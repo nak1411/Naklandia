@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Naklandia"
-run/main_scene="uid://b2wfoje26x7fv"
+run/main_scene="uid://r45rejc363d"
 config/features=PackedStringArray("4.4", "Forward Plus")
 config/icon="res://icon.svg"
 
