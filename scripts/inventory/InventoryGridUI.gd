@@ -23,11 +23,6 @@ var grid_container: GridContainer
 var slots: Array = []  # 2D array of InventorySlotUI (untyped for 2D array)
 var selected_slots: Array[InventorySlotUI] = []
 
-# Drag and drop state
-var drag_source_slot: InventorySlotUI
-var drag_target_slot: InventorySlotUI
-var is_receiving_drag: bool = false
-
 # Signals
 signal item_selected(item: InventoryItem, slot: InventorySlotUI)
 signal item_activated(item: InventoryItem, slot: InventorySlotUI)
@@ -61,28 +56,7 @@ func _setup_background():
 	background_panel.add_theme_stylebox_override("panel", style_box)
 
 func _setup_grid():
-	# Calculate total grid size
-	var total_width = grid_width * slot_size.x + (grid_width - 1) * slot_spacing
-	var total_height = grid_height * slot_size.y + (grid_height - 1) * slot_spacing
-	
-	custom_minimum_size = Vector2(total_width, total_height)
-	size = custom_minimum_size
-	
-	# Create grid container
-	grid_container = GridContainer.new()
-	grid_container.name = "GridContainer"
-	grid_container.columns = grid_width
-	grid_container.add_theme_constant_override("h_separation", slot_spacing)
-	grid_container.add_theme_constant_override("v_separation", slot_spacing)
-	grid_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(grid_container)
-	
-	# Initialize slots array
-	slots.clear()
-	slots.resize(grid_height)
-	for y in grid_height:
-		slots[y] = []
-		slots[y].resize(grid_width)
+	# ... existing grid setup code ...
 	
 	# Create slot UI elements
 	for y in grid_height:
@@ -92,11 +66,9 @@ func _setup_grid():
 			slot.set_grid_position(Vector2i(x, y))
 			slot.set_container_id(container_id)
 			
-			# Connect slot signals
+			# Connect only necessary signals
 			slot.slot_clicked.connect(_on_slot_clicked)
 			slot.slot_right_clicked.connect(_on_slot_right_clicked)
-			slot.drag_started.connect(_on_drag_started)
-			slot.drag_ended.connect(_on_drag_ended)
 			slot.item_dropped.connect(_on_item_dropped)
 			
 			slots[y][x] = slot
@@ -287,68 +259,34 @@ func _toggle_slot_selection(slot: InventorySlotUI):
 			selected_slots.append(slot)
 
 # Drag and drop handling
-func _on_drag_started(slot: InventorySlotUI, item: InventoryItem):
-	drag_source_slot = slot
-	
-	# Highlight valid drop zones
-	_highlight_valid_drop_zones(item)
-
-func _on_drag_ended(slot: InventorySlotUI, item: InventoryItem):
-	drag_source_slot = null
-	
-	# Remove drop zone highlights
-	_clear_drop_zone_highlights()
-
 func _on_item_dropped(target_slot: InventorySlotUI, dropped_item: InventoryItem):
-	if not drag_source_slot or not container:
+	# The slot has already handled the visual move, just sync the container
+	call_deferred("_sync_container_with_visual_state")
+						
+func _on_items_moved_internally():
+	_sync_container_with_visual_state()
+	# Refresh container info
+	if get_parent() and get_parent().has_method("_update_mass_info"):
+		get_parent()._update_mass_info()
+
+# Add method to sync container with visual state
+func _sync_container_with_visual_state():
+	if not container:
 		return
 	
-	var source_pos = drag_source_slot.get_grid_position()
-	var target_pos = target_slot.get_grid_position()
+	# Clear container's grid and items
+	container._initialize_grid()
+	container.items.clear()
 	
-	# Check if this is a move within the same container
-	if drag_source_slot.get_container_id() == target_slot.get_container_id():
-		_handle_internal_move(dropped_item, source_pos, target_pos)
-	else:
-		_handle_external_drop(dropped_item, target_slot)
-
-func _handle_internal_move(item: InventoryItem, from_pos: Vector2i, to_pos: Vector2i):
-	if container.move_item(item, to_pos):
-		refresh_display()
-
-func _handle_external_drop(item: InventoryItem, target_slot: InventorySlotUI):
-	# This handles drops from other containers
-	var target_container_id = target_slot.get_container_id()
-	var source_container_id = drag_source_slot.get_container_id()
-	
-	# Get inventory manager to handle the transfer
-	var inventory_manager = _get_inventory_manager()
-	if inventory_manager:
-		var target_pos = target_slot.get_grid_position()
-		var success = inventory_manager.transfer_item(
-			item, source_container_id, target_container_id, target_pos
-		)
-		
-		if success:
-			refresh_display()
-			items_transferred.emit([item], source_container_id, target_container_id)
-
-func _highlight_valid_drop_zones(item: InventoryItem):
-	for y in grid_height:
-		for x in grid_width:
-			var pos = Vector2i(x, y)
-			if container and container.is_area_free(pos):
-				var slot = slots[y][x]
-				slot.set_highlighted(true)
-
-func _clear_drop_zone_highlights():
+	# Rebuild from visual slots
 	for y in grid_height:
 		for x in grid_width:
 			if y < slots.size() and x < slots[y].size():
 				var slot = slots[y][x]
-				if slot and is_instance_valid(slot):
-					if not slot.is_selected:
-						slot.set_highlighted(false)
+				if slot and slot.has_item():
+					var item = slot.get_item()
+					container.items.append(item)
+					container.occupy_grid_area(Vector2i(x, y), item)
 
 # Utility functions
 func _is_valid_position(pos: Vector2i) -> bool:
@@ -357,8 +295,11 @@ func _is_valid_position(pos: Vector2i) -> bool:
 func get_slot_at_position(global_pos: Vector2) -> InventorySlotUI:
 	for y in grid_height:
 		for x in grid_width:
-			if slots[y] and x < slots[y].size():
+			if y < slots.size() and x < slots[y].size():
 				var slot = slots[y][x]
+				if not slot:
+					continue
+				
 				var slot_rect = Rect2(slot.global_position, slot.size)
 				if slot_rect.has_point(global_pos):
 					return slot
@@ -468,15 +409,12 @@ func _gui_input(event: InputEvent):
 		grab_focus()
 
 func _can_drop_data(position: Vector2, data) -> bool:
-	return data is Dictionary and "item" in data and "source_container" in data
+	return data is Dictionary and data.has("item") and data.has("source_container")
 
 func _drop_data(position: Vector2, data):
 	if not _can_drop_data(position, data):
 		return
 	
-	var item = data.item as InventoryItem
-	var source_container_id = data.source_container
 	var target_slot = get_slot_at_position(global_position + position)
-	
 	if target_slot:
-		_handle_external_drop(item, target_slot)
+		target_slot._drop_data(Vector2.ZERO, data)

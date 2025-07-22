@@ -13,6 +13,7 @@ extends Control
 var item: InventoryItem
 var grid_position: Vector2i
 var container_id: String
+var drag_data: Dictionary = {}
 
 # Visual components
 var background_panel: Panel
@@ -23,12 +24,7 @@ var rarity_border: NinePatchRect
 # State
 var is_highlighted: bool = false
 var is_selected: bool = false
-var is_dragging: bool = false
 var is_occupied: bool = false
-
-# Drag and drop
-var drag_preview: Control
-var drag_offset: Vector2
 
 # Signals
 signal slot_clicked(slot: InventorySlotUI, event: InputEvent)
@@ -108,8 +104,6 @@ func _setup_visual_components():
 func _setup_signals():
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	gui_input.connect(_on_gui_input)
-	mouse_entered.connect(_on_mouse_entered)
-	mouse_exited.connect(_on_mouse_exited)
 
 # Item management
 func set_item(new_item: InventoryItem):
@@ -257,114 +251,69 @@ func _on_gui_input(event: InputEvent):
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		
-		if mouse_event.pressed:
-			if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-				slot_clicked.emit(self, mouse_event)
-				
-				# Start drag if we have an item
-				if item and not is_dragging:
-					_start_drag(mouse_event.position)
-			
-			elif mouse_event.button_index == MOUSE_BUTTON_RIGHT:
-				slot_right_clicked.emit(self, mouse_event)
-				get_viewport().set_input_as_handled()
-		
-		else:  # Mouse button released
-			if mouse_event.button_index == MOUSE_BUTTON_LEFT and is_dragging:
-				_end_drag()
-
-func _on_mouse_entered():
-	if not is_dragging:
-		set_highlighted(true)
-
-func _on_mouse_exited():
-	if not is_dragging:
-		set_highlighted(false)
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			slot_clicked.emit(self, mouse_event)
+		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			slot_right_clicked.emit(self, mouse_event)
+			get_viewport().set_input_as_handled()
 
 # Drag and drop
-func _start_drag(mouse_pos: Vector2):
-	if not item:
-		return
+func _find_drop_target_at_position(global_pos: Vector2) -> InventorySlotUI:
+	# Get the inventory grid parent
+	var grid = _get_inventory_grid()
+	if not grid:
+		return null
 	
-	is_dragging = true
-	drag_offset = mouse_pos
-	
-	# Create drag preview
-	_create_drag_preview()
-	
-	# Change cursor
-	Input.set_default_cursor_shape(Input.CURSOR_DRAG)
-	
-	drag_started.emit(self, item)
+	return grid.get_slot_at_position(global_pos)
 
-func _create_drag_preview():
-	drag_preview = Control.new()
-	drag_preview.name = "DragPreview"
-	drag_preview.size = size
-	drag_preview.z_index = 1000
-	
-	# Copy visual elements
-	var preview_icon = TextureRect.new()
-	preview_icon.texture = item_icon.texture
-	preview_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	preview_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	preview_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	preview_icon.modulate.a = 0.7
-	drag_preview.add_child(preview_icon)
-	
-	if item.quantity > 1:
-		var preview_quantity = Label.new()
-		preview_quantity.text = str(item.quantity)
-		preview_quantity.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-		preview_quantity.position = Vector2(-20, -16)
-		preview_quantity.size = Vector2(18, 14)
-		drag_preview.add_child(preview_quantity)
-	
-	get_viewport().add_child(drag_preview)
-
-func _process(delta):
-	if is_dragging and drag_preview:
-		var mouse_pos = get_global_mouse_position()
-		drag_preview.global_position = mouse_pos - drag_offset
-
-func _end_drag():
-	if not is_dragging:
-		return
-	
-	is_dragging = false
-	
-	# Remove drag preview
-	if drag_preview and drag_preview.get_parent():
-		drag_preview.get_parent().remove_child(drag_preview)
-		drag_preview.queue_free()
-		drag_preview = null
-	
-	# Reset cursor
-	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-	
-	# Check for drop target
-	var drop_target = _find_drop_target()
-	if drop_target and drop_target != self:
-		drop_target.item_dropped.emit(drop_target, item)
-	
-	drag_ended.emit(self, item)
-
-func _find_drop_target() -> InventorySlotUI:
-	var mouse_pos = get_global_mouse_position()
-	var space_state = get_world_2d().direct_space_state
-	
-	# Find UI element under mouse
-	var query = PhysicsPointQueryParameters2D.new()
-	query.position = mouse_pos
-	query.collision_mask = 1
-	
-	# Alternative: Use get_viewport().gui_get_drag_data()
-	# For now, use a simpler approach by checking the parent grid
-	var parent_grid = get_parent()
-	if parent_grid and parent_grid.has_method("get_slot_at_position"):
-		return parent_grid.get_slot_at_position(mouse_pos)
-	
+# Add this helper method
+func _get_inventory_grid() -> InventoryGridUI:
+	var parent = get_parent()
+	while parent:
+		if parent is InventoryGridUI:
+			return parent
+		parent = parent.get_parent()
 	return null
+
+# Add this method to handle successful drops
+func _handle_successful_drop(target_slot: InventorySlotUI):
+	var grid = _get_inventory_grid()
+	if not grid:
+		return
+	
+	var source_pos = get_grid_position()
+	var target_pos = target_slot.get_grid_position()
+	
+	# Handle stacking if possible
+	if target_slot.has_item() and item.can_stack_with(target_slot.get_item()):
+		var target_item = target_slot.get_item()
+		var remaining = target_item.add_to_stack(item.quantity)
+		
+		if remaining == 0:
+			# Full stack merged, remove source item
+			clear_item()
+		else:
+			# Partial merge, update source quantity
+			item.quantity = remaining
+			_update_item_display()
+		
+		target_slot._update_item_display()
+	else:
+		# Swap or move items
+		var target_item = target_slot.get_item()
+		
+		# Clear both slots first
+		target_slot.clear_item()
+		var source_item = item
+		clear_item()
+		
+		# Place items in new positions
+		target_slot.set_item(source_item)
+		if target_item:
+			set_item(target_item)
+	
+	# Notify the grid of the change
+	grid._on_items_moved_internally()
 
 # Drop handling
 func can_accept_drop(dropped_item: InventoryItem) -> bool:
@@ -377,27 +326,109 @@ func can_accept_drop(dropped_item: InventoryItem) -> bool:
 	
 	# Can stack identical items
 	if item and item.can_stack_with(dropped_item):
-		return true
+		return item.quantity + dropped_item.quantity <= item.max_stack_size
 	
-	return false
+	# Can swap different items
+	return true
+	
+func _get_drag_data(position: Vector2):
+	if not item:
+		return null
+	
+	# Create drag data
+	var drag_data = {
+		"item": item,
+		"source_slot": self,
+		"source_container": container_id,
+		"source_position": grid_position
+	}
+	
+	# Create visual drag preview
+	var preview = Control.new()
+	preview.size = size
+	
+	var preview_icon = TextureRect.new()
+	preview_icon.texture = item_icon.texture
+	preview_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	preview_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	preview_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	preview_icon.modulate.a = 0.8
+	preview.add_child(preview_icon)
+	
+	if item.quantity > 1:
+		var preview_quantity = Label.new()
+		preview_quantity.text = str(item.quantity)
+		preview_quantity.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+		preview_quantity.position = Vector2(-20, -16)
+		preview_quantity.size = Vector2(18, 14)
+		preview_quantity.add_theme_color_override("font_color", Color.WHITE)
+		preview_quantity.add_theme_font_size_override("font_size", 10)
+		preview.add_child(preview_quantity)
+	
+	set_drag_preview(preview)
+	
+	# Emit drag started signal
+	drag_started.emit(self, item)
+	
+	return drag_data
 
-func accept_drop(dropped_item: InventoryItem) -> bool:
-	if not can_accept_drop(dropped_item):
+func _can_drop_data(position: Vector2, data) -> bool:
+	if not data is Dictionary:
 		return false
 	
-	if not has_item():
-		set_item(dropped_item)
-		return true
+	if not data.has("item") or not data.has("source_slot"):
+		return false
 	
-	if item.can_stack_with(dropped_item):
+	var source_slot = data.source_slot as InventorySlotUI
+	if source_slot == self:
+		return false  # Can't drop on itself
+	
+	var dropped_item = data.item as InventoryItem
+	return can_accept_drop(dropped_item)
+
+func _drop_data(position: Vector2, data):
+	if not _can_drop_data(position, data):
+		return
+	
+	var source_slot = data.source_slot as InventorySlotUI
+	var dropped_item = data.item as InventoryItem
+	
+	# Handle the drop based on current slot state
+	if not has_item():
+		# Empty slot - move item here
+		source_slot.clear_item()
+		set_item(dropped_item)
+	elif item.can_stack_with(dropped_item):
+		# Stack items
 		var remaining = item.add_to_stack(dropped_item.quantity)
 		if remaining == 0:
-			return true
+			source_slot.clear_item()
 		else:
 			dropped_item.quantity = remaining
-			return false
+			source_slot._update_item_display()
+		_update_item_display()
+	else:
+		# Swap items
+		var temp_item = item
+		source_slot.clear_item()
+		clear_item()
+		set_item(dropped_item)
+		source_slot.set_item(temp_item)
 	
-	return false
+	# Emit signals
+	item_dropped.emit(self, dropped_item)
+	source_slot.drag_ended.emit(source_slot, dropped_item)
+	
+	# Update container
+	_notify_container_of_changes()
+
+# Add method to notify container
+func _notify_container_of_changes():
+	var grid = _get_inventory_grid()
+	if grid and grid.container:
+		# Force container to update its internal state
+		grid.container.compact_items()
+		grid.refresh_display()
 
 # Signal handlers
 func _on_item_quantity_changed(new_quantity: int):
