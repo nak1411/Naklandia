@@ -648,7 +648,7 @@ func _show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, positio
 	popup.add_item("Clear Container", 22)
 	
 	add_child(popup)
-	popup.position = Vector2i(position)
+	popup.position = Vector2i(get_mouse_position().x + (DisplayServer.screen_get_size().x / 2  - 740), get_mouse_position().y / 2 + 340)
 	popup.show()
 	
 	# Connect signal with proper parameter handling
