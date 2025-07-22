@@ -11,6 +11,7 @@ var inventory_hud: InventoryHUD
 # UI Management
 var ui_canvas: CanvasLayer
 var is_inventory_open: bool = false
+var input_consumed: bool = false
 
 # Input action names
 const TOGGLE_INVENTORY = "toggle_inventory"
@@ -47,34 +48,6 @@ func _add_initial_test_items():
 		# Force UI refresh
 		if inventory_window:
 			inventory_window.refresh_display()
-		
-func debug_inventory_contents():
-	if not inventory_manager:
-		print("No inventory manager!")
-		return
-	
-	print("=== INVENTORY DEBUG ===")
-	
-	# Check player inventory
-	var player_inv = inventory_manager.get_player_inventory()
-	if player_inv:
-		print("Player Inventory (%s):" % player_inv.container_id)
-		print("  Item count: %d" % player_inv.get_item_count())
-		print("  Grid size: %dx%d" % [player_inv.grid_width, player_inv.grid_height])
-		print("  Items:")
-		for i in range(player_inv.items.size()):
-			var item = player_inv.items[i]
-			var pos = player_inv.get_item_position(item)
-			print("    %d: %s (pos: %s, qty: %d)" % [i, item.item_name, pos, item.quantity])
-	
-	# Check which container the UI is showing
-	if inventory_window and inventory_window.current_container:
-		print("UI showing container: %s (%s)" % [inventory_window.current_container.container_name, inventory_window.current_container.container_id])
-		print("UI container item count: %d" % inventory_window.current_container.get_item_count())
-	else:
-		print("UI not ready or no current container")
-	
-	print("=== END DEBUG ===")
 
 func _setup_input_actions():
 	# Add inventory input actions if they don't exist
@@ -144,8 +117,7 @@ func _connect_signals():
 		inventory_manager.item_transferred.connect(_on_item_transferred)
 		inventory_manager.transaction_completed.connect(_on_transaction_completed)
 
-# Input handling
-func _unhandled_input(event: InputEvent):
+func _input(event: InputEvent):
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_I:
 			toggle_inventory()
@@ -154,28 +126,41 @@ func _unhandled_input(event: InputEvent):
 			use_selected_quick_slot()
 			get_viewport().set_input_as_handled()
 
-func _input(event: InputEvent):
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_I:
-			toggle_inventory()
-			get_viewport().set_input_as_handled()
-
 # Inventory management
 func toggle_inventory():
+	if input_consumed:
+		return
+	
+	input_consumed = true
+	get_tree().process_frame.connect(func(): input_consumed = false, CONNECT_ONE_SHOT)
+	
 	if not inventory_window:
+		print("Inventory window not ready!")
 		return
 	
 	is_inventory_open = not is_inventory_open
 	
+	
 	if is_inventory_open:
-		inventory_window._reset_window_if_offscreen()
-		inventory_window.show()
+		
+		# Use the fine-tuned centered position
+		inventory_window.position = Vector2i(((DisplayServer.screen_get_size().x / 2) - 200) / 2, ((DisplayServer.screen_get_size().y / 2) - 200) / 2)
+		# Make visible
+		inventory_window.visible = true
+		
+		# Focus and mouse
 		inventory_window.grab_focus()
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		
 	else:
-		inventory_window.hide()
+		inventory_window.visible = false
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	
+	inventory_toggled.emit(is_inventory_open)
+
+func _on_inventory_window_closed():
+	is_inventory_open = false
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	inventory_toggled.emit(is_inventory_open)
 
 
@@ -319,12 +304,6 @@ func _equip_module(item: InventoryItem) -> bool:
 	return true
 
 # Event handlers
-func _on_inventory_window_closed():
-	print("Inventory window closed via signal")
-	is_inventory_open = false
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	inventory_toggled.emit(is_inventory_open)
-
 func _on_container_switched(container: InventoryContainer):
 	print("Switched to container: ", container.container_name)
 
@@ -518,39 +497,6 @@ func clear_all_inventories():
 		for container in inventory_manager.get_all_containers():
 			container.clear()
 			
-func debug_grid_ui():
-	print("=== GRID UI DEBUG ===")
-	
-	if not inventory_window:
-		print("No inventory window!")
-		return
-	
-	var grid = inventory_window.inventory_grid
-	if not grid:
-		print("No inventory grid!")
-		return
-	
-	print("Grid container ID: %s" % grid.container_id)
-	print("Grid container object: %s" % str(grid.container))
-	print("Grid size: %dx%d" % [grid.grid_width, grid.grid_height])
-	print("Grid slots array size: %d" % grid.slots.size())
-	
-	if grid.slots.size() > 0:
-		print("First row slots: %d" % grid.slots[0].size())
-		
-		# Check first few slots for items
-		for y in range(min(2, grid.slots.size())):
-			for x in range(min(5, grid.slots[y].size())):
-				var slot = grid.slots[y][x]
-				if slot:
-					var has_item = slot.has_item()
-					var item_name = slot.get_item().item_name if has_item else "none"
-					print("  Slot [%d,%d]: has_item=%s, item=%s" % [x, y, has_item, item_name])
-				else:
-					print("  Slot [%d,%d]: NULL SLOT!" % [x, y])
-	
-	print("=== END GRID DEBUG ===")
-
 func force_complete_refresh():
 	print("=== FORCING COMPLETE REFRESH ===")
 	

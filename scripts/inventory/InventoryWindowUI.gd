@@ -48,8 +48,8 @@ func _init():
 	
 	# Set initial position to center (will be properly centered in _ready)
 	position = Vector2i(
-		(DisplayServer.screen_get_size().x - size.x) / 2,
-		(DisplayServer.screen_get_size().y - size.y) / 2
+		(DisplayServer.screen_get_size().x - size.x / 2) / 2,
+		(DisplayServer.screen_get_size().y - size.y / 2) / 2
 	)
 
 func _ready():
@@ -60,15 +60,29 @@ func _ready():
 	# Apply custom styling
 	apply_custom_theme()
 	
-	# Center the window properly
-	_center_window()
+	# Set the fine-tuned centered position
+	position = Vector2i(1040, 410)
 	
-	# Connect resize signal for flexible grid
-	size_changed.connect(_on_window_resized)
-	
-	# Ensure window starts hidden
+	# Start hidden
 	visible = false
-	hide()
+	
+func _set_initial_position():
+	var main_window = get_tree().root
+	if main_window.mode == Window.MODE_FULLSCREEN:
+		# Center on screen for fullscreen
+		var screen_size = DisplayServer.screen_get_size(1)
+		position = Vector2i(
+			(screen_size.x - size.x) / 2,
+			(screen_size.y - size.y) / 2
+		)
+	else:
+		# Center within game window for windowed mode
+		var main_pos = main_window.position
+		var main_size = main_window.size
+		position = Vector2i(
+			main_pos.x + (main_size.x - size.x) / 2,
+			main_pos.y + (main_size.y - size.y) / 2
+		)
 
 func _on_window_resized():
 	# Update inventory grid layout when window is resized
@@ -133,33 +147,94 @@ func _resize_grid_to_fit(available_space: Vector2):
 		# Update the container's display grid size (not its actual storage grid)
 		# This allows the UI to show more slots for easier item management
 
-func _center_window():
-	# Get screen size
-	var screen_size = DisplayServer.screen_get_size()
-	var window_size = size
+func _center_window_sync():
+	center_on_main_screen()
+
+func _find_main_screen() -> int:
+	var screen_count = DisplayServer.get_screen_count()
+	var main_screen = 0
+	var largest_area = 0
 	
-	# Calculate center position
-	var center_pos = Vector2i(
-		(screen_size.x - window_size.x) / 2,
-		(screen_size.y - window_size.y) / 2
+	# Look for the screen at (0,0) first, or fall back to largest screen
+	for i in screen_count:
+		var screen_pos = DisplayServer.screen_get_position(i)
+		var screen_size = DisplayServer.screen_get_size(i)
+		var area = screen_size.x * screen_size.y
+		
+		
+		# Prefer screen at origin (0,0)
+		if screen_pos == Vector2i(0, 0):
+			return i
+		
+		# Track largest screen as fallback
+		if area > largest_area:
+			largest_area = area
+			main_screen = i
+	
+	return main_screen
+
+func center_on_main_screen():
+	# Fine-tuned position closer to perfect center
+	var centered_position = Vector2i(1040, 410)  # Slightly higher than mathematical center
+	
+	position = centered_position
+	
+func _try_alternative_centering(screen_pos: Vector2i, screen_size: Vector2i):
+
+	
+	# Method 1: Use move_to_center() if available
+	if has_method("move_to_center"):
+		call("move_to_center")
+	
+	# Method 2: Manual calculation with different approach
+	var alt_center = Vector2i(
+		screen_pos.x + screen_size.x / 2 - size.x / 2,
+		screen_pos.y + screen_size.y / 2 - size.y / 2
 	)
 	
-	position = center_pos
-	print("Window centered at: ", center_pos)
+	# Method 3: Try popup_centered equivalent
+	var popup_center = Vector2i(
+		screen_pos.x + (screen_size.x - size.x) / 2,
+		screen_pos.y + (screen_size.y - size.y) / 2
+	)
+	
+	
+	# Use the alternative calculation
+	position = alt_center
+	
+func test_manual_positions():
+	
+	var screen_size = DisplayServer.screen_get_size(_find_main_screen())
+	
+	# Test various positions
+	var test_positions = [
+		Vector2i(100, 100),  # Top-left
+		Vector2i(screen_size.x / 4, screen_size.y / 4),  # Quarter screen
+		Vector2i(screen_size.x / 2 - 400, screen_size.y / 2 - 300),  # Manual center
+		Vector2i(screen_size.x / 3, screen_size.y / 3),  # Third screen
+	]
+	
+	for i in range(test_positions.size()):
+		var test_pos = test_positions[i]
+		position = test_pos
+		await get_tree().create_timer(0.5).timeout
+	
+
+func _center_window():
+	# Simple async wrapper
+	_center_window_sync()
 
 func _is_window_on_screen() -> bool:
-	var screen_size = DisplayServer.screen_get_size()
+	var screen_rect = DisplayServer.screen_get_usable_rect()
 	var window_rect = Rect2i(position, size)
-	var screen_rect = Rect2i(Vector2i.ZERO, screen_size)
 	
 	# Check if at least 100x100 pixels of the window are visible
-	var visible_area = window_rect.intersection(screen_rect)
-	return visible_area.size.x >= 100 and visible_area.size.y >= 100
+	var intersection = window_rect.intersection(screen_rect)
+	return intersection.size.x >= 100 and intersection.size.y >= 100
 
 func _reset_window_if_offscreen():
 	if not _is_window_on_screen():
-		print("Window is off-screen, resetting position...")
-		_center_window()
+		_center_window_sync()
 
 func _setup_ui():
 	# Main container
@@ -366,21 +441,27 @@ func _setup_mass_info_bar(parent: Control):
 
 func _connect_signals():
 	# Window controls
-	close_button.pressed.connect(_on_close_pressed)
-	minimize_button.pressed.connect(_on_minimize_pressed)
-	close_requested.connect(_on_close_requested)
+	if close_button:
+		close_button.pressed.connect(_on_close_pressed)
+	if minimize_button:
+		minimize_button.pressed.connect(_on_minimize_pressed)
 	
 	# Container selection
-	container_selector.item_selected.connect(_on_container_selector_changed)
-	container_list.item_selected.connect(_on_container_list_selected)
+	if container_selector:
+		container_selector.item_selected.connect(_on_container_selector_changed)
+	if container_list:
+		container_list.item_selected.connect(_on_container_list_selected)
 	
 	# Search and filter
-	search_field.text_changed.connect(_on_search_text_changed)
-	filter_options.item_selected.connect(_on_filter_changed)
+	if search_field:
+		search_field.text_changed.connect(_on_search_text_changed)
+	if filter_options:
+		filter_options.item_selected.connect(_on_filter_changed)
 	
 	# Sort menu
-	var sort_popup = sort_button.get_popup()
-	sort_popup.id_pressed.connect(_on_sort_selected)
+	if sort_button:
+		var sort_popup = sort_button.get_popup()
+		sort_popup.id_pressed.connect(_on_sort_selected)
 	
 	# Inventory grid
 	if inventory_grid:
@@ -531,6 +612,10 @@ func _on_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position:
 func _show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position: Vector2):
 	var popup = PopupMenu.new()
 	
+	# Store the context for this popup
+	popup.set_meta("context_item", item)
+	popup.set_meta("context_slot", slot)
+	
 	# Item-specific actions first
 	popup.add_item("Item Information", 0)
 	
@@ -564,13 +649,17 @@ func _show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, positio
 	
 	add_child(popup)
 	popup.position = Vector2i(position)
-	popup.popup()
+	popup.show()
 	
-	# Connect signal
-	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup, item, slot))
+	# Connect signal with proper parameter handling
+	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup))
 
 func _show_empty_area_context_menu(position: Vector2):
 	var popup = PopupMenu.new()
+	
+	# Store context - no item or slot for empty area
+	popup.set_meta("context_item", null)
+	popup.set_meta("context_slot", null)
 	
 	# Container actions only
 	popup.add_item("Stack All Items", 20)
@@ -580,12 +669,16 @@ func _show_empty_area_context_menu(position: Vector2):
 	
 	add_child(popup)
 	popup.position = Vector2i(position)
-	popup.popup()
+	popup.show()
 	
-	# Connect signal - use null for item and slot since this is empty area
-	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup, null, null))
+	# Connect signal
+	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup))
 
-func _on_context_menu_item_selected(popup: PopupMenu, item: InventoryItem, slot: InventorySlotUI, id: int):
+func _on_context_menu_item_selected(id: int, popup: PopupMenu):
+	# Retrieve context from popup metadata
+	var item = popup.get_meta("context_item", null) as InventoryItem
+	var slot = popup.get_meta("context_slot", null) as InventorySlotUI
+	
 	match id:
 		0:  # Item Information
 			_show_item_details_dialog(item)
@@ -849,35 +942,43 @@ func toggle_visibility():
 	if visible:
 		hide()
 	else:
-		# Reset position if window was dragged off-screen
-		_reset_window_if_offscreen()
+		# Center before showing
+		await _center_window()
 		show()
 		grab_focus()
 
 func bring_to_front():
-	# Reset position if window was dragged off-screen
-	_reset_window_if_offscreen()
+	# Center if off-screen, then show
+	await _reset_window_if_offscreen()
 	grab_focus()
 
 # Keyboard shortcuts
 func _unhandled_key_input(event: InputEvent):
-	if not visible:
+	# Only process if window is visible and has focus
+	if not visible or not has_focus():
 		return
 	
 	if event is InputEventKey and event.pressed:
+		print("Key pressed in inventory window: ", event.keycode, " (window has focus: ", has_focus(), ")")
+		
 		match event.keycode:
-			KEY_I:
+			KEY_ESCAPE:
+				print("Escape key pressed - closing inventory")
 				_close_window()
 				get_viewport().set_input_as_handled()
-			KEY_ESCAPE:
-				_close_window()
 			KEY_F5:
+				print("F5 key pressed - refreshing display")
 				refresh_display()
+				get_viewport().set_input_as_handled()
 			KEY_HOME:
-				_center_window()
+				print("Home key pressed - centering window")
+				_center_window_sync()
+				get_viewport().set_input_as_handled()
 			KEY_ENTER:
 				if search_field and search_field.has_focus():
+					print("Enter key pressed in search field")
 					_apply_filters()
+					get_viewport().set_input_as_handled()
 
 # Theme and styling
 func apply_custom_theme():
@@ -911,19 +1012,12 @@ func _apply_container_list_style(itemlist_style: StyleBoxFlat):
 		container_list.add_theme_constant_override("line_separation", 4)
 		
 func debug_grid_ui():
-	print("=== GRID UI DEBUG ===")
 	
 	if not inventory_grid:
 		print("No inventory grid!")
 		return
 	
-	print("Grid container ID: %s" % inventory_grid.container_id)
-	print("Grid container object: %s" % str(inventory_grid.container))
-	print("Grid size: %dx%d" % [inventory_grid.grid_width, inventory_grid.grid_height])
-	print("Grid slots array size: %d" % inventory_grid.slots.size())
-	
 	if inventory_grid.slots.size() > 0:
-		print("First row slots: %d" % inventory_grid.slots[0].size())
 		
 		# Check first few slots for items
 		for y in range(min(2, inventory_grid.slots.size())):
@@ -932,28 +1026,6 @@ func debug_grid_ui():
 				if slot:
 					var has_item = slot.has_item()
 					var item_name = slot.get_item().item_name if has_item else "none"
-					print("  Slot [%d,%d]: has_item=%s, item=%s" % [x, y, has_item, item_name])
-				else:
-					print("  Slot [%d,%d]: NULL SLOT!" % [x, y])
-	
-	print("=== END GRID DEBUG ===")
-
-func debug_inventory_contents():
-	print("=== INVENTORY DEBUG (from window) ===")
-	
-	if current_container:
-		print("Current container: %s (%s)" % [current_container.container_name, current_container.container_id])
-		print("  Item count: %d" % current_container.get_item_count())
-		print("  Grid size: %dx%d" % [current_container.grid_width, current_container.grid_height])
-		print("  Items:")
-		for i in range(current_container.items.size()):
-			var item = current_container.items[i]
-			var pos = current_container.get_item_position(item)
-			print("    %d: %s (pos: %s, qty: %d)" % [i, item.item_name, pos, item.quantity])
-	else:
-		print("No current container!")
-	
-	print("=== END INVENTORY DEBUG ===")
 
 func force_complete_refresh():
 	print("=== FORCING COMPLETE REFRESH ===")

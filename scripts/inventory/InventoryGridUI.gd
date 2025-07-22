@@ -38,6 +38,9 @@ func _ready():
 	_setup_background()
 	_setup_grid()
 	
+	# Enable focus for keyboard input
+	set_focus_mode(Control.FOCUS_ALL)
+	
 	# Connect to drag and drop system
 	set_process_mode(Node.PROCESS_MODE_ALWAYS)
 

@@ -109,37 +109,33 @@ func _draw():
 	
 	_draw_crosshair_line(center, gap, half_size, crosshair_color, crosshair_thickness)
 
-func _draw_crosshair_line(center: Vector2, gap: float, half_size: float, color: Color, thickness: float):
+func _draw_crosshair_line(center: Vector2, gap: float, half_length: float, color: Color, thickness: float):
 	# Horizontal line (left and right)
 	draw_line(
-		Vector2(center.x - gap - half_size, center.y),
+		Vector2(center.x - gap - half_length, center.y),
 		Vector2(center.x - gap, center.y),
 		color, thickness
 	)
 	draw_line(
 		Vector2(center.x + gap, center.y),
-		Vector2(center.x + gap + half_size, center.y),
+		Vector2(center.x + gap + half_length, center.y),
 		color, thickness
 	)
 	
 	# Vertical line (up and down)
 	draw_line(
-		Vector2(center.x, center.y - gap - half_size),
+		Vector2(center.x, center.y - gap - half_length),
 		Vector2(center.x, center.y - gap),
 		color, thickness
 	)
 	draw_line(
 		Vector2(center.x, center.y + gap),
-		Vector2(center.x, center.y + gap + half_size),
+		Vector2(center.x, center.y + gap + half_length),
 		color, thickness
 	)
 
-# Public methods for customization
-func set_crosshair_color(color: Color):
-	crosshair_color = color
-
-func set_crosshair_size(size: float):
-	crosshair_size = size
+func set_crosshair_size(new_size: float):
+	crosshair_size = new_size
 	_setup_crosshair()
 
 func set_dynamic_enabled(enabled: bool):
