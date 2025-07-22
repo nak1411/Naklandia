@@ -101,6 +101,27 @@ func _setup_grid():
 			
 			slots[y][x] = slot
 			grid_container.add_child(slot)
+			
+func verify_grid_integrity() -> bool:
+	"""Verifies that the visual grid matches the container's internal state"""
+	if not container:
+		return false
+	
+	var visual_item_count = 0
+	var container_item_count = container.get_item_count()
+	
+	for y in grid_height:
+		for x in grid_width:
+			if y < slots.size() and x < slots[y].size():
+				var slot = slots[y][x]
+				if slot and slot.has_item():
+					visual_item_count += 1
+	
+	var is_valid = visual_item_count == container_item_count
+	if not is_valid:
+		print("Grid integrity check FAILED: Visual=%d, Container=%d" % [visual_item_count, container_item_count])
+	
+	return is_valid
 
 # Container management
 func set_container(new_container: InventoryContainer):
@@ -115,6 +136,11 @@ func set_container(new_container: InventoryContainer):
 		grid_height = container.grid_height
 		_connect_container_signals()
 		_rebuild_grid()
+		
+		# Compact the container when first setting it to eliminate any existing gaps
+		container.compact_items()
+		
+		# Then refresh the display
 		refresh_display()
 
 func _connect_container_signals():
@@ -154,11 +180,22 @@ func refresh_display():
 	# Clear all slots first
 	_clear_all_slots()
 	
+	# Force container to compact items to eliminate gaps
+	container.compact_items()
+	
 	# Place items in their grid positions
+	var placed_items = 0
 	for item in container.items:
 		var position = container.get_item_position(item)
 		if position != Vector2i(-1, -1):
 			_place_item_in_grid(item, position)
+			placed_items += 1
+		else:
+			print("Warning: Item %s has no valid grid position!" % item.item_name)
+	
+	# Force visual refresh on all slots
+	await get_tree().process_frame
+	force_all_slots_refresh()
 
 func _clear_all_slots():
 	for y in grid_height:
@@ -175,19 +212,23 @@ func _clear_all_slots():
 # Improve the _place_item_in_grid method with debug output
 func _place_item_in_grid(item: InventoryItem, position: Vector2i):
 	if not _is_valid_position(position):
+		print("Invalid position for item %s: [%d,%d]" % [item.item_name, position.x, position.y])
 		return
 	
 	var item_size = item.get_grid_size()
 	
 	# Check if we can access the slot
 	if position.y >= slots.size() or position.x >= slots[position.y].size():
+		print("Position out of bounds for item %s: [%d,%d]" % [item.item_name, position.x, position.y])
 		return
 	
 	# Set the main slot (top-left)
 	var main_slot = slots[position.y][position.x]
 	if not main_slot:
+		print("No slot available at position [%d,%d]" % [position.x, position.y])
 		return
 	
+	print("Placing item %s at position [%d,%d]" % [item.item_name, position.x, position.y])
 	main_slot.set_item(item)
 	
 	# For multi-slot items, mark occupied slots
@@ -200,8 +241,6 @@ func _place_item_in_grid(item: InventoryItem, position: Vector2i):
 
 	
 func force_all_slots_refresh():
-	print("InventoryGridUI: Forcing visual refresh on all slots...")
-	
 	var refreshed_count = 0
 	
 	for y in range(slots.size()):
@@ -210,8 +249,6 @@ func force_all_slots_refresh():
 			if slot and slot.has_method("force_visual_refresh"):
 				slot.force_visual_refresh()
 				refreshed_count += 1
-	
-	print("InventoryGridUI: Refreshed %d slots" % refreshed_count)
 
 # Slot interaction
 func _on_slot_clicked(slot: InventorySlotUI, event: InputEvent):

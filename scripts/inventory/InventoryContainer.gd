@@ -95,6 +95,36 @@ func find_free_position(item_size: Vector2i) -> Vector2i:
 				return pos
 	
 	return Vector2i(-1, -1)  # No free position found
+	
+# Auto-compacting functionality
+func compact_items():
+	"""Moves all items to eliminate gaps, placing them sequentially from top-left"""
+	if items.is_empty():
+		return
+	
+	# Store items temporarily
+	var items_to_place = items.duplicate()
+	
+	# Clear the grid
+	_initialize_grid()
+	items.clear()
+	
+	# Re-add items in sequence
+	for item in items_to_place:
+		var free_pos = find_free_position(item.get_grid_size())
+		if free_pos != Vector2i(-1, -1):
+			occupy_grid_area(free_pos, item.get_grid_size(), item)
+			items.append(item)
+
+func find_first_available_slot(item_size: Vector2i) -> Vector2i:
+	"""Finds the first available slot in reading order (left-to-right, top-to-bottom)"""
+	for y in range(grid_height - item_size.y + 1):
+		for x in range(grid_width - item_size.x + 1):
+			var pos = Vector2i(x, y)
+			if is_area_free(pos, item_size):
+				return pos
+	
+	return Vector2i(-1, -1)
 
 func occupy_grid_area(pos: Vector2i, item_size: Vector2i, item: InventoryItem):
 	for y in range(pos.y, pos.y + item_size.y):
@@ -150,10 +180,13 @@ func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1)) -> boo
 			item_added.emit(item, get_item_position(existing_item))
 			return true
 	
-	# Add as new item
+	# Find placement position - use first available slot if no position specified
 	var final_position = position
-	if position == Vector2i(-1, -1) or not is_area_free(position, item.get_grid_size()):
-		final_position = find_free_position(item.get_grid_size())
+	if position == Vector2i(-1, -1):
+		final_position = find_first_available_slot(item.get_grid_size())
+	elif not is_area_free(position, item.get_grid_size()):
+		# If specified position is occupied, find next available
+		final_position = find_first_available_slot(item.get_grid_size())
 	
 	if final_position == Vector2i(-1, -1):
 		container_full.emit()
@@ -170,6 +203,7 @@ func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1)) -> boo
 	item_added.emit(item, final_position)
 	return true
 
+# Auto-compact after item removal
 func remove_item(item: InventoryItem) -> bool:
 	if not item in items:
 		return false
@@ -185,6 +219,10 @@ func remove_item(item: InventoryItem) -> bool:
 		item.item_modified.disconnect(_on_item_modified)
 	
 	item_removed.emit(item, position)
+	
+	# Auto-compact after removal to fill gaps
+	compact_items()
+	
 	return true
 
 func move_item(item: InventoryItem, new_position: Vector2i) -> bool:

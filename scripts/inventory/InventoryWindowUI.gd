@@ -497,6 +497,13 @@ func _populate_container_list():
 	
 	var containers = inventory_manager.get_accessible_containers()
 	
+	# Compact all containers before displaying them
+	print("InventoryWindow: Compacting all containers before display")
+	for container in containers:
+		if container.get_item_count() > 0:
+			print("  - Compacting: %s" % container.container_name)
+			container.compact_items()
+	
 	# Sort containers to put player inventory first
 	containers.sort_custom(func(a, b): 
 		if a.container_id == "player_inventory":
@@ -527,6 +534,11 @@ func _switch_to_container(container: InventoryContainer):
 	current_container = container
 	
 	if inventory_grid:
+		# Compact the container first before displaying it
+		if container and container.get_item_count() > 0:
+			print("InventoryWindow: Compacting container '%s' on initial display" % container.container_name)
+			container.compact_items()
+		
 		inventory_grid.set_container(container)
 		
 		# Update grid layout to fit the window

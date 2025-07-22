@@ -246,10 +246,24 @@ func auto_stack_container(container_id: String):
 					container.remove_item(other_item)
 				else:
 					other_item.quantity = remaining
+	
+	# Compact after stacking to eliminate gaps
+	container.compact_items()
 
 func auto_stack_all_containers():
 	for container_id in containers:
 		auto_stack_container(container_id)
+		
+func compact_container(container_id: String):
+	"""Compacts a container to remove gaps between items"""
+	var container = get_container(container_id)
+	if container:
+		container.compact_items()
+
+func compact_all_containers():
+	"""Compacts all containers to remove gaps"""
+	for container_id in containers:
+		compact_container(container_id)
 
 func sort_container(container_id: String, sort_type: SortType = SortType.BY_NAME):
 	var container = get_container(container_id)

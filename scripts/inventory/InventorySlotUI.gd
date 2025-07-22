@@ -128,22 +128,11 @@ func set_item(new_item: InventoryItem):
 		queue_redraw()
 	
 func force_visual_refresh():
-	print("InventorySlotUI: force_visual_refresh called at [%d,%d]" % [grid_position.x, grid_position.y])
-	
-	# Ensure all visual components are visible and properly set up
-	if item_icon:
-		print("InventorySlotUI: Item icon - visible: %s, texture: %s" % [item_icon.visible, str(item_icon.texture)])
-	
-	if quantity_label:
-		print("InventorySlotUI: Quantity label - visible: %s, text: '%s'" % [quantity_label.visible, quantity_label.text])
-	
 	# Force redraw
 	queue_redraw()
 	
 	# Update visual state
 	_update_visual_state()
-	
-	print("InventorySlotUI: Visual refresh complete")
 
 func clear_item():
 	set_item(null)
