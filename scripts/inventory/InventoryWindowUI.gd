@@ -498,10 +498,8 @@ func _populate_container_list():
 	var containers = inventory_manager.get_accessible_containers()
 	
 	# Compact all containers before displaying them
-	print("InventoryWindow: Compacting all containers before display")
 	for container in containers:
 		if container.get_item_count() > 0:
-			print("  - Compacting: %s" % container.container_name)
 			container.compact_items()
 	
 	# Sort containers to put player inventory first

@@ -215,29 +215,18 @@ func _place_item_in_grid(item: InventoryItem, position: Vector2i):
 		print("Invalid position for item %s: [%d,%d]" % [item.item_name, position.x, position.y])
 		return
 	
-	var item_size = item.get_grid_size()
-	
 	# Check if we can access the slot
 	if position.y >= slots.size() or position.x >= slots[position.y].size():
 		print("Position out of bounds for item %s: [%d,%d]" % [item.item_name, position.x, position.y])
 		return
 	
-	# Set the main slot (top-left)
-	var main_slot = slots[position.y][position.x]
-	if not main_slot:
+	# Set the slot
+	var slot = slots[position.y][position.x]
+	if not slot:
 		print("No slot available at position [%d,%d]" % [position.x, position.y])
 		return
 	
-	print("Placing item %s at position [%d,%d]" % [item.item_name, position.x, position.y])
-	main_slot.set_item(item)
-	
-	# For multi-slot items, mark occupied slots
-	if item_size.x > 1 or item_size.y > 1:
-		for y in range(position.y, position.y + item_size.y):
-			for x in range(position.x, position.x + item_size.x):
-				if _is_valid_position(Vector2i(x, y)) and not (x == position.x and y == position.y):
-					if y < slots.size() and x < slots[y].size() and slots[y][x]:
-						slots[y][x].is_occupied = true
+	slot.set_item(item)
 
 	
 func force_all_slots_refresh():
@@ -342,12 +331,10 @@ func _handle_external_drop(item: InventoryItem, target_slot: InventorySlotUI):
 			items_transferred.emit([item], source_container_id, target_container_id)
 
 func _highlight_valid_drop_zones(item: InventoryItem):
-	var item_size = item.get_grid_size()
-	
 	for y in grid_height:
 		for x in grid_width:
 			var pos = Vector2i(x, y)
-			if container and container.is_area_free(pos, item_size, item):
+			if container and container.is_area_free(pos):
 				var slot = slots[y][x]
 				slot.set_highlighted(true)
 

@@ -19,10 +19,6 @@ extends Resource
 @export var item_rarity: ItemRarity = ItemRarity.COMMON
 @export var is_contraband: bool = false
 
-# Grid display properties
-@export var grid_width: int = 1
-@export var grid_height: int = 1
-
 # Value and meta properties
 @export var base_value: float = 0.0
 @export var can_be_destroyed: bool = true
@@ -141,13 +137,6 @@ func split_stack(split_amount: int) -> InventoryItem:
 	
 	return new_item
 
-# Grid size calculation for UI
-func get_grid_size() -> Vector2i:
-	return Vector2i(grid_width, grid_height)
-
-func get_grid_area() -> int:
-	return grid_width * grid_height
-
 # Rarity color coding (EVE-like)
 func get_rarity_color() -> Color:
 	match item_rarity:
@@ -222,8 +211,6 @@ func to_dict() -> Dictionary:
 		"item_type": item_type,
 		"item_rarity": item_rarity,
 		"is_contraband": is_contraband,
-		"grid_width": grid_width,
-		"grid_height": grid_height,
 		"base_value": base_value,
 		"can_be_destroyed": can_be_destroyed,
 		"is_unique": is_unique,
@@ -244,8 +231,6 @@ func from_dict(data: Dictionary):
 	item_type = data.get("item_type") if data.has("item_type") else ItemType.MISCELLANEOUS
 	item_rarity = data.get("item_rarity") if data.has("item_rarity") else ItemRarity.COMMON
 	is_contraband = data.get("is_contraband") if data.has("is_contraband") else false
-	grid_width = data.get("grid_width") if data.has("grid_width") else 1
-	grid_height = data.get("grid_height") if data.has("grid_height") else 1
 	base_value = data.get("base_value") if data.has("base_value") else 0.0
 	can_be_destroyed = data.get("can_be_destroyed") if data.has("can_be_destroyed") else true
 	is_unique = data.get("is_unique") if data.has("is_unique") else false

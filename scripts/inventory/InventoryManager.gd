@@ -369,7 +369,6 @@ func create_item(item_id: String, name: String, quantity: int = 1) -> InventoryI
 	return item
 
 func create_sample_items():
-	# Create some sample items for testing
 	var items = [
 		{
 			"id": "tritanium_ore",
@@ -389,9 +388,7 @@ func create_sample_items():
 			"mass": 2.0,
 			"max_stack": 1,
 			"value": 15000.0,
-			"rarity": InventoryItem.ItemRarity.RARE,
-			"grid_width": 2,
-			"grid_height": 1
+			"rarity": InventoryItem.ItemRarity.RARE
 		},
 		{
 			"id": "ammo_hybrid",
@@ -411,9 +408,7 @@ func create_sample_items():
 			"mass": 0.1,
 			"max_stack": 1,
 			"value": 50000.0,
-			"rarity": InventoryItem.ItemRarity.EPIC,
-			"grid_width": 1,
-			"grid_height": 2
+			"rarity": InventoryItem.ItemRarity.EPIC
 		}
 	]
 	
@@ -425,10 +420,6 @@ func create_sample_items():
 		item.max_stack_size = item_data.max_stack
 		item.base_value = item_data.value
 		item.item_rarity = item_data.rarity
-		if "grid_width" in item_data:
-			item.grid_width = item_data.grid_width
-		if "grid_height" in item_data:
-			item.grid_height = item_data.grid_height
 		
 		# Add to player inventory
 		player_inventory.add_item(item)

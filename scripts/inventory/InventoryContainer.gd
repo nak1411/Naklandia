@@ -68,33 +68,28 @@ func has_volume_for_item(item: InventoryItem) -> bool:
 	return get_available_volume() >= item.get_total_volume()
 
 # Grid management
-func is_position_valid(pos: Vector2i, item_size: Vector2i) -> bool:
+func is_position_valid(pos: Vector2i) -> bool:
 	if pos.x < 0 or pos.y < 0:
 		return false
-	if pos.x + item_size.x > grid_width or pos.y + item_size.y > grid_height:
+	if pos.x >= grid_width or pos.y >= grid_height:
 		return false
 	return true
 
-func is_area_free(pos: Vector2i, item_size: Vector2i, exclude_item: InventoryItem = null) -> bool:
-	if not is_position_valid(pos, item_size):
+func is_area_free(pos: Vector2i, exclude_item: InventoryItem = null) -> bool:
+	if not is_position_valid(pos):
 		return false
 	
-	for y in range(pos.y, pos.y + item_size.y):
-		for x in range(pos.x, pos.x + item_size.x):
-			var slot_item = grid_slots[y][x]
-			if slot_item != null and slot_item != exclude_item:
-				return false
-	
-	return true
+	var slot_item = grid_slots[pos.y][pos.x]
+	return slot_item == null or slot_item == exclude_item
 
-func find_free_position(item_size: Vector2i) -> Vector2i:
-	for y in range(grid_height - item_size.y + 1):
-		for x in range(grid_width - item_size.x + 1):
+func find_free_position() -> Vector2i:
+	for y in range(grid_height):
+		for x in range(grid_width):
 			var pos = Vector2i(x, y)
-			if is_area_free(pos, item_size):
+			if is_area_free(pos):
 				return pos
 	
-	return Vector2i(-1, -1)  # No free position found
+	return Vector2i(-1, -1)
 	
 # Auto-compacting functionality
 func compact_items():
@@ -109,33 +104,21 @@ func compact_items():
 	_initialize_grid()
 	items.clear()
 	
-	# Re-add items in sequence
+	# Re-add items in sequence, filling from top-left
 	for item in items_to_place:
-		var free_pos = find_free_position(item.get_grid_size())
+		var free_pos = find_free_position()
 		if free_pos != Vector2i(-1, -1):
-			occupy_grid_area(free_pos, item.get_grid_size(), item)
+			occupy_grid_area(free_pos, item)
 			items.append(item)
+		else:
+			print("Warning: Could not find space for item %s during compacting!" % item.item_name)
 
-func find_first_available_slot(item_size: Vector2i) -> Vector2i:
-	"""Finds the first available slot in reading order (left-to-right, top-to-bottom)"""
-	for y in range(grid_height - item_size.y + 1):
-		for x in range(grid_width - item_size.x + 1):
-			var pos = Vector2i(x, y)
-			if is_area_free(pos, item_size):
-				return pos
-	
-	return Vector2i(-1, -1)
+func occupy_grid_area(pos: Vector2i, item: InventoryItem):
+	grid_slots[pos.y][pos.x] = item
 
-func occupy_grid_area(pos: Vector2i, item_size: Vector2i, item: InventoryItem):
-	for y in range(pos.y, pos.y + item_size.y):
-		for x in range(pos.x, pos.x + item_size.x):
-			grid_slots[y][x] = item
-
-func clear_grid_area(pos: Vector2i, item_size: Vector2i):
-	for y in range(pos.y, pos.y + item_size.y):
-		for x in range(pos.x, pos.x + item_size.x):
-			if y < grid_slots.size() and x < grid_slots[y].size():
-				grid_slots[y][x] = null
+func clear_grid_area(pos: Vector2i):
+	if pos.y < grid_slots.size() and pos.x < grid_slots[pos.y].size():
+		grid_slots[pos.y][pos.x] = null
 
 func get_item_position(item: InventoryItem) -> Vector2i:
 	for y in grid_height:
@@ -163,7 +146,7 @@ func can_add_item(item: InventoryItem) -> bool:
 		return existing_item.quantity + item.quantity <= existing_item.max_stack_size
 	
 	# Check grid space
-	var free_pos = find_free_position(item.get_grid_size())
+	var free_pos = find_free_position()
 	return free_pos != Vector2i(-1, -1)
 
 func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1)) -> bool:
@@ -180,20 +163,19 @@ func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1)) -> boo
 			item_added.emit(item, get_item_position(existing_item))
 			return true
 	
-	# Find placement position - use first available slot if no position specified
+	# Find placement position
 	var final_position = position
 	if position == Vector2i(-1, -1):
-		final_position = find_first_available_slot(item.get_grid_size())
-	elif not is_area_free(position, item.get_grid_size()):
-		# If specified position is occupied, find next available
-		final_position = find_first_available_slot(item.get_grid_size())
+		final_position = find_free_position()
+	elif not is_area_free(position):
+		final_position = find_free_position()
 	
 	if final_position == Vector2i(-1, -1):
 		container_full.emit()
 		return false
 	
 	# Place item in grid
-	occupy_grid_area(final_position, item.get_grid_size(), item)
+	occupy_grid_area(final_position, item)
 	items.append(item)
 	
 	# Connect to item signals
@@ -209,7 +191,7 @@ func remove_item(item: InventoryItem) -> bool:
 		return false
 	
 	var position = get_item_position(item)
-	clear_grid_area(position, item.get_grid_size())
+	clear_grid_area(position)
 	items.erase(item)
 	
 	# Disconnect signals
@@ -230,14 +212,13 @@ func move_item(item: InventoryItem, new_position: Vector2i) -> bool:
 		return false
 	
 	var old_position = get_item_position(item)
-	var item_size = item.get_grid_size()
 	
-	if not is_area_free(new_position, item_size, item):
+	if not is_area_free(new_position, item):
 		return false
 	
 	# Clear old position and set new position
-	clear_grid_area(old_position, item_size)
-	occupy_grid_area(new_position, item_size, item)
+	clear_grid_area(old_position)
+	occupy_grid_area(new_position, item)
 	
 	item_moved.emit(item, old_position, new_position)
 	return true

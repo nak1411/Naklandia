@@ -418,16 +418,6 @@ func set_container_id(id: String):
 func get_container_id() -> String:
 	return container_id
 
-# Multi-slot item support (for items larger than 1x1)
-func set_multi_slot_size(grid_size: Vector2i):
-	var total_size = Vector2(slot_size.x * grid_size.x, slot_size.y * grid_size.y)
-	custom_minimum_size = total_size
-	size = total_size
-
-func is_main_slot() -> bool:
-	# For multi-slot items, only the top-left slot is the "main" slot
-	return true  # Simplified for now
-
 # Context menu support
 func show_context_menu(position: Vector2):
 	if not item:
