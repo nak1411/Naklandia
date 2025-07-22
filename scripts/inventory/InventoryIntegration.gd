@@ -99,21 +99,34 @@ func _setup_ui():
 		inventory_window.visible = false
 
 func _on_inventory_item_transferred(item: InventoryItem, from_container: String, to_container: String):
-	# Refresh UI if transfer involves player inventory
+	# Only refresh if transfer involves player inventory
 	var player_inv = inventory_manager.get_player_inventory()
 	if player_inv and (from_container == player_inv.container_id or to_container == player_inv.container_id):
-		print("Item transferred involving player inventory, refreshing UI")
-		refresh_all_ui()
+		_schedule_ui_refresh()
 
 func _on_inventory_transaction_completed(transaction: Dictionary):
-	# Refresh UI after any transaction involving player inventory
+	# Only refresh if transaction involves player inventory
 	var player_inv = inventory_manager.get_player_inventory()
 	if player_inv:
 		var from_container = transaction.get("from_container", "")
 		var to_container = transaction.get("to_container", "")
 		if from_container == player_inv.container_id or to_container == player_inv.container_id:
-			print("Transaction completed involving player inventory, refreshing UI")
-			refresh_all_ui()
+			_schedule_ui_refresh()
+
+var _refresh_scheduled: bool = false
+
+func _schedule_ui_refresh():
+	if _refresh_scheduled:
+		return
+	_refresh_scheduled = true
+	call_deferred("_do_ui_refresh")
+
+func _do_ui_refresh():
+	_refresh_scheduled = false
+	if inventory_hud:
+		inventory_hud._refresh_quick_slots()
+	if inventory_window and inventory_window.visible:
+		inventory_window.refresh_display()
 
 func _connect_signals():
 	# Player reference
@@ -121,7 +134,6 @@ func _connect_signals():
 	
 	# Inventory window signals
 	if inventory_window:
-		# Make sure we're connected to the window_closed signal
 		if not inventory_window.window_closed.is_connected(_on_inventory_window_closed):
 			inventory_window.window_closed.connect(_on_inventory_window_closed)
 		inventory_window.container_switched.connect(_on_container_switched)
@@ -131,10 +143,43 @@ func _connect_signals():
 		inventory_hud.quick_slot_used.connect(_on_quick_slot_used)
 		inventory_hud.quick_slot_selected.connect(_on_quick_slot_selected)
 	
-	# Inventory manager signals - use the existing signals
+	# Inventory manager signals only - avoid container direct connections
 	if inventory_manager:
 		inventory_manager.item_transferred.connect(_on_inventory_item_transferred)
 		inventory_manager.transaction_completed.connect(_on_inventory_transaction_completed)
+		
+func _connect_container_signals():
+	# Player reference
+	player = get_parent() as Player
+	
+	# Inventory window signals
+	if inventory_window:
+		if not inventory_window.window_closed.is_connected(_on_inventory_window_closed):
+			inventory_window.window_closed.connect(_on_inventory_window_closed)
+		inventory_window.container_switched.connect(_on_container_switched)
+	
+	# Inventory HUD signals
+	if inventory_hud:
+		inventory_hud.quick_slot_used.connect(_on_quick_slot_used)
+		inventory_hud.quick_slot_selected.connect(_on_quick_slot_selected)
+	
+	# Inventory manager signals
+	if inventory_manager:
+		inventory_manager.item_transferred.connect(_on_inventory_item_transferred)
+		inventory_manager.transaction_completed.connect(_on_inventory_transaction_completed)
+		
+		# Connect to player inventory container signals directly
+		var player_inv = inventory_manager.get_player_inventory()
+		if player_inv:
+			player_inv.item_added.connect(_on_player_inventory_changed)
+			player_inv.item_removed.connect(_on_player_inventory_changed)
+			player_inv.item_moved.connect(_on_player_inventory_item_moved)
+
+func _on_player_inventory_changed(item: InventoryItem, position: Vector2i):
+	refresh_all_ui()
+
+func _on_player_inventory_item_moved(item: InventoryItem, from_pos: Vector2i, to_pos: Vector2i):
+	refresh_all_ui()
 
 func _unhandled_input(event: InputEvent):
 	if event is InputEventKey and event.pressed:
@@ -587,17 +632,14 @@ func debug_inventory_state():
 	
 	print("=== END DEBUG ===")
 	
-func refresh_window():
-	if inventory_window:
-		print("Refreshing inventory window display")
-		inventory_window.refresh_display()
-
 func refresh_all_ui():
 	"""Refresh both HUD and window displays"""
-	refresh_hud()
-	refresh_window()
-	
+	_schedule_ui_refresh()
+
 func refresh_hud():
 	if inventory_hud:
-		print("Manually refreshing inventory HUD")
 		inventory_hud._refresh_quick_slots()
+
+func refresh_window():
+	if inventory_window:
+		inventory_window.refresh_display()

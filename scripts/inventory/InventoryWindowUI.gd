@@ -867,7 +867,6 @@ func _show_destroy_item_confirmation(item: InventoryItem, slot: InventorySlotUI)
 	)
 	
 	dialog.canceled.connect(func(): dialog.queue_free())
-	refresh_display()
 
 func _use_item(item: InventoryItem, slot: InventorySlotUI):
 	# TODO: Implement item usage system
