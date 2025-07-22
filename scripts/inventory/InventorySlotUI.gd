@@ -46,10 +46,14 @@ func _ready():
 	_setup_signals()
 
 func _setup_visual_components():
+	# Set mouse filter to pass input
+	mouse_filter = Control.MOUSE_FILTER_PASS
+	
 	# Background panel
 	background_panel = Panel.new()
 	background_panel.name = "Background"
 	background_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background_panel)
 	
 	# Style the background
@@ -102,6 +106,7 @@ func _setup_visual_components():
 	_update_visual_state()
 
 func _setup_signals():
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	gui_input.connect(_on_gui_input)
 	mouse_entered.connect(_on_mouse_entered)
 	mouse_exited.connect(_on_mouse_exited)
@@ -118,6 +123,27 @@ func set_item(new_item: InventoryItem):
 		item.quantity_changed.connect(_on_item_quantity_changed)
 	
 	_update_item_display()
+	
+	if visible:
+		queue_redraw()
+	
+func force_visual_refresh():
+	print("InventorySlotUI: force_visual_refresh called at [%d,%d]" % [grid_position.x, grid_position.y])
+	
+	# Ensure all visual components are visible and properly set up
+	if item_icon:
+		print("InventorySlotUI: Item icon - visible: %s, texture: %s" % [item_icon.visible, str(item_icon.texture)])
+	
+	if quantity_label:
+		print("InventorySlotUI: Quantity label - visible: %s, text: '%s'" % [quantity_label.visible, quantity_label.text])
+	
+	# Force redraw
+	queue_redraw()
+	
+	# Update visual state
+	_update_visual_state()
+	
+	print("InventorySlotUI: Visual refresh complete")
 
 func clear_item():
 	set_item(null)
@@ -131,9 +157,14 @@ func has_item() -> bool:
 # Visual updates
 func _update_item_display():
 	if not item:
-		item_icon.texture = null
-		quantity_label.text = ""
-		rarity_border.visible = false
+		if item_icon:
+			item_icon.texture = null
+			item_icon.visible = false
+		if quantity_label:
+			quantity_label.text = ""
+			quantity_label.visible = false
+		if rarity_border:
+			rarity_border.visible = false
 		tooltip_text = ""
 		return
 	
@@ -141,33 +172,39 @@ func _update_item_display():
 	var icon_texture = item.get_icon_texture()
 	if icon_texture:
 		item_icon.texture = icon_texture
+		item_icon.visible = true
 	else:
-		# Create a colored rectangle as fallback
 		_create_fallback_icon()
+		item_icon.visible = true
 	
 	# Set quantity
 	if item.quantity > 1:
 		quantity_label.text = str(item.quantity)
+		quantity_label.visible = true
 	else:
 		quantity_label.text = ""
+		quantity_label.visible = false
 	
 	# Set rarity border
-	if item.item_rarity != InventoryItem.ItemRarity.COMMON:
-		_show_rarity_border()
-	else:
-		rarity_border.visible = false
+	if rarity_border:
+		if item.item_rarity != InventoryItem.ItemRarity.COMMON:
+			_show_rarity_border()
+		else:
+			rarity_border.visible = false
 	
 	# Set tooltip
 	_update_tooltip()
+	
+	# Force visual update
+	queue_redraw()
 
 func _create_fallback_icon():
-	# Create a simple colored rectangle based on item type
-	var image = Image.create(32, 32, false, Image.FORMAT_RGB8)
+	var image = Image.create(64, 64, false, Image.FORMAT_RGB8)
 	var type_color = item.get_type_color()
 	image.fill(type_color)
 	
 	var texture = ImageTexture.new()
-	texture.create_from_image(image)
+	texture.set_image(image)
 	item_icon.texture = texture
 
 func _show_rarity_border():
@@ -240,6 +277,7 @@ func _on_gui_input(event: InputEvent):
 			
 			elif mouse_event.button_index == MOUSE_BUTTON_RIGHT:
 				slot_right_clicked.emit(self, mouse_event)
+				get_viewport().set_input_as_handled()
 		
 		else:  # Mouse button released
 			if mouse_event.button_index == MOUSE_BUTTON_LEFT and is_dragging:
@@ -409,3 +447,20 @@ func show_context_menu(position: Vector2):
 	# TODO: Implement context menu
 	# This would show options like "Split Stack", "Destroy", "Info", etc.
 	pass
+
+func debug_slot_state():
+	print("=== SLOT DEBUG [%d,%d] ===" % [grid_position.x, grid_position.y])
+	print("Has item: %s" % has_item())
+	print("Is occupied: %s" % is_occupied)
+	print("Item icon node: %s" % str(item_icon))
+	print("Quantity label node: %s" % str(quantity_label))
+	
+	if has_item():
+		print("Item name: %s" % item.item_name)
+		print("Item quantity: %d" % item.quantity)
+		print("Icon texture: %s" % str(item_icon.texture))
+		print("Icon visible: %s" % item_icon.visible)
+		print("Quantity text: '%s'" % quantity_label.text)
+		print("Quantity visible: %s" % quantity_label.visible)
+	
+	print("=== END SLOT DEBUG ===")

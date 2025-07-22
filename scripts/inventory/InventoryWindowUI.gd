@@ -416,25 +416,31 @@ func _populate_container_list():
 	
 	var containers = inventory_manager.get_accessible_containers()
 	
+	# Sort containers to put player inventory first
+	containers.sort_custom(func(a, b): 
+		if a.container_id == "player_inventory":
+			return true
+		elif b.container_id == "player_inventory":
+			return false
+		return a.container_name < b.container_name
+	)
+	
 	for container in containers:
 		var container_text = "%s (%d)" % [container.container_name, container.get_item_count()]
 		
-		# Add to option button (header)
 		container_selector.add_item(container_text)
-		
-		# Add to item list (left panel) with proper sizing
 		container_list.add_item(container_text)
-		# Set item text to wrap if too long
 		var item_index = container_list.get_item_count() - 1
 		container_list.set_item_tooltip(item_index, container_text)
 		
 		open_containers.append(container)
 	
-	# Select first container by default
+	# Select player inventory first
 	if not open_containers.is_empty():
 		_switch_to_container(open_containers[0])
 		container_selector.selected = 0
 		container_list.select(0)
+
 
 func _switch_to_container(container: InventoryContainer):
 	current_container = container
@@ -861,8 +867,6 @@ func _unhandled_key_input(event: InputEvent):
 	if event is InputEventKey and event.pressed:
 		match event.keycode:
 			KEY_I:
-				# Close inventory when I is pressed
-				print("I key pressed in inventory window - closing")
 				_close_window()
 				get_viewport().set_input_as_handled()
 			KEY_ESCAPE:
@@ -870,8 +874,6 @@ func _unhandled_key_input(event: InputEvent):
 			KEY_F5:
 				refresh_display()
 			KEY_HOME:
-				# Reset window to center
-				print("Resetting window position to center...")
 				_center_window()
 			KEY_ENTER:
 				if search_field and search_field.has_focus():
@@ -907,3 +909,70 @@ func _apply_container_list_style(itemlist_style: StyleBoxFlat):
 		container_list.add_theme_color_override("font_color", Color.WHITE)
 		container_list.add_theme_color_override("font_selected_color", Color.YELLOW)
 		container_list.add_theme_constant_override("line_separation", 4)
+		
+func debug_grid_ui():
+	print("=== GRID UI DEBUG ===")
+	
+	if not inventory_grid:
+		print("No inventory grid!")
+		return
+	
+	print("Grid container ID: %s" % inventory_grid.container_id)
+	print("Grid container object: %s" % str(inventory_grid.container))
+	print("Grid size: %dx%d" % [inventory_grid.grid_width, inventory_grid.grid_height])
+	print("Grid slots array size: %d" % inventory_grid.slots.size())
+	
+	if inventory_grid.slots.size() > 0:
+		print("First row slots: %d" % inventory_grid.slots[0].size())
+		
+		# Check first few slots for items
+		for y in range(min(2, inventory_grid.slots.size())):
+			for x in range(min(5, inventory_grid.slots[y].size())):
+				var slot = inventory_grid.slots[y][x]
+				if slot:
+					var has_item = slot.has_item()
+					var item_name = slot.get_item().item_name if has_item else "none"
+					print("  Slot [%d,%d]: has_item=%s, item=%s" % [x, y, has_item, item_name])
+				else:
+					print("  Slot [%d,%d]: NULL SLOT!" % [x, y])
+	
+	print("=== END GRID DEBUG ===")
+
+func debug_inventory_contents():
+	print("=== INVENTORY DEBUG (from window) ===")
+	
+	if current_container:
+		print("Current container: %s (%s)" % [current_container.container_name, current_container.container_id])
+		print("  Item count: %d" % current_container.get_item_count())
+		print("  Grid size: %dx%d" % [current_container.grid_width, current_container.grid_height])
+		print("  Items:")
+		for i in range(current_container.items.size()):
+			var item = current_container.items[i]
+			var pos = current_container.get_item_position(item)
+			print("    %d: %s (pos: %s, qty: %d)" % [i, item.item_name, pos, item.quantity])
+	else:
+		print("No current container!")
+	
+	print("=== END INVENTORY DEBUG ===")
+
+func force_complete_refresh():
+	print("=== FORCING COMPLETE REFRESH ===")
+	
+	if not current_container:
+		print("No current container!")
+		return
+	
+	print("Refreshing container: %s with %d items" % [current_container.container_name, current_container.get_item_count()])
+	
+	# Force grid to rebuild
+	if inventory_grid:
+		print("Rebuilding grid...")
+		inventory_grid.set_container(current_container)  # This should rebuild everything
+		await get_tree().process_frame
+		inventory_grid.refresh_display()
+		await get_tree().process_frame
+	
+	# Also refresh the window
+	refresh_display()
+	
+	print("Refresh complete!")

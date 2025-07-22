@@ -159,18 +159,32 @@ func refresh_display():
 
 func _clear_all_slots():
 	for y in grid_height:
+		if y >= slots.size():
+			continue
+			
 		for x in grid_width:
-			if slots[y] and x < slots[y].size() and slots[y][x]:
+			if x >= slots[y].size():
+				continue
+				
+			if slots[y][x]:
 				slots[y][x].clear_item()
 
+# Improve the _place_item_in_grid method with debug output
 func _place_item_in_grid(item: InventoryItem, position: Vector2i):
 	if not _is_valid_position(position):
 		return
 	
 	var item_size = item.get_grid_size()
 	
+	# Check if we can access the slot
+	if position.y >= slots.size() or position.x >= slots[position.y].size():
+		return
+	
 	# Set the main slot (top-left)
 	var main_slot = slots[position.y][position.x]
+	if not main_slot:
+		return
+	
 	main_slot.set_item(item)
 	
 	# For multi-slot items, mark occupied slots
@@ -178,8 +192,23 @@ func _place_item_in_grid(item: InventoryItem, position: Vector2i):
 		for y in range(position.y, position.y + item_size.y):
 			for x in range(position.x, position.x + item_size.x):
 				if _is_valid_position(Vector2i(x, y)) and not (x == position.x and y == position.y):
-					# Mark as occupied but don't set item
-					slots[y][x].is_occupied = true
+					if y < slots.size() and x < slots[y].size() and slots[y][x]:
+						slots[y][x].is_occupied = true
+
+	
+func force_all_slots_refresh():
+	print("InventoryGridUI: Forcing visual refresh on all slots...")
+	
+	var refreshed_count = 0
+	
+	for y in range(slots.size()):
+		for x in range(slots[y].size()):
+			var slot = slots[y][x]
+			if slot and slot.has_method("force_visual_refresh"):
+				slot.force_visual_refresh()
+				refreshed_count += 1
+	
+	print("InventoryGridUI: Refreshed %d slots" % refreshed_count)
 
 # Slot interaction
 func _on_slot_clicked(slot: InventorySlotUI, event: InputEvent):
