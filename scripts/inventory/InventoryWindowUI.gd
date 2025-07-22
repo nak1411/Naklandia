@@ -17,9 +17,6 @@ var mass_info_bar: Panel
 var mass_info_label: Label
 
 # Header components
-var title_label: Label
-var close_button: Button
-var minimize_button: Button
 var container_selector: OptionButton
 var search_field: LineEdit
 var filter_options: OptionButton
@@ -39,7 +36,7 @@ func _init():
 	size = default_size
 	min_size = min_window_size
 	
-	# Enable window dragging and resizing
+	# Enable window dragging and resizing with native title bar
 	set_flag(Window.FLAG_RESIZE_DISABLED, false)
 	set_flag(Window.FLAG_BORDERLESS, false)
 	
@@ -255,15 +252,10 @@ func _setup_header():
 	header_container.custom_minimum_size.y = 40
 	main_container.add_child(header_container)
 	
-	# Title (make it draggable)
-	title_label = Label.new()
-	title_label.text = window_title
-	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	header_container.add_child(title_label)
-	
-	# Make the header draggable
-	_setup_window_dragging()
+	# Add some spacing at the start
+	var left_spacer = Control.new()
+	left_spacer.custom_minimum_size.x = 8
+	header_container.add_child(left_spacer)
 	
 	# Container selector
 	container_selector = OptionButton.new()
@@ -305,50 +297,10 @@ func _setup_header():
 	sort_popup.add_item("By Rarity")
 	header_container.add_child(sort_button)
 	
-	# Window controls
-	var spacer = Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header_container.add_child(spacer)
-	
-	minimize_button = Button.new()
-	minimize_button.text = "_"
-	minimize_button.custom_minimum_size = Vector2(30, 30)
-	header_container.add_child(minimize_button)
-	
-	close_button = Button.new()
-	close_button.text = "×"
-	close_button.custom_minimum_size = Vector2(30, 30)
-	header_container.add_child(close_button)
-
-func _setup_window_dragging():
-	# The window should be draggable by default in Godot 4
-	# If it's not working, we can implement custom dragging
-	var drag_enabled = true
-	
-	if drag_enabled:
-		# Make sure the window can be dragged by the title bar
-		# This is usually automatic, but we can force it
-		borderless = false
-		unresizable = false
-		
-		# If automatic dragging doesn't work, implement manual dragging
-		var is_dragging = false
-		var drag_offset = Vector2()
-		
-		title_label.gui_input.connect(func(event: InputEvent):
-			if event is InputEventMouseButton:
-				var mouse_event = event as InputEventMouseButton
-				if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-					if mouse_event.pressed:
-						is_dragging = true
-						drag_offset = mouse_event.global_position - Vector2(position)
-					else:
-						is_dragging = false
-			
-			elif event is InputEventMouseMotion and is_dragging:
-				var mouse_event = event as InputEventMouseMotion
-				position = Vector2i(mouse_event.global_position - drag_offset)
-		)
+	# Right spacer to push everything left
+	var right_spacer = Control.new()
+	right_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_container.add_child(right_spacer)
 
 func _setup_content():
 	content_container = HSplitContainer.new()
@@ -440,11 +392,8 @@ func _setup_mass_info_bar(parent: Control):
 	mass_info_bar.add_child(mass_info_label)
 
 func _connect_signals():
-	# Window controls
-	if close_button:
-		close_button.pressed.connect(_on_close_pressed)
-	if minimize_button:
-		minimize_button.pressed.connect(_on_minimize_pressed)
+	# Connect native window close signal
+	close_requested.connect(_on_close_requested)
 	
 	# Container selection
 	if container_selector:
@@ -571,12 +520,6 @@ func _update_mass_info():
 		mass_info_label.add_theme_color_override("font_color", Color.WHITE)
 
 # Event handlers
-func _on_close_pressed():
-	_close_window()
-
-func _on_minimize_pressed():
-	visible = false
-
 func _on_close_requested():
 	_close_window()
 
