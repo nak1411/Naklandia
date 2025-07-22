@@ -48,10 +48,19 @@ func _physics_process(delta):
 	
 	# Handle interaction
 	if interact_pressed and interaction_system:
+		print("=== E KEY PRESSED ===")
+		print("Interaction system available: ", interaction_system != null)
+		print("Current interactable: ", interaction_system.get_current_interactable())
+		print("Interaction available: ", interaction_system.is_interaction_available())
+		
 		var success = interaction_system.attempt_interaction()
+		print("Interaction attempt result: ", success)
+		
 		if success:
 			# Consume the interact input buffer
 			input_manager.consume_interact_buffer()
+		else:
+			print("Interaction failed - no valid target")
 	
 	# Update movement state
 	_update_player_state(run_pressed, crouch_pressed)

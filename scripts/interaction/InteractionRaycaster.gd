@@ -1,11 +1,10 @@
-# InteractionRaycaster.gd - Handles raycast detection for interactions
-class_name InteractionRaycaster
+# InteractionRaycaster.gd - Fixed to handle floor collision properly
 extends Node
 
 # Raycast settings
-var raycast_distance: float = 3.0
-var raycast_layer: int = 2  # Changed to layer 2 for interactables
-var debug_draw: bool = false
+var raycast_distance: float = 5.0
+var raycast_layer: int = 2
+var debug_draw: bool = true
 
 # References
 var camera: Camera3D
@@ -17,95 +16,111 @@ signal interactable_detected(interactable: Interactable)
 signal interactable_lost()
 
 func _ready():
-	# Find camera reference
 	_find_camera_reference()
+	print("=== RAYCASTER READY ===")
+	print("Camera found: ", camera != null)
 
 func setup_raycaster(distance: float, layer: int):
 	raycast_distance = distance
 	raycast_layer = layer
 
 func _find_camera_reference():
-	# Look for camera in player
-	var player = get_parent().get_parent()  # InteractionRaycaster -> InteractionSystem -> Player
+	var player = get_parent().get_parent()
 	if player and player.has_node("CameraPivot/Camera3D"):
 		camera = player.get_node("CameraPivot/Camera3D")
-	else:
-		print("Warning: Could not find camera for interaction raycaster")
+		print("Camera found at CameraPivot/Camera3D")
 
 func update_raycast():
 	if not camera:
 		return
 	
-	# Get the space state
 	space_state = get_viewport().world_3d.direct_space_state
 	if not space_state:
 		return
 	
-	# Perform raycast from camera center
 	var from = camera.global_position
 	var to = from + (-camera.global_transform.basis.z * raycast_distance)
 	
-	# Setup raycast query
+	# Get all objects that need to be excluded
+	var exclude_objects = []
+	exclude_objects.append(get_parent().get_parent())  # Player
+	
+	# Find and exclude floor/ground objects on layer 1
+	var scene_root = get_tree().current_scene
+	_find_and_exclude_floors(scene_root, exclude_objects)
+	
 	var query = PhysicsRayQueryParameters3D.new()
 	query.from = from
 	query.to = to
-	query.collision_mask = 1 << (raycast_layer - 1)  # Convert to bit mask
-	query.exclude = [get_parent().get_parent()]  # Exclude player
+	query.collision_mask = 1 << (raycast_layer - 1)  # Only layer 2
+	query.exclude = exclude_objects
 	
-	# Perform raycast
+	if debug_draw:
+		print("\n=== RAYCAST (excluding ", exclude_objects.size(), " objects) ===")
+		print("From: ", from)
+		print("To: ", to)
+		print("Mask: ", query.collision_mask)
+	
 	var result = space_state.intersect_ray(query)
 	
-	# Process result
-	_process_raycast_result(result)
+	if result.has("collider"):
+		var collider = result.collider
+		if collider is Node:
+			print("HIT: ", collider.name, " layer: ", collider.collision_layer)
+		else:
+			print("HIT: Non-node collider")
+	else:
+		print("NO HIT (floor excluded)")
 	
-	# Debug visualization
-	if debug_draw:
-		_draw_debug_ray(from, to, result.has("collider"))
+	_process_raycast_result(result)
+
+func _find_and_exclude_floors(node: Node, exclude_list: Array):
+	# Exclude any StaticBody3D that might be floor/walls
+	if node is StaticBody3D and node.collision_layer == 1:
+		exclude_list.append(node)
+		if debug_draw:
+			print("Excluding floor object: ", node.name)
+	
+	for child in node.get_children():
+		_find_and_exclude_floors(child, exclude_list)
 
 func _process_raycast_result(result: Dictionary):
 	var hit_interactable: Interactable = null
 	
 	if result.has("collider"):
 		var collider = result.collider
-		
-		# Check if the collider or its parent is an Interactable
-		hit_interactable = _find_interactable_in_hierarchy(collider)
+		if collider is Node:
+			hit_interactable = _find_interactable_in_hierarchy(collider)
+			if hit_interactable:
+				print("FOUND INTERACTABLE: ", hit_interactable.name)
 	
-	# Handle interactable state changes
 	if hit_interactable != current_interactable:
-		# Lost previous interactable
 		if current_interactable:
+			print("LOST: ", current_interactable.name)
 			current_interactable.end_hover()
 			interactable_lost.emit()
 		
-		# Found new interactable
 		current_interactable = hit_interactable
 		if current_interactable and current_interactable.can_interact():
+			print("GAINED: ", current_interactable.name)
 			current_interactable.start_hover()
 			interactable_detected.emit(current_interactable)
 		else:
 			current_interactable = null
 
 func _find_interactable_in_hierarchy(node: Node) -> Interactable:
-	# Check if the node itself is an Interactable
 	if node is Interactable:
 		return node
 	
-	# Check parent nodes
 	var parent = node.get_parent()
-	while parent:
+	var depth = 0
+	while parent and depth < 3:
 		if parent is Interactable:
 			return parent
 		parent = parent.get_parent()
+		depth += 1
 	
 	return null
-
-func _draw_debug_ray(from: Vector3, to: Vector3, hit: bool):
-	# This would require a debug drawing system
-	# For now, we'll use print statements for debugging
-	if debug_draw:
-		var color = Color.GREEN if hit else Color.RED
-		print("Debug Ray: ", from, " -> ", to, " Hit: ", hit)
 
 # Public interface
 func set_raycast_distance(distance: float):
