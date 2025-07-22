@@ -142,20 +142,31 @@ func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
 # Quick slot management
 func _refresh_quick_slots():
 	if not player_inventory:
+		# Clear all slots if no inventory
+		for slot in quick_slots:
+			slot.clear_item()
 		return
+	
+	var total_qty = player_inventory.get_total_quantity()
+	var unique_items = player_inventory.get_item_count()
+	print("Refreshing quick slots: %d total items (%d unique types)" % [total_qty, unique_items])
 	
 	# Clear all slots first
 	for slot in quick_slots:
 		slot.clear_item()
 	
-	# Fill slots with items from player inventory
-	var item_index = 0
+	# Fill slots with items from player inventory, respecting quantities
+	var slot_index = 0
 	for item in player_inventory.items:
-		if item_index >= slot_count:
+		if slot_index >= slot_count:
 			break
-		
-		quick_slots[item_index].set_item(item)
-		item_index += 1
+		quick_slots[slot_index].set_item(item)
+		slot_index += 1
+	
+	# Force visual update on all slots
+	for i in range(quick_slots.size()):
+		var slot = quick_slots[i]
+		slot.force_visual_refresh()
 
 func _select_slot(index: int):
 	if index < 0 or index >= quick_slots.size():

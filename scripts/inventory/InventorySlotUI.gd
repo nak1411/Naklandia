@@ -166,13 +166,14 @@ func _update_item_display():
 		_create_fallback_icon()
 		item_icon.visible = true
 	
-	# Set quantity
+	# Always show quantity for any amount > 1, and ensure it's visible
 	if item.quantity > 1:
 		quantity_label.text = str(item.quantity)
 		quantity_label.visible = true
 	else:
-		quantity_label.text = ""
-		quantity_label.visible = false
+		# Still show "1" for single items to be explicit
+		quantity_label.text = "1"
+		quantity_label.visible = true
 	
 	# Set rarity border
 	if rarity_border:

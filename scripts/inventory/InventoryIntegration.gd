@@ -98,6 +98,23 @@ func _setup_ui():
 		inventory_window.hide()
 		inventory_window.visible = false
 
+func _on_inventory_item_transferred(item: InventoryItem, from_container: String, to_container: String):
+	# Refresh UI if transfer involves player inventory
+	var player_inv = inventory_manager.get_player_inventory()
+	if player_inv and (from_container == player_inv.container_id or to_container == player_inv.container_id):
+		print("Item transferred involving player inventory, refreshing UI")
+		refresh_all_ui()
+
+func _on_inventory_transaction_completed(transaction: Dictionary):
+	# Refresh UI after any transaction involving player inventory
+	var player_inv = inventory_manager.get_player_inventory()
+	if player_inv:
+		var from_container = transaction.get("from_container", "")
+		var to_container = transaction.get("to_container", "")
+		if from_container == player_inv.container_id or to_container == player_inv.container_id:
+			print("Transaction completed involving player inventory, refreshing UI")
+			refresh_all_ui()
+
 func _connect_signals():
 	# Player reference
 	player = get_parent() as Player
@@ -114,22 +131,28 @@ func _connect_signals():
 		inventory_hud.quick_slot_used.connect(_on_quick_slot_used)
 		inventory_hud.quick_slot_selected.connect(_on_quick_slot_selected)
 	
-	# Inventory manager signals
+	# Inventory manager signals - use the existing signals
 	if inventory_manager:
-		inventory_manager.item_transferred.connect(_on_item_transferred)
-		inventory_manager.transaction_completed.connect(_on_transaction_completed)
+		inventory_manager.item_transferred.connect(_on_inventory_item_transferred)
+		inventory_manager.transaction_completed.connect(_on_inventory_transaction_completed)
 
-func _input(event: InputEvent):
+func _unhandled_input(event: InputEvent):
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_I:
 			toggle_inventory()
 			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_ESCAPE and is_inventory_open:
-			# Handle escape as fallback when inventory is open
 			close_inventory()
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_ESCAPE and !is_inventory_open:
+			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_F:
 			use_selected_quick_slot()
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_F9:  # Debug key
+			#debug_inventory_state()
+			refresh_all_ui()  # Force complete UI refresh
 			get_viewport().set_input_as_handled()
 
 # Inventory management
@@ -531,3 +554,50 @@ func force_complete_refresh():
 	inventory_window.refresh_display()
 	
 	print("Refresh complete!")
+	
+func debug_inventory_state():
+	print("=== DEBUG INVENTORY STATE ===")
+	
+	if not inventory_manager:
+		print("No inventory manager!")
+		return
+	
+	var player_inv = inventory_manager.get_player_inventory()
+	if not player_inv:
+		print("No player inventory!")
+		return
+	
+	var total_qty = player_inv.get_total_quantity()
+	var unique_items = player_inv.get_item_count()
+	print("Player inventory: %d total items (%d unique types)" % [total_qty, unique_items])
+	
+	for i in range(player_inv.items.size()):
+		var item = player_inv.items[i]
+		print("  [%d] %s - Quantity: %d" % [i, item.item_name, item.quantity])
+	
+	if inventory_hud:
+		print("HUD slots:")
+		for i in range(inventory_hud.quick_slots.size()):
+			var slot = inventory_hud.quick_slots[i]
+			if slot.has_item():
+				var item = slot.get_item()
+				print("  Slot[%d]: %s - Quantity: %d" % [i, item.item_name, item.quantity])
+			else:
+				print("  Slot[%d]: empty" % i)
+	
+	print("=== END DEBUG ===")
+	
+func refresh_window():
+	if inventory_window:
+		print("Refreshing inventory window display")
+		inventory_window.refresh_display()
+
+func refresh_all_ui():
+	"""Refresh both HUD and window displays"""
+	refresh_hud()
+	refresh_window()
+	
+func refresh_hud():
+	if inventory_hud:
+		print("Manually refreshing inventory HUD")
+		inventory_hud._refresh_quick_slots()

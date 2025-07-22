@@ -253,6 +253,28 @@ func find_item_by_id(item_id: String) -> InventoryItem:
 # Container statistics
 func get_item_count() -> int:
 	return items.size()
+	
+func get_total_quantity() -> int:
+	"""Returns the total quantity of all items (sum of all item quantities)"""
+	var total_quantity = 0
+	for item in items:
+		total_quantity += item.quantity
+	return total_quantity
+
+# Update get_container_info to include total quantity
+func get_container_info() -> Dictionary:
+	return {
+		"name": container_name,
+		"id": container_id,
+		"volume_used": get_current_volume(),
+		"volume_max": max_volume,
+		"volume_percentage": get_volume_percentage(),
+		"item_count": get_item_count(),
+		"total_quantity": get_total_quantity(),  # Add this line
+		"total_mass": get_total_mass(),
+		"total_value": get_total_value(),
+		"is_secure": is_secure
+	}
 
 func get_total_mass() -> float:
 	var total_mass = 0.0
@@ -265,19 +287,6 @@ func get_total_value() -> float:
 	for item in items:
 		total_value += item.get_total_value()
 	return total_value
-
-func get_container_info() -> Dictionary:
-	return {
-		"name": container_name,
-		"id": container_id,
-		"volume_used": get_current_volume(),
-		"volume_max": max_volume,
-		"volume_percentage": get_volume_percentage(),
-		"item_count": get_item_count(),
-		"total_mass": get_total_mass(),
-		"total_value": get_total_value(),
-		"is_secure": is_secure
-	}
 
 # Signal handlers
 func _on_item_quantity_changed(new_quantity: int):

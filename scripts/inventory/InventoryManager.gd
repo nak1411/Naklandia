@@ -130,7 +130,6 @@ func remove_item_from_container(item: InventoryItem, container_id: String) -> bo
 	var container = get_container(container_id)
 	if not container:
 		return false
-	
 	return container.remove_item(item)
 
 func transfer_item(item: InventoryItem, from_container_id: String, to_container_id: String, 
@@ -527,17 +526,6 @@ func get_player_cargo() -> InventoryContainer:
 
 func get_hangar_containers() -> Array[InventoryContainer]:
 	return hangar_containers
-
-# Debug and testing
-func print_inventory_status():
-	print("=== Inventory Status ===")
-	for container in containers.values():
-		print(container.get_debug_string())
-	
-	var summary = get_inventory_summary()
-	print("Total Value: %.2f ISK" % summary.total_value)
-	print("Total Volume: %.2f m³" % summary.total_volume)
-	print("Total Mass: %.2f kg" % summary.total_mass)
 
 func _exit_tree():
 	save_inventory()

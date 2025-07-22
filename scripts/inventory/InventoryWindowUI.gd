@@ -464,7 +464,16 @@ func _populate_container_list():
 	)
 	
 	for container in containers:
-		var container_text = "%s (%d)" % [container.container_name, container.get_item_count()]
+		# Show total quantity instead of unique item count
+		var total_qty = container.get_total_quantity()
+		var unique_items = container.get_item_count()
+		
+		# Format: "Container Name (50 items)" or "Container Name (50 items, 3 types)"
+		var container_text = ""
+		if unique_items > 1:
+			container_text = "%s (%d items, %d types)" % [container.container_name, total_qty, unique_items]
+		else:
+			container_text = "%s (%d items)" % [container.container_name, total_qty]
 		
 		container_selector.add_item(container_text)
 		container_list.add_item(container_text)
@@ -478,6 +487,37 @@ func _populate_container_list():
 		_switch_to_container(open_containers[0])
 		container_selector.selected = 0
 		container_list.select(0)
+		
+func refresh_container_list():
+	"""Refreshes the container list display without changing selection"""
+	if not inventory_manager:
+		return
+	
+	var selected_index = container_selector.selected
+	var selected_container = current_container
+	
+	# Update container text for each container
+	for i in range(open_containers.size()):
+		var container = open_containers[i]
+		var total_qty = container.get_total_quantity()
+		var unique_items = container.get_item_count()
+		
+		# Format: "Container Name (50 items)" or "Container Name (50 items, 3 types)"
+		var container_text = ""
+		if unique_items > 1:
+			container_text = "%s (%d items, %d types)" % [container.container_name, total_qty, unique_items]
+		else:
+			container_text = "%s (%d items)" % [container.container_name, total_qty]
+		
+		# Update both the selector and list
+		container_selector.set_item_text(i, container_text)
+		container_list.set_item_text(i, container_text)
+		container_list.set_item_tooltip(i, container_text)
+	
+	# Maintain selection
+	if selected_index >= 0 and selected_index < open_containers.size():
+		container_selector.selected = selected_index
+		container_list.select(selected_index)
 
 
 func _switch_to_container(container: InventoryContainer):
@@ -505,9 +545,9 @@ func _update_mass_info():
 	
 	var info = current_container.get_container_info()
 	
-	# Create comprehensive info text
+	# Create comprehensive info text with total quantity
 	var text = "%s  |  " % current_container.container_name
-	text += "Items: %d  |  " % info.item_count
+	text += "Items: %d (%d types)  |  " % [info.total_quantity, info.item_count]
 	text += "Volume: %.1f/%.1f m³ (%.1f%%)  |  " % [info.volume_used, info.volume_max, info.volume_percentage]
 	text += "Mass: %.1f kg  |  " % info.total_mass
 	text += "Value: %.0f ISK" % info.total_value
@@ -827,6 +867,7 @@ func _show_destroy_item_confirmation(item: InventoryItem, slot: InventorySlotUI)
 	)
 	
 	dialog.canceled.connect(func(): dialog.queue_free())
+	refresh_display()
 
 func _use_item(item: InventoryItem, slot: InventorySlotUI):
 	# TODO: Implement item usage system
@@ -897,6 +938,7 @@ func refresh_display():
 	if inventory_grid:
 		inventory_grid.refresh_display()
 	_update_mass_info()
+	refresh_container_list()
 
 # Window state management
 func toggle_visibility():
@@ -937,6 +979,9 @@ func _input(event: InputEvent):
 				if search_field and search_field.has_focus():
 					_apply_filters()
 					get_viewport().set_input_as_handled()
+			KEY_F9:
+				refresh_display()
+				get_viewport().set_input_as_handled()
 
 # Theme and styling
 func apply_custom_theme():
