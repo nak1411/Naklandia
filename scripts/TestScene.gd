@@ -14,6 +14,7 @@ func _ready():
 	print("  Space - Jump")
 	print("  Shift - Run")
 	print("  Ctrl - Crouch")
+	print("  E - Interact")
 	print("  Escape - Toggle mouse")
 
 func setup_materials():
@@ -68,8 +69,8 @@ func setup_debug_ui():
 	canvas_layer.name = "UI"
 	add_child(canvas_layer)
 	
-	# Add crosshair
-	var crosshair = preload("res://CrosshairUI.gd").new()
+	# Add crosshair - Create instance directly since we have the script
+	var crosshair = CrosshairUI.new()
 	crosshair.name = "Crosshair"
 	canvas_layer.add_child(crosshair)
 	

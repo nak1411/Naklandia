@@ -5,12 +5,12 @@ extends Node
 # Interaction settings
 @export_group("Interaction")
 @export var interaction_distance: float = 3.0
-@export var interaction_layer: int = 1  # Physics layer for interactables
+@export var interaction_layer: int = 2  # Physics layer for interactables
 @export var debug_draw: bool = false
 
-# Component references
-@onready var raycaster: InteractionRaycaster = $InteractionRaycaster
-@onready var ui: InteractionUI = $InteractionUI
+# Component references - using untyped variables to avoid class loading issues
+var raycaster: Node
+var ui: Node
 
 # Current interaction state
 var current_interactable: Interactable = null
@@ -22,6 +22,10 @@ signal interactable_lost()
 signal interaction_performed(interactable: Interactable)
 
 func _ready():
+	# Get component references
+	raycaster = get_node("InteractionRaycaster")
+	ui = get_node("InteractionUI")
+	
 	# Setup raycaster
 	if raycaster:
 		raycaster.setup_raycaster(interaction_distance, interaction_layer)
@@ -89,9 +93,21 @@ func _on_interactable_lost():
 
 func _update_crosshair_interaction():
 	# Find crosshair and update it
-	var crosshair = get_node_or_null("../UI/Crosshair")
+	var scene_root = get_tree().current_scene
+	var crosshair = _find_crosshair_recursive(scene_root)
 	if crosshair and crosshair.has_method("set_interaction_state"):
 		crosshair.set_interaction_state(interaction_available)
+
+func _find_crosshair_recursive(node: Node) -> Node:
+	if node.name == "Crosshair":
+		return node
+	
+	for child in node.get_children():
+		var result = _find_crosshair_recursive(child)
+		if result:
+			return result
+	
+	return null
 
 # Public getters
 func get_current_interactable() -> Interactable:

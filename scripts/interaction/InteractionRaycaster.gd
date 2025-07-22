@@ -4,7 +4,7 @@ extends Node
 
 # Raycast settings
 var raycast_distance: float = 3.0
-var raycast_layer: int = 1
+var raycast_layer: int = 2  # Changed to layer 2 for interactables
 var debug_draw: bool = false
 
 # References
@@ -26,7 +26,7 @@ func setup_raycaster(distance: float, layer: int):
 
 func _find_camera_reference():
 	# Look for camera in player
-	var player = get_parent().get_parent()  # InteractionSystem -> Player
+	var player = get_parent().get_parent()  # InteractionRaycaster -> InteractionSystem -> Player
 	if player and player.has_node("CameraPivot/Camera3D"):
 		camera = player.get_node("CameraPivot/Camera3D")
 	else:
