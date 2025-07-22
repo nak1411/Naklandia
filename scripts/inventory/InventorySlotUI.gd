@@ -426,20 +426,3 @@ func show_context_menu(position: Vector2):
 	# TODO: Implement context menu
 	# This would show options like "Split Stack", "Destroy", "Info", etc.
 	pass
-
-func debug_slot_state():
-	print("=== SLOT DEBUG [%d,%d] ===" % [grid_position.x, grid_position.y])
-	print("Has item: %s" % has_item())
-	print("Is occupied: %s" % is_occupied)
-	print("Item icon node: %s" % str(item_icon))
-	print("Quantity label node: %s" % str(quantity_label))
-	
-	if has_item():
-		print("Item name: %s" % item.item_name)
-		print("Item quantity: %d" % item.quantity)
-		print("Icon texture: %s" % str(item_icon.texture))
-		print("Icon visible: %s" % item_icon.visible)
-		print("Quantity text: '%s'" % quantity_label.text)
-		print("Quantity visible: %s" % quantity_label.visible)
-	
-	print("=== END SLOT DEBUG ===")

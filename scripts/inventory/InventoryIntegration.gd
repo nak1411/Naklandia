@@ -104,7 +104,9 @@ func _connect_signals():
 	
 	# Inventory window signals
 	if inventory_window:
-		inventory_window.window_closed.connect(_on_inventory_window_closed)
+		# Make sure we're connected to the window_closed signal
+		if not inventory_window.window_closed.is_connected(_on_inventory_window_closed):
+			inventory_window.window_closed.connect(_on_inventory_window_closed)
 		inventory_window.container_switched.connect(_on_container_switched)
 	
 	# Inventory HUD signals
@@ -122,6 +124,10 @@ func _input(event: InputEvent):
 		if event.keycode == KEY_I:
 			toggle_inventory()
 			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_ESCAPE and is_inventory_open:
+			# Handle escape as fallback when inventory is open
+			close_inventory()
+			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_F:
 			use_selected_quick_slot()
 			get_viewport().set_input_as_handled()
@@ -138,28 +144,25 @@ func toggle_inventory():
 		print("Inventory window not ready!")
 		return
 	
-	is_inventory_open = not is_inventory_open
-	
-	
-	if is_inventory_open:
-		
-		# Use the fine-tuned centered position
+	# Check current state and toggle
+	if inventory_window.visible:
+		# Close the inventory
+		inventory_window.visible = false
+		is_inventory_open = false
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	else:
+		# Open the inventory
+		is_inventory_open = true
 		inventory_window.position = Vector2i(((DisplayServer.screen_get_size().x / 2) - 200) / 2, ((DisplayServer.screen_get_size().y / 2) - 200) / 2)
-		# Make visible
 		inventory_window.visible = true
-		
-		# Focus and mouse
 		inventory_window.grab_focus()
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-		
-	else:
-		inventory_window.visible = false
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	
 	inventory_toggled.emit(is_inventory_open)
 
 func _on_inventory_window_closed():
 	is_inventory_open = false
+	# Ensure mouse mode is captured for gameplay
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	inventory_toggled.emit(is_inventory_open)
 
@@ -175,7 +178,10 @@ func close_inventory():
 	if not inventory_window:
 		return
 	if is_inventory_open:
-		toggle_inventory()
+		inventory_window.visible = false
+		is_inventory_open = false
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		inventory_toggled.emit(is_inventory_open)
 
 func use_selected_quick_slot():
 	inventory_hud.use_selected_slot()

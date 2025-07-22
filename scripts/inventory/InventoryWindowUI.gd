@@ -525,6 +525,8 @@ func _on_close_requested():
 
 func _close_window():
 	visible = false
+	# Force mouse capture restoration
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	window_closed.emit()
 
 func _on_container_selector_changed(index: int):
@@ -906,30 +908,27 @@ func bring_to_front():
 	grab_focus()
 
 # Keyboard shortcuts
-func _unhandled_key_input(event: InputEvent):
-	# Only process if window is visible and has focus
-	if not visible or not has_focus():
+func _input(event: InputEvent):
+	# Only process if window is visible
+	if not visible:
 		return
 	
 	if event is InputEventKey and event.pressed:
-		print("Key pressed in inventory window: ", event.keycode, " (window has focus: ", has_focus(), ")")
-		
 		match event.keycode:
+			KEY_I:
+				_close_window()
+				get_viewport().set_input_as_handled()
 			KEY_ESCAPE:
-				print("Escape key pressed - closing inventory")
 				_close_window()
 				get_viewport().set_input_as_handled()
 			KEY_F5:
-				print("F5 key pressed - refreshing display")
 				refresh_display()
 				get_viewport().set_input_as_handled()
 			KEY_HOME:
-				print("Home key pressed - centering window")
 				_center_window_sync()
 				get_viewport().set_input_as_handled()
 			KEY_ENTER:
 				if search_field and search_field.has_focus():
-					print("Enter key pressed in search field")
 					_apply_filters()
 					get_viewport().set_input_as_handled()
 
