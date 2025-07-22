@@ -489,7 +489,7 @@ func _populate_container_list():
 		container_list.select(0)
 		
 func refresh_container_list():
-	"""Refreshes the container list display without changing selection"""
+	"""Refreshes the container list display after validating container integrity"""
 	if not inventory_manager:
 		return
 	
@@ -499,6 +499,7 @@ func refresh_container_list():
 	# Update container text for each container
 	for i in range(open_containers.size()):
 		var container = open_containers[i]
+		
 		var total_qty = container.get_total_quantity()
 		var unique_items = container.get_item_count()
 		
@@ -702,6 +703,9 @@ func _on_context_menu_item_selected(id: int, popup: PopupMenu):
 		22: # Clear Container
 			_on_clear_container_pressed()
 	
+	# Refresh container list after any action that might change item counts
+	refresh_container_list()
+	
 	popup.queue_free()
 
 func _show_item_details_dialog(item: InventoryItem):
@@ -863,6 +867,10 @@ func _show_destroy_item_confirmation(item: InventoryItem, slot: InventorySlotUI)
 	dialog.confirmed.connect(func():
 		if inventory_manager:
 			inventory_manager.remove_item_from_container(item, current_container.container_id)
+			# Wait a frame then refresh everything
+			await get_tree().process_frame
+			refresh_display()
+			refresh_container_list()
 		dialog.queue_free()
 	)
 	

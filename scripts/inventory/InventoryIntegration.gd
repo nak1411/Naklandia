@@ -143,43 +143,38 @@ func _connect_signals():
 		inventory_hud.quick_slot_used.connect(_on_quick_slot_used)
 		inventory_hud.quick_slot_selected.connect(_on_quick_slot_selected)
 	
-	# Inventory manager signals only - avoid container direct connections
-	if inventory_manager:
-		inventory_manager.item_transferred.connect(_on_inventory_item_transferred)
-		inventory_manager.transaction_completed.connect(_on_inventory_transaction_completed)
-		
-func _connect_container_signals():
-	# Player reference
-	player = get_parent() as Player
-	
-	# Inventory window signals
-	if inventory_window:
-		if not inventory_window.window_closed.is_connected(_on_inventory_window_closed):
-			inventory_window.window_closed.connect(_on_inventory_window_closed)
-		inventory_window.container_switched.connect(_on_container_switched)
-	
-	# Inventory HUD signals
-	if inventory_hud:
-		inventory_hud.quick_slot_used.connect(_on_quick_slot_used)
-		inventory_hud.quick_slot_selected.connect(_on_quick_slot_selected)
-	
 	# Inventory manager signals
 	if inventory_manager:
 		inventory_manager.item_transferred.connect(_on_inventory_item_transferred)
 		inventory_manager.transaction_completed.connect(_on_inventory_transaction_completed)
 		
-		# Connect to player inventory container signals directly
-		var player_inv = inventory_manager.get_player_inventory()
-		if player_inv:
-			player_inv.item_added.connect(_on_player_inventory_changed)
-			player_inv.item_removed.connect(_on_player_inventory_changed)
-			player_inv.item_moved.connect(_on_player_inventory_item_moved)
+		# Connect to all container signals for immediate UI updates
+		_connect_all_container_signals()
 
-func _on_player_inventory_changed(item: InventoryItem, position: Vector2i):
-	refresh_all_ui()
+func _connect_all_container_signals():
+	if not inventory_manager:
+		return
+		
+	var containers = inventory_manager.get_all_containers()
+	for container in containers:
+		if not container.item_added.is_connected(_on_container_item_changed):
+			container.item_added.connect(_on_container_item_changed)
+		if not container.item_removed.is_connected(_on_container_item_changed):
+			container.item_removed.connect(_on_container_item_changed)
+		if not container.item_moved.is_connected(_on_container_item_moved):
+			container.item_moved.connect(_on_container_item_moved)
 
-func _on_player_inventory_item_moved(item: InventoryItem, from_pos: Vector2i, to_pos: Vector2i):
-	refresh_all_ui()
+func _on_container_item_changed(item: InventoryItem, position: Vector2i):
+	# Immediate UI refresh when any container changes
+	_schedule_ui_refresh()
+	# Also refresh the inventory window's container list text
+	if inventory_window and inventory_window.visible:
+		inventory_window.refresh_container_list()
+
+func _on_container_item_moved(item: InventoryItem, from_pos: Vector2i, to_pos: Vector2i):
+	# Immediate UI refresh when items are moved
+	_schedule_ui_refresh()
+	
 
 func _unhandled_input(event: InputEvent):
 	if event is InputEventKey and event.pressed:
