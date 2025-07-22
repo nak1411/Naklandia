@@ -194,7 +194,6 @@ func refresh_display():
 			print("Warning: Item %s has no valid grid position!" % item.item_name)
 	
 	# Force visual refresh on all slots
-	await get_tree().process_frame
 	force_all_slots_refresh()
 
 func _clear_all_slots():
@@ -263,18 +262,22 @@ func _on_slot_right_clicked(slot: InventorySlotUI, event: InputEvent):
 		item_context_menu.emit(slot.get_item(), slot, global_pos)
 
 func _select_single_slot(slot: InventorySlotUI):
-	# Clear previous selection
+	# Clear previous selection with null checks
 	for selected_slot in selected_slots:
-		selected_slot.set_selected(false)
+		if is_instance_valid(selected_slot):
+			selected_slot.set_selected(false)
 	
 	selected_slots.clear()
 	
 	# Select new slot
-	if slot.has_item():
+	if slot and is_instance_valid(slot) and slot.has_item():
 		slot.set_selected(true)
 		selected_slots.append(slot)
 
 func _toggle_slot_selection(slot: InventorySlotUI):
+	if not slot or not is_instance_valid(slot):
+		return
+		
 	if slot in selected_slots:
 		slot.set_selected(false)
 		selected_slots.erase(slot)
@@ -341,10 +344,11 @@ func _highlight_valid_drop_zones(item: InventoryItem):
 func _clear_drop_zone_highlights():
 	for y in grid_height:
 		for x in grid_width:
-			if slots[y] and x < slots[y].size():
+			if y < slots.size() and x < slots[y].size():
 				var slot = slots[y][x]
-				if not slot.is_selected:
-					slot.set_highlighted(false)
+				if slot and is_instance_valid(slot):
+					if not slot.is_selected:
+						slot.set_highlighted(false)
 
 # Utility functions
 func _is_valid_position(pos: Vector2i) -> bool:
@@ -401,7 +405,8 @@ func get_selected_items() -> Array[InventoryItem]:
 
 func clear_selection():
 	for slot in selected_slots:
-		slot.set_selected(false)
+		if is_instance_valid(slot):
+			slot.set_selected(false)
 	selected_slots.clear()
 
 # Keyboard shortcuts

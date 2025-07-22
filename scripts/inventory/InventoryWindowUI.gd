@@ -532,12 +532,16 @@ func _switch_to_container(container: InventoryContainer):
 		
 		inventory_grid.set_container(container)
 		
+		# Wait a frame then force refresh
+		await get_tree().process_frame
+		refresh_display()
+		
 		# Update grid layout to fit the window
 		_update_grid_layout()
 	
 	_update_mass_info()
-	
 	container_switched.emit(container)
+	
 
 func _update_mass_info():
 	if not current_container or not mass_info_label:
@@ -575,13 +579,17 @@ func _close_window():
 
 func _on_container_selector_changed(index: int):
 	if index >= 0 and index < open_containers.size():
-		_switch_to_container(open_containers[index])
-		container_list.select(index)
+		var new_container = open_containers[index]
+		if new_container != current_container:
+			_switch_to_container(new_container)
+			container_list.select(index)
 
 func _on_container_list_selected(index: int):
 	if index >= 0 and index < open_containers.size():
-		_switch_to_container(open_containers[index])
-		container_selector.selected = index
+		var new_container = open_containers[index]
+		if new_container != current_container:
+			_switch_to_container(new_container)
+			container_selector.selected = index
 
 func _on_search_text_changed(new_text: String):
 	_apply_filters()
@@ -936,13 +944,16 @@ func close_container(container: InventoryContainer):
 		open_containers.remove_at(index)
 		container_selector.remove_item(index)
 		container_list.remove_item(index)
-		
+
 		# Switch to another container if current one was closed
 		if container == current_container and not open_containers.is_empty():
 			_switch_to_container(open_containers[0])
+			
 
 func refresh_display():
-	if inventory_grid:
+	if inventory_grid and current_container:
+		inventory_grid.set_container(current_container)
+		await get_tree().process_frame
 		inventory_grid.refresh_display()
 	_update_mass_info()
 	refresh_container_list()
