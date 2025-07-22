@@ -1,0 +1,33 @@
+[gd_scene load_steps=7 format=3 uid="uid://b2wfoje26x7fv"]
+
+[ext_resource type="Script" uid="uid://ckniy4t5b4kte" path="res://Player.gd" id="1_hqtel"]
+[ext_resource type="Script" uid="uid://c0bnvtexowx2r" path="res://MouseLook.gd" id="2_sweqy"]
+[ext_resource type="Script" uid="uid://bxbhdc3dkjtx0" path="res://PlayerMovement.gd" id="3_2hs0m"]
+[ext_resource type="Script" uid="uid://6nmprawkymsv" path="res://InputManager.gd" id="4_1jxqw"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_dw050"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_b26j0"]
+
+[node name="Player" type="CharacterBody3D"]
+script = ExtResource("1_hqtel")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_dw050")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_b26j0")
+
+[node name="CameraPivot" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="CameraPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
+
+[node name="MouseLook" type="Node" parent="."]
+script = ExtResource("2_sweqy")
+
+[node name="PlayerMovement" type="Node" parent="."]
+script = ExtResource("3_2hs0m")
+
+[node name="InputManager" type="Node" parent="."]
+script = ExtResource("4_1jxqw")
