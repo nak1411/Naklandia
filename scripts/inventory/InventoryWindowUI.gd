@@ -7,6 +7,9 @@ extends Window
 @export var min_window_size: Vector2 = Vector2(400, 300)
 @export var default_size: Vector2 = Vector2(800, 600)
 
+# Context menu properties
+@export var popup_offset: Vector2 = Vector2(20,20)
+
 # UI Components
 var main_container: VBoxContainer
 var header_container: HBoxContainer
@@ -603,7 +606,10 @@ func _show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, positio
 	popup.add_item("Clear Container", 22)
 	
 	add_child(popup)
-	popup.position = Vector2i(get_mouse_position().x + (DisplayServer.screen_get_size().x / 2  - 740), get_mouse_position().y / 2 + 340)
+	
+	# Get current mouse position relative to this window
+	var mouse_pos = (get_mouse_position() + Vector2(self.position)) + popup_offset
+	popup.position = Vector2i(mouse_pos)
 	popup.show()
 	
 	# Connect signal with proper parameter handling
