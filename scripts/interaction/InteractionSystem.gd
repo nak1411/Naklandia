@@ -1,4 +1,4 @@
-# InteractionSystem.gd - Main interaction manager
+# InteractionSystem.gd - Clean production version
 class_name InteractionSystem
 extends Node
 
@@ -6,7 +6,6 @@ extends Node
 @export_group("Interaction")
 @export var interaction_distance: float = 3.0
 @export var interaction_layer: int = 2  # Physics layer for interactables
-@export var debug_draw: bool = false
 
 # Component references - using untyped variables to avoid class loading issues
 var raycaster: Node
