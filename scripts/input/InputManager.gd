@@ -1,4 +1,4 @@
-# InputManager.gd - Centralized input handling
+# InputManager.gd - Centralized input handling with interaction support
 class_name InputManager
 extends Node
 
@@ -11,10 +11,13 @@ const JUMP = "jump"
 const RUN = "run"
 const CROUCH = "crouch"
 const TOGGLE_MOUSE = "toggle_mouse"
+const INTERACT = "interact"  # New interaction input
 
 # Input buffering for better responsiveness
 var jump_buffer_time: float = 0.1
 var jump_buffer_timer: float = 0.0
+var interact_buffer_time: float = 0.1
+var interact_buffer_timer: float = 0.0
 
 func _ready():
 	# Verify input actions exist
@@ -53,6 +56,10 @@ func is_run_pressed() -> bool:
 func is_crouch_pressed() -> bool:
 	return Input.is_action_pressed(CROUCH)
 
+func is_interact_pressed() -> bool:
+	# Check for fresh interact input or buffered interact
+	return Input.is_action_just_pressed(INTERACT) or interact_buffer_timer > 0
+
 func _update_input_buffers(delta: float):
 	# Update jump buffer
 	if Input.is_action_just_pressed(JUMP):
@@ -61,6 +68,14 @@ func _update_input_buffers(delta: float):
 		jump_buffer_timer -= delta
 		if jump_buffer_timer <= 0:
 			jump_buffer_timer = 0
+	
+	# Update interact buffer
+	if Input.is_action_just_pressed(INTERACT):
+		interact_buffer_timer = interact_buffer_time
+	elif interact_buffer_timer > 0:
+		interact_buffer_timer -= delta
+		if interact_buffer_timer <= 0:
+			interact_buffer_timer = 0
 
 func _handle_toggle_inputs():
 	# Toggle mouse capture
@@ -73,7 +88,7 @@ func _verify_input_actions():
 	# Check if all required actions exist in the Input Map
 	var required_actions = [
 		MOVE_FORWARD, MOVE_BACKWARD, MOVE_LEFT, MOVE_RIGHT,
-		JUMP, RUN, CROUCH, TOGGLE_MOUSE
+		JUMP, RUN, CROUCH, TOGGLE_MOUSE, INTERACT
 	]
 	
 	for action in required_actions:
@@ -83,3 +98,7 @@ func _verify_input_actions():
 # Utility function to consume jump buffer (call when jump is used)
 func consume_jump_buffer():
 	jump_buffer_timer = 0
+
+# Utility function to consume interact buffer (call when interaction is used)
+func consume_interact_buffer():
+	interact_buffer_timer = 0

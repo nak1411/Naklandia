@@ -1,6 +1,6 @@
 [gd_scene load_steps=12 format=3 uid="uid://r45rejc363d"]
 
-[ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://TestScene.gd" id="1_ia1lp"]
+[ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/TestScene.gd" id="1_ia1lp"]
 [ext_resource type="PackedScene" uid="uid://b2wfoje26x7fv" path="res://player.tscn" id="2_sasra"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_ia1lp"]
