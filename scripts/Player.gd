@@ -8,6 +8,7 @@ extends CharacterBody3D
 @onready var movement: PlayerMovement = $PlayerMovement
 @onready var input_manager: InputManager = $InputManager
 @onready var interaction_system: InteractionSystem = $InteractionSystem
+@onready var inventory_integration: InventoryIntegration = $InventoryIntegration
 
 # Player state
 var current_state: PlayerState = PlayerState.NORMAL

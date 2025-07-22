@@ -1,6 +1,5 @@
-[gd_scene load_steps=12 format=3 uid="uid://b2wfoje26x7fv"]
+[gd_scene load_steps=10 format=3 uid="uid://b2wfoje26x7fv"]
 
-[ext_resource type="Script" uid="uid://bkwn4ro4reyj4" path="res://scripts/inventory/InventoryIntegration.gd" id="1_1jxqw"]
 [ext_resource type="Script" uid="uid://ckniy4t5b4kte" path="res://scripts/Player.gd" id="1_hqtel"]
 [ext_resource type="Script" uid="uid://c0bnvtexowx2r" path="res://scripts/input/MouseLook.gd" id="2_sweqy"]
 [ext_resource type="Script" uid="uid://bxbhdc3dkjtx0" path="res://scripts/input/PlayerMovement.gd" id="3_2hs0m"]
@@ -8,7 +7,6 @@
 [ext_resource type="Script" uid="uid://b71tsw7jkvbfo" path="res://scripts/interaction/InteractionSystem.gd" id="5_interaction"]
 [ext_resource type="Script" uid="uid://2kdu455x8lmy" path="res://scripts/interaction/InteractionRaycaster.gd" id="6_raycaster"]
 [ext_resource type="Script" uid="uid://bar11whdhhkdq" path="res://scripts/ui/InteractionUI.gd" id="7_ui"]
-[ext_resource type="Script" uid="uid://cb3mrgt7pgsjh" path="res://scripts/inventory/PlayerInventorySetup.gd" id="9_b26j0"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_dw050"]
 
@@ -52,9 +50,3 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("7_ui")
-
-[node name="InventoryIntegration" type="Node" parent="."]
-script = ExtResource("1_1jxqw")
-
-[node name="InventorySetup" type="Node" parent="."]
-script = ExtResource("9_b26j0")

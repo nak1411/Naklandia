@@ -21,7 +21,7 @@ var prompt_label: Label
 var feedback_timer: float = 0.0
 
 # Animation state
-var is_visible: bool = false
+var prompt_is_visible: bool = false  # Changed from is_visible to avoid shadowing
 var fade_tween: Tween
 var pulse_time: float = 0.0
 
@@ -78,7 +78,7 @@ func _process(delta):
 			_hide_feedback()
 	
 	# Handle pulse animation
-	if pulse_enabled and is_visible:
+	if pulse_enabled and prompt_is_visible:
 		pulse_time += delta * pulse_speed
 		var pulse_alpha = 1.0 + sin(pulse_time) * pulse_intensity
 		if prompt_label:
@@ -103,7 +103,7 @@ func hide_interaction_prompt():
 	_fade_out()
 
 func update_interaction_prompt(interactable: Interactable):
-	if is_visible and interactable:
+	if prompt_is_visible and interactable:
 		# Update text if it changed
 		var action_text = interactable.interaction_text
 		var key_text = interactable.interaction_key
@@ -131,7 +131,7 @@ func _fade_in():
 		fade_tween.kill()
 	
 	visible = true
-	is_visible = true
+	prompt_is_visible = true
 	pulse_time = 0.0
 	
 	fade_tween = create_tween()
@@ -141,7 +141,7 @@ func _fade_out():
 	if fade_tween:
 		fade_tween.kill()
 	
-	is_visible = false
+	prompt_is_visible = false
 	
 	fade_tween = create_tween()
 	fade_tween.tween_property(self, "modulate:a", 0.0, fade_duration)
