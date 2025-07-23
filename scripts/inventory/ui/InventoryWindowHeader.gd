@@ -97,7 +97,7 @@ func _setup_transparency_popup():
 	
 	# Slider
 	transparency_slider = HSlider.new()
-	transparency_slider.min_value = 0.3
+	transparency_slider.min_value = 0.1
 	transparency_slider.max_value = 1.0
 	transparency_slider.step = 0.01
 	transparency_slider.value = 1.0
@@ -169,7 +169,7 @@ func _on_transparency_button_pressed():
 	else:
 		# Position popup below the button
 		var button_rect = transparency_button.get_global_rect()
-		transparency_popup.position = Vector2i(
+		transparency_popup.position = Vector2(
 			button_rect.position.x - 90,  # Center under button
 			button_rect.position.y + button_rect.size.y + 5
 		)

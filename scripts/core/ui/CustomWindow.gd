@@ -4,7 +4,6 @@ extends Window
 
 # Window properties
 @export var window_title: String = "Custom Window"
-@export var can_resize: bool = true
 @export var can_drag: bool = true
 @export var can_close: bool = true
 @export var can_minimize: bool = true
@@ -37,26 +36,10 @@ var is_dragging: bool = false
 var is_resizing: bool = false
 var drag_start_position: Vector2i
 var drag_start_window_position: Vector2i
-var resize_start_position: Vector2
-var resize_start_size: Vector2i
-var resize_direction: int = 0
 var is_window_focused: bool = true
 var is_maximized: bool = false
 var restore_position: Vector2i
 var restore_size: Vector2i
-
-# Resize directions
-enum ResizeDirection {
-	NONE = 0,
-	LEFT = 1,
-	RIGHT = 2,
-	TOP = 4,
-	BOTTOM = 8,
-	TOP_LEFT = 5,     # TOP | LEFT
-	TOP_RIGHT = 6,    # TOP | RIGHT
-	BOTTOM_LEFT = 9,  # BOTTOM | LEFT
-	BOTTOM_RIGHT = 10 # BOTTOM | RIGHT
-}
 
 # Signals
 signal window_closed()
@@ -81,7 +64,7 @@ func _ready():
 	_setup_custom_ui()
 	_connect_signals()
 
-func _process(delta):
+func _process(_delta):
 	# Handle smooth dragging
 	if is_dragging and can_drag:
 		var current_mouse_pos = Vector2i(get_viewport().get_mouse_position())
@@ -202,12 +185,6 @@ func _connect_signals():
 		maximize_button.pressed.connect(_on_maximize_button_pressed)
 		maximize_button.mouse_entered.connect(_on_button_hover.bind(maximize_button, true))
 		maximize_button.mouse_exited.connect(_on_button_hover.bind(maximize_button, false))
-	
-	# Window resizing
-	main_container.gui_input.connect(_on_window_input)
-	
-	# Update button positions when window resizes
-	size_changed.connect(_on_window_size_changed)
 
 func _update_title_bar_style():
 	var style_box = StyleBoxFlat.new()
@@ -252,106 +229,6 @@ func _on_title_bar_input(event: InputEvent):
 					restore_window()
 				else:
 					maximize_window()
-
-func _on_window_input(event: InputEvent):
-	if not can_resize or is_maximized:
-		return
-	
-	if event is InputEventMouseMotion:
-		# Only update cursor and handle resize if not dragging
-		if not is_dragging:
-			var resize_dir = _get_resize_direction(event.position)
-			_set_resize_cursor(resize_dir)
-		
-		if is_resizing:
-			_handle_resize(event)
-	
-	elif event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			if mouse_event.pressed and not is_dragging:
-				resize_direction = _get_resize_direction(mouse_event.position)
-				if resize_direction != ResizeDirection.NONE:
-					is_resizing = true
-					resize_start_position = mouse_event.global_position
-					resize_start_size = size
-			else:
-				is_resizing = false
-				resize_direction = ResizeDirection.NONE
-				if not is_dragging:
-					Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-
-func _get_resize_direction(pos: Vector2) -> int:
-	var margin = 8  # Resize margin from edges
-	var direction = ResizeDirection.NONE
-	
-	# Check edges
-	if pos.x <= margin:
-		direction |= ResizeDirection.LEFT
-	elif pos.x >= size.x - margin:
-		direction |= ResizeDirection.RIGHT
-	
-	if pos.y <= margin:
-		direction |= ResizeDirection.TOP
-	elif pos.y >= size.y - margin:
-		direction |= ResizeDirection.BOTTOM
-	
-	return direction
-
-func _set_resize_cursor(direction: int):
-	# Only set cursor if not currently dragging
-	if is_dragging:
-		return
-		
-	match direction:
-		ResizeDirection.LEFT, ResizeDirection.RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_HSIZE)
-		ResizeDirection.TOP, ResizeDirection.BOTTOM:
-			Input.set_default_cursor_shape(Input.CURSOR_VSIZE)
-		ResizeDirection.TOP_LEFT, ResizeDirection.BOTTOM_RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_FDIAGSIZE)
-		ResizeDirection.TOP_RIGHT, ResizeDirection.BOTTOM_LEFT:
-			Input.set_default_cursor_shape(Input.CURSOR_BDIAGSIZE)
-		_:
-			Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-
-func _handle_resize(event: InputEventMouseMotion):
-	var delta = event.global_position - resize_start_position
-	var new_size = resize_start_size
-	var new_pos = position
-	
-	# Handle horizontal resizing
-	if resize_direction & ResizeDirection.LEFT:
-		var size_change = -int(delta.x)
-		new_size.x = resize_start_size.x + size_change
-		new_pos.x = position.x - size_change
-	elif resize_direction & ResizeDirection.RIGHT:
-		new_size.x = resize_start_size.x + int(delta.x)
-	
-	# Handle vertical resizing
-	if resize_direction & ResizeDirection.TOP:
-		var size_change = -int(delta.y)
-		new_size.y = resize_start_size.y + size_change
-		new_pos.y = position.y - size_change
-	elif resize_direction & ResizeDirection.BOTTOM:
-		new_size.y = resize_start_size.y + int(delta.y)
-	
-	# Apply minimum size constraints
-	new_size.x = maxi(new_size.x, min_size.x)
-	new_size.y = maxi(new_size.y, min_size.y)
-	
-	# Apply maximum size constraints (screen size)
-	var screen_size = DisplayServer.screen_get_size()
-	new_size.x = mini(new_size.x, screen_size.x)
-	new_size.y = mini(new_size.y, screen_size.y)
-	
-	# Update window with bounds checking
-	size = new_size
-	if resize_direction & (ResizeDirection.LEFT | ResizeDirection.TOP):
-		# Clamp position to screen bounds
-		new_pos.x = clampi(new_pos.x, 0, screen_size.x - new_size.x)
-		new_pos.y = clampi(new_pos.y, 0, screen_size.y - new_size.y)
-		position = new_pos
 
 # Window control handlers
 func _on_close_button_pressed():
@@ -424,26 +301,6 @@ func restore_window():
 	maximize_button.text = "□"  # Maximize icon
 	window_restored.emit()
 
-func _on_window_size_changed():
-	# Update button positions when window is resized
-	if close_button:
-		close_button.position.x = size.x - close_button.size.x - 8
-	if maximize_button:
-		var max_x = size.x - maximize_button.size.x - 8
-		if can_close:
-			max_x -= close_button.size.x + 2
-		maximize_button.position.x = max_x
-	if minimize_button:
-		var min_x = size.x - minimize_button.size.x - 8
-		if can_close:
-			min_x -= close_button.size.x + 2
-		if can_maximize:
-			min_x -= maximize_button.size.x + 2
-		minimize_button.position.x = min_x
-	
-	# Update content area size
-	content_area.size = Vector2(size.x, size.y - title_bar_height)
-
 # Focus handling
 func _on_window_focus_entered():
 	is_window_focused = true
@@ -469,14 +326,6 @@ func set_dragging_enabled(enabled: bool):
 	# Reset any drag state when disabling
 	if not enabled and is_dragging:
 		is_dragging = false
-		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-
-func set_resizing_enabled(enabled: bool):
-	can_resize = enabled
-	# Reset any resize state when disabling
-	if not enabled and is_resizing:
-		is_resizing = false
-		resize_direction = ResizeDirection.NONE
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
 func get_content_area() -> Control:
