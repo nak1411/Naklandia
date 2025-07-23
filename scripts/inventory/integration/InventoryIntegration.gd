@@ -6,7 +6,6 @@ extends Node
 var player: Player
 var inventory_manager: InventoryManager
 var inventory_window: InventoryWindowUI
-var inventory_hud: InventoryHUD
 
 # UI Management
 var ui_canvas: CanvasLayer
@@ -15,7 +14,6 @@ var input_consumed: bool = false
 
 # Input action names
 const TOGGLE_INVENTORY = "toggle_inventory"
-const QUICK_USE = "quick_use"
 
 # Signals
 signal inventory_toggled(is_open: bool)
@@ -56,12 +54,6 @@ func _setup_input_actions():
 		var key_event = InputEventKey.new()
 		key_event.keycode = KEY_I
 		InputMap.action_add_event(TOGGLE_INVENTORY, key_event)
-	
-	if not InputMap.has_action(QUICK_USE):
-		InputMap.add_action(QUICK_USE)
-		var key_event = InputEventKey.new()
-		key_event.keycode = KEY_F
-		InputMap.action_add_event(QUICK_USE, key_event)
 
 func _initialize_inventory_system():
 	# Create inventory manager
@@ -78,11 +70,6 @@ func _setup_ui():
 	ui_canvas.name = "InventoryUI"
 	ui_canvas.layer = 10  # Above other UI
 	add_child(ui_canvas)
-	
-	# Create inventory HUD
-	inventory_hud = InventoryHUD.new()
-	inventory_hud.name = "InventoryHUD"
-	ui_canvas.add_child(inventory_hud)
 	
 	# Create inventory window (initially hidden)
 	inventory_window = InventoryWindowUI.new()
@@ -123,8 +110,6 @@ func _schedule_ui_refresh():
 
 func _do_ui_refresh():
 	_refresh_scheduled = false
-	if inventory_hud:
-		inventory_hud._refresh_quick_slots()
 	if inventory_window and inventory_window.visible:
 		inventory_window.refresh_display()
 
@@ -137,11 +122,6 @@ func _connect_signals():
 		if not inventory_window.window_closed.is_connected(_on_inventory_window_closed):
 			inventory_window.window_closed.connect(_on_inventory_window_closed)
 		inventory_window.container_switched.connect(_on_container_switched)
-	
-	# Inventory HUD signals
-	if inventory_hud:
-		inventory_hud.quick_slot_used.connect(_on_quick_slot_used)
-		inventory_hud.quick_slot_selected.connect(_on_quick_slot_selected)
 	
 	# Inventory manager signals
 	if inventory_manager:
@@ -174,7 +154,6 @@ func _on_container_item_changed(item: InventoryItem, position: Vector2i):
 func _on_container_item_moved(item: InventoryItem, from_pos: Vector2i, to_pos: Vector2i):
 	# Immediate UI refresh when items are moved
 	_schedule_ui_refresh()
-	
 
 func _unhandled_input(event: InputEvent):
 	if event is InputEventKey and event.pressed:
@@ -187,11 +166,7 @@ func _unhandled_input(event: InputEvent):
 		elif event.keycode == KEY_ESCAPE and !is_inventory_open:
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 			get_viewport().set_input_as_handled()
-		elif event.keycode == KEY_F:
-			use_selected_quick_slot()
-			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_F9:  # Debug key
-			#debug_inventory_state()
 			refresh_all_ui()  # Force complete UI refresh
 			get_viewport().set_input_as_handled()
 
@@ -229,7 +204,6 @@ func _on_inventory_window_closed():
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	inventory_toggled.emit(is_inventory_open)
 
-
 func open_inventory():
 	if not inventory_window:
 		print("Inventory window not ready!")
@@ -246,18 +220,12 @@ func close_inventory():
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 		inventory_toggled.emit(is_inventory_open)
 
-func use_selected_quick_slot():
-	inventory_hud.use_selected_slot()
-
 # Item management
 func add_item_to_inventory(item: InventoryItem) -> bool:
 	var player_inventory = inventory_manager.get_player_inventory()
 	var success = inventory_manager.add_item_to_container(item, player_inventory.container_id)
 	
 	if success:
-		# Show pickup animation
-		inventory_hud.animate_item_pickup(item)
-		
 		# Show pickup notification
 		_show_item_pickup_notification(item)
 	
@@ -375,13 +343,6 @@ func _equip_module(item: InventoryItem) -> bool:
 # Event handlers
 func _on_container_switched(container: InventoryContainer):
 	print("Switched to container: ", container.container_name)
-
-func _on_quick_slot_used(slot_index: int, item: InventoryItem):
-	_use_item(item)
-	inventory_hud.animate_slot_use(slot_index)
-
-func _on_quick_slot_selected(slot_index: int):
-	print("Selected quick slot: ", slot_index)
 
 func _on_item_transferred(item: InventoryItem, from_container: String, to_container: String):
 	print("Item transferred: %s from %s to %s" % [item.item_name, from_container, to_container])
@@ -511,33 +472,18 @@ func _play_pickup_sound():
 func save_inventory_state() -> Dictionary:
 	var state = {
 		"inventory_manager": {},
-		"quick_slot_config": {},
-		"settings": {
-			"hud_visible": inventory_hud.visible,
-			"hud_opacity": inventory_hud.modulate.a
-		}
+		"settings": {}
 	}
 	
 	if inventory_manager:
 		# Inventory manager handles its own serialization
 		pass
 	
-	if inventory_hud:
-		state.quick_slot_config = inventory_hud.save_quick_slot_config()
-	
 	return state
 
 func load_inventory_state(state: Dictionary):
 	var settings = state.get("settings", {})
-	
-	if inventory_hud:
-		inventory_hud.visible = settings.get("hud_visible") if settings.has("hud_visible") else true
-		var hud_opacity = settings.get("hud_opacity") if settings.has("hud_opacity") else 1.0
-		inventory_hud.set_hud_opacity(hud_opacity)
-		
-		var quick_slot_config = state.get("quick_slot_config") if state.has("quick_slot_config") else {}
-		if not quick_slot_config.is_empty():
-			inventory_hud.load_quick_slot_config(quick_slot_config)
+	# No HUD settings to load
 
 # Public interface
 func get_inventory_manager() -> InventoryManager:
@@ -545,9 +491,6 @@ func get_inventory_manager() -> InventoryManager:
 
 func get_inventory_window() -> InventoryWindowUI:
 	return inventory_window
-
-func get_inventory_hud() -> InventoryHUD:
-	return inventory_hud
 
 func is_inventory_window_open() -> bool:
 	return is_inventory_open
@@ -596,12 +539,8 @@ func force_complete_refresh():
 	print("Refresh complete!")
 	
 func refresh_all_ui():
-	"""Refresh both HUD and window displays"""
+	"""Refresh window display"""
 	_schedule_ui_refresh()
-
-func refresh_hud():
-	if inventory_hud:
-		inventory_hud._refresh_quick_slots()
 
 func refresh_window():
 	if inventory_window:
