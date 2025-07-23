@@ -98,7 +98,6 @@ func compact_items():
 	"""Moves all items to eliminate gaps, placing them sequentially from top-left"""
 	
 	if items.is_empty():
-		print("No items to compact")
 		return
 	
 	for i in range(items.size()):

@@ -283,7 +283,6 @@ func _on_slot_right_clicked(slot: InventorySlotUI, event: InputEvent):
 	if slot.has_item():
 		var mouse_event = event as InputEventMouseButton
 		var global_pos = mouse_event.global_position
-		print("Grid: Emitting item_context_menu signal")
 		item_context_menu.emit(slot.get_item(), slot, global_pos)
 		get_viewport().set_input_as_handled()
 
