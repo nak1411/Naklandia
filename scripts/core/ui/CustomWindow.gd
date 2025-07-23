@@ -1,0 +1,494 @@
+# CustomWindow.gd - Custom window implementation with full control
+class_name CustomWindow
+extends Window
+
+# Window properties
+@export var window_title: String = "Custom Window"
+@export var can_resize: bool = true
+@export var can_drag: bool = true
+@export var can_close: bool = true
+@export var can_minimize: bool = true
+@export var can_maximize: bool = true
+
+# Visual properties
+@export var title_bar_height: float = 32.0
+@export var border_width: float = 2.0
+@export var corner_radius: float = 8.0
+
+# Colors
+@export var title_bar_color: Color = Color(0.15, 0.15, 0.15, 1.0)
+@export var title_bar_active_color: Color = Color(0.2, 0.2, 0.2, 1.0)
+@export var border_color: Color = Color(0.4, 0.4, 0.4, 1.0)
+@export var border_active_color: Color = Color(0.6, 0.6, 0.8, 1.0)
+@export var button_hover_color: Color = Color(0.3, 0.3, 0.3, 1.0)
+@export var close_button_hover_color: Color = Color(0.8, 0.2, 0.2, 1.0)
+
+# UI Components
+var main_container: Control
+var title_bar: Panel
+var title_label: Label
+var close_button: Button
+var minimize_button: Button
+var maximize_button: Button
+var content_area: Control
+
+# State
+var is_dragging: bool = false
+var is_resizing: bool = false
+var drag_start_position: Vector2
+var drag_start_window_position: Vector2i
+var resize_start_position: Vector2
+var resize_start_size: Vector2i
+var resize_direction: int = 0
+var is_window_focused: bool = true
+var is_maximized: bool = false
+var restore_position: Vector2i
+var restore_size: Vector2i
+
+# Resize directions
+enum ResizeDirection {
+	NONE = 0,
+	LEFT = 1,
+	RIGHT = 2,
+	TOP = 4,
+	BOTTOM = 8,
+	TOP_LEFT = 5,     # TOP | LEFT
+	TOP_RIGHT = 6,    # TOP | RIGHT
+	BOTTOM_LEFT = 9,  # BOTTOM | LEFT
+	BOTTOM_RIGHT = 10 # BOTTOM | RIGHT
+}
+
+# Signals
+signal window_closed()
+signal window_minimized()
+signal window_maximized()
+signal window_restored()
+signal window_focus_changed(focused: bool)
+
+func _init():
+	# Make window borderless so we can draw our own
+	set_flag(Window.FLAG_BORDERLESS, true)
+	
+	# Set up basic window properties
+	title = window_title
+	min_size = Vector2i(300, 200)
+	
+	# Connect window signals
+	focus_entered.connect(_on_window_focus_entered)
+	focus_exited.connect(_on_window_focus_exited)
+
+func _ready():
+	_setup_custom_ui()
+	_connect_signals()
+
+func _process(delta):
+	# Handle smooth dragging
+	if is_dragging and can_drag:
+		var current_mouse_pos = get_mouse_position()
+		var offset = current_mouse_pos - drag_start_position
+		var new_position = drag_start_window_position + Vector2i(offset)
+		
+		# Clamp to screen bounds
+		var screen_size = DisplayServer.screen_get_size()
+		new_position.x = clampi(new_position.x, -size.x + 100, screen_size.x - 100)
+		new_position.y = clampi(new_position.y, 0, screen_size.y - int(title_bar_height))
+		
+		position = new_position
+
+func _setup_custom_ui():
+	# Main container fills the entire window
+	main_container = Control.new()
+	main_container.name = "MainContainer"
+	main_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	main_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	add_child(main_container)
+	
+	# Title bar
+	title_bar = Panel.new()
+	title_bar.name = "TitleBar"
+	title_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	title_bar.size.y = title_bar_height
+	title_bar.mouse_filter = Control.MOUSE_FILTER_PASS
+	main_container.add_child(title_bar)
+	
+	# Style title bar
+	_update_title_bar_style()
+	
+	# Title label
+	title_label = Label.new()
+	title_label.name = "TitleLabel"
+	title_label.text = window_title
+	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title_label.add_theme_color_override("font_color", Color.WHITE)
+	title_label.add_theme_font_size_override("font_size", 12)
+	title_label.position = Vector2(12, 0)
+	title_label.size = Vector2(200, title_bar_height)
+	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_bar.add_child(title_label)
+	
+	# Window control buttons
+	_create_window_buttons()
+	
+	# Content area (below title bar)
+	content_area = Control.new()
+	content_area.name = "ContentArea"
+	content_area.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	content_area.position.y = title_bar_height
+	content_area.size.y -= title_bar_height
+	content_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_container.add_child(content_area)
+	
+	# Draw border
+	main_container.draw.connect(_draw_window_border)
+
+func _create_window_buttons():
+	var button_size = Vector2(title_bar_height - 4, title_bar_height - 4)
+	var button_y = 2
+	var button_spacing = 2
+	
+	# Close button (rightmost)
+	if can_close:
+		close_button = Button.new()
+		close_button.name = "CloseButton"
+		close_button.text = "×"
+		close_button.size = button_size
+		close_button.position = Vector2(size.x - button_size.x - 8, button_y)
+		close_button.flat = true
+		close_button.add_theme_font_size_override("font_size", 16)
+		close_button.add_theme_color_override("font_color", Color.WHITE)
+		title_bar.add_child(close_button)
+	
+	# Maximize button
+	if can_maximize:
+		maximize_button = Button.new()
+		maximize_button.name = "MaximizeButton"
+		maximize_button.text = "□"
+		maximize_button.size = button_size
+		var max_x = size.x - button_size.x - 8
+		if can_close:
+			max_x -= button_size.x + button_spacing
+		maximize_button.position = Vector2(max_x, button_y)
+		maximize_button.flat = true
+		maximize_button.add_theme_font_size_override("font_size", 12)
+		maximize_button.add_theme_color_override("font_color", Color.WHITE)
+		title_bar.add_child(maximize_button)
+	
+	# Minimize button
+	if can_minimize:
+		minimize_button = Button.new()
+		minimize_button.name = "MinimizeButton"
+		minimize_button.text = "−"
+		minimize_button.size = button_size
+		var min_x = size.x - button_size.x - 8
+		if can_close:
+			min_x -= button_size.x + button_spacing
+		if can_maximize:
+			min_x -= button_size.x + button_spacing
+		minimize_button.position = Vector2(min_x, button_y)
+		minimize_button.flat = true
+		minimize_button.add_theme_font_size_override("font_size", 12)
+		minimize_button.add_theme_color_override("font_color", Color.WHITE)
+		title_bar.add_child(minimize_button)
+
+func _connect_signals():
+	# Title bar dragging
+	title_bar.gui_input.connect(_on_title_bar_input)
+	
+	# Window control buttons
+	if close_button:
+		close_button.pressed.connect(_on_close_button_pressed)
+		close_button.mouse_entered.connect(_on_close_button_hover.bind(true))
+		close_button.mouse_exited.connect(_on_close_button_hover.bind(false))
+	
+	if minimize_button:
+		minimize_button.pressed.connect(_on_minimize_button_pressed)
+		minimize_button.mouse_entered.connect(_on_button_hover.bind(minimize_button, true))
+		minimize_button.mouse_exited.connect(_on_button_hover.bind(minimize_button, false))
+	
+	if maximize_button:
+		maximize_button.pressed.connect(_on_maximize_button_pressed)
+		maximize_button.mouse_entered.connect(_on_button_hover.bind(maximize_button, true))
+		maximize_button.mouse_exited.connect(_on_button_hover.bind(maximize_button, false))
+	
+	# Window resizing
+	main_container.gui_input.connect(_on_window_input)
+	
+	# Update button positions when window resizes
+	size_changed.connect(_on_window_size_changed)
+
+func _update_title_bar_style():
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = title_bar_active_color if is_window_focused else title_bar_color
+	style_box.border_width_left = border_width
+	style_box.border_width_right = border_width
+	style_box.border_width_top = border_width
+	style_box.border_width_bottom = 1
+	style_box.border_color = border_active_color if is_window_focused else border_color
+	style_box.corner_radius_top_left = corner_radius
+	style_box.corner_radius_top_right = corner_radius
+	title_bar.add_theme_stylebox_override("panel", style_box)
+
+func _draw_window_border():
+	# Draw border around the entire window
+	var rect = Rect2(Vector2.ZERO, main_container.size)
+	var color = border_active_color if is_window_focused else border_color
+	
+	# Draw border using draw_rect with border_width
+	main_container.draw_rect(rect, color, false, border_width)
+
+# Input handling
+func _on_title_bar_input(event: InputEvent):
+	if not can_drag:
+		return
+	
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed:
+				# Start dragging - store initial positions
+				is_dragging = true
+				drag_start_position = get_mouse_position()
+				drag_start_window_position = position
+			else:
+				# Stop dragging
+				is_dragging = false
+		elif mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.double_click:
+			# Double-click to maximize/restore
+			if can_maximize:
+				if is_maximized:
+					restore_window()
+				else:
+					maximize_window()
+
+func _on_window_input(event: InputEvent):
+	if not can_resize or is_maximized:
+		return
+	
+	if event is InputEventMouseMotion:
+		# Only update cursor and handle resize if not dragging
+		if not is_dragging:
+			var resize_dir = _get_resize_direction(event.position)
+			_set_resize_cursor(resize_dir)
+		
+		if is_resizing:
+			_handle_resize(event)
+	
+	elif event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed and not is_dragging:
+				resize_direction = _get_resize_direction(mouse_event.position)
+				if resize_direction != ResizeDirection.NONE:
+					is_resizing = true
+					resize_start_position = mouse_event.global_position
+					resize_start_size = size
+			else:
+				is_resizing = false
+				resize_direction = ResizeDirection.NONE
+				if not is_dragging:
+					Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+func _get_resize_direction(pos: Vector2) -> int:
+	var margin = 8  # Resize margin from edges
+	var direction = ResizeDirection.NONE
+	
+	# Check edges
+	if pos.x <= margin:
+		direction |= ResizeDirection.LEFT
+	elif pos.x >= size.x - margin:
+		direction |= ResizeDirection.RIGHT
+	
+	if pos.y <= margin:
+		direction |= ResizeDirection.TOP
+	elif pos.y >= size.y - margin:
+		direction |= ResizeDirection.BOTTOM
+	
+	return direction
+
+func _set_resize_cursor(direction: int):
+	# Only set cursor if not currently dragging
+	if is_dragging:
+		return
+		
+	match direction:
+		ResizeDirection.LEFT, ResizeDirection.RIGHT:
+			Input.set_default_cursor_shape(Input.CURSOR_HSIZE)
+		ResizeDirection.TOP, ResizeDirection.BOTTOM:
+			Input.set_default_cursor_shape(Input.CURSOR_VSIZE)
+		ResizeDirection.TOP_LEFT, ResizeDirection.BOTTOM_RIGHT:
+			Input.set_default_cursor_shape(Input.CURSOR_FDIAGSIZE)
+		ResizeDirection.TOP_RIGHT, ResizeDirection.BOTTOM_LEFT:
+			Input.set_default_cursor_shape(Input.CURSOR_BDIAGSIZE)
+		_:
+			Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+func _handle_resize(event: InputEventMouseMotion):
+	var delta = event.global_position - resize_start_position
+	var new_size = resize_start_size
+	var new_pos = position
+	
+	# Handle horizontal resizing
+	if resize_direction & ResizeDirection.LEFT:
+		var size_change = -int(delta.x)
+		new_size.x = resize_start_size.x + size_change
+		new_pos.x = position.x - size_change
+	elif resize_direction & ResizeDirection.RIGHT:
+		new_size.x = resize_start_size.x + int(delta.x)
+	
+	# Handle vertical resizing
+	if resize_direction & ResizeDirection.TOP:
+		var size_change = -int(delta.y)
+		new_size.y = resize_start_size.y + size_change
+		new_pos.y = position.y - size_change
+	elif resize_direction & ResizeDirection.BOTTOM:
+		new_size.y = resize_start_size.y + int(delta.y)
+	
+	# Apply minimum size constraints
+	new_size.x = maxi(new_size.x, min_size.x)
+	new_size.y = maxi(new_size.y, min_size.y)
+	
+	# Apply maximum size constraints (screen size)
+	var screen_size = DisplayServer.screen_get_size()
+	new_size.x = mini(new_size.x, screen_size.x)
+	new_size.y = mini(new_size.y, screen_size.y)
+	
+	# Update window with bounds checking
+	size = new_size
+	if resize_direction & (ResizeDirection.LEFT | ResizeDirection.TOP):
+		# Clamp position to screen bounds
+		new_pos.x = clampi(new_pos.x, 0, screen_size.x - new_size.x)
+		new_pos.y = clampi(new_pos.y, 0, screen_size.y - new_size.y)
+		position = new_pos
+
+# Window control handlers
+func _on_close_button_pressed():
+	window_closed.emit()
+
+func _on_minimize_button_pressed():
+	minimize_window()
+
+func _on_maximize_button_pressed():
+	if is_maximized:
+		restore_window()
+	else:
+		maximize_window()
+
+func _on_close_button_hover(hovering: bool):
+	if hovering:
+		close_button.add_theme_color_override("font_color", Color.WHITE)
+		close_button.add_theme_stylebox_override("normal", _create_hover_style(close_button_hover_color))
+	else:
+		close_button.remove_theme_color_override("font_color")
+		close_button.remove_theme_stylebox_override("normal")
+
+func _on_button_hover(button: Button, hovering: bool):
+	if hovering:
+		button.add_theme_stylebox_override("normal", _create_hover_style(button_hover_color))
+	else:
+		button.remove_theme_stylebox_override("normal")
+
+func _create_hover_style(color: Color) -> StyleBoxFlat:
+	var style = StyleBoxFlat.new()
+	style.bg_color = color
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_left = 4
+	style.corner_radius_bottom_right = 4
+	return style
+
+# Window state management
+func minimize_window():
+	# Note: Godot doesn't support true minimization, so we hide the window
+	visible = false
+	window_minimized.emit()
+
+func maximize_window():
+	if is_maximized:
+		return
+	
+	# Store current position and size for restoration
+	restore_position = position
+	restore_size = size
+	
+	# Get screen size and maximize
+	var screen_size = DisplayServer.screen_get_size()
+	position = Vector2i.ZERO
+	size = screen_size
+	
+	is_maximized = true
+	maximize_button.text = "❐"  # Restore icon
+	window_maximized.emit()
+
+func restore_window():
+	if not is_maximized:
+		return
+	
+	# Restore previous position and size
+	position = restore_position
+	size = restore_size
+	
+	is_maximized = false
+	maximize_button.text = "□"  # Maximize icon
+	window_restored.emit()
+
+func _on_window_size_changed():
+	# Update button positions when window is resized
+	if close_button:
+		close_button.position.x = size.x - close_button.size.x - 8
+	if maximize_button:
+		var max_x = size.x - maximize_button.size.x - 8
+		if can_close:
+			max_x -= close_button.size.x + 2
+		maximize_button.position.x = max_x
+	if minimize_button:
+		var min_x = size.x - minimize_button.size.x - 8
+		if can_close:
+			min_x -= close_button.size.x + 2
+		if can_maximize:
+			min_x -= maximize_button.size.x + 2
+		minimize_button.position.x = min_x
+	
+	# Update content area size
+	content_area.size = Vector2(size.x, size.y - title_bar_height)
+
+# Focus handling
+func _on_window_focus_entered():
+	is_window_focused = true
+	_update_title_bar_style()
+	main_container.queue_redraw()
+	window_focus_changed.emit(true)
+
+func _on_window_focus_exited():
+	is_window_focused = false
+	_update_title_bar_style()
+	main_container.queue_redraw()
+	window_focus_changed.emit(false)
+
+# Public interface
+func set_window_title(new_title: String):
+	window_title = new_title
+	title = new_title
+	if title_label:
+		title_label.text = new_title
+
+func set_dragging_enabled(enabled: bool):
+	can_drag = enabled
+	# Reset any drag state when disabling
+	if not enabled and is_dragging:
+		is_dragging = false
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+func set_resizing_enabled(enabled: bool):
+	can_resize = enabled
+	# Reset any resize state when disabling
+	if not enabled and is_resizing:
+		is_resizing = false
+		resize_direction = ResizeDirection.NONE
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+func get_content_area() -> Control:
+	return content_area
+
+func add_content(content: Control):
+	if content_area:
+		content_area.add_child(content)

@@ -1,14 +1,14 @@
-# InventoryWindowUI.gd - Refactored modular inventory window
+# InventoryWindowUI.gd - Using custom window implementation
 class_name InventoryWindowUI
-extends Window
+extends CustomWindow
 
 # Window properties
-@export var window_title: String = "Inventory"
+@export var inventory_title: String = "Inventory"
 @export var min_window_size: Vector2 = Vector2(400, 300)
 @export var default_size: Vector2 = Vector2(800, 600)
 
 # UI Modules
-var main_container: VBoxContainer
+var inventory_container: VBoxContainer
 var header: InventoryWindowHeader
 var content: InventoryWindowContent
 var item_actions: InventoryItemActions
@@ -24,48 +24,49 @@ var is_locked: bool = false
 var window_transparency: float = 1.0
 
 # Signals
-signal window_closed()
 signal container_switched(container: InventoryContainer)
 
 func _init():
-	title = window_title
-	size = default_size
-	min_size = min_window_size
-	
-	set_flag(Window.FLAG_RESIZE_DISABLED, false)
-	set_flag(Window.FLAG_BORDERLESS, false)
-	
+	super._init()
+	set_window_title(inventory_title)
+	size = Vector2i(default_size)
+	min_size = Vector2i(min_window_size)
 	visible = false
 	position = Vector2i(1040, 410)
 
 func _ready():
-	_setup_ui()
-	_connect_signals()
+	super._ready()
+	_setup_inventory_ui()
+	_connect_inventory_signals()
 	_find_inventory_manager()
 	apply_custom_theme()
 	visible = false
 
-func _setup_ui():
-	main_container = VBoxContainer.new()
-	main_container.name = "MainContainer"
-	main_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(main_container)
+func _setup_inventory_ui():
+	# Create main container for inventory content
+	inventory_container = VBoxContainer.new()
+	inventory_container.name = "InventoryContainer"
+	inventory_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	# Add to the custom window's content area
+	add_content(inventory_container)
 	
 	# Create header module
 	header = InventoryWindowHeader.new()
 	header.name = "Header"
-	main_container.add_child(header)
+	inventory_container.add_child(header)
 	
 	# Create content module
 	content = InventoryWindowContent.new()
 	content.name = "Content"
-	main_container.add_child(content)
+	inventory_container.add_child(content)
 	
 	# Create item actions module
 	item_actions = InventoryItemActions.new(self)
 
-func _connect_signals():
-	close_requested.connect(_on_close_requested)
+func _connect_inventory_signals():
+	# Connect custom window signals
+	window_closed.connect(_on_close_requested)
 	
 	# Header signals
 	header.search_changed.connect(_on_search_changed)
@@ -152,13 +153,6 @@ func _switch_to_container(container: InventoryContainer):
 	
 	container_switched.emit(container)
 
-# Window behavior overrides
-var locked_position: Vector2i
-
-func _notification(what: int):
-	# Handle window events if needed
-	pass
-
 # Event handlers
 func _on_close_requested():
 	_close_window()
@@ -166,7 +160,6 @@ func _on_close_requested():
 func _close_window():
 	visible = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	window_closed.emit()
 
 func _on_content_container_selected(container: InventoryContainer):
 	_switch_to_container(container)
@@ -185,69 +178,38 @@ func _on_sort_requested(sort_type: InventoryManager.SortType):
 
 func _on_transparency_changed(value: float):
 	window_transparency = value
-	if main_container:
-		main_container.modulate.a = value
+	if inventory_container:
+		inventory_container.modulate.a = value
 
 func _on_lock_toggled(locked: bool):
 	is_locked = locked
+	# Use the custom window's dragging control
+	set_dragging_enabled(not locked)
 	
-	# Store current size and position to maintain consistency
-	var current_size = size
-	var current_pos = position
-	
-	# Update window flags based on lock state
-	if is_locked:
-		# Store current position
-		locked_position = current_pos
-		# Disable resizing and dragging
-		set_flag(Window.FLAG_RESIZE_DISABLED, true)
-		# Start position monitoring to snap back if moved
-		_start_position_monitoring()
+	# Add/remove visual indicator
+	if locked:
+		_add_lock_indicator()
 	else:
-		# Stop monitoring and re-enable resizing
-		_stop_position_monitoring()
-		set_flag(Window.FLAG_RESIZE_DISABLED, false)
+		_remove_lock_indicator()
 
-func _start_position_monitoring():
-	# Use a high-frequency timer to immediately snap back position
-	var timer = Timer.new()
-	timer.name = "PositionLockTimer"
-	timer.wait_time = 0.016  # ~60 FPS for smooth snapping
-	timer.timeout.connect(_enforce_position_lock)
-	add_child(timer)
-	timer.start()
-
-func _stop_position_monitoring():
-	var timer = get_node_or_null("PositionLockTimer")
-	if timer:
-		timer.queue_free()
-
-func _enforce_position_lock():
-	if is_locked and position != locked_position:
-		# Immediately snap back to locked position
-		position = locked_position
-
-func _create_fake_titlebar():
-	# Just add a visual indicator without trying to block dragging
-	var fake_titlebar = Panel.new()
-	fake_titlebar.name = "FakeTitlebar"
-	fake_titlebar.custom_minimum_size.y = 4
-	fake_titlebar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+func _add_lock_indicator():
+	# Add a yellow bar indicator at the top
+	var lock_indicator = Panel.new()
+	lock_indicator.name = "LockIndicator"
+	lock_indicator.custom_minimum_size.y = 4
+	lock_indicator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	
-	# Style as a simple yellow bar indicator
 	var style_box = StyleBoxFlat.new()
 	style_box.bg_color = Color.YELLOW
-	fake_titlebar.add_theme_stylebox_override("panel", style_box)
+	lock_indicator.add_theme_stylebox_override("panel", style_box)
 	
-	# Insert at the top of main container
-	main_container.add_child(fake_titlebar)
-	main_container.move_child(fake_titlebar, 0)
+	inventory_container.add_child(lock_indicator)
+	inventory_container.move_child(lock_indicator, 0)
 
-func _remove_fake_titlebar():
-	# Remove visual indicator
-	var fake_titlebar = main_container.get_node_or_null("FakeTitlebar")
-	if fake_titlebar:
-		fake_titlebar.queue_free()
+func _remove_lock_indicator():
+	var lock_indicator = inventory_container.get_node_or_null("LockIndicator")
+	if lock_indicator:
+		lock_indicator.queue_free()
 
 func _on_item_activated(item: InventoryItem, slot: InventorySlotUI):
 	item_actions.show_item_details_dialog(item)
@@ -326,8 +288,8 @@ func bring_to_front():
 
 func set_transparency(value: float):
 	window_transparency = value
-	if main_container:
-		main_container.modulate.a = value
+	if inventory_container:
+		inventory_container.modulate.a = value
 	if header:
 		header.set_transparency(value)
 
@@ -342,9 +304,6 @@ func set_window_locked(locked: bool):
 
 func is_window_locked() -> bool:
 	return is_locked
-
-func _exit_tree():
-	_stop_position_monitoring()
 
 # Theme and styling
 func apply_custom_theme():
@@ -362,4 +321,6 @@ func apply_custom_theme():
 	itemlist_style.content_margin_top = 4
 	itemlist_style.content_margin_bottom = 4
 	
-	set_theme(theme)
+	# Apply theme to main container
+	if inventory_container:
+		inventory_container.set_theme(theme)
