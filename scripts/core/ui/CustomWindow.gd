@@ -35,7 +35,7 @@ var content_area: Control
 # State
 var is_dragging: bool = false
 var is_resizing: bool = false
-var drag_start_position: Vector2
+var drag_start_position: Vector2i
 var drag_start_window_position: Vector2i
 var resize_start_position: Vector2
 var resize_start_size: Vector2i
@@ -84,16 +84,9 @@ func _ready():
 func _process(delta):
 	# Handle smooth dragging
 	if is_dragging and can_drag:
-		var current_mouse_pos = get_mouse_position()
-		var offset = current_mouse_pos - drag_start_position
-		var new_position = drag_start_window_position + Vector2i(offset)
+		var current_mouse_pos = Vector2i(get_viewport().get_mouse_position())
 		
-		# Clamp to screen bounds
-		var screen_size = DisplayServer.screen_get_size()
-		new_position.x = clampi(new_position.x, -size.x + 100, screen_size.x - 100)
-		new_position.y = clampi(new_position.y, 0, screen_size.y - int(title_bar_height))
-		
-		position = new_position
+		position += current_mouse_pos - drag_start_position
 
 func _setup_custom_ui():
 	# Main container fills the entire window
@@ -247,7 +240,7 @@ func _on_title_bar_input(event: InputEvent):
 			if mouse_event.pressed:
 				# Start dragging - store initial positions
 				is_dragging = true
-				drag_start_position = get_mouse_position()
+				drag_start_position = get_viewport().get_mouse_position()
 				drag_start_window_position = position
 			else:
 				# Stop dragging
