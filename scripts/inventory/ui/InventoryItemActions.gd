@@ -52,6 +52,9 @@ func show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position
 	# Create input blocker overlay
 	_create_input_blocker()
 	
+	# Set the window's active context menu reference
+	_setup_click_detection()
+	
 	# Position and show the popup relative to the window position
 	popup.position = Vector2i(position) + window_parent.position + popup_offset
 	popup.popup()
@@ -59,11 +62,25 @@ func show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position
 	print("FIXED: Popup positioned at ", popup.position)
 
 func _create_input_blocker():
+	# First, check for and remove any existing input blockers
+	var viewport = window_parent.get_viewport()
+	var existing_blockers = []
+	for child in viewport.get_children():
+		if child.name == "InputBlocker":
+			existing_blockers.append(child)
+	
+	if existing_blockers.size() > 0:
+		for blocker in existing_blockers:
+			viewport.remove_child(blocker)
+			blocker.queue_free()
+	
 	var blocker = Control.new()
 	blocker.name = "InputBlocker"
 	blocker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	blocker.mouse_filter = Control.MOUSE_FILTER_PASS
 	blocker.z_index = 999  # Below popup but above everything else
+	
+	print("DEBUG: Creating new input blocker")
 	
 	# Make it invisible but functional
 	var color_rect = ColorRect.new()
@@ -78,15 +95,22 @@ func _create_input_blocker():
 	# Add to viewport
 	window_parent.get_viewport().add_child(blocker)
 	current_popup.set_meta("input_blocker", blocker)
+	print("DEBUG: Input blocker created and added to viewport")
 
 func _on_blocker_input(event: InputEvent):
+	print("DEBUG: Input blocker received input: ", event)
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.pressed:
+			print("DEBUG: Input blocker - mouse button pressed: ", mouse_event.button_index)
 			# Any click outside popup should close it
 			if current_popup and is_instance_valid(current_popup):
 				var popup_rect = Rect2(current_popup.position, current_popup.size)
+				print("DEBUG: Input blocker - popup rect: ", popup_rect, " click pos: ", mouse_event.global_position)
+				print("DEBUG: Input blocker - popup is_visible: ", current_popup.visible)
+				print("DEBUG: Input blocker - popup is_inside_tree: ", current_popup.is_inside_tree())
 				if not popup_rect.has_point(mouse_event.global_position):
+					print("DEBUG: Input blocker - click outside popup, closing")
 					# For right-clicks, close but don't consume to allow new context menus
 					if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
 						_close_current_popup()
@@ -96,7 +120,14 @@ func _on_blocker_input(event: InputEvent):
 						# For other clicks, close and consume
 						_close_current_popup()
 						window_parent.get_viewport().set_input_as_handled()
+						print("DEBUG: Input blocker - event consumed")
 						return
+				else:
+					print("DEBUG: Input blocker - click inside popup, not closing")
+			else:
+				print("DEBUG: Input blocker - no valid popup, but blocker still active!")
+		else:
+			print("DEBUG: Input blocker - mouse button released: ", mouse_event.button_index)
 
 func show_empty_area_context_menu(position: Vector2):
 	print("ItemActions: show_empty_area_context_menu called at ", position)
@@ -117,14 +148,11 @@ func show_empty_area_context_menu(position: Vector2):
 	
 	window_parent.add_child(popup)
 	
-	# Use the window's current mouse position (already relative to window)
-	print("ItemActions: Empty area popup positioned at ", popup.position, " (using window mouse position)")
-	
 	# Connect signals
 	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup))
 	popup.popup_hide.connect(_on_popup_hidden.bind(popup))
 	
-	# Connect to detect clicks outside popup
+	# Set the window's active context menu reference
 	_setup_click_detection()
 	
 	popup.show()
@@ -144,6 +172,8 @@ func _cleanup_input_connections():
 func handle_window_input(event: InputEvent) -> bool:
 	"""Called by the window to check if input should close the popup"""
 	if not current_popup or not is_instance_valid(current_popup):
+		# No popup active, clear the reference and don't handle
+		_cleanup_input_connections()
 		return false
 	
 	if event is InputEventMouseButton:
@@ -154,56 +184,109 @@ func handle_window_input(event: InputEvent) -> bool:
 			var click_pos = mouse_event.global_position
 			
 			if not popup_rect.has_point(click_pos):
-				# For right-clicks, close popup but don't consume the event
-				# This allows the right-click to reach other items for new context menus
+				# Click is outside popup - close it
+				_close_current_popup()
+				
+				# For right-clicks, don't consume the event so new context menus can appear
 				if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
-					_close_current_popup()
 					return false  # Don't consume the event
 				else:
-					# For left-clicks, close popup and consume the event
-					_close_current_popup()
-					return true  # Input was handled
+					return true   # Consume other clicks
 	
 	return false
 
 func _close_current_popup():
 	if popup_being_cleaned:
+		print("DEBUG: _close_current_popup called but already cleaning")
 		return
+	
+	print("DEBUG: _close_current_popup called")
+	
+	# First, clean up ANY input blockers in the viewport
+	var viewport = window_parent.get_viewport()
+	var blockers_found = 0
+	var all_children = viewport.get_children()
+	print("DEBUG: Viewport has ", all_children.size(), " children")
+	
+	for child in all_children:
+		print("DEBUG: Viewport child: ", child.name, " (", child.get_class(), ")")
+		if child.name == "InputBlocker":
+			print("DEBUG: Found input blocker in viewport - removing it")
+			if child.is_inside_tree():
+				viewport.remove_child(child)
+				print("DEBUG: Input blocker removed from tree")
+			else:
+				print("DEBUG: Input blocker was not in tree")
+			child.queue_free()
+			blockers_found += 1
+	print("DEBUG: Removed ", blockers_found, " input blockers from viewport")
 	
 	if current_popup and is_instance_valid(current_popup):
 		popup_being_cleaned = true
-		
-		# Remove input blocker if it exists
-		var blocker = current_popup.get_meta("input_blocker", null)
-		if blocker and is_instance_valid(blocker):
-			blocker.queue_free()
+		print("DEBUG: Closing popup and cleaning up")
+		print("DEBUG: Popup visible: ", current_popup.visible)
+		print("DEBUG: Popup in tree: ", current_popup.is_inside_tree())
 		
 		current_popup.hide()
+		if current_popup.is_inside_tree():
+			current_popup.get_parent().remove_child(current_popup)
+			print("DEBUG: Popup removed from tree")
 		current_popup.queue_free()
 		current_popup = null
 		popup_being_cleaned = false
+		print("DEBUG: Popup cleanup complete")
+	else:
+		print("DEBUG: No current popup to close")
 	
-	_cleanup_input_connections()
+	# Verify cleanup worked
+	print("DEBUG: Verifying cleanup...")
+	var remaining_blockers = 0
+	for child in viewport.get_children():
+		if child.name == "InputBlocker":
+			remaining_blockers += 1
+			print("DEBUG: WARNING - Input blocker still exists: ", child)
+	print("DEBUG: Remaining input blockers: ", remaining_blockers)
+	
+	# Don't call _cleanup_input_connections here - let the window handle its own reference
 
 func _on_popup_hidden(popup: PopupMenu):
+	print("DEBUG: _on_popup_hidden called for popup: ", popup)
+	print("DEBUG: popup_being_cleaned: ", popup_being_cleaned)
+	print("DEBUG: current_popup == popup: ", current_popup == popup)
+	
 	if popup_being_cleaned:
+		print("DEBUG: Popup already being cleaned, returning")
 		return
 	
 	# Only clear current_popup if this is the popup that was hidden
 	if popup == current_popup:
+		print("DEBUG: Clearing current_popup reference and cleaning up input blockers")
 		current_popup = null
-	
-	_cleanup_input_connections()
+		
+		# IMPORTANT: Also clean up input blockers when popup hides automatically
+		var viewport = window_parent.get_viewport()
+		var blockers_found = 0
+		for child in viewport.get_children():
+			if child.name == "InputBlocker":
+				print("DEBUG: _on_popup_hidden - Found input blocker, removing it")
+				if child.is_inside_tree():
+					viewport.remove_child(child)
+					print("DEBUG: _on_popup_hidden - Input blocker removed from tree")
+				child.queue_free()
+				blockers_found += 1
+		print("DEBUG: _on_popup_hidden - Removed ", blockers_found, " input blockers")
 	
 	# Clean up the popup if it's still valid and not already being cleaned
 	if popup and is_instance_valid(popup) and not popup_being_cleaned:
 		popup_being_cleaned = true
+		print("DEBUG: Queueing popup for deletion")
 		popup.queue_free()
 		popup_being_cleaned = false
 	
 	# Ensure window keeps focus
 	if window_parent:
 		window_parent.grab_focus()
+		print("DEBUG: Window focus restored")
 
 func _on_context_menu_item_selected(id: int, popup: PopupMenu):
 	var item = popup.get_meta("context_item", null) as InventoryItem
