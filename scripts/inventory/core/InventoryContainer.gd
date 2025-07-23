@@ -96,19 +96,14 @@ func find_free_position() -> Vector2i:
 
 func compact_items():
 	"""Moves all items to eliminate gaps, placing them sequentially from top-left"""
-	print("=== COMPACT_ITEMS CALLED ===")
-	print("Stack trace:")
-	print(get_stack())
 	
 	if items.is_empty():
 		print("No items to compact")
 		return
 	
-	print("Compacting ", items.size(), " items")
 	for i in range(items.size()):
 		var item = items[i]
 		var old_pos = get_item_position(item)
-		print("Item ", i, ": ", item.item_name, " at position ", old_pos)
 	
 	# Store items temporarily
 	var items_to_place = items.duplicate()
@@ -123,11 +118,6 @@ func compact_items():
 		if free_pos != Vector2i(-1, -1):
 			occupy_grid_area(free_pos, item)
 			items.append(item)
-			print("Placed ", item.item_name, " at new position ", free_pos)
-		else:
-			print("Warning: Could not find space for item ", item.item_name, " during compacting!")
-	
-	print("=== COMPACT_ITEMS COMPLETE ===")
 
 func occupy_grid_area(pos: Vector2i, item: InventoryItem):
 	grid_slots[pos.y][pos.x] = item

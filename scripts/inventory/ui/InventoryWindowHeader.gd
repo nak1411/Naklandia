@@ -3,17 +3,14 @@ class_name InventoryWindowHeader
 extends HBoxContainer
 
 # UI Components
-var container_selector: OptionButton
 var search_field: LineEdit
 var filter_options: OptionButton
 var sort_button: MenuButton
 
 # References
 var inventory_manager: InventoryManager
-var open_containers: Array[InventoryContainer] = []
 
 # Signals
-signal container_changed(container: InventoryContainer)
 signal search_changed(text: String)
 signal filter_changed(filter_type: int)
 signal sort_requested(sort_type: InventoryManager.SortType)
@@ -29,22 +26,16 @@ func _setup_controls():
 	left_spacer.custom_minimum_size.x = 8
 	add_child(left_spacer)
 	
-	# Container selector
-	container_selector = OptionButton.new()
-	container_selector.custom_minimum_size.x = 150
-	container_selector.selected = -1
-	add_child(container_selector)
-	
 	# Search field
 	search_field = LineEdit.new()
 	search_field.placeholder_text = "Search items..."
-	search_field.custom_minimum_size.x = 120
+	search_field.custom_minimum_size.x = 150
 	add_child(search_field)
 	
 	# Filter options
 	filter_options = OptionButton.new()
 	_populate_filter_options()
-	filter_options.custom_minimum_size.x = 100
+	filter_options.custom_minimum_size.x = 120
 	add_child(filter_options)
 	
 	# Sort button
@@ -81,14 +72,9 @@ func _populate_sort_menu():
 	sort_popup.add_item("By Rarity")
 
 func _connect_signals():
-	container_selector.item_selected.connect(_on_container_selector_changed)
 	search_field.text_changed.connect(_on_search_text_changed)
 	filter_options.item_selected.connect(_on_filter_changed)
 	sort_button.get_popup().id_pressed.connect(_on_sort_selected)
-
-func _on_container_selector_changed(index: int):
-	if index >= 0 and index < open_containers.size():
-		container_changed.emit(open_containers[index])
 
 func _on_search_text_changed(new_text: String):
 	search_changed.emit(new_text)
@@ -103,22 +89,6 @@ func _on_sort_selected(id: int):
 # Public interface
 func set_inventory_manager(manager: InventoryManager):
 	inventory_manager = manager
-
-func update_containers(containers: Array[InventoryContainer]):
-	open_containers = containers
-	
-	for container in containers:
-		var total_qty = container.get_total_quantity()
-		var unique_items = container.get_item_count()
-		
-		var container_text = container.container_name
-
-func select_container_index(index: int):
-	if index >= 0 and index < open_containers.size():
-		container_selector.selected = index
-
-func get_selected_container_index() -> int:
-	return container_selector.selected
 
 func get_search_text() -> String:
 	return search_field.text

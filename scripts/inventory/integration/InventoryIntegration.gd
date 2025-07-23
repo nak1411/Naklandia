@@ -595,38 +595,6 @@ func force_complete_refresh():
 	
 	print("Refresh complete!")
 	
-func debug_inventory_state():
-	print("=== DEBUG INVENTORY STATE ===")
-	
-	if not inventory_manager:
-		print("No inventory manager!")
-		return
-	
-	var player_inv = inventory_manager.get_player_inventory()
-	if not player_inv:
-		print("No player inventory!")
-		return
-	
-	var total_qty = player_inv.get_total_quantity()
-	var unique_items = player_inv.get_item_count()
-	print("Player inventory: %d total items (%d unique types)" % [total_qty, unique_items])
-	
-	for i in range(player_inv.items.size()):
-		var item = player_inv.items[i]
-		print("  [%d] %s - Quantity: %d" % [i, item.item_name, item.quantity])
-	
-	if inventory_hud:
-		print("HUD slots:")
-		for i in range(inventory_hud.quick_slots.size()):
-			var slot = inventory_hud.quick_slots[i]
-			if slot.has_item():
-				var item = slot.get_item()
-				print("  Slot[%d]: %s - Quantity: %d" % [i, item.item_name, item.quantity])
-			else:
-				print("  Slot[%d]: empty" % i)
-	
-	print("=== END DEBUG ===")
-	
 func refresh_all_ui():
 	"""Refresh both HUD and window displays"""
 	_schedule_ui_refresh()

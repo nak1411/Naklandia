@@ -9,6 +9,7 @@ var current_container: InventoryContainer
 
 # Context menu properties
 var popup_offset: Vector2 = Vector2(20, 20)
+var current_popup: PopupMenu
 
 # Signals
 signal container_refreshed()
@@ -23,48 +24,39 @@ func set_current_container(container: InventoryContainer):
 	current_container = container
 
 func show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position: Vector2):
-	var popup = PopupMenu.new()
+	print("FIXED: show_item_context_menu called for ", item.item_name, " at ", position)
 	
-	popup.set_meta("context_item", item)
-	popup.set_meta("context_slot", slot)
+	# Close existing popup if open
+	_close_current_popup()
+	
+	var popup = PopupMenu.new()
+	current_popup = popup
 	
 	popup.add_item("Item Information", 0)
-	
 	if item.quantity > 1:
 		popup.add_item("Split Stack", 1)
-	
 	popup.add_item("Move to...", 2)
 	
-	match item.item_type:
-		InventoryItem.ItemType.CONSUMABLE:
-			popup.add_item("Use Item", 10)
-		InventoryItem.ItemType.CONTAINER:
-			popup.add_item("Open Container", 11)
-		InventoryItem.ItemType.BLUEPRINT:
-			popup.add_item("View Blueprint", 12)
+	# Add to scene root instead of window
+	var scene_root = window_parent.get_tree().current_scene
+	scene_root.add_child(popup)
 	
-	popup.add_separator()
-	
-	popup.add_item("Stack All Items", 20)
-	popup.add_item("Sort Container", 21)
-	
-	popup.add_separator()
-	
-	if item.can_be_destroyed:
-		popup.add_item("Destroy Item", 3)
-	
-	popup.add_item("Clear Container", 22)
-	
-	window_parent.add_child(popup)
-	
-	var mouse_pos = (window_parent.get_mouse_position() + Vector2(window_parent.position)) + popup_offset
-	popup.position = Vector2i(mouse_pos)
-	popup.show()
-	
+	# Use global coordinates and popup() method
+	popup.position = Vector2i(position)
 	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup))
+	popup.popup_hide.connect(_on_popup_hidden.bind(popup))
+	
+	popup.popup()  # Use popup() instead of show()
+	print("FIXED: Called popup.popup()")
 
 func show_empty_area_context_menu(position: Vector2):
+	print("ItemActions: show_empty_area_context_menu called at ", position)
+	
+	# Close existing popup if open
+	_close_current_popup()
+	
 	var popup = PopupMenu.new()
+	current_popup = popup
 	
 	popup.set_meta("context_item", null)
 	popup.set_meta("context_slot", null)
@@ -75,10 +67,71 @@ func show_empty_area_context_menu(position: Vector2):
 	popup.add_item("Clear Container", 22)
 	
 	window_parent.add_child(popup)
-	popup.position = Vector2i(position)
+	
+	# Use the window's current mouse position (already relative to window)
+	var mouse_pos = window_parent.get_mouse_position()
+	popup.position = Vector2i(mouse_pos)
+	print("ItemActions: Empty area popup positioned at ", popup.position, " (using window mouse position)")
+	
+	# Connect signals
+	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup))
+	popup.popup_hide.connect(_on_popup_hidden.bind(popup))
+	
+	# Register with window for monitoring
+	if window_parent.has_method("_set_context_menu_handler"):
+		window_parent._set_context_menu_handler(self)
+	
 	popup.show()
 	
-	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup))
+	# Return focus to the inventory window immediately
+	window_parent.grab_focus()
+
+func _setup_right_click_monitoring():
+	# Simple approach - just set a flag that we have a popup open
+	# The window will check this flag when it receives right-clicks
+	pass
+
+func _on_window_right_click(event: InputEventMouseButton):
+	if not current_popup or not is_instance_valid(current_popup):
+		return false
+	
+	# Right click detected - check if it's outside the popup
+	var popup_rect = Rect2(current_popup.global_position, current_popup.size)
+	var click_pos = event.global_position
+	
+	if not popup_rect.has_point(click_pos):
+		# Click is outside the popup - close it and allow new context menu
+		_close_current_popup()
+		return false  # Don't consume the event
+	else:
+		# Click is inside popup - consume it
+		return true
+
+func _disconnect_input_monitoring():
+	if window_parent.has_method("_clear_context_menu_handler"):
+		window_parent._clear_context_menu_handler()
+
+func _close_current_popup():
+	if current_popup and is_instance_valid(current_popup):
+		current_popup.hide()
+		current_popup.queue_free()
+	current_popup = null
+	
+	_disconnect_input_monitoring()
+
+func _on_popup_hidden(popup: PopupMenu):
+	if popup == current_popup:
+		current_popup = null
+	
+	_disconnect_input_monitoring()
+	
+	# Clean up the popup
+	if is_instance_valid(popup):
+		popup.queue_free()
+	
+	# Ensure window keeps focus
+	if window_parent:
+		window_parent.grab_focus()
 
 func _on_context_menu_item_selected(id: int, popup: PopupMenu):
 	var item = popup.get_meta("context_item", null) as InventoryItem
@@ -107,7 +160,7 @@ func _on_context_menu_item_selected(id: int, popup: PopupMenu):
 			clear_container()
 	
 	container_refreshed.emit()
-	popup.queue_free()
+	_close_current_popup()
 
 func show_item_details_dialog(item: InventoryItem):
 	var dialog = AcceptDialog.new()

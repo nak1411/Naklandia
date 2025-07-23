@@ -31,11 +31,13 @@ signal item_context_menu(item: InventoryItem, slot: InventorySlotUI, position: V
 func _ready():
 	_setup_background()
 	set_focus_mode(Control.FOCUS_ALL)
+	mouse_filter = Control.MOUSE_FILTER_PASS
 
 func _setup_background():
 	background_panel = Panel.new()
 	background_panel.name = "Background"
 	background_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(background_panel)
 	
 	var style_box = StyleBoxFlat.new()
@@ -59,6 +61,7 @@ func _setup_grid():
 	grid_container.columns = grid_width
 	grid_container.add_theme_constant_override("h_separation", slot_spacing)
 	grid_container.add_theme_constant_override("v_separation", slot_spacing)
+	grid_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	background_panel.add_child(grid_container)
 	
 	# Initialize slots array
@@ -97,8 +100,6 @@ func _update_grid_size():
 		custom_minimum_size = Vector2(total_width + 16, total_height + 16)  # Add padding
 
 # Container management
-
-
 func set_container(new_container: InventoryContainer):
 	if container:
 		_disconnect_container_signals()
@@ -214,8 +215,53 @@ func force_all_slots_refresh():
 			if slot and slot.has_method("force_visual_refresh"):
 				slot.force_visual_refresh()
 
+# Input handling for focus management
+func _gui_input(event: InputEvent):
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed:
+			# Focus the inventory window when clicking anywhere in the grid
+			_focus_inventory_window()
+			
+			if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+				# Handle right-click on empty area
+				var clicked_slot = get_slot_at_position(mouse_event.global_position)
+				if not clicked_slot or not clicked_slot.has_item():
+					# Right-clicked on empty area - show empty area context menu
+					_show_empty_area_context_menu(mouse_event.global_position)
+					get_viewport().set_input_as_handled()
+		
+		# Always grab focus for keyboard input
+		grab_focus()
+
+func _focus_inventory_window():
+	# Find the inventory window and focus it
+	var current_node = get_parent()
+	while current_node:
+		if current_node is Window:
+			current_node.grab_focus()
+			break
+		current_node = current_node.get_parent()
+
+func _show_empty_area_context_menu(global_pos: Vector2):
+	# Find the item actions handler and show empty area menu
+	var inventory_window = _find_inventory_window()
+	if inventory_window and inventory_window.has_method("_show_empty_area_context_menu"):
+		inventory_window._show_empty_area_context_menu(global_pos)
+
+func _find_inventory_window():
+	var current_node = get_parent()
+	while current_node:
+		if current_node.get_script() and current_node.get_script().get_global_name() == "InventoryWindowUI":
+			return current_node
+		current_node = current_node.get_parent()
+	return null
+
 # Slot interaction handlers
 func _on_slot_clicked(slot: InventorySlotUI, event: InputEvent):
+	# Focus window on any slot click
+	_focus_inventory_window()
+	
 	var mouse_event = event as InputEventMouseButton
 	
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT:
@@ -231,10 +277,15 @@ func _on_slot_clicked(slot: InventorySlotUI, event: InputEvent):
 				item_activated.emit(slot.get_item(), slot)
 
 func _on_slot_right_clicked(slot: InventorySlotUI, event: InputEvent):
+	# Focus window on right click
+	_focus_inventory_window()
+	
 	if slot.has_item():
 		var mouse_event = event as InputEventMouseButton
-		var global_pos = slot.global_position + mouse_event.position
+		var global_pos = mouse_event.global_position
+		print("Grid: Emitting item_context_menu signal")
 		item_context_menu.emit(slot.get_item(), slot, global_pos)
+		get_viewport().set_input_as_handled()
 
 func _select_single_slot(slot: InventorySlotUI):
 	for selected_slot in selected_slots:
@@ -447,8 +498,3 @@ func set_slot_size(new_size: Vector2):
 		for x in grid_width:
 			if slots[y] and x < slots[y].size():
 				slots[y][x].slot_size = new_size
-
-# Focus management for keyboard input
-func _gui_input(event: InputEvent):
-	if event is InputEventMouseButton:
-		grab_focus()

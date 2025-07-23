@@ -16,6 +16,8 @@ var item_actions: InventoryItemActions
 # State
 var inventory_manager: InventoryManager
 var open_containers: Array[InventoryContainer] = []
+var current_container: InventoryContainer
+var context_menu_handler: InventoryItemActions
 
 # Signals
 signal window_closed()
@@ -62,7 +64,6 @@ func _connect_signals():
 	close_requested.connect(_on_close_requested)
 	
 	# Header signals
-	header.container_changed.connect(_on_header_container_changed)
 	header.search_changed.connect(_on_search_changed)
 	header.filter_changed.connect(_on_filter_changed)
 	header.sort_requested.connect(_on_sort_requested)
@@ -121,20 +122,19 @@ func _populate_container_list():
 	
 	open_containers = containers
 	
-	# Update modules
-	header.update_containers(open_containers)
+	# Update content module only
 	content.update_containers(open_containers)
 	
 	# Select player inventory first
 	if not open_containers.is_empty():
 		_switch_to_container(open_containers[0])
-		header.select_container_index(0)
 		content.select_container_index(0)
 
 func _switch_to_container(container: InventoryContainer):
-	var current_container = content.get_current_container()
 	if current_container == container:
 		return
+	
+	current_container = container
 	
 	# Compact the container before displaying
 	if container and container.get_item_count() > 0:
@@ -154,17 +154,8 @@ func _close_window():
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	window_closed.emit()
 
-func _on_header_container_changed(container: InventoryContainer):
-	_switch_to_container(container)
-	var index = open_containers.find(container)
-	if index != -1:
-		content.select_container_index(index)
-
 func _on_content_container_selected(container: InventoryContainer):
 	_switch_to_container(container)
-	var index = open_containers.find(container)
-	if index != -1:
-		header.select_container_index(index)
 
 func _on_search_changed(text: String):
 	# TODO: Implement search filtering
@@ -175,7 +166,6 @@ func _on_filter_changed(filter_type: int):
 	pass
 
 func _on_sort_requested(sort_type: InventoryManager.SortType):
-	var current_container = content.get_current_container()
 	if inventory_manager and current_container:
 		inventory_manager.sort_container(current_container.container_id, sort_type)
 
@@ -189,6 +179,39 @@ func _on_container_refreshed():
 	refresh_display()
 	refresh_container_list()
 
+func _show_empty_area_context_menu(global_pos: Vector2):
+	if item_actions:
+		item_actions.show_empty_area_context_menu(global_pos)
+
+func _set_context_menu_handler(handler: InventoryItemActions):
+	context_menu_handler = handler
+
+func _clear_context_menu_handler():
+	context_menu_handler = null
+
+func _unhandled_input(event: InputEvent):
+	# Only handle context menu monitoring, not regular input
+	if context_menu_handler and event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			var handled = context_menu_handler._on_window_right_click(mouse_event)
+			if handled:
+				get_viewport().set_input_as_handled()
+				return
+	
+	# Handle window-specific keyboard shortcuts only when visible
+	if visible and event is InputEventKey and event.pressed:
+		match event.keycode:
+			KEY_I, KEY_ESCAPE:
+				_close_window()
+				get_viewport().set_input_as_handled()
+			KEY_F5, KEY_F9:
+				refresh_display()
+				get_viewport().set_input_as_handled()
+			KEY_HOME:
+				position = Vector2i(1040, 410)
+				get_viewport().set_input_as_handled()
+
 # Public interface
 func refresh_display():
 	content.refresh_display()
@@ -197,21 +220,7 @@ func refresh_container_list():
 	if not inventory_manager:
 		return
 	
-	# Update container text for each container
-	for i in range(open_containers.size()):
-		var container = open_containers[i]
-		
-		var total_qty = container.get_total_quantity()
-		var unique_items = container.get_item_count()
-		
-		var container_text = ""
-		if unique_items > 1:
-			container_text = "%s (%d items, %d types)" % [container.container_name, total_qty, unique_items]
-		else:
-			container_text = "%s (%d items)" % [container.container_name, total_qty]
-	
-	# Update modules with refreshed container info
-	header.update_containers(open_containers)
+	# Update content module with refreshed container info
 	content.update_containers(open_containers)
 
 func toggle_visibility():
@@ -223,23 +232,6 @@ func toggle_visibility():
 
 func bring_to_front():
 	grab_focus()
-
-# Keyboard input
-func _input(event: InputEvent):
-	if not visible:
-		return
-	
-	if event is InputEventKey and event.pressed:
-		match event.keycode:
-			KEY_I, KEY_ESCAPE:
-				_close_window()
-				get_viewport().set_input_as_handled()
-			KEY_F5, KEY_F9:
-				refresh_display()
-				get_viewport().set_input_as_handled()
-			KEY_HOME:
-				position = Vector2i(1040, 410)
-				get_viewport().set_input_as_handled()
 
 # Theme and styling
 func apply_custom_theme():
