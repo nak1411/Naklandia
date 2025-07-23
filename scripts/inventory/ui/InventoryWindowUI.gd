@@ -19,6 +19,10 @@ var open_containers: Array[InventoryContainer] = []
 var current_container: InventoryContainer
 var active_context_menu: InventoryItemActions
 
+# Window state
+var is_locked: bool = false
+var window_transparency: float = 1.0
+
 # Signals
 signal window_closed()
 signal container_switched(container: InventoryContainer)
@@ -67,6 +71,8 @@ func _connect_signals():
 	header.search_changed.connect(_on_search_changed)
 	header.filter_changed.connect(_on_filter_changed)
 	header.sort_requested.connect(_on_sort_requested)
+	header.transparency_changed.connect(_on_transparency_changed)
+	header.lock_toggled.connect(_on_lock_toggled)
 	
 	# Content signals
 	content.container_selected.connect(_on_content_container_selected)
@@ -82,6 +88,7 @@ func _find_inventory_manager():
 	
 	if inventory_manager:
 		header.set_inventory_manager(inventory_manager)
+		header.set_inventory_window(self)
 		content.set_inventory_manager(inventory_manager)
 		item_actions.set_inventory_manager(inventory_manager)
 		_populate_container_list()
@@ -145,6 +152,13 @@ func _switch_to_container(container: InventoryContainer):
 	
 	container_switched.emit(container)
 
+# Window behavior overrides
+var locked_position: Vector2i
+
+func _notification(what: int):
+	# Handle window events if needed
+	pass
+
 # Event handlers
 func _on_close_requested():
 	_close_window()
@@ -168,6 +182,72 @@ func _on_filter_changed(filter_type: int):
 func _on_sort_requested(sort_type: InventoryManager.SortType):
 	if inventory_manager and current_container:
 		inventory_manager.sort_container(current_container.container_id, sort_type)
+
+func _on_transparency_changed(value: float):
+	window_transparency = value
+	if main_container:
+		main_container.modulate.a = value
+
+func _on_lock_toggled(locked: bool):
+	is_locked = locked
+	
+	# Store current size and position to maintain consistency
+	var current_size = size
+	var current_pos = position
+	
+	# Update window flags based on lock state
+	if is_locked:
+		# Store current position
+		locked_position = current_pos
+		# Disable resizing and dragging
+		set_flag(Window.FLAG_RESIZE_DISABLED, true)
+		# Start position monitoring to snap back if moved
+		_start_position_monitoring()
+	else:
+		# Stop monitoring and re-enable resizing
+		_stop_position_monitoring()
+		set_flag(Window.FLAG_RESIZE_DISABLED, false)
+
+func _start_position_monitoring():
+	# Use a high-frequency timer to immediately snap back position
+	var timer = Timer.new()
+	timer.name = "PositionLockTimer"
+	timer.wait_time = 0.016  # ~60 FPS for smooth snapping
+	timer.timeout.connect(_enforce_position_lock)
+	add_child(timer)
+	timer.start()
+
+func _stop_position_monitoring():
+	var timer = get_node_or_null("PositionLockTimer")
+	if timer:
+		timer.queue_free()
+
+func _enforce_position_lock():
+	if is_locked and position != locked_position:
+		# Immediately snap back to locked position
+		position = locked_position
+
+func _create_fake_titlebar():
+	# Just add a visual indicator without trying to block dragging
+	var fake_titlebar = Panel.new()
+	fake_titlebar.name = "FakeTitlebar"
+	fake_titlebar.custom_minimum_size.y = 4
+	fake_titlebar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	# Style as a simple yellow bar indicator
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = Color.YELLOW
+	fake_titlebar.add_theme_stylebox_override("panel", style_box)
+	
+	# Insert at the top of main container
+	main_container.add_child(fake_titlebar)
+	main_container.move_child(fake_titlebar, 0)
+
+func _remove_fake_titlebar():
+	# Remove visual indicator
+	var fake_titlebar = main_container.get_node_or_null("FakeTitlebar")
+	if fake_titlebar:
+		fake_titlebar.queue_free()
 
 func _on_item_activated(item: InventoryItem, slot: InventorySlotUI):
 	item_actions.show_item_details_dialog(item)
@@ -219,7 +299,8 @@ func _unhandled_input(event: InputEvent):
 				refresh_display()
 				get_viewport().set_input_as_handled()
 			KEY_HOME:
-				position = Vector2i(1040, 410)
+				if not is_locked:
+					position = Vector2i(1040, 410)
 				get_viewport().set_input_as_handled()
 
 # Public interface
@@ -242,6 +323,28 @@ func toggle_visibility():
 
 func bring_to_front():
 	grab_focus()
+
+func set_transparency(value: float):
+	window_transparency = value
+	if main_container:
+		main_container.modulate.a = value
+	if header:
+		header.set_transparency(value)
+
+func get_transparency() -> float:
+	return window_transparency
+
+func set_window_locked(locked: bool):
+	is_locked = locked
+	if header:
+		header.set_window_locked(locked)
+	_on_lock_toggled(locked)
+
+func is_window_locked() -> bool:
+	return is_locked
+
+func _exit_tree():
+	_stop_position_monitoring()
 
 # Theme and styling
 func apply_custom_theme():
