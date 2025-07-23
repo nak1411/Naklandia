@@ -22,7 +22,34 @@ func _ready():
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	split_offset = 200
+	_remove_split_container_outline()
 	_setup_content()
+
+func _remove_split_container_outline():
+	# Remove the default HSplitContainer theme that creates outlines
+	var theme = Theme.new()
+	
+	# Create custom grabber style without outlines
+	var grabber_style = StyleBoxFlat.new()
+	grabber_style.bg_color = Color(0.4, 0.4, 0.4, 1.0)
+	grabber_style.corner_radius_top_left = 2
+	grabber_style.corner_radius_top_right = 2
+	grabber_style.corner_radius_bottom_left = 2
+	grabber_style.corner_radius_bottom_right = 2
+	
+	# Remove any border/outline styling
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color.TRANSPARENT
+	panel_style.border_width_left = 0
+	panel_style.border_width_right = 0
+	panel_style.border_width_top = 0
+	panel_style.border_width_bottom = 0
+	
+	theme.set_stylebox("grabber", "HSplitContainer", grabber_style)
+	theme.set_stylebox("panel", "HSplitContainer", panel_style)
+	theme.set_stylebox("bg", "HSplitContainer", panel_style)
+	
+	set_theme(theme)
 
 func _setup_content():
 	_setup_left_panel()
@@ -47,6 +74,17 @@ func _setup_left_panel():
 	container_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container_list.custom_minimum_size = Vector2(160, 200)
 	container_list.auto_height = true
+	
+	# Keep normal dark background for container list
+	var list_style = StyleBoxFlat.new()
+	list_style.bg_color = Color(0.1, 0.1, 0.1, 0.9)
+	list_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
+	list_style.border_width_left = 1
+	list_style.border_width_right = 1
+	list_style.border_width_top = 1
+	list_style.border_width_bottom = 1
+	container_list.add_theme_stylebox_override("panel", list_style)
+	
 	left_panel.add_child(container_list)
 	
 	container_list.item_selected.connect(_on_container_list_selected)

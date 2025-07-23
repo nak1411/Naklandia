@@ -21,7 +21,6 @@ var active_context_menu: InventoryItemActions
 
 # Window state
 var is_locked: bool = false
-var window_transparency: float = 1.0
 
 # Signals
 signal container_switched(container: InventoryContainer)
@@ -67,13 +66,13 @@ func _setup_inventory_ui():
 func _connect_inventory_signals():
 	# Connect custom window signals
 	window_closed.connect(_on_close_requested)
+	window_locked_changed.connect(_on_window_locked_changed)
+	transparency_changed.connect(_on_transparency_changed)
 	
 	# Header signals
 	header.search_changed.connect(_on_search_changed)
 	header.filter_changed.connect(_on_filter_changed)
 	header.sort_requested.connect(_on_sort_requested)
-	header.transparency_changed.connect(_on_transparency_changed)
-	header.lock_toggled.connect(_on_lock_toggled)
 	
 	# Content signals
 	content.container_selected.connect(_on_content_container_selected)
@@ -177,14 +176,11 @@ func _on_sort_requested(sort_type: InventoryManager.SortType):
 		inventory_manager.sort_container(current_container.container_id, sort_type)
 
 func _on_transparency_changed(value: float):
-	window_transparency = value
 	if inventory_container:
 		inventory_container.modulate.a = value
 
-func _on_lock_toggled(locked: bool):
+func _on_window_locked_changed(locked: bool):
 	is_locked = locked
-	# Use the custom window's dragging control
-	set_dragging_enabled(not locked)
 	
 	# Add/remove visual indicator
 	if locked:
@@ -287,20 +283,22 @@ func bring_to_front():
 	grab_focus()
 
 func set_transparency(value: float):
-	window_transparency = value
 	if inventory_container:
 		inventory_container.modulate.a = value
-	if header:
-		header.set_transparency(value)
+	# Use CustomWindow's method
+	super.set_transparency(value)
 
 func get_transparency() -> float:
-	return window_transparency
+	return super.get_transparency()
+
+func set_window_title(new_title: String):
+	super.set_window_title(new_title)
 
 func set_window_locked(locked: bool):
 	is_locked = locked
-	if header:
-		header.set_window_locked(locked)
-	_on_lock_toggled(locked)
+	# Use CustomWindow's method
+	super.set_window_locked(locked)
+	_on_window_locked_changed(locked)
 
 func is_window_locked() -> bool:
 	return is_locked

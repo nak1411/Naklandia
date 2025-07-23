@@ -29,7 +29,9 @@ var title_label: Label
 var close_button: Button
 var minimize_button: Button
 var maximize_button: Button
+var options_button: MenuButton
 var content_area: Control
+var content_background: Panel  # Separate background panel we can control
 
 # State
 var is_dragging: bool = false
@@ -40,6 +42,8 @@ var is_window_focused: bool = true
 var is_maximized: bool = false
 var restore_position: Vector2i
 var restore_size: Vector2i
+var window_locked: bool = false
+var window_transparency: float = 1.0
 
 # Signals
 signal window_closed()
@@ -47,10 +51,14 @@ signal window_minimized()
 signal window_maximized()
 signal window_restored()
 signal window_focus_changed(focused: bool)
+signal window_locked_changed(locked: bool)
+signal transparency_changed(value: float)
 
 func _init():
 	# Make window borderless so we can draw our own
 	set_flag(Window.FLAG_BORDERLESS, true)
+	# Enable transparency for the window
+	set_flag(Window.FLAG_TRANSPARENT, true)
 	
 	# Set up basic window properties
 	title = window_title
@@ -114,8 +122,18 @@ func _setup_custom_ui():
 	content_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	main_container.add_child(content_area)
 	
-	# Draw border
-	main_container.draw.connect(_draw_window_border)
+	# Create a separate background panel that we can control transparency on
+	content_background = Panel.new()
+	content_background.name = "ContentBackground"
+	content_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	content_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	# Style the background panel
+	var bg_style = StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.1, 0.1, 0.1, 1.0)  # Dark background
+	content_background.add_theme_stylebox_override("panel", bg_style)
+	
+	content_area.add_child(content_background)
 
 func _create_window_buttons():
 	var button_size = Vector2(title_bar_height - 4, title_bar_height - 4)
@@ -165,6 +183,26 @@ func _create_window_buttons():
 		minimize_button.add_theme_font_size_override("font_size", 12)
 		minimize_button.add_theme_color_override("font_color", Color.WHITE)
 		title_bar.add_child(minimize_button)
+	
+	# Options button
+	options_button = MenuButton.new()
+	options_button.name = "OptionsButton"
+	options_button.text = "⚙"
+	options_button.size = button_size
+	var options_x = size.x - button_size.x - 8
+	if can_close:
+		options_x -= button_size.x + button_spacing
+	if can_maximize:
+		options_x -= button_size.x + button_spacing
+	if can_minimize:
+		options_x -= button_size.x + button_spacing
+	options_button.position = Vector2(options_x, button_y)
+	options_button.flat = true
+	options_button.add_theme_font_size_override("font_size", 12)
+	options_button.add_theme_color_override("font_color", Color.WHITE)
+	title_bar.add_child(options_button)
+	
+	_setup_options_menu()
 
 func _connect_signals():
 	# Title bar dragging
@@ -185,30 +223,91 @@ func _connect_signals():
 		maximize_button.pressed.connect(_on_maximize_button_pressed)
 		maximize_button.mouse_entered.connect(_on_button_hover.bind(maximize_button, true))
 		maximize_button.mouse_exited.connect(_on_button_hover.bind(maximize_button, false))
+	
+	if options_button:
+		options_button.mouse_entered.connect(_on_button_hover.bind(options_button, true))
+		options_button.mouse_exited.connect(_on_button_hover.bind(options_button, false))
 
 func _update_title_bar_style():
 	var style_box = StyleBoxFlat.new()
 	style_box.bg_color = title_bar_active_color if is_window_focused else title_bar_color
-	style_box.border_width_left = border_width
-	style_box.border_width_right = border_width
-	style_box.border_width_top = border_width
+	style_box.border_width_left = 0
+	style_box.border_width_right = 0
+	style_box.border_width_top = 0
 	style_box.border_width_bottom = 1
 	style_box.border_color = border_active_color if is_window_focused else border_color
 	style_box.corner_radius_top_left = corner_radius
 	style_box.corner_radius_top_right = corner_radius
 	title_bar.add_theme_stylebox_override("panel", style_box)
 
-func _draw_window_border():
-	# Draw border around the entire window
-	var rect = Rect2(Vector2.ZERO, main_container.size)
-	var color = border_active_color if is_window_focused else border_color
+func _setup_options_menu():
+	var popup = options_button.get_popup()
+	popup.add_check_item("Lock Window")
+	popup.add_separator()
+	popup.add_item("Transparency: 100%")
+	popup.add_item("Reset Transparency")
 	
-	# Draw border using draw_rect with border_width
-	main_container.draw_rect(rect, color, false, border_width)
+	popup.id_pressed.connect(_on_options_menu_selected)
+
+func _on_options_menu_selected(id: int):
+	var popup = options_button.get_popup()
+	match id:
+		0:  # Lock Window
+			window_locked = not window_locked
+			popup.set_item_checked(0, window_locked)
+			set_dragging_enabled(not window_locked)
+			window_locked_changed.emit(window_locked)
+		2:  # Transparency (placeholder - opens dialog)
+			_show_transparency_dialog()
+		3:  # Reset Transparency
+			_set_transparency(1.0)
+
+func _show_transparency_dialog():
+	var dialog = AcceptDialog.new()
+	dialog.title = "Window Transparency"
+	dialog.size = Vector2(300, 120)
+	
+	var vbox = VBoxContainer.new()
+	dialog.add_child(vbox)
+	
+	var label = Label.new()
+	label.text = "Transparency: %d%%" % int(window_transparency * 100)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(label)
+	
+	var slider = HSlider.new()
+	slider.min_value = 0.1
+	slider.max_value = 1.0
+	slider.step = 0.01
+	slider.value = window_transparency
+	slider.custom_minimum_size.x = 250
+	vbox.add_child(slider)
+	
+	slider.value_changed.connect(func(value):
+		_set_transparency(value)
+		label.text = "Transparency: %d%%" % int(value * 100)
+	)
+	
+	add_child(dialog)
+	dialog.popup_centered()
+	dialog.close_requested.connect(func(): dialog.queue_free())
+
+func _set_transparency(value: float):
+	window_transparency = value
+	if content_background:
+		var current_modulate = content_background.modulate
+		current_modulate.a = value
+		content_background.modulate = current_modulate
+	
+	# Update menu text
+	var popup = options_button.get_popup()
+	popup.set_item_text(2, "Transparency: %d%%" % int(value * 100))
+	
+	transparency_changed.emit(value)
 
 # Input handling
 func _on_title_bar_input(event: InputEvent):
-	if not can_drag:
+	if not can_drag or window_locked:
 		return
 	
 	if event is InputEventMouseButton:
@@ -305,13 +404,11 @@ func restore_window():
 func _on_window_focus_entered():
 	is_window_focused = true
 	_update_title_bar_style()
-	main_container.queue_redraw()
 	window_focus_changed.emit(true)
 
 func _on_window_focus_exited():
 	is_window_focused = false
 	_update_title_bar_style()
-	main_container.queue_redraw()
 	window_focus_changed.emit(false)
 
 # Public interface
@@ -327,6 +424,21 @@ func set_dragging_enabled(enabled: bool):
 	if not enabled and is_dragging:
 		is_dragging = false
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+func get_window_locked() -> bool:
+	return window_locked
+
+func set_window_locked(locked: bool):
+	window_locked = locked
+	var popup = options_button.get_popup()
+	popup.set_item_checked(0, locked)
+	set_dragging_enabled(not locked)
+
+func get_transparency() -> float:
+	return window_transparency
+
+func set_transparency(value: float):
+	_set_transparency(value)
 
 func get_content_area() -> Control:
 	return content_area
