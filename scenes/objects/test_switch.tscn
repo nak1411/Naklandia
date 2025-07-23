@@ -1,6 +1,6 @@
 [gd_scene load_steps=5 format=3 uid="uid://3crjjuj2n4na"]
 
-[ext_resource type="Script" uid="uid://bnj3wiqncvqi0" path="res://scripts/interaction/TestInteractable.gd" id="1_test_script"]
+[ext_resource type="Script" uid="uid://bnj3wiqncvqi0" path="res://scripts/world/objects/TestInteractable.gd" id="1_test_script"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_switch"]
 size = Vector3(2, 2, 2)

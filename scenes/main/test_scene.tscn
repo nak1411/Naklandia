@@ -1,8 +1,8 @@
 [gd_scene load_steps=13 format=3 uid="uid://r45rejc363d"]
 
-[ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/TestScene.gd" id="1_ia1lp"]
-[ext_resource type="PackedScene" uid="uid://b2wfoje26x7fv" path="res://player.tscn" id="2_sasra"]
-[ext_resource type="PackedScene" uid="uid://3crjjuj2n4na" path="res://test_switch.tscn" id="3_sasra"]
+[ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
+[ext_resource type="PackedScene" uid="uid://b2wfoje26x7fv" path="res://scenes/player/player.tscn" id="2_d2t3o"]
+[ext_resource type="PackedScene" uid="uid://3crjjuj2n4na" path="res://scenes/objects/test_switch.tscn" id="3_ny3xg"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_ia1lp"]
 ground_color = Color(0.3, 0.3, 0.4, 1)
@@ -41,7 +41,7 @@ size = Vector3(3, 0.2, 3)
 size = Vector3(3, 0.2, 3)
 
 [node name="TestScene" type="Node3D"]
-script = ExtResource("1_ia1lp")
+script = ExtResource("1_wvjab")
 
 [node name="Environment" type="Node" parent="."]
 
@@ -98,8 +98,8 @@ mesh = SubResource("BoxMesh_njel3")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TestObjects/Platform"]
 shape = SubResource("BoxShape3D_vr1i5")
 
-[node name="Player" parent="." instance=ExtResource("2_sasra")]
+[node name="Player" parent="." instance=ExtResource("2_d2t3o")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 
-[node name="TestSwitch" parent="." instance=ExtResource("3_sasra")]
+[node name="TestSwitch" parent="." instance=ExtResource("3_ny3xg")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 1.5, 0)
