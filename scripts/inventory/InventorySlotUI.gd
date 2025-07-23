@@ -1,4 +1,4 @@
-# InventorySlotUI.gd - Individual inventory slot with drag-and-drop
+# InventorySlotUI.gd - Individual inventory slot with new drag-and-drop system
 class_name InventorySlotUI
 extends Control
 
@@ -13,7 +13,6 @@ extends Control
 var item: InventoryItem
 var grid_position: Vector2i
 var container_id: String
-var drag_data: Dictionary = {}
 
 # Visual components
 var background_panel: Panel
@@ -26,12 +25,17 @@ var is_highlighted: bool = false
 var is_selected: bool = false
 var is_occupied: bool = false
 
+# Drag and drop state
+var is_dragging: bool = false
+var drag_start_position: Vector2
+var drag_threshold: float = 5.0
+
 # Signals
 signal slot_clicked(slot: InventorySlotUI, event: InputEvent)
 signal slot_right_clicked(slot: InventorySlotUI, event: InputEvent)
-signal drag_started(slot: InventorySlotUI, item: InventoryItem)
-signal drag_ended(slot: InventorySlotUI, item: InventoryItem)
-signal item_dropped(slot: InventorySlotUI, dropped_item: InventoryItem)
+signal item_drag_started(slot: InventorySlotUI, item: InventoryItem)
+signal item_drag_ended(slot: InventorySlotUI, success: bool)
+signal item_dropped_on_slot(source_slot: InventorySlotUI, target_slot: InventorySlotUI)
 
 func _init():
 	custom_minimum_size = slot_size
@@ -42,7 +46,6 @@ func _ready():
 	_setup_signals()
 
 func _setup_visual_components():
-	# Set mouse filter to pass input
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	
 	# Background panel
@@ -122,10 +125,7 @@ func set_item(new_item: InventoryItem):
 		queue_redraw()
 	
 func force_visual_refresh():
-	# Force redraw
 	queue_redraw()
-	
-	# Update visual state
 	_update_visual_state()
 
 func clear_item():
@@ -160,12 +160,11 @@ func _update_item_display():
 		_create_fallback_icon()
 		item_icon.visible = true
 	
-	# Always show quantity for any amount > 1, and ensure it's visible
+	# Always show quantity for any amount > 1
 	if item.quantity > 1:
 		quantity_label.text = str(item.quantity)
 		quantity_label.visible = true
 	else:
-		# Still show "1" for single items to be explicit
 		quantity_label.text = "1"
 		quantity_label.visible = true
 	
@@ -179,7 +178,6 @@ func _update_item_display():
 	# Set tooltip
 	_update_tooltip()
 	
-	# Force visual update
 	queue_redraw()
 
 func _create_fallback_icon():
@@ -195,9 +193,6 @@ func _show_rarity_border():
 	rarity_border.visible = true
 	var rarity_color = item.get_rarity_color()
 	rarity_border.modulate = rarity_color
-	
-	# TODO: Set appropriate rarity border texture
-	# For now, just use modulation
 
 func _update_tooltip():
 	if not item:
@@ -246,27 +241,281 @@ func _update_visual_state():
 	
 	background_panel.add_theme_stylebox_override("panel", style_box)
 
-# Input handling
+# New drag and drop input handling
 func _on_gui_input(event: InputEvent):
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		
-		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			slot_clicked.emit(self, mouse_event)
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed:
+				if has_item():
+					is_dragging = true
+					drag_start_position = mouse_event.global_position
+				slot_clicked.emit(self, mouse_event)
+			else:
+				# Mouse button released
+				if is_dragging:
+					_handle_drag_end(mouse_event.global_position)
+					is_dragging = false
 		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
 			slot_right_clicked.emit(self, mouse_event)
 			get_viewport().set_input_as_handled()
+	
+	elif event is InputEventMouseMotion and is_dragging:
+		var distance = event.global_position.distance_to(drag_start_position)
+		if distance > drag_threshold and has_item():
+			_start_drag()
 
-# Drag and drop
-func _find_drop_target_at_position(global_pos: Vector2) -> InventorySlotUI:
-	# Get the inventory grid parent
+func _start_drag():
+	if not has_item() or get_viewport().get_node_or_null("DragPreview"):
+		return  # Already dragging or no item
+	
+	# Create drag preview
+	var preview = _create_drag_preview()
+	get_viewport().add_child(preview)
+	
+	# Start following mouse
+	_follow_mouse(preview)
+	
+	# Emit drag started signal
+	item_drag_started.emit(self, item)
+
+func _create_drag_preview() -> Control:
+	var preview = Control.new()
+	preview.name = "DragPreview"
+	preview.size = size
+	preview.z_index = 1000
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	# Copy visual elements
+	var preview_bg = Panel.new()
+	preview_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	preview_bg.add_theme_stylebox_override("panel", background_panel.get_theme_stylebox("panel"))
+	preview_bg.modulate.a = 0.8
+	preview.add_child(preview_bg)
+	
+	var preview_icon = TextureRect.new()
+	preview_icon.texture = item_icon.texture
+	preview_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	preview_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	preview_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	preview_icon.modulate.a = 0.9
+	preview.add_child(preview_icon)
+	
+	if item.quantity > 1:
+		var preview_quantity = Label.new()
+		preview_quantity.text = str(item.quantity)
+		preview_quantity.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+		preview_quantity.position = quantity_label.position
+		preview_quantity.size = quantity_label.size
+		preview_quantity.add_theme_color_override("font_color", Color.WHITE)
+		preview_quantity.add_theme_font_size_override("font_size", 10)
+		preview.add_child(preview_quantity)
+	
+	return preview
+
+func _follow_mouse(preview: Control):
+	# Store reference and start immediate positioning
+	preview.set_meta("source_slot", self)
+	_update_preview_position(preview)
+	
+	# Create a timer to update position continuously
+	var timer = Timer.new()
+	timer.wait_time = 0.016  # ~60 FPS
+	timer.timeout.connect(_update_preview_position.bind(preview))
+	add_child(timer)
+	timer.start()
+	
+	# Store timer reference to clean it up later
+	preview.set_meta("position_timer", timer)
+
+func _update_preview_position(preview: Control):
+	if not is_instance_valid(preview):
+		return
+	
+	# Check if this preview belongs to this slot
+	var source_slot = preview.get_meta("source_slot", null)
+	if source_slot != self:
+		return
+	
+	var mouse_pos = get_global_mouse_position()
+	preview.global_position = mouse_pos - preview.size / 2
+
+func _handle_drag_end(end_position: Vector2):
+	if not has_item():
+		is_dragging = false
+		return
+	
+	# Clean up drag preview and timer
+	var preview = get_viewport().get_node_or_null("DragPreview")
+	if preview and preview.get_meta("source_slot", null) == self:
+		var timer = preview.get_meta("position_timer", null)
+		if timer and is_instance_valid(timer):
+			timer.queue_free()
+		preview.queue_free()
+	
+	# Find target slot
+	var target_slot = _find_slot_at_position(end_position)
+	var success = false
+	
+	if target_slot and target_slot != self:
+		success = _attempt_drop_on_slot(target_slot)
+		if success:
+			# Emit the dropped signal for successful drops
+			item_dropped_on_slot.emit(self, target_slot)
+	
+	# Reset dragging state immediately
+	is_dragging = false
+	
+	# Emit drag ended signal
+	item_drag_ended.emit(self, success)
+
+func _find_slot_at_position(global_pos: Vector2) -> InventorySlotUI:
 	var grid = _get_inventory_grid()
 	if not grid:
 		return null
 	
-	return grid.get_slot_at_position(global_pos)
+	# Check all slots in the grid for the one under the mouse
+	for y in range(grid.slots.size()):
+		for x in range(grid.slots[y].size()):
+			var slot = grid.slots[y][x]
+			if slot and slot != self and is_instance_valid(slot):
+				var slot_rect = Rect2(slot.global_position, slot.size)
+				# Add small margin for easier dropping
+				slot_rect = slot_rect.grow(2)
+				if slot_rect.has_point(global_pos):
+					return slot
+	
+	return null
 
-# Add this helper method
+func _attempt_drop_on_slot(target_slot: InventorySlotUI) -> bool:
+	if not target_slot or not has_item():
+		return false
+	
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	# Get containers
+	var source_container = inventory_manager.get_container(container_id)
+	var target_container = inventory_manager.get_container(target_slot.container_id)
+	
+	if not source_container or not target_container:
+		return false
+	
+	# Handle different drop scenarios
+	if target_slot.has_item():
+		var target_item = target_slot.get_item()
+		
+		# Try stacking if items are compatible
+		if item.can_stack_with(target_item):
+			return _handle_stack_merge(target_slot, target_item)
+		else:
+			# Swap items
+			return _handle_item_swap(target_slot, target_item, inventory_manager)
+	else:
+		# Move to empty slot
+		return _handle_move_to_empty(target_slot, inventory_manager)
+
+func _handle_stack_merge(target_slot: InventorySlotUI, target_item: InventoryItem) -> bool:
+	var space_available = target_item.max_stack_size - target_item.quantity
+	var amount_to_transfer = min(item.quantity, space_available)
+	
+	if amount_to_transfer <= 0:
+		return false
+	
+	# Update quantities
+	target_item.quantity += amount_to_transfer
+	item.quantity -= amount_to_transfer
+	
+	# Update displays
+	target_slot._update_item_display()
+	
+	if item.quantity <= 0:
+		# Source item fully consumed
+		var source_container = _get_inventory_manager().get_container(container_id)
+		if source_container:
+			source_container.remove_item(item)
+		clear_item()
+	else:
+		_update_item_display()
+	
+	# Emit drop signal
+	item_dropped_on_slot.emit(self, target_slot)
+	return true
+
+func _handle_item_swap(target_slot: InventorySlotUI, target_item: InventoryItem, inventory_manager: InventoryManager) -> bool:
+	var source_container = inventory_manager.get_container(container_id)
+	var target_container = inventory_manager.get_container(target_slot.container_id)
+	
+	# Remove items from containers
+	source_container.remove_item(item)
+	target_container.remove_item(target_item)
+	
+	# Store items temporarily
+	var temp_source_item = item
+	var temp_target_item = target_item
+	
+	# Clear slots
+	clear_item()
+	target_slot.clear_item()
+	
+	# Add items to new containers
+	target_container.add_item(temp_source_item, target_slot.grid_position)
+	source_container.add_item(temp_target_item, grid_position)
+	
+	# Update slot displays
+	target_slot.set_item(temp_source_item)
+	set_item(temp_target_item)
+	
+	# Emit drop signal
+	item_dropped_on_slot.emit(self, target_slot)
+	return true
+
+func _handle_move_to_empty(target_slot: InventorySlotUI, inventory_manager: InventoryManager) -> bool:
+	var source_container = inventory_manager.get_container(container_id)
+	var target_container = inventory_manager.get_container(target_slot.container_id)
+	
+	# Check if target container can accept the item
+	if not target_container.can_add_item(item):
+		return false
+	
+	# Store the item reference before removing it
+	var temp_item = item
+	
+	# For same container moves, use move_item instead of remove/add
+	if source_container == target_container:
+		var move_success = source_container.move_item(temp_item, target_slot.grid_position)
+		if move_success:
+			# Update visual slots immediately - NO compacting
+			clear_item()
+			target_slot.set_item(temp_item)
+			return true
+		else:
+			return false
+	
+	# For different containers, remove from source and add to target
+	var source_success = source_container.remove_item(temp_item)
+	if not source_success:
+		return false
+	
+	# Clear the source slot visually
+	clear_item()
+	
+	# Add to target container at the specific position - NO compacting
+	var target_success = target_container.add_item(temp_item, target_slot.grid_position)
+	if not target_success:
+		# Restore to source if target add failed
+		source_container.add_item(temp_item, grid_position)
+		set_item(temp_item)
+		return false
+	
+	# Set the target slot visually
+	target_slot.set_item(temp_item)
+	
+	return true
+
+# Helper methods
 func _get_inventory_grid() -> InventoryGridUI:
 	var parent = get_parent()
 	while parent:
@@ -275,160 +524,20 @@ func _get_inventory_grid() -> InventoryGridUI:
 		parent = parent.get_parent()
 	return null
 
-# Add this method to handle successful drops
-func _handle_successful_drop(target_slot: InventorySlotUI):
-	var grid = _get_inventory_grid()
-	if not grid:
-		return
-	
-	var source_pos = get_grid_position()
-	var target_pos = target_slot.get_grid_position()
-	
-	# Handle stacking if possible
-	if target_slot.has_item() and item.can_stack_with(target_slot.get_item()):
-		var target_item = target_slot.get_item()
-		var remaining = target_item.add_to_stack(item.quantity)
-		
-		if remaining == 0:
-			# Full stack merged, remove source item
-			clear_item()
-		else:
-			# Partial merge, update source quantity
-			item.quantity = remaining
-			_update_item_display()
-		
-		target_slot._update_item_display()
-	else:
-		# Swap or move items
-		var target_item = target_slot.get_item()
-		
-		# Clear both slots first
-		target_slot.clear_item()
-		var source_item = item
-		clear_item()
-		
-		# Place items in new positions
-		target_slot.set_item(source_item)
-		if target_item:
-			set_item(target_item)
-	
-	# Notify the grid of the change
-	grid._on_items_moved_internally()
+func _get_inventory_manager() -> InventoryManager:
+	var scene_root = get_tree().current_scene
+	return _find_inventory_manager_recursive(scene_root)
 
-# Drop handling
-func can_accept_drop(dropped_item: InventoryItem) -> bool:
-	if not dropped_item:
-		return false
+func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
+	if node is InventoryManager:
+		return node
 	
-	# Can always drop on empty slots
-	if not has_item():
-		return true
+	for child in node.get_children():
+		var result = _find_inventory_manager_recursive(child)
+		if result:
+			return result
 	
-	# Can stack identical items
-	if item and item.can_stack_with(dropped_item):
-		return item.quantity + dropped_item.quantity <= item.max_stack_size
-	
-	# Can swap different items
-	return true
-	
-func _get_drag_data(position: Vector2):
-	if not item:
-		return null
-	
-	# Create drag data
-	var drag_data = {
-		"item": item,
-		"source_slot": self,
-		"source_container": container_id,
-		"source_position": grid_position
-	}
-	
-	# Create visual drag preview
-	var preview = Control.new()
-	preview.size = size
-	
-	var preview_icon = TextureRect.new()
-	preview_icon.texture = item_icon.texture
-	preview_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	preview_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	preview_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	preview_icon.modulate.a = 0.8
-	preview.add_child(preview_icon)
-	
-	if item.quantity > 1:
-		var preview_quantity = Label.new()
-		preview_quantity.text = str(item.quantity)
-		preview_quantity.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-		preview_quantity.position = Vector2(-20, -16)
-		preview_quantity.size = Vector2(18, 14)
-		preview_quantity.add_theme_color_override("font_color", Color.WHITE)
-		preview_quantity.add_theme_font_size_override("font_size", 10)
-		preview.add_child(preview_quantity)
-	
-	set_drag_preview(preview)
-	
-	# Emit drag started signal
-	drag_started.emit(self, item)
-	
-	return drag_data
-
-func _can_drop_data(position: Vector2, data) -> bool:
-	if not data is Dictionary:
-		return false
-	
-	if not data.has("item") or not data.has("source_slot"):
-		return false
-	
-	var source_slot = data.source_slot as InventorySlotUI
-	if source_slot == self:
-		return false  # Can't drop on itself
-	
-	var dropped_item = data.item as InventoryItem
-	return can_accept_drop(dropped_item)
-
-func _drop_data(position: Vector2, data):
-	if not _can_drop_data(position, data):
-		return
-	
-	var source_slot = data.source_slot as InventorySlotUI
-	var dropped_item = data.item as InventoryItem
-	
-	# Handle the drop based on current slot state
-	if not has_item():
-		# Empty slot - move item here
-		source_slot.clear_item()
-		set_item(dropped_item)
-	elif item.can_stack_with(dropped_item):
-		# Stack items
-		var remaining = item.add_to_stack(dropped_item.quantity)
-		if remaining == 0:
-			source_slot.clear_item()
-		else:
-			dropped_item.quantity = remaining
-			source_slot._update_item_display()
-		_update_item_display()
-	else:
-		# Swap items
-		var temp_item = item
-		source_slot.clear_item()
-		clear_item()
-		set_item(dropped_item)
-		source_slot.set_item(temp_item)
-	
-	# Emit signals
-	item_dropped.emit(self, dropped_item)
-	source_slot.drag_ended.emit(source_slot, dropped_item)
-	
-	# Update container
-	_notify_container_of_changes()
-
-# Add method to notify container
-func _notify_container_of_changes():
-	var grid = _get_inventory_grid()
-	if grid and grid.container:
-		# Force container to update its internal state
-		grid.container.compact_items()
-		grid.refresh_display()
+	return null
 
 # Signal handlers
 func _on_item_quantity_changed(new_quantity: int):
@@ -449,12 +558,3 @@ func set_container_id(id: String):
 
 func get_container_id() -> String:
 	return container_id
-
-# Context menu support
-func show_context_menu(position: Vector2):
-	if not item:
-		return
-	
-	# TODO: Implement context menu
-	# This would show options like "Split Stack", "Destroy", "Info", etc.
-	pass

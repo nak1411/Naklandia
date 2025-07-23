@@ -79,9 +79,12 @@ func _create_quick_slots():
 		slot.slot_size = slot_size
 		slot.set_grid_position(Vector2i(i, 0))
 		
-		# Connect signals
+		# Connect signals for new drag and drop system
 		slot.slot_clicked.connect(_on_quick_slot_clicked.bind(i))
 		slot.slot_right_clicked.connect(_on_quick_slot_right_clicked.bind(i))
+		slot.item_drag_started.connect(_on_quick_slot_drag_started.bind(i))
+		slot.item_drag_ended.connect(_on_quick_slot_drag_ended.bind(i))
+		slot.item_dropped_on_slot.connect(_on_quick_slot_dropped.bind(i))
 		
 		# Add hotkey label if enabled
 		if show_hotkeys:
@@ -92,6 +95,23 @@ func _create_quick_slots():
 	
 	# Select first slot by default
 	_select_slot(0)
+	
+func _on_quick_slot_drag_started(slot_index: int, slot: InventorySlotUI, item: InventoryItem):
+	# Highlight the quick slot being dragged from
+	slot.modulate.a = 0.5
+
+func _on_quick_slot_drag_ended(slot_index: int, slot: InventorySlotUI, success: bool):
+	# Restore slot appearance
+	slot.modulate.a = 1.0
+	
+	# Refresh quick slots after any successful drag operation
+	if success:
+		call_deferred("_refresh_quick_slots")
+
+func _on_quick_slot_dropped(slot_index: int, source_slot: InventorySlotUI, target_slot: InventorySlotUI):
+	# Handle drops within the quick slots
+	# The slots have already handled the item transfer
+	call_deferred("_refresh_quick_slots")
 
 func _add_hotkey_label(slot: InventorySlotUI, index: int):
 	var hotkey_label = Label.new()
