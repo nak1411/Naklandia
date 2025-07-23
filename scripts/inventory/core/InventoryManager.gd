@@ -137,10 +137,23 @@ func transfer_item(item: InventoryItem, from_container_id: String, to_container_
 	var from_container = get_container(from_container_id)
 	var to_container = get_container(to_container_id)
 	
-	if not from_container or not to_container:
+	print("DEBUG: Transferring item from '%s' to '%s'" % [from_container_id, to_container_id])
+	
+	if not from_container:
+		print("DEBUG: Source container '%s' not found" % from_container_id)
+		return false
+	
+	if not to_container:
+		print("DEBUG: Target container '%s' not found" % to_container_id)
 		return false
 	
 	if not item in from_container.items:
+		print("DEBUG: Item '%s' not found in source container" % item.item_name)
+		return false
+	
+	# Check if target container can accept the item
+	if not to_container.can_add_item(item):
+		print("DEBUG: Target container cannot accept item (volume/type restrictions)")
 		return false
 	
 	# Handle partial transfer
@@ -150,31 +163,44 @@ func transfer_item(item: InventoryItem, from_container_id: String, to_container_
 	if transfer_quantity < item.quantity:
 		transfer_item = item.split_stack(transfer_quantity)
 		if not transfer_item:
+			print("DEBUG: Failed to split stack")
 			return false
 	
-	# Attempt transfer
-	if to_container.add_item(transfer_item, position):
-		if transfer_quantity >= item.quantity:
-			from_container.remove_item(item)
-		
-		# Record transaction
-		var transaction = {
-			"item_name": transfer_item.item_name,
-			"quantity": transfer_item.quantity,
-			"from_container": from_container_id,
-			"to_container": to_container_id,
-			"timestamp": Time.get_unix_time_from_system()
-		}
-		transaction_history.append(transaction)
-		
-		item_transferred.emit(transfer_item, from_container_id, to_container_id)
-		transaction_completed.emit(transaction)
-		return true
-	else:
-		# Transfer failed, restore original item if it was split
+	# Remove from source container first
+	var remove_success = from_container.remove_item(transfer_item if transfer_quantity < item.quantity else item)
+	if not remove_success:
+		print("DEBUG: Failed to remove item from source container")
+		# Restore split if we made one
 		if transfer_quantity < item.quantity and transfer_item:
 			item.add_to_stack(transfer_item.quantity)
 		return false
+	
+	# Add to target container
+	var add_success = to_container.add_item(transfer_item, position)
+	if not add_success:
+		print("DEBUG: Failed to add item to target container")
+		# Restore to source container
+		from_container.add_item(transfer_item if transfer_quantity < item.quantity else item)
+		# Restore split if we made one
+		if transfer_quantity < item.quantity and transfer_item:
+			item.add_to_stack(transfer_item.quantity)
+		return false
+	
+	print("DEBUG: Transfer successful")
+	
+	# Record transaction
+	var transaction = {
+		"item_name": transfer_item.item_name,
+		"quantity": transfer_item.quantity,
+		"from_container": from_container_id,
+		"to_container": to_container_id,
+		"timestamp": Time.get_unix_time_from_system()
+	}
+	transaction_history.append(transaction)
+	
+	item_transferred.emit(transfer_item, from_container_id, to_container_id)
+	transaction_completed.emit(transaction)
+	return true
 
 # Item searching across all containers
 func find_item_globally(item_id: String) -> Dictionary:

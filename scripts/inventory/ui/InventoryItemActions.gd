@@ -369,11 +369,15 @@ func show_move_item_dialog(item: InventoryItem, slot: InventorySlotUI):
 	container_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(container_list)
 	
+	# Store valid target containers with their indices
+	var valid_containers: Array[InventoryContainer] = []
+	
 	if inventory_manager:
 		var containers = inventory_manager.get_accessible_containers()
 		for container in containers:
 			if container != current_container:
 				container_list.add_item(container.container_name)
+				valid_containers.append(container)
 	
 	var button_container = HBoxContainer.new()
 	vbox.add_child(button_container)
@@ -390,16 +394,16 @@ func show_move_item_dialog(item: InventoryItem, slot: InventorySlotUI):
 	dialog.popup_centered()
 	
 	move_button.pressed.connect(func():
-		var selected_index = container_list.get_selected_items()
-		if not selected_index.is_empty() and inventory_manager:
-			var containers = inventory_manager.get_accessible_containers()
-			var target_container_index = 0
-			for i in range(containers.size()):
-				if containers[i] != current_container:
-					if target_container_index == selected_index[0]:
-						inventory_manager.transfer_item(item, current_container.container_id, containers[i].container_id)
-						break
-					target_container_index += 1
+		var selected_indices = container_list.get_selected_items()
+		if not selected_indices.is_empty() and inventory_manager:
+			var selected_index = selected_indices[0]
+			if selected_index >= 0 and selected_index < valid_containers.size():
+				var target_container = valid_containers[selected_index]
+				var success = inventory_manager.transfer_item(item, current_container.container_id, target_container.container_id)
+				if success:
+					print("Successfully moved %s to %s" % [item.item_name, target_container.container_name])
+				else:
+					print("Failed to move %s to %s" % [item.item_name, target_container.container_name])
 		dialog.queue_free()
 	)
 	
