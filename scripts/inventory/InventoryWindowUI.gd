@@ -96,11 +96,6 @@ func _update_grid_layout():
 	if inventory_grid:
 		# Force the grid to refresh its layout
 		inventory_grid.queue_redraw()
-		
-		# Update grid size based on available space
-		var available_space = _get_available_grid_space()
-		if available_space.x > 0 and available_space.y > 0:
-			_resize_grid_to_fit(available_space)
 
 func _get_available_grid_space() -> Vector2:
 	if not inventory_grid or not inventory_grid.get_parent():
@@ -118,34 +113,6 @@ func _get_available_grid_space() -> Vector2:
 	available_size.y -= 20  # Approximate scrollbar height
 	
 	return available_size
-
-func _resize_grid_to_fit(available_space: Vector2):
-	if not inventory_grid or not current_container:
-		return
-	
-	# Get the current slot size from the grid
-	var slot_size = inventory_grid.slot_size
-	var slot_spacing = inventory_grid.slot_spacing
-	
-	# Calculate how many slots can fit in the available space
-	var slots_horizontal = max(1, int((available_space.x + slot_spacing) / (slot_size.x + slot_spacing)))
-	var slots_vertical = max(1, int((available_space.y + slot_spacing) / (slot_size.y + slot_spacing)))
-	
-	# Don't make the grid smaller than the container's actual grid size
-	var container_width = current_container.grid_width
-	var container_height = current_container.grid_height
-	
-	# Use the larger of calculated size or minimum container size
-	var new_width = max(slots_horizontal, container_width)
-	var new_height = max(slots_vertical, container_height)
-	
-	# Only update if the size actually changed
-	if new_width != inventory_grid.get_grid_size().x or new_height != inventory_grid.get_grid_size().y:
-		# Update the grid size for display purposes
-		inventory_grid.set_grid_size(new_width, new_height)
-		
-		# Update the container's display grid size (not its actual storage grid)
-		# This allows the UI to show more slots for easier item management
 
 func _center_window_sync():
 	center_on_main_screen()

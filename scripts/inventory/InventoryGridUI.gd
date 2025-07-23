@@ -5,8 +5,8 @@ extends Control
 # Grid properties
 @export var slot_size: Vector2 = Vector2(64, 64)
 @export var slot_spacing: float = 2.0
-@export var grid_width: int = 10
-@export var grid_height: int = 10
+@export var grid_width: int = 0
+@export var grid_height: int = 0
 
 # Visual properties
 @export var background_color: Color = Color(0.1, 0.1, 0.1, 0.9)
@@ -30,7 +30,6 @@ signal item_context_menu(item: InventoryItem, slot: InventorySlotUI, position: V
 
 func _ready():
 	_setup_background()
-	_setup_grid()
 	set_focus_mode(Control.FOCUS_ALL)
 
 func _setup_background():
@@ -49,6 +48,11 @@ func _setup_background():
 	background_panel.add_theme_stylebox_override("panel", style_box)
 
 func _setup_grid():
+	if grid_width <= 0 or grid_height <= 0:
+		print("InventoryGridUI: Cannot create grid with dimensions %dx%d" % [grid_width, grid_height])
+		return
+	
+	print("InventoryGridUI: Creating grid with dimensions %dx%d" % [grid_width, grid_height])
 	# Create grid container
 	grid_container = GridContainer.new()
 	grid_container.name = "GridContainer"
@@ -93,6 +97,8 @@ func _update_grid_size():
 		custom_minimum_size = Vector2(total_width + 16, total_height + 16)  # Add padding
 
 # Container management
+
+
 func set_container(new_container: InventoryContainer):
 	if container:
 		_disconnect_container_signals()
@@ -101,12 +107,24 @@ func set_container(new_container: InventoryContainer):
 	container_id = container.container_id if container else ""
 	
 	if container:
+		# Always update grid size to match container exactly
 		grid_width = container.grid_width
 		grid_height = container.grid_height
+		print("InventoryGridUI: Setting grid size to %dx%d for container '%s'" % [grid_width, grid_height, container.container_name])
+		
+		await _rebuild_grid()
+		
 		_connect_container_signals()
-		_rebuild_grid()
 		container.compact_items()
 		refresh_display()
+	else:
+		# No container - clear everything
+		grid_width = 0
+		grid_height = 0
+		if grid_container:
+			grid_container.queue_free()
+			grid_container = null
+		slots.clear()
 
 func _connect_container_signals():
 	if container:

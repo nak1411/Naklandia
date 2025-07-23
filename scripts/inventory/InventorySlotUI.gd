@@ -448,29 +448,66 @@ func _handle_item_swap(target_slot: InventorySlotUI, target_item: InventoryItem,
 	var source_container = inventory_manager.get_container(container_id)
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	
-	# Remove items from containers
-	source_container.remove_item(item)
-	target_container.remove_item(target_item)
-	
-	# Store items temporarily
+	# Store items and positions temporarily
 	var temp_source_item = item
 	var temp_target_item = target_item
+	var source_pos = grid_position
+	var target_pos = target_slot.grid_position
 	
-	# Clear slots
-	clear_item()
-	target_slot.clear_item()
-	
-	# Add items to new containers
-	target_container.add_item(temp_source_item, target_slot.grid_position)
-	source_container.add_item(temp_target_item, grid_position)
-	
-	# Update slot displays
-	target_slot.set_item(temp_source_item)
-	set_item(temp_target_item)
-	
-	# Emit drop signal
-	item_dropped_on_slot.emit(self, target_slot)
-	return true
+	# For same container swaps, use move_item which is more reliable
+	if source_container == target_container:
+		# Clear the grid positions manually first
+		source_container.clear_grid_area(source_pos)
+		source_container.clear_grid_area(target_pos)
+		
+		# Place items at swapped positions
+		source_container.occupy_grid_area(target_pos, temp_source_item)
+		source_container.occupy_grid_area(source_pos, temp_target_item)
+		
+		# Update visual slots immediately
+		clear_item()
+		target_slot.clear_item()
+		target_slot.set_item(temp_source_item)
+		set_item(temp_target_item)
+		
+		# Emit move signals instead of add/remove to avoid refresh_display
+		source_container.item_moved.emit(temp_source_item, source_pos, target_pos)
+		source_container.item_moved.emit(temp_target_item, target_pos, source_pos)
+		
+		return true
+	else:
+		# Different containers - use the existing logic but without signals
+		var source_success = source_container.remove_item(temp_source_item)
+		var target_success = target_container.remove_item(temp_target_item)
+		
+		if not source_success or not target_success:
+			return false
+		
+		# Clear visual slots
+		clear_item()
+		target_slot.clear_item()
+		
+		# Add to new containers at specific positions
+		target_container.occupy_grid_area(target_pos, temp_source_item)
+		source_container.occupy_grid_area(source_pos, temp_target_item)
+		target_container.items.append(temp_source_item)
+		source_container.items.append(temp_target_item)
+		
+		# Reconnect signals
+		temp_source_item.quantity_changed.connect(target_container._on_item_quantity_changed)
+		temp_source_item.item_modified.connect(target_container._on_item_modified)
+		temp_target_item.quantity_changed.connect(source_container._on_item_quantity_changed)
+		temp_target_item.item_modified.connect(source_container._on_item_modified)
+		
+		# Update visual slots
+		target_slot.set_item(temp_source_item)
+		set_item(temp_target_item)
+		
+		# Only emit item_added signals for cross-container moves
+		target_container.item_added.emit(temp_source_item, target_pos)
+		source_container.item_added.emit(temp_target_item, source_pos)
+		
+		return true
 
 func _handle_move_to_empty(target_slot: InventorySlotUI, inventory_manager: InventoryManager) -> bool:
 	var source_container = inventory_manager.get_container(container_id)
