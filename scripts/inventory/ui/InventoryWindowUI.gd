@@ -17,7 +17,7 @@ var item_actions: InventoryItemActions
 var inventory_manager: InventoryManager
 var open_containers: Array[InventoryContainer] = []
 var current_container: InventoryContainer
-var context_menu_handler: InventoryItemActions
+var active_context_menu: InventoryItemActions
 
 # Signals
 signal window_closed()
@@ -183,18 +183,18 @@ func _show_empty_area_context_menu(global_pos: Vector2):
 	if item_actions:
 		item_actions.show_empty_area_context_menu(global_pos)
 
-func _set_context_menu_handler(handler: InventoryItemActions):
-	context_menu_handler = handler
+func _set_context_menu_active(handler: InventoryItemActions):
+	active_context_menu = handler
 
-func _clear_context_menu_handler():
-	context_menu_handler = null
+func _clear_context_menu_active():
+	active_context_menu = null
 
 func _unhandled_input(event: InputEvent):
-	# Only handle context menu monitoring, not regular input
-	if context_menu_handler and event is InputEventMouseButton:
+	# Handle context menu input detection
+	if active_context_menu and event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
-		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
-			var handled = context_menu_handler._on_window_right_click(mouse_event)
+		if mouse_event.pressed:
+			var handled = active_context_menu.handle_window_input(event)
 			if handled:
 				get_viewport().set_input_as_handled()
 				return

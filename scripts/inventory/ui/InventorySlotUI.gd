@@ -211,6 +211,12 @@ func _update_tooltip():
 	
 	tooltip_text = tooltip
 
+# Calculate tooltip position (same position where Godot would show the tooltip)
+func get_tooltip_position() -> Vector2:
+	# Position the popup just to the right and slightly below the slot
+	var tooltip_offset = Vector2(slot_size.x + 5, 0)
+	return global_position + tooltip_offset
+
 # Visual state management
 func set_highlighted(highlighted: bool):
 	is_highlighted = highlighted

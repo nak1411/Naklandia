@@ -8,8 +8,9 @@ var inventory_manager: InventoryManager
 var current_container: InventoryContainer
 
 # Context menu properties
-var popup_offset: Vector2 = Vector2(20, 20)
+var popup_offset: Vector2i = Vector2i(20, 20)
 var current_popup: PopupMenu
+var popup_being_cleaned: bool = false
 
 # Signals
 signal container_refreshed()
@@ -32,6 +33,10 @@ func show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position
 	var popup = PopupMenu.new()
 	current_popup = popup
 	
+	# Store context information
+	popup.set_meta("context_item", item)
+	popup.set_meta("context_slot", slot)
+	
 	popup.add_item("Item Information", 0)
 	if item.quantity > 1:
 		popup.add_item("Split Stack", 1)
@@ -39,15 +44,20 @@ func show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position
 	
 	# Add to scene root instead of window
 	var scene_root = window_parent.get_tree().current_scene
-	scene_root.add_child(popup)
+	window_parent.get_viewport().add_child(popup)
 	
-	# Use global coordinates and popup() method
-	popup.position = Vector2i(position)
+	# Connect signals first
 	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup))
 	popup.popup_hide.connect(_on_popup_hidden.bind(popup))
 	
-	popup.popup()  # Use popup() instead of show()
-	print("FIXED: Called popup.popup()")
+	# Connect to detect clicks outside popup
+	_setup_click_detection()
+	
+	# Position and show the popup at the exact cursor position
+	popup.position = Vector2i(position.x + 400, position.y + 200)
+	popup.popup()
+	
+	print("FIXED: Popup positioned at ", popup.position)
 
 func show_empty_area_context_menu(position: Vector2):
 	print("ItemActions: show_empty_area_context_menu called at ", position)
@@ -69,65 +79,77 @@ func show_empty_area_context_menu(position: Vector2):
 	window_parent.add_child(popup)
 	
 	# Use the window's current mouse position (already relative to window)
-	var mouse_pos = window_parent.get_mouse_position()
-	popup.position = Vector2i(mouse_pos)
 	print("ItemActions: Empty area popup positioned at ", popup.position, " (using window mouse position)")
 	
 	# Connect signals
 	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup))
 	popup.popup_hide.connect(_on_popup_hidden.bind(popup))
 	
-	# Register with window for monitoring
-	if window_parent.has_method("_set_context_menu_handler"):
-		window_parent._set_context_menu_handler(self)
+	# Connect to detect clicks outside popup
+	_setup_click_detection()
 	
 	popup.show()
 	
 	# Return focus to the inventory window immediately
 	window_parent.grab_focus()
 
-func _setup_right_click_monitoring():
-	# Simple approach - just set a flag that we have a popup open
-	# The window will check this flag when it receives right-clicks
-	pass
+func _setup_click_detection():
+	# Set a flag that the window can check
+	if window_parent and window_parent.has_method("_set_context_menu_active"):
+		window_parent._set_context_menu_active(self)
 
-func _on_window_right_click(event: InputEventMouseButton):
+func _cleanup_input_connections():
+	if window_parent and window_parent.has_method("_clear_context_menu_active"):
+		window_parent._clear_context_menu_active()
+
+func handle_window_input(event: InputEvent) -> bool:
+	"""Called by the window to check if input should close the popup"""
 	if not current_popup or not is_instance_valid(current_popup):
 		return false
 	
-	# Right click detected - check if it's outside the popup
-	var popup_rect = Rect2(current_popup.global_position, current_popup.size)
-	var click_pos = event.global_position
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed:
+			# Check if click is outside the popup
+			# PopupMenu position is already in global coordinates when using popup()
+			var popup_rect = Rect2(current_popup.position, current_popup.size)
+			var click_pos = mouse_event.global_position
+			
+			if not popup_rect.has_point(click_pos):
+				# Click is outside popup - close it
+				_close_current_popup()
+				return true  # Input was handled
 	
-	if not popup_rect.has_point(click_pos):
-		# Click is outside the popup - close it and allow new context menu
-		_close_current_popup()
-		return false  # Don't consume the event
-	else:
-		# Click is inside popup - consume it
-		return true
-
-func _disconnect_input_monitoring():
-	if window_parent.has_method("_clear_context_menu_handler"):
-		window_parent._clear_context_menu_handler()
+	return false
 
 func _close_current_popup():
+	if popup_being_cleaned:
+		return
+	
 	if current_popup and is_instance_valid(current_popup):
+		popup_being_cleaned = true
 		current_popup.hide()
 		current_popup.queue_free()
-	current_popup = null
+		current_popup = null
+		popup_being_cleaned = false
 	
-	_disconnect_input_monitoring()
+	_cleanup_input_connections()
 
 func _on_popup_hidden(popup: PopupMenu):
+	if popup_being_cleaned:
+		return
+	
+	# Only clear current_popup if this is the popup that was hidden
 	if popup == current_popup:
 		current_popup = null
 	
-	_disconnect_input_monitoring()
+	_cleanup_input_connections()
 	
-	# Clean up the popup
-	if is_instance_valid(popup):
+	# Clean up the popup if it's still valid and not already being cleaned
+	if popup and is_instance_valid(popup) and not popup_being_cleaned:
+		popup_being_cleaned = true
 		popup.queue_free()
+		popup_being_cleaned = false
 	
 	# Ensure window keeps focus
 	if window_parent:
