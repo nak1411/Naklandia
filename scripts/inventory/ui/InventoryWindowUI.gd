@@ -41,6 +41,16 @@ func _ready():
 	apply_custom_theme()
 	visible = false
 
+func _gui_input(event: InputEvent):
+	# Handle context menu input at the window level
+	if active_context_menu and event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed:
+			var handled = active_context_menu.handle_window_input(event)
+			if handled:
+				get_viewport().set_input_as_handled()
+				return
+
 func _setup_ui():
 	main_container = VBoxContainer.new()
 	main_container.name = "MainContainer"
@@ -190,7 +200,7 @@ func _clear_context_menu_active():
 	active_context_menu = null
 
 func _unhandled_input(event: InputEvent):
-	# Handle context menu input detection
+	# Handle context menu input detection FIRST - for ANY mouse button
 	if active_context_menu and event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.pressed:
@@ -198,6 +208,7 @@ func _unhandled_input(event: InputEvent):
 			if handled:
 				get_viewport().set_input_as_handled()
 				return
+			# If not handled by context menu, continue processing
 	
 	# Handle window-specific keyboard shortcuts only when visible
 	if visible and event is InputEventKey and event.pressed:
@@ -210,6 +221,29 @@ func _unhandled_input(event: InputEvent):
 				get_viewport().set_input_as_handled()
 			KEY_HOME:
 				position = Vector2i(1040, 410)
+				get_viewport().set_input_as_handled()
+
+func _input(event: InputEvent):
+	# Handle context menu input detection at the highest level
+	if active_context_menu and event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			# Check if right-click is outside the popup
+			if active_context_menu.current_popup and is_instance_valid(active_context_menu.current_popup):
+				var popup = active_context_menu.current_popup
+				# Get the popup's actual screen rect
+				var popup_rect = Rect2(popup.global_position, popup.size)
+				var click_pos = mouse_event.global_position
+				
+				if not popup_rect.has_point(click_pos):
+					# Close popup and allow event to continue for new context menus
+					active_context_menu._close_current_popup()
+					# Don't consume the event so it can reach other items
+					return
+		elif mouse_event.pressed:
+			# For other mouse buttons, close popup and consume event
+			var handled = active_context_menu.handle_window_input(event)
+			if handled:
 				get_viewport().set_input_as_handled()
 
 # Public interface

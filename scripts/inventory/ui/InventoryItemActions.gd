@@ -42,22 +42,61 @@ func show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position
 		popup.add_item("Split Stack", 1)
 	popup.add_item("Move to...", 2)
 	
-	# Add to scene root instead of window
-	var scene_root = window_parent.get_tree().current_scene
+	# Add to viewport for proper input handling
 	window_parent.get_viewport().add_child(popup)
 	
 	# Connect signals first
 	popup.id_pressed.connect(_on_context_menu_item_selected.bind(popup))
 	popup.popup_hide.connect(_on_popup_hidden.bind(popup))
 	
-	# Connect to detect clicks outside popup
-	_setup_click_detection()
+	# Create input blocker overlay
+	_create_input_blocker()
 	
-	# Position and show the popup at the exact cursor position
-	popup.position = Vector2i(position.x + 400, position.y + 200)
+	# Position and show the popup relative to the window position
+	popup.position = Vector2i(position) + window_parent.position + popup_offset
 	popup.popup()
 	
 	print("FIXED: Popup positioned at ", popup.position)
+
+func _create_input_blocker():
+	var blocker = Control.new()
+	blocker.name = "InputBlocker"
+	blocker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	blocker.mouse_filter = Control.MOUSE_FILTER_PASS
+	blocker.z_index = 999  # Below popup but above everything else
+	
+	# Make it invisible but functional
+	var color_rect = ColorRect.new()
+	color_rect.color = Color.TRANSPARENT
+	color_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	color_rect.mouse_filter = Control.MOUSE_FILTER_PASS
+	blocker.add_child(color_rect)
+	
+	# Connect input handling
+	blocker.gui_input.connect(_on_blocker_input)
+	
+	# Add to viewport
+	window_parent.get_viewport().add_child(blocker)
+	current_popup.set_meta("input_blocker", blocker)
+
+func _on_blocker_input(event: InputEvent):
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed:
+			# Any click outside popup should close it
+			if current_popup and is_instance_valid(current_popup):
+				var popup_rect = Rect2(current_popup.position, current_popup.size)
+				if not popup_rect.has_point(mouse_event.global_position):
+					# For right-clicks, close but don't consume to allow new context menus
+					if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+						_close_current_popup()
+						# Don't accept_event() so it can reach other items
+						return
+					else:
+						# For other clicks, close and consume
+						_close_current_popup()
+						window_parent.get_viewport().set_input_as_handled()
+						return
 
 func show_empty_area_context_menu(position: Vector2):
 	print("ItemActions: show_empty_area_context_menu called at ", position)
@@ -111,14 +150,19 @@ func handle_window_input(event: InputEvent) -> bool:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.pressed:
 			# Check if click is outside the popup
-			# PopupMenu position is already in global coordinates when using popup()
 			var popup_rect = Rect2(current_popup.position, current_popup.size)
 			var click_pos = mouse_event.global_position
 			
 			if not popup_rect.has_point(click_pos):
-				# Click is outside popup - close it
-				_close_current_popup()
-				return true  # Input was handled
+				# For right-clicks, close popup but don't consume the event
+				# This allows the right-click to reach other items for new context menus
+				if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+					_close_current_popup()
+					return false  # Don't consume the event
+				else:
+					# For left-clicks, close popup and consume the event
+					_close_current_popup()
+					return true  # Input was handled
 	
 	return false
 
@@ -128,6 +172,12 @@ func _close_current_popup():
 	
 	if current_popup and is_instance_valid(current_popup):
 		popup_being_cleaned = true
+		
+		# Remove input blocker if it exists
+		var blocker = current_popup.get_meta("input_blocker", null)
+		if blocker and is_instance_valid(blocker):
+			blocker.queue_free()
+		
 		current_popup.hide()
 		current_popup.queue_free()
 		current_popup = null
