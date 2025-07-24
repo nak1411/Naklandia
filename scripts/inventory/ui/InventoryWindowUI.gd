@@ -157,6 +157,10 @@ func _on_close_requested():
 	_close_window()
 
 func _close_window():
+	# Close any open dialog windows first
+	if item_actions:
+		item_actions.close_all_dialogs()
+	
 	visible = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 

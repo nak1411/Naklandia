@@ -184,10 +184,8 @@ func toggle_inventory():
 	
 	# Check current state and toggle
 	if inventory_window.visible:
-		# Close the inventory
-		inventory_window.visible = false
-		is_inventory_open = false
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		# Close the inventory - this will also close dialog windows
+		close_inventory()
 	else:
 		# Open the inventory
 		is_inventory_open = true
@@ -199,6 +197,10 @@ func toggle_inventory():
 	inventory_toggled.emit(is_inventory_open)
 
 func _on_inventory_window_closed():
+	# Close any open dialog windows when inventory window is closed
+	if inventory_window and inventory_window.item_actions:
+		inventory_window.item_actions.close_all_dialogs()
+	
 	is_inventory_open = false
 	# Ensure mouse mode is captured for gameplay
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -215,6 +217,10 @@ func close_inventory():
 	if not inventory_window:
 		return
 	if is_inventory_open:
+		# Close any open dialog windows first
+		if inventory_window and inventory_window.item_actions:
+			inventory_window.item_actions.close_all_dialogs()
+		
 		inventory_window.visible = false
 		is_inventory_open = false
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

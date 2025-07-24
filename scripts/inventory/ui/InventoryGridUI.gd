@@ -247,6 +247,20 @@ func _focus_inventory_window():
 			current_node.grab_focus()
 			break
 		current_node = current_node.get_parent()
+		
+func _check_for_active_dialogs() -> bool:
+	"""Check if there are any active dialogs that should prevent focus changes"""
+	var viewport = get_viewport()
+	if not viewport:
+		return false
+	
+	# Look for any dialogs with high z_index (our dialog windows)
+	for child in viewport.get_children():
+		if child is AcceptDialog or child is ConfirmationDialog:
+			if child.visible and child.z_index >= 2000:
+				return true
+	
+	return false
 
 func _show_empty_area_context_menu(global_pos: Vector2):
 	# Find the item actions handler and show empty area menu

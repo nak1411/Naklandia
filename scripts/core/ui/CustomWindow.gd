@@ -263,12 +263,25 @@ func _on_options_menu_selected(id: int):
 			_set_transparency(1.0)
 
 func _show_transparency_dialog():
-	var dialog = AcceptDialog.new()
-	dialog.title = "Window Transparency"
-	dialog.size = Vector2(300, 120)
+	# Create a new independent window for the dialog
+	var dialog_window = Window.new()
+	dialog_window.title = "Window Transparency"
+	dialog_window.size = Vector2i(300, 120)
+	dialog_window.unresizable = true
+	dialog_window.always_on_top = true
+	dialog_window.set_flag(Window.FLAG_POPUP, false)
 	
+	# Position relative to this window
+	var window_center = position + size / 2
+	dialog_window.position = Vector2i(window_center - dialog_window.size / 2)
+	
+	# Create content container
 	var vbox = VBoxContainer.new()
-	dialog.add_child(vbox)
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vbox.add_theme_constant_override("margin_left", 10)
+	vbox.add_theme_constant_override("margin_right", 10)
+	vbox.add_theme_constant_override("margin_top", 10)
+	vbox.add_theme_constant_override("margin_bottom", 10)
 	
 	var label = Label.new()
 	label.text = "Transparency: %d%%" % int(window_transparency * 100)
@@ -283,14 +296,35 @@ func _show_transparency_dialog():
 	slider.custom_minimum_size.x = 250
 	vbox.add_child(slider)
 	
+	var close_button = Button.new()
+	close_button.text = "Close"
+	close_button.custom_minimum_size = Vector2(80, 30)
+	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vbox.add_child(close_button)
+	
+	dialog_window.add_child(vbox)
+	
+	# Connect slider
 	slider.value_changed.connect(func(value):
 		_set_transparency(value)
 		label.text = "Transparency: %d%%" % int(value * 100)
 	)
 	
-	add_child(dialog)
-	dialog.popup_centered()
-	dialog.close_requested.connect(func(): dialog.queue_free())
+	# Add to scene and show
+	get_tree().current_scene.add_child(dialog_window)
+	dialog_window.popup()
+	dialog_window.grab_focus()
+	
+	# Connect close events
+	close_button.pressed.connect(func():
+		dialog_window.queue_free()
+		grab_focus()
+	)
+	
+	dialog_window.close_requested.connect(func():
+		dialog_window.queue_free()
+		grab_focus()
+	)
 
 func _set_transparency(value: float):
 	window_transparency = value
