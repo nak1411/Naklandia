@@ -322,10 +322,15 @@ func _create_drag_preview() -> Control:
 	if item.quantity > 1:
 		var preview_quantity = Label.new()
 		preview_quantity.text = str(item.quantity)
-		preview_quantity.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-		preview_quantity.position = quantity_label.position
-		preview_quantity.size = quantity_label.size
+		preview_quantity.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		preview_quantity.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		# Position relative to preview size, not copying original position
+		preview_quantity.position = Vector2(preview.size.x - 20, preview.size.y - 16)
+		preview_quantity.size = Vector2(18, 14)
 		preview_quantity.add_theme_color_override("font_color", Color.WHITE)
+		preview_quantity.add_theme_color_override("font_shadow_color", Color.BLACK)
+		preview_quantity.add_theme_constant_override("shadow_offset_x", 1)
+		preview_quantity.add_theme_constant_override("shadow_offset_y", 1)
 		preview_quantity.add_theme_font_size_override("font_size", 10)
 		preview.add_child(preview_quantity)
 	
