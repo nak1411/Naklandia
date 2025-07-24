@@ -1,4 +1,3 @@
-# InventoryManager.gd - Central inventory management system
 class_name InventoryManager
 extends Node
 
@@ -31,6 +30,55 @@ signal inventory_saved()
 func _ready():
 	_initialize_default_containers()
 	_setup_autosave()
+
+func _input(event):
+	# Debug key to regenerate sample items
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_F10:
+			print("F10 pressed - regenerating sample items")
+			# Clear all containers completely
+			for container in containers.values():
+				container.clear()
+			
+			# Reinitialize containers to make sure they're empty
+			_initialize_default_containers()
+			
+			# Create fresh sample items
+			create_sample_items()
+			print("Sample items regenerated with correct stack sizes")
+		elif event.keycode == KEY_F11:
+			print("F11 pressed - debugging item properties")
+			var player_inv = get_player_inventory()
+			if player_inv:
+				for item in player_inv.items:
+					print("Item: %s, ID: %s, Qty: %d, Max: %d, Unique: %s" % [
+						item.item_name, item.item_id, item.quantity, item.max_stack_size, item.is_unique
+					])
+		elif event.keycode == KEY_F12:
+			print("F12 pressed - fixing existing item IDs")
+			var player_inv = get_player_inventory()
+			if player_inv:
+				for item in player_inv.items:
+					# Fix laser crystals
+					if item.item_name == "Laser Focusing Crystal":
+						item.item_id = "laser_crystal"
+						item.max_stack_size = 10
+						print("Fixed laser crystal: %s" % item.item_id)
+					# Fix blueprints
+					elif item.item_name == "Frigate Blueprint":
+						item.item_id = "blueprint_frigate"
+						item.max_stack_size = 5
+						print("Fixed blueprint: %s" % item.item_id)
+					# Fix tritanium
+					elif item.item_name == "Tritanium Ore":
+						item.item_id = "tritanium_ore"
+						item.max_stack_size = 1000
+						print("Fixed tritanium: %s" % item.item_id)
+					# Fix ammo
+					elif item.item_name == "Hybrid Charges":
+						item.item_id = "ammo_hybrid"
+						item.max_stack_size = 500
+						print("Fixed ammo: %s" % item.item_id)
 
 func _initialize_default_containers():
 	# Create player inventory (limited space, always accessible)
@@ -119,12 +167,12 @@ func get_accessible_containers() -> Array[InventoryContainer]:
 	return accessible
 
 # Item operations
-func add_item_to_container(item: InventoryItem, container_id: String, position: Vector2i = Vector2i(-1, -1)) -> bool:
+func add_item_to_container(item: InventoryItem, container_id: String, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
 	var container = get_container(container_id)
 	if not container:
 		return false
 	
-	return container.add_item(item, position)
+	return container.add_item(item, position, auto_stack)
 
 func remove_item_from_container(item: InventoryItem, container_id: String) -> bool:
 	var container = get_container(container_id)
@@ -137,40 +185,92 @@ func transfer_item(item: InventoryItem, from_container_id: String, to_container_
 	var from_container = get_container(from_container_id)
 	var to_container = get_container(to_container_id)
 	
-	print("DEBUG: Transferring item from '%s' to '%s'" % [from_container_id, to_container_id])
-	
-	if not from_container:
-		print("DEBUG: Source container '%s' not found" % from_container_id)
-		return false
-	
-	if not to_container:
-		print("DEBUG: Target container '%s' not found" % to_container_id)
+	if not from_container or not to_container:
 		return false
 	
 	if not item in from_container.items:
-		print("DEBUG: Item '%s' not found in source container" % item.item_name)
 		return false
 	
-	# Check if target container can accept the item
-	if not to_container.can_add_item(item):
-		print("DEBUG: Target container cannot accept item (volume/type restrictions)")
-		return false
-	
-	# Handle partial transfer
+	# Handle transfer quantity
 	var transfer_quantity = quantity if quantity > 0 else item.quantity
 	var transfer_item = item
 	
+	# For same container transfers to specific positions, check if target has stackable item
+	if from_container == to_container and position != Vector2i(-1, -1):
+		var target_item = _get_item_at_position(to_container, position)
+		if target_item and target_item != item and item.can_stack_with(target_item):
+			# Stack with target item
+			var space_available = target_item.max_stack_size - target_item.quantity
+			var amount_to_stack = min(transfer_quantity, space_available)
+			
+			if amount_to_stack > 0:
+				target_item.quantity += amount_to_stack
+				item.quantity -= amount_to_stack
+				
+				if item.quantity <= 0:
+					from_container.remove_item(item)
+				
+				# Record transaction
+				var transaction = {
+					"item_name": item.item_name,
+					"quantity": amount_to_stack,
+					"from_container": from_container_id,
+					"to_container": to_container_id,
+					"timestamp": Time.get_unix_time_from_system(),
+					"stacked": true
+				}
+				transaction_history.append(transaction)
+				
+				item_transferred.emit(item, from_container_id, to_container_id)
+				transaction_completed.emit(transaction)
+				return true
+	
+	# Check if we can stack with existing items in target container (for different containers)
+	if from_container != to_container:
+		var stackable_item = to_container.find_stackable_item(item)
+		if stackable_item and transfer_quantity <= (stackable_item.max_stack_size - stackable_item.quantity):
+			# We can stack completely - handle the stacking
+			if transfer_quantity < item.quantity:
+				# Partial transfer - reduce source quantity
+				item.quantity -= transfer_quantity
+				stackable_item.quantity += transfer_quantity
+			else:
+				# Complete transfer - remove from source and add to target stack
+				from_container.remove_item(item)
+				stackable_item.quantity += transfer_quantity
+			
+			# Record transaction
+			var transaction = {
+				"item_name": item.item_name,
+				"quantity": transfer_quantity,
+				"from_container": from_container_id,
+				"to_container": to_container_id,
+				"timestamp": Time.get_unix_time_from_system(),
+				"stacked": true
+			}
+			transaction_history.append(transaction)
+			
+			item_transferred.emit(transfer_item, from_container_id, to_container_id)
+			transaction_completed.emit(transaction)
+			return true
+	
+	# Can't stack or only partial stack possible - handle as separate item
 	if transfer_quantity < item.quantity:
 		transfer_item = item.split_stack(transfer_quantity)
 		if not transfer_item:
-			print("DEBUG: Failed to split stack")
 			return false
 	
-	# Remove from source container first
+	# Check if target container can accept the item
+	if not to_container.can_add_item(transfer_item):
+		# If we split the stack, restore it
+		if transfer_quantity < item.quantity and transfer_item:
+			item.add_to_stack(transfer_item.quantity)
+		return false
+	
+	# Remove from source container
 	var remove_success = from_container.remove_item(transfer_item if transfer_quantity < item.quantity else item)
 	if not remove_success:
-		print("DEBUG: Failed to remove item from source container")
-		# Restore split if we made one
+		# If we split the stack, restore it
 		if transfer_quantity < item.quantity and transfer_item:
 			item.add_to_stack(transfer_item.quantity)
 		return false
@@ -178,7 +278,6 @@ func transfer_item(item: InventoryItem, from_container_id: String, to_container_
 	# Add to target container
 	var add_success = to_container.add_item(transfer_item, position)
 	if not add_success:
-		print("DEBUG: Failed to add item to target container")
 		# Restore to source container
 		from_container.add_item(transfer_item if transfer_quantity < item.quantity else item)
 		# Restore split if we made one
@@ -186,21 +285,26 @@ func transfer_item(item: InventoryItem, from_container_id: String, to_container_
 			item.add_to_stack(transfer_item.quantity)
 		return false
 	
-	print("DEBUG: Transfer successful")
-	
 	# Record transaction
 	var transaction = {
 		"item_name": transfer_item.item_name,
 		"quantity": transfer_item.quantity,
 		"from_container": from_container_id,
 		"to_container": to_container_id,
-		"timestamp": Time.get_unix_time_from_system()
+		"timestamp": Time.get_unix_time_from_system(),
+		"stacked": false
 	}
 	transaction_history.append(transaction)
 	
 	item_transferred.emit(transfer_item, from_container_id, to_container_id)
 	transaction_completed.emit(transaction)
 	return true
+
+func _get_item_at_position(container: InventoryContainer, position: Vector2i) -> InventoryItem:
+	if position.y >= 0 and position.y < container.grid_slots.size():
+		if position.x >= 0 and position.x < container.grid_slots[position.y].size():
+			return container.grid_slots[position.y][position.x]
+	return null
 
 # Item searching across all containers
 func find_item_globally(item_id: String) -> Dictionary:
@@ -294,6 +398,9 @@ func sort_container(container_id: String, sort_type: SortType = SortType.BY_NAME
 	var container = get_container(container_id)
 	if not container:
 		return
+	
+	# Auto-stack before sorting
+	container.auto_stack_items()
 	
 	var sorted_items = container.items.duplicate()
 	
@@ -411,7 +518,7 @@ func create_sample_items():
 			"type": InventoryItem.ItemType.MODULE,
 			"volume": 5.0,
 			"mass": 2.0,
-			"max_stack": 1,
+			"max_stack": 10,  # Changed from 1 to 10
 			"value": 15000.0,
 			"rarity": InventoryItem.ItemRarity.RARE
 		},
@@ -431,33 +538,57 @@ func create_sample_items():
 			"type": InventoryItem.ItemType.BLUEPRINT,
 			"volume": 0.1,
 			"mass": 0.1,
-			"max_stack": 1,
+			"max_stack": 5,  # Changed from 1 to 5
 			"value": 50000.0,
 			"rarity": InventoryItem.ItemRarity.EPIC
 		}
 	]
 	
 	for item_data in items:
-		var item = InventoryItem.new(item_data.id, item_data.name)
-		item.item_type = item_data.type
-		item.volume = item_data.volume
-		item.mass = item_data.mass
-		item.max_stack_size = item_data.max_stack
-		item.base_value = item_data.value
-		item.item_rarity = item_data.rarity
+		# Create multiple instances of some items for testing stacking
+		var base_item = InventoryItem.new(item_data.id, item_data.name)
+		base_item.item_type = item_data.type
+		base_item.volume = item_data.volume
+		base_item.mass = item_data.mass
+		base_item.max_stack_size = item_data.max_stack
+		base_item.base_value = item_data.value
+		base_item.item_rarity = item_data.rarity
 		
-		# Add to player inventory
-		player_inventory.add_item(item)
+		# Add multiple copies of stackable items for testing
+		if item_data.max_stack > 1:
+			# Add 3 separate stacks of 1 each (so you can test stacking them)
+			for i in range(3):
+				var item = InventoryItem.new()
+				item.item_id = item_data.id  # Set ID explicitly after creation
+				item.item_name = item_data.name
+				item.item_type = item_data.type
+				item.volume = item_data.volume
+				item.mass = item_data.mass
+				item.max_stack_size = item_data.max_stack
+				item.base_value = item_data.value
+				item.item_rarity = item_data.rarity
+				item.quantity = 1
+				
+				print("Creating item: %s with ID: %s and max_stack_size: %d" % [item.item_name, item.item_id, item.max_stack_size])
+				player_inventory.add_item(item)
+		else:
+			# Just add one for non-stackable items
+			base_item.item_id = item_data.id  # Make sure base item has correct ID too
+			player_inventory.add_item(base_item)
 
 # Signal handlers
-func _on_container_item_added(item: InventoryItem, position: Vector2i):
-	if auto_stack:
+func _on_container_item_added(item: InventoryItem, position: Vector2i, auto_stack_requested: bool = true):
+	print("InventoryManager._on_container_item_added called for: %s with auto_stack_requested: %s" % [item.item_name, auto_stack_requested])
+	if auto_stack and auto_stack_requested:
+		print("Auto-stack enabled and requested, calling auto_stack_container")
 		# Find which container this came from by checking all containers
 		for container_id in containers:
 			var container = containers[container_id]
 			if item in container.items:
 				auto_stack_container(container_id)
 				break
+	else:
+		print("Auto-stack disabled or not requested")
 
 func _on_container_item_removed(item: InventoryItem, position: Vector2i):
 	# Handle item removal cleanup
@@ -506,16 +637,33 @@ func load_inventory():
 	var parse_result = json.parse(json_string)
 	if parse_result != OK:
 		print("Failed to parse save file!")
+		# If save file is corrupted, create new sample items
+		create_sample_items()
 		return false
 	
 	var save_data = json.data
+	
+	# Check if this is an old save file with incorrect stack sizes
+	var needs_refresh = false
+	var containers_data = save_data.get("containers") if save_data.has("containers") else {}
+	if containers_data.has("player_inventory"):
+		var player_data = containers_data["player_inventory"]
+		var items_data = player_data.get("items") if player_data.has("items") else []
+		for item_data in items_data:
+			if item_data.get("item_id") == "laser_crystal" and item_data.get("max_stack_size") == 1:
+				needs_refresh = true
+				break
+	
+	if needs_refresh:
+		print("Old save file detected with incorrect stack sizes, creating fresh sample items")
+		create_sample_items()
+		return false
 	
 	# Clear existing containers (except defaults)
 	containers.clear()
 	_initialize_default_containers()
 	
 	# Load containers
-	var containers_data = save_data.get("containers") if save_data.has("containers") else {}
 	for container_id in containers_data:
 		var container_data = containers_data[container_id]
 		var container = get_container(container_id)

@@ -68,12 +68,13 @@ signal quantity_changed(new_quantity: int)
 signal item_modified()
 
 func _init(id: String = "", name: String = "Unknown Item"):
-	item_id = id
-	item_name = name
-	
-	# Generate unique ID if not provided
-	if item_id.is_empty():
+	if not id.is_empty():
+		item_id = id
+	else:
 		item_id = _generate_unique_id()
+	
+	if not name.is_empty():
+		item_name = name
 
 func _generate_unique_id() -> String:
 	return "item_" + str(Time.get_unix_time_from_system()) + "_" + str(randi() % 10000)
@@ -93,10 +94,12 @@ func can_stack_with(other_item: InventoryItem) -> bool:
 	if not other_item:
 		return false
 	
-	return (item_id == other_item.item_id and 
+	var can_stack = (item_id == other_item.item_id and 
 			quantity < max_stack_size and 
 			other_item.quantity < other_item.max_stack_size and
 			not is_unique and not other_item.is_unique)
+	
+	return can_stack
 
 func add_to_stack(amount: int) -> int:
 	var space_available = max_stack_size - quantity
@@ -128,7 +131,7 @@ func split_stack(split_amount: int) -> InventoryItem:
 	# Create new item with split amount
 	var new_item = duplicate()
 	new_item.quantity = split_amount
-	new_item.item_id = _generate_unique_id()  # New unique ID
+	# Keep the same ID so items can still stack together
 	
 	# Reduce current stack
 	quantity -= split_amount

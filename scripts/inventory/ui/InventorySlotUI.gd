@@ -276,6 +276,17 @@ func _start_drag():
 	if not has_item() or get_viewport().get_node_or_null("DragPreview"):
 		return  # Already dragging or no item
 	
+	# Create drag data for container list drops
+	var drag_data = {
+		"source_slot": self,
+		"item": item,
+		"container_id": container_id,
+		"success_callback": _on_external_drop_result
+	}
+	
+	# Set the drag data globally so container list can access it
+	get_viewport().set_meta("current_drag_data", drag_data)
+	
 	# Create drag preview
 	var preview = _create_drag_preview()
 	get_viewport().add_child(preview)
@@ -360,21 +371,47 @@ func _handle_drag_end(end_position: Vector2):
 			timer.queue_free()
 		preview.queue_free()
 	
-	# Find target slot
-	var target_slot = _find_slot_at_position(end_position)
 	var success = false
 	
-	if target_slot and target_slot != self:
-		success = _attempt_drop_on_slot(target_slot)
-		if success:
-			# Emit the dropped signal for successful drops
-			item_dropped_on_slot.emit(self, target_slot)
+	# Check if we dropped on container list first
+	var container_content = _find_inventory_content()
+	if container_content:
+		# Try container list drop first
+		if get_viewport().has_meta("current_drag_data"):
+			var drag_data = get_viewport().get_meta("current_drag_data")
+			success = container_content._try_drop_on_container_list(end_position, drag_data)
+	
+	# If container drop failed, try slot drop
+	if not success:
+		var target_slot = _find_slot_at_position(end_position)
+		if target_slot and target_slot != self:
+			success = _attempt_drop_on_slot(target_slot)
+			if success:
+				# Emit the dropped signal for successful drops
+				item_dropped_on_slot.emit(self, target_slot)
+	
+	# Clear drag data
+	get_viewport().remove_meta("current_drag_data")
 	
 	# Reset dragging state immediately
 	is_dragging = false
 	
 	# Emit drag ended signal
 	item_drag_ended.emit(self, success)
+
+func _on_external_drop_result(success: bool):
+	"""Called when an external drop (like container list) completes"""
+	if success:
+		clear_item()
+
+func _find_inventory_content():
+	"""Find the InventoryWindowContent in the scene tree"""
+	var current = get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowContent":
+			return current
+		current = current.get_parent()
+	return null
 
 func _find_slot_at_position(global_pos: Vector2) -> InventorySlotUI:
 	var grid = _get_inventory_grid()
@@ -407,48 +444,89 @@ func _attempt_drop_on_slot(target_slot: InventorySlotUI) -> bool:
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	
 	if not source_container or not target_container:
+		print("DEBUG: Missing containers")
 		return false
 	
 	# Handle different drop scenarios
 	if target_slot.has_item():
 		var target_item = target_slot.get_item()
+		print("DEBUG: Target slot has item: %s" % target_item.item_name)
 		
 		# Try stacking if items are compatible
 		if item.can_stack_with(target_item):
+			print("DEBUG: Items can stack - calling _handle_stack_merge")
 			return _handle_stack_merge(target_slot, target_item)
 		else:
+			print("DEBUG: Items cannot stack - calling _handle_item_swap")
 			# Swap items
 			return _handle_item_swap(target_slot, target_item, inventory_manager)
 	else:
+		print("DEBUG: Target slot is empty - calling _handle_move_to_empty")
 		# Move to empty slot
 		return _handle_move_to_empty(target_slot, inventory_manager)
 
 func _handle_stack_merge(target_slot: InventorySlotUI, target_item: InventoryItem) -> bool:
+	print("DEBUG: _handle_stack_merge called")
+	print("DEBUG: Source item: %s (qty: %d, max: %d)" % [item.item_name, item.quantity, item.max_stack_size])
+	print("DEBUG: Target item: %s (qty: %d, max: %d)" % [target_item.item_name, target_item.quantity, target_item.max_stack_size])
+	
 	var space_available = target_item.max_stack_size - target_item.quantity
 	var amount_to_transfer = min(item.quantity, space_available)
 	
+	print("DEBUG: Space available: %d, Amount to transfer: %d" % [space_available, amount_to_transfer])
+	
 	if amount_to_transfer <= 0:
+		print("DEBUG: No space available for stacking")
 		return false
 	
-	# Update quantities
-	target_item.quantity += amount_to_transfer
-	item.quantity -= amount_to_transfer
-	
-	# Update displays
-	target_slot._update_item_display()
-	
-	if item.quantity <= 0:
-		# Source item fully consumed
-		var source_container = _get_inventory_manager().get_container(container_id)
-		if source_container:
-			source_container.remove_item(item)
-		clear_item()
+	# Direct stacking without using transfer system for same container
+	if container_id == target_slot.container_id:
+		print("DEBUG: Same container - doing direct stacking")
+		# Update quantities directly
+		target_item.quantity += amount_to_transfer
+		item.quantity -= amount_to_transfer
+		
+		print("DEBUG: After quantity update - target: %d, source: %d" % [target_item.quantity, item.quantity])
+		
+		# Update displays
+		target_slot._update_item_display()
+		
+		if item.quantity <= 0:
+			# Source item fully consumed
+			var source_container = _get_inventory_manager().get_container(container_id)
+			if source_container:
+				source_container.remove_item(item)
+			clear_item()
+			print("DEBUG: Source item consumed and removed")
+		else:
+			_update_item_display()
+			print("DEBUG: Source item updated with remaining quantity")
+		
+		return true
 	else:
-		_update_item_display()
-	
-	# Emit drop signal
-	item_dropped_on_slot.emit(self, target_slot)
-	return true
+		print("DEBUG: Different containers - using transfer system")
+		# Different container stacking - use transfer system
+		var inventory_manager = _get_inventory_manager()
+		if not inventory_manager:
+			return false
+		
+		# Use the inventory manager's transfer system for different containers
+		var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, target_slot.grid_position, amount_to_transfer)
+		
+		if success:
+			# Update displays - the transfer system handles the logic
+			if item.quantity <= 0:
+				# Source item fully consumed
+				clear_item()
+			else:
+				_update_item_display()
+			
+			# Update target display
+			target_slot._update_item_display()
+			
+			return true
+		
+		return false
 
 func _handle_item_swap(target_slot: InventorySlotUI, target_item: InventoryItem, inventory_manager: InventoryManager) -> bool:
 	var source_container = inventory_manager.get_container(container_id)
@@ -519,8 +597,11 @@ func _handle_move_to_empty(target_slot: InventorySlotUI, inventory_manager: Inve
 	var source_container = inventory_manager.get_container(container_id)
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	
+	if not source_container or not target_container:
+		return false
+	
 	# Check if target container can accept the item
-	if not target_container.can_add_item(item):
+	if not target_container.can_add_item(item, item):
 		return false
 	
 	# Store the item reference before removing it

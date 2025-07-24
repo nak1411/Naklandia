@@ -91,20 +91,17 @@ func find_free_position() -> Vector2i:
 	
 	return Vector2i(-1, -1)
 	
-# Auto-compacting functionality
-# Add this debug version of compact_items to InventoryContainer.gd:
-
+# Auto-compacting with stacking functionality
 func compact_items():
-	"""Moves all items to eliminate gaps, placing them sequentially from top-left"""
+	"""Stacks identical items first, then moves all items to eliminate gaps"""
 	
 	if items.is_empty():
 		return
 	
-	for i in range(items.size()):
-		var item = items[i]
-		var old_pos = get_item_position(item)
+	# First, auto-stack all compatible items
+	auto_stack_items()
 	
-	# Store items temporarily
+	# Then compact to remove gaps
 	var items_to_place = items.duplicate()
 	
 	# Clear the grid
@@ -117,6 +114,35 @@ func compact_items():
 		if free_pos != Vector2i(-1, -1):
 			occupy_grid_area(free_pos, item)
 			items.append(item)
+
+func auto_stack_items():
+	"""Automatically stack identical items within this container"""
+	var items_to_process = items.duplicate()
+	
+	for i in range(items_to_process.size()):
+		var item = items_to_process[i]
+		if not item in items:  # Item might have been merged already
+			continue
+		
+		# Find stackable items after this one
+		for j in range(i + 1, items_to_process.size()):
+			var other_item = items_to_process[j]
+			if not other_item in items:  # Item might have been merged already
+				continue
+			
+			if item.can_stack_with(other_item):
+				# Calculate how much we can stack
+				var space_available = item.max_stack_size - item.quantity
+				var amount_to_stack = min(other_item.quantity, space_available)
+				
+				if amount_to_stack > 0:
+					# Add to the first item's stack
+					item.quantity += amount_to_stack
+					other_item.quantity -= amount_to_stack
+					
+					# If the second item is now empty, remove it
+					if other_item.quantity <= 0:
+						remove_item(other_item)
 
 func occupy_grid_area(pos: Vector2i, item: InventoryItem):
 	grid_slots[pos.y][pos.x] = item
@@ -133,40 +159,61 @@ func get_item_position(item: InventoryItem) -> Vector2i:
 	return Vector2i(-1, -1)
 
 # Item management
-func can_add_item(item: InventoryItem) -> bool:
+func can_add_item(item: InventoryItem, exclude_item: InventoryItem = null) -> bool:
 	if not item or not item.is_valid_item():
 		return false
 	
-	# Check volume constraint
-	if not has_volume_for_item(item):
+	# Check volume constraint (exclude the item being moved if specified)
+	var available_volume = get_available_volume()
+	if exclude_item and exclude_item in items:
+		available_volume += exclude_item.get_total_volume()
+	
+	if item.get_total_volume() > available_volume:
 		return false
 	
 	# Check type restrictions
 	if not allowed_item_types.is_empty() and not item.item_type in allowed_item_types:
 		return false
 	
-	# Check for stacking possibility
+	# Check for stacking possibility (exclude the item being moved)
 	var existing_item = find_stackable_item(item)
-	if existing_item:
-		return existing_item.quantity + item.quantity <= existing_item.max_stack_size
+	if existing_item and existing_item != exclude_item:
+		var can_stack = existing_item.quantity + item.quantity <= existing_item.max_stack_size
+		return can_stack
 	
 	# Check grid space
 	var free_pos = find_free_position()
-	return free_pos != Vector2i(-1, -1)
+	var has_space = free_pos != Vector2i(-1, -1)
+	return has_space
 
-func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1)) -> bool:
+func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
 	if not can_add_item(item):
 		return false
 	
-	# Try to stack with existing item first
-	var existing_item = find_stackable_item(item)
-	if existing_item:
-		var remaining = existing_item.add_to_stack(item.quantity)
-		if remaining > 0:
-			item.quantity = remaining
-		else:
-			item_added.emit(item, get_item_position(existing_item))
-			return true
+	print("Container.add_item called: %s (qty: %d) with auto_stack: %s" % [item.item_name, item.quantity, auto_stack])
+	
+	# Try to stack with existing item first (only if auto_stack is enabled)
+	if auto_stack:
+		print("Auto-stack enabled, checking for stackable items")
+		var existing_item = find_stackable_item(item)
+		if existing_item:
+			print("Found stackable item: %s (qty: %d)" % [existing_item.item_name, existing_item.quantity])
+			var space_available = existing_item.max_stack_size - existing_item.quantity
+			var amount_to_stack = min(item.quantity, space_available)
+			
+			if amount_to_stack > 0:
+				existing_item.quantity += amount_to_stack
+				item.quantity -= amount_to_stack
+				
+				# If we stacked everything, we're done
+				if item.quantity <= 0:
+					print("Item fully stacked with existing item")
+					item_added.emit(item, get_item_position(existing_item))
+					return true
+				# Otherwise, continue to add the remaining as a new item
+				print("Partial stack, continuing with remaining: %d" % item.quantity)
+	else:
+		print("Auto-stack disabled, placing as separate item")
 	
 	# Find placement position
 	var final_position = position
@@ -176,8 +223,11 @@ func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1)) -> boo
 		final_position = find_free_position()
 	
 	if final_position == Vector2i(-1, -1):
+		print("No free position found")
 		container_full.emit()
 		return false
+	
+	print("Placing item at position: %s" % final_position)
 	
 	# Place item in grid
 	occupy_grid_area(final_position, item)
@@ -187,6 +237,7 @@ func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1)) -> boo
 	item.quantity_changed.connect(_on_item_quantity_changed)
 	item.item_modified.connect(_on_item_modified)
 	
+	print("Item added successfully. Total items in container: %d" % items.size())
 	item_added.emit(item, final_position)
 	return true
 
@@ -206,9 +257,6 @@ func remove_item(item: InventoryItem) -> bool:
 		item.item_modified.disconnect(_on_item_modified)
 	
 	item_removed.emit(item, position)
-	
-	# DON'T auto-compact after removal - let items stay where they are
-	# compact_items()  <-- REMOVE THIS LINE
 	
 	return true
 

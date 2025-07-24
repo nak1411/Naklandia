@@ -38,7 +38,6 @@ func show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position
 	popup.add_item("Item Information", 0)
 	if item.quantity > 1:
 		popup.add_item("Split Stack", 1)
-	popup.add_item("Move to...", 2)
 	
 	# Add to viewport for proper input handling
 	window_parent.get_viewport().add_child(popup)
@@ -242,8 +241,6 @@ func _on_context_menu_item_selected(id: int, popup: PopupMenu):
 			show_item_details_dialog(item)
 		1:  # Split Stack
 			show_split_stack_dialog(item, slot)
-		2:  # Move to...
-			show_move_item_dialog(item, slot)
 		3:  # Destroy Item
 			show_destroy_item_confirmation(item, slot)
 		10: # Use Item
@@ -344,66 +341,14 @@ func show_split_stack_dialog(item: InventoryItem, slot: InventorySlotUI):
 	
 	split_button.pressed.connect(func():
 		var split_amount = int(spinbox.value)
-		if inventory_manager:
+		if inventory_manager and current_container:
 			var new_item = item.split_stack(split_amount)
 			if new_item:
-				inventory_manager.add_item_to_container(new_item, current_container.container_id)
-		dialog.queue_free()
-	)
-	
-	cancel_button.pressed.connect(func(): dialog.queue_free())
-
-func show_move_item_dialog(item: InventoryItem, slot: InventorySlotUI):
-	var dialog = AcceptDialog.new()
-	dialog.title = "Move Item"
-	dialog.size = Vector2(350, 200)
-	
-	var vbox = VBoxContainer.new()
-	dialog.add_child(vbox)
-	
-	var label = Label.new()
-	label.text = "Move %s to:" % item.item_name
-	vbox.add_child(label)
-	
-	var container_list = ItemList.new()
-	container_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(container_list)
-	
-	# Store valid target containers with their indices
-	var valid_containers: Array[InventoryContainer] = []
-	
-	if inventory_manager:
-		var containers = inventory_manager.get_accessible_containers()
-		for container in containers:
-			if container != current_container:
-				container_list.add_item(container.container_name)
-				valid_containers.append(container)
-	
-	var button_container = HBoxContainer.new()
-	vbox.add_child(button_container)
-	
-	var move_button = Button.new()
-	move_button.text = "Move"
-	button_container.add_child(move_button)
-	
-	var cancel_button = Button.new()
-	cancel_button.text = "Cancel"
-	button_container.add_child(cancel_button)
-	
-	window_parent.add_child(dialog)
-	dialog.popup_centered()
-	
-	move_button.pressed.connect(func():
-		var selected_indices = container_list.get_selected_items()
-		if not selected_indices.is_empty() and inventory_manager:
-			var selected_index = selected_indices[0]
-			if selected_index >= 0 and selected_index < valid_containers.size():
-				var target_container = valid_containers[selected_index]
-				var success = inventory_manager.transfer_item(item, current_container.container_id, target_container.container_id)
-				if success:
-					print("Successfully moved %s to %s" % [item.item_name, target_container.container_name])
-				else:
-					print("Failed to move %s to %s" % [item.item_name, target_container.container_name])
+				# Add directly to container with auto_stack = false to keep separate
+				var success = current_container.add_item(new_item, Vector2i(-1, -1), false)
+				if not success:
+					# If adding failed, restore the original stack
+					item.quantity += new_item.quantity
 		dialog.queue_free()
 	)
 	

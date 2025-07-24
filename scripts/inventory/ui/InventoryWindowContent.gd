@@ -24,6 +24,9 @@ func _ready():
 	split_offset = 200
 	_remove_split_container_outline()
 	_setup_content()
+	
+	# Connect gui_input for drop handling
+	gui_input.connect(_gui_input)
 
 func _remove_split_container_outline():
 	# Remove the default HSplitContainer theme that creates outlines
@@ -74,6 +77,10 @@ func _setup_left_panel():
 	container_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container_list.custom_minimum_size = Vector2(160, 200)
 	container_list.auto_height = true
+	container_list.allow_rmb_select = true
+	
+	# Set up drop detection on container list
+	container_list.mouse_filter = Control.MOUSE_FILTER_PASS
 	
 	# Keep normal dark background for container list
 	var list_style = StyleBoxFlat.new()
@@ -88,6 +95,10 @@ func _setup_left_panel():
 	left_panel.add_child(container_list)
 	
 	container_list.item_selected.connect(_on_container_list_selected)
+	container_list.gui_input.connect(_on_container_list_input)
+	
+	# Set up drop area handling
+	_setup_container_drop_handling()
 
 func _setup_right_panel():
 	var inventory_area = VBoxContainer.new()
@@ -227,3 +238,125 @@ func get_current_container() -> InventoryContainer:
 
 func get_inventory_grid() -> InventoryGridUI:
 	return inventory_grid
+
+func _setup_container_drop_handling():
+	"""Set up the container list to accept drops from inventory slots"""
+	# Create an invisible overlay on the container list to detect drops
+	var drop_detector = Control.new()
+	drop_detector.name = "ContainerDropDetector"
+	drop_detector.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	drop_detector.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	drop_detector.z_index = 10
+	container_list.add_child(drop_detector)
+
+func _process(delta):
+	# Check for ongoing drags and highlight valid drop targets
+	if get_viewport().has_meta("current_drag_data"):
+		_update_container_drop_highlights()
+
+func _update_container_drop_highlights():
+	var drag_data = get_viewport().get_meta("current_drag_data", null)
+	if not drag_data:
+		return
+	
+	var item = drag_data.get("item") as InventoryItem
+	if not item:
+		return
+	
+	var mouse_pos = get_global_mouse_position()
+	var container_rect = Rect2(container_list.global_position, container_list.size)
+	
+	if container_rect.has_point(mouse_pos):
+		# Mouse is over container list - highlight valid containers
+		var local_pos = mouse_pos - container_list.global_position
+		var hovered_index = container_list.get_item_at_position(local_pos)
+		
+		for i in range(container_list.get_item_count()):
+			if i < open_containers.size():
+				var container = open_containers[i]
+				var can_accept = container != current_container and container.can_add_item(item)
+				var is_hovered = i == hovered_index
+				
+				# Update visual feedback
+				if can_accept and is_hovered:
+					container_list.set_item_custom_bg_color(i, Color.GREEN.darkened(0.7))
+				elif can_accept:
+					container_list.set_item_custom_bg_color(i, Color.BLUE.darkened(0.8))
+				else:
+					container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
+	else:
+		# Clear all highlights
+		for i in range(container_list.get_item_count()):
+			container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
+
+# Handle mouse input on container list for drop detection
+func _gui_input(event: InputEvent):
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if not mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			# Check if we have active drag data when mouse is released over container list
+			if get_viewport().has_meta("current_drag_data"):
+				var drag_data = get_viewport().get_meta("current_drag_data")
+				_try_drop_on_container_list(mouse_event.global_position, drag_data)
+
+func _on_container_list_input(event: InputEvent):
+	"""Handle input specifically on the container list"""
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if not mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			# Check if we have active drag data when mouse is released over container list
+			if get_viewport().has_meta("current_drag_data"):
+				var drag_data = get_viewport().get_meta("current_drag_data")
+				var success = _try_drop_on_container_list(mouse_event.global_position, drag_data)
+				if success:
+					get_viewport().set_input_as_handled()
+
+func _try_drop_on_container_list(global_pos: Vector2, drag_data):
+	var container_rect = Rect2(container_list.global_position, container_list.size)
+	
+	if not container_rect.has_point(global_pos):
+		return false
+	
+	var local_pos = global_pos - container_list.global_position
+	var container_index = container_list.get_item_at_position(local_pos)
+	
+	if container_index < 0 or container_index >= open_containers.size():
+		return false
+	
+	var target_container = open_containers[container_index]
+	var item = drag_data.get("item") as InventoryItem
+	var source_slot = drag_data.get("source_slot") as InventorySlotUI
+	
+	# Don't allow dropping on the same container
+	if target_container == current_container:
+		return false
+	
+	# Check if target container can accept the item
+	if not target_container.can_add_item(item):
+		return false
+	
+	# Perform the transfer
+	if inventory_manager:
+		var success = inventory_manager.transfer_item(item, current_container.container_id, target_container.container_id)
+		if success:
+			# Clear the source slot visually
+			source_slot.clear_item()
+			
+			# Refresh displays
+			refresh_display()
+			
+			# Clear highlights
+			for i in range(container_list.get_item_count()):
+				container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
+			
+			# Notify success
+			if drag_data.has("success_callback"):
+				drag_data.success_callback.call(true)
+			
+			return true
+		else:
+			# Transfer failed, notify failure
+			if drag_data.has("success_callback"):
+				drag_data.success_callback.call(false)
+	
+	return false
