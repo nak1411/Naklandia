@@ -116,8 +116,7 @@ func set_container(new_container: InventoryContainer):
 		await _rebuild_grid()
 		
 		_connect_container_signals()
-		print("1")
-		#container.compact_items()
+		container.compact_items()
 		refresh_display()
 	else:
 		# No container - clear everything
