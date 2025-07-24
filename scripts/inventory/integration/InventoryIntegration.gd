@@ -508,35 +508,6 @@ func clear_all_inventories():
 	if inventory_manager:
 		for container in inventory_manager.get_all_containers():
 			container.clear()
-			
-func force_complete_refresh():
-	print("=== FORCING COMPLETE REFRESH ===")
-	
-	if not inventory_window:
-		print("No inventory window!")
-		return
-	
-	# Get the current container
-	var container = inventory_window.current_container
-	if not container:
-		print("No current container!")
-		return
-	
-	print("Refreshing container: %s with %d items" % [container.container_name, container.get_item_count()])
-	
-	# Force grid to rebuild
-	var grid = inventory_window.inventory_grid
-	if grid:
-		print("Rebuilding grid...")
-		grid.set_container(container)  # This should rebuild everything
-		await get_tree().process_frame
-		grid.refresh_display()
-		await get_tree().process_frame
-	
-	# Also refresh the window
-	inventory_window.refresh_display()
-	
-	print("Refresh complete!")
 	
 func refresh_all_ui():
 	"""Refresh window display"""

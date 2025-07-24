@@ -569,7 +569,6 @@ func create_sample_items():
 				item.item_rarity = item_data.rarity
 				item.quantity = 1
 				
-				print("Creating item: %s with ID: %s and max_stack_size: %d" % [item.item_name, item.item_id, item.max_stack_size])
 				player_inventory.add_item(item)
 		else:
 			# Just add one for non-stackable items
@@ -577,18 +576,15 @@ func create_sample_items():
 			player_inventory.add_item(base_item)
 
 # Signal handlers
-func _on_container_item_added(item: InventoryItem, position: Vector2i, auto_stack_requested: bool = true):
-	print("InventoryManager._on_container_item_added called for: %s with auto_stack_requested: %s" % [item.item_name, auto_stack_requested])
-	if auto_stack and auto_stack_requested:
-		print("Auto-stack enabled and requested, calling auto_stack_container")
+func _on_container_item_added(item: InventoryItem, position: Vector2i):
+	# Only auto-stack if auto_stack is enabled
+	if auto_stack:
 		# Find which container this came from by checking all containers
 		for container_id in containers:
 			var container = containers[container_id]
 			if item in container.items:
 				auto_stack_container(container_id)
 				break
-	else:
-		print("Auto-stack disabled or not requested")
 
 func _on_container_item_removed(item: InventoryItem, position: Vector2i):
 	# Handle item removal cleanup

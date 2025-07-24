@@ -191,7 +191,8 @@ func select_container(container: InventoryContainer):
 	current_container = container
 	
 	if inventory_grid:
-		if container and container.get_item_count() > 0:
+		# Only compact if auto_stack is enabled in inventory manager
+		if container and container.get_item_count() > 0 and inventory_manager and inventory_manager.auto_stack:
 			container.compact_items()
 		
 		inventory_grid.set_container(container)

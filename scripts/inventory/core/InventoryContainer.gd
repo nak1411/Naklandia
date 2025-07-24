@@ -187,17 +187,14 @@ func can_add_item(item: InventoryItem, exclude_item: InventoryItem = null) -> bo
 	return has_space
 
 func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
+	
 	if not can_add_item(item):
 		return false
 	
-	print("Container.add_item called: %s (qty: %d) with auto_stack: %s" % [item.item_name, item.quantity, auto_stack])
-	
 	# Try to stack with existing item first (only if auto_stack is enabled)
 	if auto_stack:
-		print("Auto-stack enabled, checking for stackable items")
 		var existing_item = find_stackable_item(item)
 		if existing_item:
-			print("Found stackable item: %s (qty: %d)" % [existing_item.item_name, existing_item.quantity])
 			var space_available = existing_item.max_stack_size - existing_item.quantity
 			var amount_to_stack = min(item.quantity, space_available)
 			
@@ -207,14 +204,9 @@ func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1), auto_s
 				
 				# If we stacked everything, we're done
 				if item.quantity <= 0:
-					print("Item fully stacked with existing item")
 					item_added.emit(item, get_item_position(existing_item))
 					return true
-				# Otherwise, continue to add the remaining as a new item
-				print("Partial stack, continuing with remaining: %d" % item.quantity)
-	else:
-		print("Auto-stack disabled, placing as separate item")
-	
+
 	# Find placement position
 	var final_position = position
 	if position == Vector2i(-1, -1):
@@ -223,21 +215,19 @@ func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1), auto_s
 		final_position = find_free_position()
 	
 	if final_position == Vector2i(-1, -1):
-		print("No free position found")
 		container_full.emit()
 		return false
-	
-	print("Placing item at position: %s" % final_position)
 	
 	# Place item in grid
 	occupy_grid_area(final_position, item)
 	items.append(item)
 	
 	# Connect to item signals
-	item.quantity_changed.connect(_on_item_quantity_changed)
-	item.item_modified.connect(_on_item_modified)
+	if not item.quantity_changed.is_connected(_on_item_quantity_changed):
+		item.quantity_changed.connect(_on_item_quantity_changed)
+	if not item.item_modified.is_connected(_on_item_modified):
+		item.item_modified.connect(_on_item_modified)
 	
-	print("Item added successfully. Total items in container: %d" % items.size())
 	item_added.emit(item, final_position)
 	return true
 
@@ -323,7 +313,7 @@ func get_container_info() -> Dictionary:
 		"volume_max": max_volume,
 		"volume_percentage": get_volume_percentage(),
 		"item_count": get_item_count(),
-		"total_quantity": get_total_quantity(),  # Add this line
+		"total_quantity": get_total_quantity(),
 		"total_mass": get_total_mass(),
 		"total_value": get_total_value(),
 		"is_secure": is_secure

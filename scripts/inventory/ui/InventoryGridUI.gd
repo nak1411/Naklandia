@@ -51,10 +51,8 @@ func _setup_background():
 
 func _setup_grid():
 	if grid_width <= 0 or grid_height <= 0:
-		print("InventoryGridUI: Cannot create grid with dimensions %dx%d" % [grid_width, grid_height])
 		return
 	
-	print("InventoryGridUI: Creating grid with dimensions %dx%d" % [grid_width, grid_height])
 	# Create grid container
 	grid_container = GridContainer.new()
 	grid_container.name = "GridContainer"
@@ -101,6 +99,11 @@ func _update_grid_size():
 
 # Container management
 func set_container(new_container: InventoryContainer):
+	# If it's the same container, don't rebuild - just refresh display
+	if container == new_container and new_container != null:
+		refresh_display()
+		return
+	
 	if container:
 		_disconnect_container_signals()
 	
@@ -111,12 +114,14 @@ func set_container(new_container: InventoryContainer):
 		# Always update grid size to match container exactly
 		grid_width = container.grid_width
 		grid_height = container.grid_height
-		print("InventoryGridUI: Setting grid size to %dx%d for container '%s'" % [grid_width, grid_height, container.container_name])
 		
 		await _rebuild_grid()
 		
 		_connect_container_signals()
-		container.compact_items()
+		# Only compact if auto_stack is enabled in inventory manager
+		var inventory_manager = _get_inventory_manager()
+		if inventory_manager and inventory_manager.auto_stack:
+			container.compact_items()
 		refresh_display()
 	else:
 		# No container - clear everything

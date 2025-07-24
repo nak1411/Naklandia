@@ -308,6 +308,10 @@ func _generate_detailed_item_info(item: InventoryItem) -> String:
 	return text
 
 func show_split_stack_dialog(item: InventoryItem, slot: InventorySlotUI):
+	# Prevent auto-stacking while dialog is open
+	var original_auto_stack = inventory_manager.auto_stack
+	inventory_manager.auto_stack = false
+	
 	var dialog = AcceptDialog.new()
 	dialog.title = "Split Stack"
 	dialog.size = Vector2(300, 150)
@@ -322,7 +326,7 @@ func show_split_stack_dialog(item: InventoryItem, slot: InventorySlotUI):
 	var spinbox = SpinBox.new()
 	spinbox.min_value = 1
 	spinbox.max_value = item.quantity - 1
-	spinbox.value = 1
+	spinbox.value = min(1, item.quantity - 1)
 	vbox.add_child(spinbox)
 	
 	var button_container = HBoxContainer.new()
@@ -337,22 +341,122 @@ func show_split_stack_dialog(item: InventoryItem, slot: InventorySlotUI):
 	button_container.add_child(cancel_button)
 	
 	window_parent.add_child(dialog)
+	
 	dialog.popup_centered()
 	
-	split_button.pressed.connect(func():
-		var split_amount = int(spinbox.value)
-		if inventory_manager and current_container:
-			var new_item = item.split_stack(split_amount)
-			if new_item:
-				# Add directly to container with auto_stack = false to keep separate
-				var success = current_container.add_item(new_item, Vector2i(-1, -1), false)
-				if not success:
-					# If adding failed, restore the original stack
-					item.quantity += new_item.quantity
-		dialog.queue_free()
-	)
+	# Store only the data we need, not object references that might be freed
+	dialog.set_meta("original_auto_stack", original_auto_stack)
+	dialog.set_meta("target_item", item)
 	
-	cancel_button.pressed.connect(func(): dialog.queue_free())
+	split_button.pressed.connect(_handle_split_button_pressed.bind(dialog, spinbox))
+	cancel_button.pressed.connect(_handle_split_cancel_pressed.bind(dialog))
+
+func _handle_split_button_pressed(dialog: AcceptDialog, spinbox: SpinBox):
+	if not dialog or not is_instance_valid(dialog):
+		return
+	
+	var split_amount = int(spinbox.value)
+	var original_auto_stack = dialog.get_meta("original_auto_stack", true)
+	var item = dialog.get_meta("target_item", null) as InventoryItem
+	
+	_perform_split(item, split_amount, original_auto_stack)
+	dialog.queue_free()
+
+func _handle_split_cancel_pressed(dialog: AcceptDialog):
+	if not dialog or not is_instance_valid(dialog):
+		return
+	
+	var original_auto_stack = dialog.get_meta("original_auto_stack", true)
+	# Restore auto-stack setting
+	inventory_manager.auto_stack = original_auto_stack
+	dialog.queue_free()
+
+func _on_split_button_pressed(dialog: AcceptDialog, spinbox: SpinBox):
+	if not dialog or not is_instance_valid(dialog):
+		return
+	
+	var split_amount = int(spinbox.value)
+	var original_auto_stack = dialog.get_meta("original_auto_stack", true)
+	var item = dialog.get_meta("target_item", null) as InventoryItem
+	
+	_perform_split(item, split_amount, original_auto_stack)
+	dialog.queue_free()
+
+func _on_split_cancel_pressed(dialog: AcceptDialog):
+	if not dialog or not is_instance_valid(dialog):
+		return
+	
+	var original_auto_stack = dialog.get_meta("original_auto_stack", true)
+	# Restore auto-stack setting
+	inventory_manager.auto_stack = original_auto_stack
+	dialog.queue_free()
+
+func _perform_split(item: InventoryItem, split_amount: int, original_auto_stack: bool):
+	
+	if not inventory_manager or not current_container or not item:
+		inventory_manager.auto_stack = original_auto_stack
+		return
+	
+	# Validate split amount
+	if split_amount <= 0 or split_amount >= item.quantity:
+		inventory_manager.auto_stack = original_auto_stack
+		return
+	
+	# Store original quantity for rollback
+	var original_quantity = item.quantity
+	
+	# Create the new item manually
+	var new_item = InventoryItem.new()
+	new_item.item_id = item.item_id
+	new_item.item_name = item.item_name
+	new_item.description = item.description
+	new_item.icon_path = item.icon_path
+	new_item.volume = item.volume
+	new_item.mass = item.mass
+	new_item.quantity = split_amount
+	new_item.max_stack_size = item.max_stack_size
+	new_item.item_type = item.item_type
+	new_item.item_rarity = item.item_rarity
+	new_item.is_contraband = item.is_contraband
+	new_item.base_value = item.base_value
+	new_item.can_be_destroyed = item.can_be_destroyed
+	new_item.is_unique = item.is_unique
+	new_item.is_container = item.is_container
+	new_item.container_volume = item.container_volume
+	new_item.container_type = item.container_type
+	
+	
+	# Find a free position for the new item
+	var free_position = current_container.find_free_position()
+	
+	if free_position == Vector2i(-1, -1):
+		# No free space - can't split
+		inventory_manager.auto_stack = original_auto_stack
+		return
+	
+	# Check container state before split
+	for i in range(current_container.items.size()):
+		var container_item = current_container.items[i]
+	
+	# Reduce the original item's quantity BEFORE adding the new item
+	item.quantity -= split_amount
+	
+	# Add the new item to container with auto_stack explicitly disabled
+	var success = current_container.add_item(new_item, free_position, false)
+	
+	if not success:
+		# Failed to add - restore original quantity
+		item.quantity = original_quantity
+		
+		for i in range(current_container.items.size()):
+			var container_item = current_container.items[i]
+		
+		# DON'T emit container_refreshed as it triggers compacting
+		# Just emit the quantity changed signal to update the original slot
+		item.quantity_changed.emit(item.quantity)
+	
+	# Always restore auto-stack setting
+	inventory_manager.auto_stack = original_auto_stack
 
 func show_destroy_item_confirmation(item: InventoryItem, slot: InventorySlotUI):
 	var dialog = ConfirmationDialog.new()

@@ -444,49 +444,37 @@ func _attempt_drop_on_slot(target_slot: InventorySlotUI) -> bool:
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	
 	if not source_container or not target_container:
-		print("DEBUG: Missing containers")
 		return false
 	
 	# Handle different drop scenarios
 	if target_slot.has_item():
 		var target_item = target_slot.get_item()
-		print("DEBUG: Target slot has item: %s" % target_item.item_name)
 		
 		# Try stacking if items are compatible
 		if item.can_stack_with(target_item):
-			print("DEBUG: Items can stack - calling _handle_stack_merge")
 			return _handle_stack_merge(target_slot, target_item)
 		else:
-			print("DEBUG: Items cannot stack - calling _handle_item_swap")
 			# Swap items
 			return _handle_item_swap(target_slot, target_item, inventory_manager)
 	else:
-		print("DEBUG: Target slot is empty - calling _handle_move_to_empty")
 		# Move to empty slot
 		return _handle_move_to_empty(target_slot, inventory_manager)
 
 func _handle_stack_merge(target_slot: InventorySlotUI, target_item: InventoryItem) -> bool:
-	print("DEBUG: _handle_stack_merge called")
-	print("DEBUG: Source item: %s (qty: %d, max: %d)" % [item.item_name, item.quantity, item.max_stack_size])
-	print("DEBUG: Target item: %s (qty: %d, max: %d)" % [target_item.item_name, target_item.quantity, target_item.max_stack_size])
 	
 	var space_available = target_item.max_stack_size - target_item.quantity
 	var amount_to_transfer = min(item.quantity, space_available)
 	
-	print("DEBUG: Space available: %d, Amount to transfer: %d" % [space_available, amount_to_transfer])
 	
 	if amount_to_transfer <= 0:
-		print("DEBUG: No space available for stacking")
 		return false
 	
 	# Direct stacking without using transfer system for same container
 	if container_id == target_slot.container_id:
-		print("DEBUG: Same container - doing direct stacking")
 		# Update quantities directly
 		target_item.quantity += amount_to_transfer
 		item.quantity -= amount_to_transfer
 		
-		print("DEBUG: After quantity update - target: %d, source: %d" % [target_item.quantity, item.quantity])
 		
 		# Update displays
 		target_slot._update_item_display()
@@ -497,14 +485,11 @@ func _handle_stack_merge(target_slot: InventorySlotUI, target_item: InventoryIte
 			if source_container:
 				source_container.remove_item(item)
 			clear_item()
-			print("DEBUG: Source item consumed and removed")
 		else:
 			_update_item_display()
-			print("DEBUG: Source item updated with remaining quantity")
 		
 		return true
 	else:
-		print("DEBUG: Different containers - using transfer system")
 		# Different container stacking - use transfer system
 		var inventory_manager = _get_inventory_manager()
 		if not inventory_manager:
