@@ -289,14 +289,7 @@ func show_item_details_dialog(item: InventoryItem):
 	content.add_theme_constant_override("margin_top", 10)
 	content.add_theme_constant_override("margin_bottom", 50)
 	
-	# Create close button
-	var close_button = Button.new()
-	close_button.text = "Close"
-	close_button.size = Vector2(80, 30)
-	close_button.position = Vector2(dialog_window.size.x / 2 - 40, dialog_window.size.y - 40)
-	
 	dialog_window.add_child(content)
-	dialog_window.add_child(close_button)
 	
 	# Add to scene and show
 	window_parent.get_tree().current_scene.add_child(dialog_window)
@@ -304,10 +297,6 @@ func show_item_details_dialog(item: InventoryItem):
 	dialog_window.grab_focus()
 	
 	# Connect close events
-	close_button.pressed.connect(func():
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
-	)
 	
 	dialog_window.close_requested.connect(func():
 		_cleanup_dialog_window(dialog_window)

@@ -401,6 +401,9 @@ func _handle_drag_end(end_position: Vector2):
 	# Reset dragging state immediately
 	is_dragging = false
 	
+	# Clear any highlighting on this slot
+	set_highlighted(false)
+	
 	# Emit drag ended signal
 	item_drag_ended.emit(self, success)
 

@@ -337,8 +337,8 @@ func _on_item_drag_started(slot: InventorySlotUI, item: InventoryItem):
 	slot.modulate.a = 0.5
 
 func _on_item_drag_ended(slot: InventorySlotUI, success: bool):
-	# Clear highlighting
-	_clear_drop_target_highlights()
+	# Clear highlighting on all slots, including the source slot
+	_clear_all_highlights()
 	
 	# Restore source slot appearance
 	slot.modulate.a = 1.0
@@ -387,6 +387,15 @@ func _clear_drop_target_highlights():
 			var slot = slots[y][x]
 			if slot:
 				slot.set_highlighted(false)
+
+func _clear_all_highlights():
+	"""Clear all highlighting from all slots"""
+	for y in grid_height:
+		for x in grid_width:
+			var slot = slots[y][x]
+			if slot:
+				slot.set_highlighted(false)
+				slot.set_selected(false)
 
 # Utility functions
 func _is_valid_position(pos: Vector2i) -> bool:
