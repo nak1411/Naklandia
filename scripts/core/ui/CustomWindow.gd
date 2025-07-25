@@ -377,7 +377,7 @@ func _check_hover():
 		var local_mouse = screen_mouse_pos - popup_screen_pos
 		var item_height = 28  # Correct item height
 		var item_y_offset = 3  # Y offset to align with actual menu items
-		var item_spacing = 2  # Spacing between menu items
+		var item_spacing = 4  # Spacing between menu items
 		var total_item_height = item_height + item_spacing
 		var hovered_item = int((local_mouse.y - item_y_offset) / total_item_height)
 		
