@@ -245,12 +245,79 @@ func _update_title_bar_style():
 
 func _setup_options_menu():
 	var popup = options_button.get_popup()
-	popup.add_check_item("Lock Window")
-	popup.add_separator()
-	popup.add_item("Transparency: 100%")
-	popup.add_item("Reset Transparency")
 	
+	# Clear any existing items first
+	popup.clear()
+	
+	# Add menu items
+	popup.add_check_item("Lock Window", 0)
+	popup.add_separator()
+	popup.add_item("Transparency", 2)
+	popup.add_separator()
+	popup.add_item("Reset Transparency", 4)
+	
+	# Connect main popup signals
 	popup.id_pressed.connect(_on_options_menu_selected)
+	
+	# Add hover detection for transparency submenu
+	popup.mouse_entered.connect(_start_hover_detection)
+	popup.mouse_exited.connect(_stop_hover_detection)
+
+var hover_timer: Timer
+var current_transparency_popup: PopupMenu
+
+func _start_hover_detection():
+	if hover_timer:
+		hover_timer.queue_free()
+	
+	hover_timer = Timer.new()
+	hover_timer.wait_time = 0.1  # Check every 100ms
+	hover_timer.timeout.connect(_check_hover)
+	add_child(hover_timer)
+	hover_timer.start()
+
+func _stop_hover_detection():
+	if hover_timer:
+		hover_timer.queue_free()
+		hover_timer = null
+	_close_transparency_popup()
+
+func _check_hover():
+	var options_popup = options_button.get_popup()
+	if not options_popup.visible:
+		_stop_hover_detection()
+		return
+	
+	var mouse_pos = get_viewport().get_mouse_position()
+	var button_global_pos = options_button.global_position
+	
+	# Calculate where the options popup appears
+	var popup_global_pos = Vector2(button_global_pos.x, button_global_pos.y + options_button.size.y)
+	var options_rect = Rect2(popup_global_pos, options_popup.size)
+	
+	if options_rect.has_point(mouse_pos):
+		# Calculate which item is being hovered
+		var local_mouse = mouse_pos - popup_global_pos
+		var item_height = 24  # Standard menu item height
+		var hovered_item = int(local_mouse.y / item_height)
+		
+		# Account for separators: Lock(0), sep(1), Transparency(2)
+		if hovered_item == 2:  # Transparency item
+			if not current_transparency_popup or not is_instance_valid(current_transparency_popup):
+				_show_transparency_popup_on_hover()
+		else:
+			_close_transparency_popup()
+	else:
+		# Check if mouse is over transparency popup
+		if current_transparency_popup and is_instance_valid(current_transparency_popup):
+			var transparency_rect = Rect2(current_transparency_popup.global_position, current_transparency_popup.size)
+			if not transparency_rect.has_point(mouse_pos):
+				_close_transparency_popup()
+
+func _close_transparency_popup():
+	if current_transparency_popup and is_instance_valid(current_transparency_popup):
+		current_transparency_popup.queue_free()
+		current_transparency_popup = null
 
 func _on_options_menu_selected(id: int):
 	var popup = options_button.get_popup()
@@ -260,54 +327,77 @@ func _on_options_menu_selected(id: int):
 			popup.set_item_checked(0, window_locked)
 			set_dragging_enabled(not window_locked)
 			window_locked_changed.emit(window_locked)
-		2:  # Transparency (placeholder - opens dialog)
-			_show_transparency_dialog()
-		3:  # Reset Transparency
+		2:  # Transparency - handled by hover, do nothing on click
+			pass
+		4:  # Reset Transparency
 			_set_transparency(1.0)
 
-func _show_transparency_dialog():
-	# Create a new transparency dialog
-	var dialog_window = DialogWindow.new("Window Transparency", Vector2(300, 120))
-	dialog_window.apply_dialog_theme()
+func _show_transparency_popup_on_hover():
+	# Prevent multiple popups
+	if current_transparency_popup and is_instance_valid(current_transparency_popup):
+		return
 	
-	# Create transparency label and slider
-	var label = Label.new()
-	label.text = "Transparency: %d%%" % int(window_transparency * 100)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	dialog_window.add_dialog_content(label)
+	# Create a new popup menu for transparency options
+	current_transparency_popup = PopupMenu.new()
+	current_transparency_popup.name = "TransparencyOptions"
 	
-	var slider = HSlider.new()
-	slider.min_value = 0.1
-	slider.max_value = 1.0
-	slider.step = 0.01
-	slider.value = window_transparency
-	slider.custom_minimum_size.x = 250
+	# Add transparency options
+	current_transparency_popup.add_item("100%", 100)
+	current_transparency_popup.add_item("90%", 90)
+	current_transparency_popup.add_item("80%", 80)
+	current_transparency_popup.add_item("70%", 70)
+	current_transparency_popup.add_item("60%", 60)
+	current_transparency_popup.add_item("50%", 50)
+	current_transparency_popup.add_item("40%", 40)
+	current_transparency_popup.add_item("30%", 30)
+	current_transparency_popup.add_item("20%", 20)
+	current_transparency_popup.add_item("10%", 10)
 	
-	var slider_container = HBoxContainer.new()
-	slider_container.alignment = BoxContainer.ALIGNMENT_CENTER
-	slider_container.add_child(slider)
-	dialog_window.add_dialog_content(slider_container)
+	# Mark current transparency value
+	var current_percentage = int(window_transparency * 100)
+	for i in current_transparency_popup.get_item_count():
+		var item_id = current_transparency_popup.get_item_id(i)
+		if item_id == current_percentage:
+			current_transparency_popup.set_item_checked(i, true)
+			break
 	
-	# Add close button
-	dialog_window.add_button("Close", func():
-		dialog_window.close_dialog()
-		grab_focus()
+	# Connect selection
+	current_transparency_popup.id_pressed.connect(_on_transparency_option_selected.bind(current_transparency_popup))
+	
+	# Add to viewport for proper global positioning
+	get_viewport().add_child(current_transparency_popup)
+	
+	# Calculate correct position relative to transparency menu item
+	var options_popup = options_button.get_popup()
+	var button_global_pos = options_button.global_position
+	
+	# Position where options dropdown appears
+	var dropdown_x = button_global_pos.x
+	var dropdown_y = button_global_pos.y + options_button.size.y
+	
+	# Calculate transparency item position (Lock=0, separator=1, Transparency=2)
+	var item_height = 24
+	var transparency_item_y = 2 * item_height  # Item index 2
+	
+	# Position transparency popup to the right of the transparency item
+	var popup_pos = Vector2i(
+		int(dropdown_x + options_popup.size.x),  # Right edge of options popup
+		int(dropdown_y + transparency_item_y)   # Aligned with transparency item
 	)
 	
-	# Connect slider to update transparency and label
-	slider.value_changed.connect(func(value):
-		_set_transparency(value)
-		label.text = "Transparency: %d%%" % int(value * 100)
-	)
+	current_transparency_popup.position = popup_pos
+	current_transparency_popup.popup()
 	
-	# Add to scene and show
-	get_tree().current_scene.add_child(dialog_window)
-	dialog_window.show_dialog(self)
-	
-	# Connect close events
-	dialog_window.dialog_closed.connect(func():
-		grab_focus()
+	# Auto-cleanup
+	current_transparency_popup.popup_hide.connect(func():
+		if current_transparency_popup and is_instance_valid(current_transparency_popup):
+			current_transparency_popup = null
 	)
+
+func _on_transparency_option_selected(id: int, popup: PopupMenu):
+	var transparency_value = float(id) / 100.0
+	_set_transparency(transparency_value)
+	popup.queue_free()
 
 func _set_transparency(value: float):
 	window_transparency = value
@@ -315,10 +405,6 @@ func _set_transparency(value: float):
 		var current_modulate = content_background.modulate
 		current_modulate.a = value
 		content_background.modulate = current_modulate
-	
-	# Update menu text
-	var popup = options_button.get_popup()
-	popup.set_item_text(2, "Transparency: %d%%" % int(value * 100))
 	
 	transparency_changed.emit(value)
 
