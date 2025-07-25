@@ -35,6 +35,7 @@ func _init():
 
 func _ready():
 	super._ready()
+	await get_tree().process_frame  # Wait for parent to be fully ready
 	_setup_inventory_ui()
 	_connect_inventory_signals()
 	_find_inventory_manager()
