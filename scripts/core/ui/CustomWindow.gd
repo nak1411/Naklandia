@@ -1,4 +1,4 @@
-# CustomWindow.gd - Custom window implementation with full control
+# CustomWindow.gd - Custom window implementation with clean dropdown menu
 class_name CustomWindow
 extends Window
 
@@ -8,7 +8,6 @@ extends Window
 @export var can_close: bool = true
 @export var can_minimize: bool = true
 @export var can_maximize: bool = true
-@export var debug_hover_rects: bool = true  # Enable debug rectangle drawing
 
 # Visual properties
 @export var title_bar_height: float = 32.0
@@ -30,7 +29,7 @@ var title_label: Label
 var close_button: Button
 var minimize_button: Button
 var maximize_button: Button
-var options_button: MenuButton
+var options_button: Button
 var content_area: Control
 var content_background: Panel
 
@@ -45,15 +44,6 @@ var restore_position: Vector2i
 var restore_size: Vector2i
 var window_locked: bool = false
 var window_transparency: float = 1.0
-
-# Transparency popup management
-var hover_timer: Timer
-var current_transparency_popup: PopupMenu
-var popup_hover_grace_timer: Timer
-
-# Debug visualization
-var debug_overlay: Control
-var debug_rects: Array[Dictionary] = []
 
 # Signals
 signal window_closed()
@@ -81,7 +71,6 @@ func _init():
 func _ready():
 	_setup_custom_ui()
 	_connect_signals()
-	_setup_debug_overlay()
 
 func _process(_delta):
 	# Handle smooth dragging
@@ -198,8 +187,8 @@ func _create_window_buttons():
 		minimize_button.add_theme_color_override("font_color", Color.WHITE)
 		title_bar.add_child(minimize_button)
 	
-	# Options button
-	options_button = MenuButton.new()
+	# Options button (changed from MenuButton to Button)
+	options_button = Button.new()
 	options_button.name = "OptionsButton"
 	options_button.text = "⚙"
 	options_button.size = button_size
@@ -216,7 +205,20 @@ func _create_window_buttons():
 	options_button.add_theme_color_override("font_color", Color.WHITE)
 	title_bar.add_child(options_button)
 	
-	_setup_options_menu()
+	# Setup simple dropdown menu
+	_setup_simple_options_menu()
+
+func _setup_simple_options_menu():
+	# Create simple dropdown menu
+	var dropdown = SimpleDropdownMenu.new()
+	dropdown.name = "OptionsDropdown"
+	add_child(dropdown)
+	
+	# Setup the menu items
+	dropdown.setup_window_options_menu()
+	
+	# Connect menu item selection
+	dropdown.item_selected.connect(_on_options_item_selected)
 
 func _connect_signals():
 	# Title bar dragging
@@ -239,8 +241,35 @@ func _connect_signals():
 		maximize_button.mouse_exited.connect(_on_button_hover.bind(maximize_button, false))
 	
 	if options_button:
+		options_button.pressed.connect(_show_options_menu)
 		options_button.mouse_entered.connect(_on_button_hover.bind(options_button, true))
 		options_button.mouse_exited.connect(_on_button_hover.bind(options_button, false))
+
+func _show_options_menu():
+	var dropdown = get_node("OptionsDropdown") as SimpleDropdownMenu
+	if dropdown:
+		var button_screen_pos = options_button.get_screen_position()
+		var menu_pos = Vector2(
+			button_screen_pos.x,
+			button_screen_pos.y + options_button.size.y
+		)
+		dropdown.show_menu(menu_pos)
+
+func _on_options_item_selected(item_id: String, item_data: Dictionary):
+	match item_id:
+		"lock_window":
+			window_locked = not window_locked
+			set_dragging_enabled(not window_locked)
+			window_locked_changed.emit(window_locked)
+		"reset_transparency":
+			set_transparency(1.0)
+	
+	# Handle transparency items
+	if item_id.begins_with("transparency_"):
+		var percentage_str = item_id.replace("transparency_", "")
+		var percentage = int(percentage_str)
+		var transparency_value = float(percentage) / 100.0
+		set_transparency(transparency_value)
 
 func _update_title_bar_style():
 	if not title_bar:
@@ -256,290 +285,6 @@ func _update_title_bar_style():
 	style_box.corner_radius_top_left = corner_radius
 	style_box.corner_radius_top_right = corner_radius
 	title_bar.add_theme_stylebox_override("panel", style_box)
-
-func _setup_options_menu():
-	var popup = options_button.get_popup()
-	
-	# Clear any existing items first
-	popup.clear()
-	
-	# Add menu items
-	popup.add_check_item("Lock Window", 0)
-	popup.add_separator()
-	popup.add_item("Transparency", 2)
-	popup.add_separator()
-	popup.add_item("Reset Transparency", 4)
-	
-	# Connect main popup signals
-	popup.id_pressed.connect(_on_options_menu_selected)
-	
-	# Add proper hover detection for transparency submenu
-	popup.mouse_entered.connect(_start_hover_detection)
-	popup.popup_hide.connect(_on_options_popup_hidden)
-
-func _start_hover_detection():
-	_stop_hover_detection()  # Clean up any existing timer
-	
-	hover_timer = Timer.new()
-	hover_timer.wait_time = 0.05  # Check every 50ms for responsiveness
-	hover_timer.timeout.connect(_check_hover)
-	add_child(hover_timer)
-	hover_timer.start()
-
-func _stop_hover_detection():
-	if hover_timer and is_instance_valid(hover_timer):
-		hover_timer.queue_free()
-		hover_timer = null
-
-func _on_options_popup_hidden():
-	# Don't immediately close everything if transparency popup is open
-	if current_transparency_popup and is_instance_valid(current_transparency_popup) and current_transparency_popup.visible:
-		# Keep hover detection running to manage the transparency popup
-		return
-	
-	_stop_hover_detection()
-	_close_transparency_popup()
-
-func _check_hover():
-	# Clear previous debug rects
-	_clear_debug_rects()
-	
-	var options_popup = options_button.get_popup()
-	
-	# If options popup is not visible but transparency popup is, manage transparency popup independently
-	if not options_popup.visible:
-		if current_transparency_popup and is_instance_valid(current_transparency_popup) and current_transparency_popup.visible:
-			# Check if mouse is still over transparency popup
-			var screen_mouse_pos = DisplayServer.mouse_get_position()
-			var transparency_rect = Rect2(Vector2(current_transparency_popup.position), current_transparency_popup.size)
-			
-			# Debug: Draw transparency popup rect
-			_draw_debug_rect(transparency_rect, Color.CYAN, "Transparency Popup")
-			
-			if not transparency_rect.has_point(screen_mouse_pos):
-				_close_transparency_popup()
-				_stop_hover_detection()
-			# Keep checking while transparency popup is open
-			return
-		else:
-			_stop_hover_detection()
-			return
-	
-	var mouse_pos = get_viewport().get_mouse_position()
-	
-	# Calculate options popup position and rect using screen coordinates
-	var options_button_screen_pos = options_button.get_screen_position()
-	var popup_screen_pos = Vector2(
-		options_button_screen_pos.x,
-		options_button_screen_pos.y + options_button.size.y
-	)
-	
-	# Force a larger height for the options rect to include all items
-	var calculated_popup_height = 3 * 30 + 2 * 4  # 3 items * 30 pixels each, 2 seperators * 4 pixels each
-	var options_rect = Rect2(popup_screen_pos, Vector2(options_popup.size.x, calculated_popup_height))
-	
-	# Use viewport mouse position converted to screen coordinates
-	var viewport_mouse_pos = get_viewport().get_mouse_position()
-	var window_screen_pos = position  # Window's position on screen
-	var screen_mouse_pos = viewport_mouse_pos + Vector2(window_screen_pos)
-	
-	if debug_hover_rects:
-		# Debug: Print corrected mouse position and popup info
-		print("Corrected screen mouse: ", screen_mouse_pos)
-		print("Options popup size: ", options_popup.size)
-		print("Calculated rect: ", options_rect)
-		print("Mouse in options rect: ", options_rect.has_point(screen_mouse_pos))
-		
-		# Debug: Draw options popup rect
-		_draw_debug_rect(options_rect, Color.GREEN, "Options Popup")
-	
-	# Check if mouse is over transparency popup
-	var over_transparency_popup = false
-	if current_transparency_popup and is_instance_valid(current_transparency_popup) and current_transparency_popup.visible:
-		var transparency_rect = Rect2(Vector2(current_transparency_popup.position), current_transparency_popup.size)
-		over_transparency_popup = transparency_rect.has_point(screen_mouse_pos)
-		
-		if debug_hover_rects:
-			# Debug: Draw transparency popup rect
-			_draw_debug_rect(transparency_rect, Color.CYAN, "Transparency Popup")
-			
-			# Debug: Print transparency popup position
-			print("Transparency popup at: ", transparency_rect)
-	
-	if debug_hover_rects:
-		# Debug: Draw corrected mouse position
-		_draw_debug_rect(Rect2(screen_mouse_pos - Vector2(5, 5), Vector2(10, 10)), Color.RED, "Mouse (Corrected)")
-	
-	if options_rect.has_point(screen_mouse_pos):
-		# Mouse is over options popup - check which item
-		var local_mouse = screen_mouse_pos - popup_screen_pos
-		
-		# Account for different heights: regular items vs separators
-		var regular_item_height = 30.0
-		var separator_height = 4.0
-		var item_y_offset = 0.0
-		
-		# Calculate which actual menu item we're hovering over
-		var current_y = local_mouse.y - item_y_offset
-		var actual_item_index = -1
-		
-		# Map visual position to actual menu indices with corrected bounds
-		# Menu structure: Lock(0), sep(1), Transparency(2), sep(3), Reset(4)
-		if current_y >= 0 and current_y < regular_item_height:
-			actual_item_index = 0  # Lock Window
-		elif current_y >= regular_item_height and current_y < (regular_item_height + separator_height):
-			actual_item_index = 1  # Separator (non-interactive)
-		elif current_y >= (regular_item_height + separator_height) and current_y < (2 * regular_item_height + separator_height):
-			actual_item_index = 2  # Transparency
-		elif current_y >= (2 * regular_item_height + separator_height) and current_y < (2 * regular_item_height + 2 * separator_height):
-			actual_item_index = 3  # Separator (non-interactive)
-		elif current_y >= (2 * regular_item_height + 2 * separator_height):
-			actual_item_index = 4  # Reset Transparency (removed upper bound check)
-		
-		if debug_hover_rects:
-			# Calculate the actual Y position of the hovered item
-			var item_actual_y = item_y_offset
-			if actual_item_index == 0:
-				item_actual_y = item_y_offset  # Lock Window at top
-			elif actual_item_index == 1:
-				item_actual_y = item_y_offset + regular_item_height  # Separator after Lock
-			elif actual_item_index == 2:
-				item_actual_y = item_y_offset + regular_item_height + separator_height  # Transparency
-			elif actual_item_index == 3:
-				item_actual_y = item_y_offset + 2 * regular_item_height + separator_height  # Separator after Transparency
-			elif actual_item_index == 4:
-				item_actual_y = item_y_offset + 2 * regular_item_height + 2 * separator_height  # Reset Transparency
-			
-			# Debug: Draw hovered item rect at its actual position
-			var item_rect_screen = Rect2(
-				popup_screen_pos.x,
-				popup_screen_pos.y + item_actual_y,
-				options_rect.size.x,
-				regular_item_height if actual_item_index in [0, 2, 4] else separator_height
-			)
-			_draw_debug_rect(item_rect_screen, Color.YELLOW, "Item " + str(actual_item_index))
-			
-			# Debug: Show that we detected mouse over options popup
-			_draw_debug_rect(Rect2(screen_mouse_pos - Vector2(7, 7), Vector2(14, 14)), Color.WHITE, "Over Options")
-			
-			# Debug: Print hovered item to console
-			print("Hovered item: ", actual_item_index, " at mouse pos: ", local_mouse)
-			print("Current Y: ", current_y, " (bounds check)")
-		
-		# Handle the actual menu item interactions
-		print("Processing item: ", actual_item_index)
-		if actual_item_index == 2:  # Transparency item
-			print("Opening transparency popup")
-			if not current_transparency_popup or not is_instance_valid(current_transparency_popup) or not current_transparency_popup.visible:
-				_show_transparency_popup()
-		# For all other items, do nothing - keep transparency popup open if it exists
-		# Only close via clicking outside or selecting from transparency popup
-	elif over_transparency_popup:
-		# Mouse is over transparency popup - keep it open
-		if debug_hover_rects:
-			# Debug: Show that we detected mouse over transparency popup
-			_draw_debug_rect(Rect2(screen_mouse_pos - Vector2(10, 10), Vector2(20, 20)), Color.LIME, "Over Trans Popup")
-		pass
-	else:
-		# Mouse is over NEITHER popup (not options popup and not transparency popup)
-		# Don't automatically close transparency popup - only close on clicks outside
-		if current_transparency_popup and is_instance_valid(current_transparency_popup) and current_transparency_popup.visible:
-			if debug_hover_rects:
-				print("Mouse outside menus but keeping transparency popup open - only close on clicks")
-			# Don't close the transparency popup just for moving mouse outside
-			# It will be closed by click detection in other parts of the code
-
-func _show_transparency_popup():
-	# Clean up any existing popup
-	_close_transparency_popup()
-	
-	# Create new transparency popup
-	current_transparency_popup = PopupMenu.new()
-	current_transparency_popup.name = "TransparencyOptions"
-	
-	# Add transparency options
-	current_transparency_popup.add_item("100%", 100)
-	current_transparency_popup.add_item("90%", 90)
-	current_transparency_popup.add_item("80%", 80)
-	current_transparency_popup.add_item("70%", 70)
-	current_transparency_popup.add_item("60%", 60)
-	current_transparency_popup.add_item("50%", 50)
-	current_transparency_popup.add_item("40%", 40)
-	current_transparency_popup.add_item("30%", 30)
-	current_transparency_popup.add_item("20%", 20)
-	current_transparency_popup.add_item("10%", 10)
-	
-	# Mark current transparency value
-	var current_percentage = int(window_transparency * 100)
-	for i in current_transparency_popup.get_item_count():
-		var item_id = current_transparency_popup.get_item_id(i)
-		if item_id == current_percentage:
-			current_transparency_popup.set_item_checked(i, true)
-			break
-	
-	# Connect selection and hide events
-	current_transparency_popup.id_pressed.connect(_on_transparency_option_selected)
-	current_transparency_popup.popup_hide.connect(_on_transparency_popup_hidden)
-	
-	# Add to viewport for proper global positioning
-	get_viewport().add_child(current_transparency_popup)
-	
-	# Calculate position using screen coordinates to match hover detection
-	var options_popup = options_button.get_popup()
-	var button_screen_pos = options_button.get_screen_position()
-	
-	# Position where options dropdown appears
-	var dropdown_x = button_screen_pos.x
-	var dropdown_y = button_screen_pos.y + options_button.size.y
-	
-	# Calculate transparency item position (Lock=0, separator=1, Transparency=2)
-	var item_height = 18
-	var transparency_item_y = 2 * item_height  # Item index 2
-	
-	# Position transparency popup to the right of the transparency item
-	var popup_pos = Vector2i(
-		int(dropdown_x + options_popup.size.x - 8),  # Right edge of options popup
-		int(dropdown_y + transparency_item_y - 3)   # Aligned with transparency item
-	)
-	
-	current_transparency_popup.position = popup_pos
-	current_transparency_popup.popup()
-
-func _close_transparency_popup():
-	if current_transparency_popup and is_instance_valid(current_transparency_popup):
-		current_transparency_popup.queue_free()
-		current_transparency_popup = null
-
-func _on_transparency_popup_hidden():
-	# Don't auto-close on hide - let the hover detection handle it
-	pass
-
-func _on_options_menu_selected(id: int):
-	var popup = options_button.get_popup()
-	match id:
-		0:  # Lock Window
-			window_locked = not window_locked
-			popup.set_item_checked(0, window_locked)
-			set_dragging_enabled(not window_locked)
-			window_locked_changed.emit(window_locked)
-		2:  # Transparency - handled by hover, do nothing on click
-			pass
-		4:  # Reset Transparency
-			_set_transparency(1.0)
-
-func _on_transparency_option_selected(id: int):
-	var transparency_value = float(id) / 100.0
-	_set_transparency(transparency_value)
-	_close_transparency_popup()
-
-func _set_transparency(value: float):
-	window_transparency = value
-	if content_background:
-		var current_modulate = content_background.modulate
-		current_modulate.a = value
-		content_background.modulate = current_modulate
-	
-	transparency_changed.emit(value)
 
 # Input handling
 func _on_title_bar_input(event: InputEvent):
@@ -667,76 +412,19 @@ func get_window_locked() -> bool:
 
 func set_window_locked(locked: bool):
 	window_locked = locked
-	if options_button:
-		var popup = options_button.get_popup()
-		popup.set_item_checked(0, locked)
 	set_dragging_enabled(not locked)
 
 func get_transparency() -> float:
 	return window_transparency
 
 func set_transparency(value: float):
-	_set_transparency(value)
+	window_transparency = value
+	if content_background:
+		var current_modulate = content_background.modulate
+		current_modulate.a = value
+		content_background.modulate = current_modulate
+	
+	transparency_changed.emit(value)
 
 func get_content_area() -> Control:
 	return content_area
-
-func _setup_debug_overlay():
-	if debug_hover_rects:
-		# Create a CanvasLayer for screen-wide debug overlay
-		var debug_canvas = CanvasLayer.new()
-		debug_canvas.name = "DebugCanvas"
-		debug_canvas.layer = 10000  # Much higher layer to be on top of everything
-		
-		debug_overlay = Control.new()
-		debug_overlay.name = "DebugOverlay"
-		debug_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		debug_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		debug_overlay.z_index = 10000  # Also increase z_index
-		
-		# Add to the main scene tree for full screen coverage
-		get_tree().current_scene.add_child(debug_canvas)
-		debug_canvas.add_child(debug_overlay)
-		
-		# Connect draw signal immediately
-		debug_overlay.draw.connect(_on_debug_overlay_draw)
-		print("Debug overlay created and added to main scene with CanvasLayer layer 10000")
-
-func _draw_debug_rect(rect: Rect2, color: Color, label: String = ""):
-	if not debug_hover_rects or not debug_overlay:
-		return
-	
-	debug_rects.append({
-		"rect": rect,
-		"color": color,
-		"label": label
-	})
-	print("Adding debug rect: ", label, " at ", rect)
-	debug_overlay.queue_redraw()
-
-func _clear_debug_rects():
-	if debug_hover_rects and debug_overlay:
-		debug_rects.clear()
-		debug_overlay.queue_redraw()
-		print("Cleared debug rects")
-
-# Custom draw function for debug overlay
-func _on_debug_overlay_draw():
-	if not debug_hover_rects or not debug_overlay:
-		return
-	
-	print("Drawing ", debug_rects.size(), " debug rects")
-	
-	for debug_info in debug_rects:
-		var rect = debug_info.rect
-		var color = debug_info.color
-		var label = debug_info.label
-		
-		# Draw rectangle outline
-		debug_overlay.draw_rect(rect, color, false, 2.0)
-		
-		# Draw label if provided
-		if not label.is_empty():
-			var font = ThemeDB.fallback_font
-			var font_size = 12
-			debug_overlay.draw_string(font, rect.position + Vector2(5, 15), label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
