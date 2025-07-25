@@ -303,7 +303,7 @@ func _check_hover():
 		# Calculate which item is being hovered
 		var local_mouse = mouse_pos - popup_global_pos
 		var item_height = 24  # Standard menu item height
-		var hovered_item = int(local_mouse.y / item_height)
+		var hovered_item = int((local_mouse.y + 12) / item_height)
 		
 		# Account for separators: Lock(0), sep(1), Transparency(2)
 		if hovered_item == 2:  # Transparency item
@@ -380,23 +380,19 @@ func _show_transparency_popup_on_hover():
 	var dropdown_y = button_global_pos.y + options_button.size.y
 	
 	# Calculate transparency item position (Lock=0, separator=1, Transparency=2)
-	var item_height = 24
+	var item_height = 18
 	var transparency_item_y = 2 * item_height  # Item index 2
 	
 	# Position transparency popup to the right of the transparency item
 	var popup_pos = Vector2i(
-		int(dropdown_x + options_popup.size.x),  # Right edge of options popup
-		int(dropdown_y + transparency_item_y - 15)   # Aligned with transparency item
+		int(dropdown_x + options_popup.size.x - 8),  # Right edge of options popup
+		int(dropdown_y + transparency_item_y - 3)   # Aligned with transparency item
 	)
 	
 	current_transparency_popup.position = popup_pos
 	current_transparency_popup.popup()
 	
-	# Auto-cleanup
-	current_transparency_popup.popup_hide.connect(func():
-		if current_transparency_popup and is_instance_valid(current_transparency_popup):
-			current_transparency_popup = null
-	)
+
 
 func _on_transparency_option_selected(id: int, popup: PopupMenu):
 	var transparency_value = float(id) / 100.0
