@@ -13,16 +13,12 @@ var current_popup: PopupMenu
 var popup_being_cleaned: bool = false
 
 # Track open dialog windows for cleanup
-var open_dialog_windows: Array[DialogWindow] = []
+var open_dialog_windows: Array[Window] = []
 
 # Signals
 signal container_refreshed()
 
-func _init(parent: Window = null):
-	if parent:
-		window_parent = parent
-
-func set_window_parent(parent: Window):
+func _init(parent: Window):
 	window_parent = parent
 
 func set_inventory_manager(manager: InventoryManager):
@@ -42,29 +38,12 @@ func show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position
 	popup.set_meta("context_item", item)
 	popup.set_meta("context_slot", slot)
 	
-	# Always add item information
 	popup.add_item("Item Information", 0)
-	
-	# Add split stack option only if item quantity > 1 and max_stack_size > 1
-	if item.quantity > 1 and item.max_stack_size > 1:
+	if item.quantity > 1:
 		popup.add_item("Split Stack", 1)
-	
-	# Add destroy option if item can be destroyed
+	popup.add_separator()
 	if item.can_be_destroyed:
-		popup.add_separator()
 		popup.add_item("Destroy Item", 3)
-	
-	# Add item type specific options
-	match item.item_type:
-		InventoryItem.ItemType.CONSUMABLE:
-			popup.add_separator()
-			popup.add_item("Use Item", 10)
-		InventoryItem.ItemType.CONTAINER:
-			popup.add_separator()
-			popup.add_item("Open Container", 11)
-		InventoryItem.ItemType.BLUEPRINT:
-			popup.add_separator()
-			popup.add_item("View Blueprint", 12)
 	
 	# Add to viewport for proper input handling
 	window_parent.get_viewport().add_child(popup)
@@ -287,106 +266,132 @@ func _on_context_menu_item_selected(id: int, popup: PopupMenu):
 	_close_current_popup()
 
 func show_item_details_dialog(item: InventoryItem):
-	# Create a new dialog window
-	var dialog_window = DialogWindow.new(item.item_name, Vector2(400, 300))
+	# Create a new independent window for the dialog
+	var dialog_window = Window.new()
+	dialog_window.title = item.item_name
+	dialog_window.size = Vector2i(400, 300)
+	dialog_window.unresizable = true
+	dialog_window.always_on_top = true
+	dialog_window.set_flag(Window.FLAG_POPUP, false)
 	
 	# Track this dialog window
 	open_dialog_windows.append(dialog_window)
 	
-	# Add to scene first
+	# Position relative to inventory window
+	var inventory_center = window_parent.position + window_parent.size / 2
+	dialog_window.position = Vector2i(inventory_center - dialog_window.size / 2)
+	
+	# Create content
+	var content = RichTextLabel.new()
+	content.bbcode_enabled = true
+	content.text = _generate_detailed_item_info(item)
+	content.fit_content = true
+	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	content.add_theme_constant_override("margin_left", 10)
+	content.add_theme_constant_override("margin_right", 10)
+	content.add_theme_constant_override("margin_top", 10)
+	content.add_theme_constant_override("margin_bottom", 50)
+	
+	dialog_window.add_child(content)
+	
+	# Add to scene and show
 	window_parent.get_tree().current_scene.add_child(dialog_window)
+	dialog_window.popup()
+	dialog_window.grab_focus()
 	
-	# Wait for full initialization - multiple frames to ensure CustomWindow is ready
-	await dialog_window.get_tree().process_frame
-	await dialog_window.get_tree().process_frame
-	
-	# Apply theme after everything is initialized
-	dialog_window.apply_dialog_theme()
-	
-	# Create rich text content
-	var rich_text = dialog_window.create_rich_text_area(_generate_detailed_item_info(item))
-	
-	# Add close button
-	await dialog_window.add_button("Close", func():
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
-	)
-	
-	# Show dialog
-	dialog_window.show_dialog(window_parent)
-	
-	# Connect close events
-	dialog_window.dialog_closed.connect(func():
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
+	# Connect close events with safer cleanup
+	dialog_window.close_requested.connect(func():
+		_safe_cleanup_dialog(dialog_window)
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
 	)
 
 func show_split_stack_dialog(item: InventoryItem, slot: InventorySlotUI):
-	# Check if inventory manager is available
-	if not inventory_manager:
-		print("Error: Inventory manager not available")
-		return
-	
 	# Prevent auto-stacking while dialog is open
 	var original_auto_stack = inventory_manager.auto_stack
 	inventory_manager.auto_stack = false
 	
-	# Create a new dialog window
-	var dialog_window = DialogWindow.new("Split Stack", Vector2(300, 180))
+	# Create a new independent window for the dialog - EXACTLY like item info dialog
+	var dialog_window = Window.new()
+	dialog_window.title = "Split Stack"
+	dialog_window.size = Vector2i(300, 180)
+	dialog_window.unresizable = true
+	dialog_window.always_on_top = true
+	dialog_window.set_flag(Window.FLAG_POPUP, false)
 	
 	# Track this dialog window
 	open_dialog_windows.append(dialog_window)
 	
-	# Add to scene first
+	# Position relative to inventory window - EXACTLY like item info dialog
+	var inventory_center = window_parent.position + window_parent.size / 2
+	dialog_window.position = Vector2i(inventory_center - dialog_window.size / 2)
+	
+	# Create content container
+	var vbox = VBoxContainer.new()
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vbox.add_theme_constant_override("margin_left", 15)
+	vbox.add_theme_constant_override("margin_right", 15)
+	vbox.add_theme_constant_override("margin_top", 15)
+	vbox.add_theme_constant_override("margin_bottom", 15)
+	vbox.add_theme_constant_override("separation", 10)
+	
+	var label = Label.new()
+	label.text = "Split %s (Current: %d)" % [item.item_name, item.quantity]
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(label)
+	
+	var spinbox = SpinBox.new()
+	spinbox.min_value = 1
+	spinbox.max_value = item.quantity - 1
+	spinbox.value = min(1, item.quantity - 1)
+	spinbox.custom_minimum_size = Vector2(150, 30)
+	spinbox.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vbox.add_child(spinbox)
+	
+	var button_container = HBoxContainer.new()
+	button_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	button_container.add_theme_constant_override("separation", 10)
+	vbox.add_child(button_container)
+	
+	var split_button = Button.new()
+	split_button.text = "Split"
+	split_button.custom_minimum_size = Vector2(80, 35)
+	button_container.add_child(split_button)
+	
+	var cancel_button = Button.new()
+	cancel_button.text = "Cancel"
+	cancel_button.custom_minimum_size = Vector2(80, 35)
+	button_container.add_child(cancel_button)
+	
+	dialog_window.add_child(vbox)
+	
+	# Add to scene and show - EXACTLY like item info dialog
 	window_parent.get_tree().current_scene.add_child(dialog_window)
-	
-	# Wait for full initialization - multiple frames to ensure CustomWindow is ready
-	await dialog_window.get_tree().process_frame
-	await dialog_window.get_tree().process_frame
-	
-	# Apply theme after everything is initialized
-	dialog_window.apply_dialog_theme()
-	
-	# Add dialog text - clarify what the split does
-	dialog_window.set_dialog_text("Split %s (Current: %d)\nHow many to take out of this stack?" % [item.item_name, item.quantity])
-	
-	# Create spinbox for quantity selection - this represents how many to TAKE OUT
-	var spinbox = dialog_window.create_spinbox(1, item.quantity - 1, 1)
-	
-	# Add buttons
-	var buttons = await dialog_window.add_confirm_cancel_buttons("Split", "Cancel")
+	dialog_window.popup()
+	dialog_window.grab_focus()
 	
 	# Connect button events
-	buttons.confirm.pressed.connect(func():
-		if inventory_manager:
-			var split_amount = int(spinbox.value)
-			inventory_manager.auto_stack = original_auto_stack
-			_perform_split(item, split_amount, original_auto_stack)
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
+	split_button.pressed.connect(func():
+		var split_amount = int(spinbox.value)
+		inventory_manager.auto_stack = original_auto_stack
+		_perform_split(item, split_amount, original_auto_stack)
+		_safe_cleanup_dialog(dialog_window)
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
 	)
 	
-	buttons.cancel.pressed.connect(func():
-		if inventory_manager:
-			inventory_manager.auto_stack = original_auto_stack
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
+	cancel_button.pressed.connect(func():
+		inventory_manager.auto_stack = original_auto_stack
+		_safe_cleanup_dialog(dialog_window)
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
 	)
 	
-	# Show dialog
-	dialog_window.show_dialog(window_parent)
-	
-	# Connect dialog events - but DON'T duplicate the split action
-	dialog_window.dialog_cancelled.connect(func():
-		if inventory_manager:
-			inventory_manager.auto_stack = original_auto_stack
-	)
-	
-	dialog_window.dialog_closed.connect(func():
-		if inventory_manager:
-			inventory_manager.auto_stack = original_auto_stack
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
+	dialog_window.close_requested.connect(func():
+		inventory_manager.auto_stack = original_auto_stack
+		_safe_cleanup_dialog(dialog_window)
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
 	)
 
 func _generate_detailed_item_info(item: InventoryItem) -> String:
@@ -422,37 +427,20 @@ func _generate_detailed_item_info(item: InventoryItem) -> String:
 	return text
 
 func _perform_split(item: InventoryItem, split_amount: int, original_auto_stack: bool):
+	
 	if not inventory_manager or not current_container or not item:
-		if inventory_manager:
-			inventory_manager.auto_stack = original_auto_stack
+		inventory_manager.auto_stack = original_auto_stack
 		return
 	
-	# Debug output
-	print("DEBUG: Starting split - Original quantity: %d, Split amount: %d" % [item.quantity, split_amount])
-	
-	# Validate split amount - should be less than total quantity
+	# Validate split amount
 	if split_amount <= 0 or split_amount >= item.quantity:
-		if inventory_manager:
-			inventory_manager.auto_stack = original_auto_stack
-		print("DEBUG: Invalid split amount")
+		inventory_manager.auto_stack = original_auto_stack
 		return
 	
 	# Store original quantity for rollback
 	var original_quantity = item.quantity
 	
-	# Find a free position for the new item BEFORE modifying anything
-	var free_position = current_container.find_free_position()
-	
-	if free_position == Vector2i(-1, -1):
-		# No free space - can't split
-		if inventory_manager:
-			inventory_manager.auto_stack = original_auto_stack
-		print("DEBUG: No free space for split")
-		return
-	
-	print("DEBUG: Found free position: %s" % free_position)
-	
-	# Create the new item with the split amount
+	# Create the new item manually
 	var new_item = InventoryItem.new()
 	new_item.item_id = item.item_id
 	new_item.item_name = item.item_name
@@ -460,7 +448,7 @@ func _perform_split(item: InventoryItem, split_amount: int, original_auto_stack:
 	new_item.icon_path = item.icon_path
 	new_item.volume = item.volume
 	new_item.mass = item.mass
-	new_item.quantity = split_amount  # This is the amount being split OFF
+	new_item.quantity = split_amount
 	new_item.max_stack_size = item.max_stack_size
 	new_item.item_type = item.item_type
 	new_item.item_rarity = item.item_rarity
@@ -472,83 +460,112 @@ func _perform_split(item: InventoryItem, split_amount: int, original_auto_stack:
 	new_item.container_volume = item.container_volume
 	new_item.container_type = item.container_type
 	
-	print("DEBUG: Created new item with quantity: %d" % new_item.quantity)
 	
-	# Reduce the original item's quantity by the split amount
+	# Find a free position for the new item
+	var free_position = current_container.find_free_position()
+	
+	if free_position == Vector2i(-1, -1):
+		# No free space - can't split
+		inventory_manager.auto_stack = original_auto_stack
+		return
+	
+	# Check container state before split
+	for i in range(current_container.items.size()):
+		var container_item = current_container.items[i]
+	
+	# Reduce the original item's quantity BEFORE adding the new item
 	item.quantity -= split_amount
-	print("DEBUG: Reduced original item quantity to: %d" % item.quantity)
 	
 	# Add the new item to container with auto_stack explicitly disabled
 	var success = current_container.add_item(new_item, free_position, false)
 	
 	if not success:
 		# Failed to add - restore original quantity
-		print("DEBUG: Failed to add new item, restoring original quantity")
 		item.quantity = original_quantity
-		# Emit quantity changed signal to update the original slot
+		
+		for i in range(current_container.items.size()):
+			var container_item = current_container.items[i]
+		
+		# DON'T emit container_refreshed as it triggers compacting
+		# Just emit the quantity changed signal to update the original slot
 		item.quantity_changed.emit(item.quantity)
-	else:
-		print("DEBUG: Successfully added new item. Total items in container: %d" % current_container.get_item_count())
-		# Success - emit signals to update UI but avoid auto-stacking
-		item.quantity_changed.emit(item.quantity)
-		# Don't emit container_refreshed as it might trigger unwanted behavior
 	
 	# Always restore auto-stack setting
-	if inventory_manager:
-		inventory_manager.auto_stack = original_auto_stack
+	inventory_manager.auto_stack = original_auto_stack
 
 func show_destroy_item_confirmation(item: InventoryItem, slot: InventorySlotUI):
-	# Create a new dialog window
-	var dialog_window = DialogWindow.new("Destroy Item", Vector2(350, 120))
+	# Create a new independent window for the dialog
+	var dialog_window = Window.new()
+	dialog_window.title = "Destroy Item"
+	dialog_window.size = Vector2i(350, 120)
+	dialog_window.unresizable = true
+	dialog_window.always_on_top = true
+	dialog_window.set_flag(Window.FLAG_POPUP, false)
 	
 	# Track this dialog window
 	open_dialog_windows.append(dialog_window)
 	
-	# Add to scene first
+	# Position relative to inventory window
+	var inventory_center = window_parent.position + window_parent.size / 2
+	dialog_window.position = Vector2i(inventory_center - dialog_window.size / 2)
+	
+	# Create content container
+	var vbox = VBoxContainer.new()
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vbox.add_theme_constant_override("margin_left", 10)
+	vbox.add_theme_constant_override("margin_right", 10)
+	vbox.add_theme_constant_override("margin_top", 10)
+	vbox.add_theme_constant_override("margin_bottom", 10)
+	
+	var label = Label.new()
+	label.text = "Are you sure you want to destroy %s?\nThis action cannot be undone." % item.item_name
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(label)
+	
+	var button_container = HBoxContainer.new()
+	button_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(button_container)
+	
+	var confirm_button = Button.new()
+	confirm_button.text = "Destroy"
+	confirm_button.custom_minimum_size = Vector2(80, 30)
+	button_container.add_child(confirm_button)
+	
+	var cancel_button = Button.new()
+	cancel_button.text = "Cancel"
+	cancel_button.custom_minimum_size = Vector2(80, 30)
+	button_container.add_child(cancel_button)
+	
+	dialog_window.add_child(vbox)
+	
+	# Add to scene and show
 	window_parent.get_tree().current_scene.add_child(dialog_window)
-	
-	# Wait for full initialization - multiple frames to ensure CustomWindow is ready
-	await dialog_window.get_tree().process_frame
-	await dialog_window.get_tree().process_frame
-	
-	# Apply theme after everything is initialized
-	dialog_window.apply_dialog_theme()
-	
-	# Add confirmation text
-	dialog_window.set_dialog_text("Are you sure you want to destroy %s?\nThis action cannot be undone." % item.item_name)
-	
-	# Add buttons
-	var buttons = await dialog_window.add_confirm_cancel_buttons("Destroy", "Cancel")
+	dialog_window.popup()
+	dialog_window.grab_focus()
 	
 	# Connect button events
-	buttons.confirm.pressed.connect(func():
+	confirm_button.pressed.connect(func():
 		if inventory_manager:
 			inventory_manager.remove_item_from_container(item, current_container.container_id)
 			await window_parent.get_tree().process_frame
 			container_refreshed.emit()
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
+		_safe_cleanup_dialog(dialog_window)
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
 	)
 	
-	buttons.cancel.pressed.connect(func():
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
+	cancel_button.pressed.connect(func():
+		_safe_cleanup_dialog(dialog_window)
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
 	)
 	
-	# Show dialog
-	dialog_window.show_dialog(window_parent)
-	
-	# Connect dialog events
-	dialog_window.dialog_confirmed.connect(func():
-		if inventory_manager:
-			inventory_manager.remove_item_from_container(item, current_container.container_id)
-			await window_parent.get_tree().process_frame
-			container_refreshed.emit()
-	)
-	
-	dialog_window.dialog_closed.connect(func():
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
+	dialog_window.close_requested.connect(func():
+		_safe_cleanup_dialog(dialog_window)
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
 	)
 
 func use_item(item: InventoryItem, slot: InventorySlotUI):
@@ -572,67 +589,111 @@ func clear_container():
 	if not current_container:
 		return
 	
-	# Create a new dialog window
-	var dialog_window = DialogWindow.new("Clear Container", Vector2(350, 120))
+	# Create a new independent window for the dialog
+	var dialog_window = Window.new()
+	dialog_window.title = "Clear Container"
+	dialog_window.size = Vector2i(350, 120)
+	dialog_window.unresizable = true
+	dialog_window.always_on_top = true
+	dialog_window.set_flag(Window.FLAG_POPUP, false)
 	
 	# Track this dialog window
 	open_dialog_windows.append(dialog_window)
 	
-	# Add to scene first
+	# Position relative to inventory window
+	var inventory_center = window_parent.position + window_parent.size / 2
+	dialog_window.position = Vector2i(inventory_center - dialog_window.size / 2)
+	
+	# Create content container
+	var vbox = VBoxContainer.new()
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vbox.add_theme_constant_override("margin_left", 10)
+	vbox.add_theme_constant_override("margin_right", 10)
+	vbox.add_theme_constant_override("margin_top", 10)
+	vbox.add_theme_constant_override("margin_bottom", 10)
+	
+	var label = Label.new()
+	label.text = "Are you sure you want to clear all items from %s?\nThis action cannot be undone." % current_container.container_name
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(label)
+	
+	var button_container = HBoxContainer.new()
+	button_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(button_container)
+	
+	var confirm_button = Button.new()
+	confirm_button.text = "Clear"
+	confirm_button.custom_minimum_size = Vector2(80, 30)
+	button_container.add_child(confirm_button)
+	
+	var cancel_button = Button.new()
+	cancel_button.text = "Cancel"
+	cancel_button.custom_minimum_size = Vector2(80, 30)
+	button_container.add_child(cancel_button)
+	
+	dialog_window.add_child(vbox)
+	
+	# Add to scene and show
 	window_parent.get_tree().current_scene.add_child(dialog_window)
-	
-	# Wait for full initialization - multiple frames to ensure CustomWindow is ready
-	await dialog_window.get_tree().process_frame
-	await dialog_window.get_tree().process_frame
-	
-	# Apply theme after everything is initialized
-	dialog_window.apply_dialog_theme()
-	
-	# Add confirmation text
-	dialog_window.set_dialog_text("Are you sure you want to clear all items from %s?\nThis action cannot be undone." % current_container.container_name)
-	
-	# Add buttons
-	var buttons = await dialog_window.add_confirm_cancel_buttons("Clear", "Cancel")
+	dialog_window.popup()
+	dialog_window.grab_focus()
 	
 	# Connect button events
-	buttons.confirm.pressed.connect(func():
+	confirm_button.pressed.connect(func():
 		if current_container:
 			current_container.clear()
 			container_refreshed.emit()
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
+		_safe_cleanup_dialog(dialog_window)
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
 	)
 	
-	buttons.cancel.pressed.connect(func():
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
+	cancel_button.pressed.connect(func():
+		_safe_cleanup_dialog(dialog_window)
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
 	)
 	
-	# Show dialog
-	dialog_window.show_dialog(window_parent)
-	
-	# Connect dialog events
-	dialog_window.dialog_confirmed.connect(func():
-		if current_container:
-			current_container.clear()
-			container_refreshed.emit()
-	)
-	
-	dialog_window.dialog_closed.connect(func():
-		_cleanup_dialog_window(dialog_window)
-		window_parent.grab_focus()
+	dialog_window.close_requested.connect(func():
+		_safe_cleanup_dialog(dialog_window)
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
 	)
 
+func _safe_cleanup_dialog(dialog_window: Window):
+	"""Safely clean up a dialog window with proper validity checks"""
+	if not dialog_window:
+		return
+	
+	# Remove from tracking array immediately
+	if dialog_window in open_dialog_windows:
+		open_dialog_windows.erase(dialog_window)
+	
+	# Only queue for deletion if it's still valid and not already queued
+	if is_instance_valid(dialog_window) and not dialog_window.is_queued_for_deletion():
+		dialog_window.queue_free()
+
 # Dialog window management
-func _cleanup_dialog_window(dialog_window: DialogWindow):
+func _cleanup_dialog_window(dialog_window: Window):
 	"""Clean up a single dialog window and remove it from tracking"""
+	if not dialog_window:
+		return
+	
+	# Remove from tracking first
 	open_dialog_windows.erase(dialog_window)
-	if is_instance_valid(dialog_window):
+	
+	# Only operate on valid windows
+	if is_instance_valid(dialog_window) and not dialog_window.is_queued_for_deletion():
 		dialog_window.queue_free()
 
 func close_all_dialogs():
 	"""Close all open dialog windows - called when inventory is closed"""
-	for dialog_window in open_dialog_windows.duplicate():
-		if is_instance_valid(dialog_window):
-			dialog_window.queue_free()
+	# Create a copy of the array to avoid modification during iteration
+	var dialogs_to_close = open_dialog_windows.duplicate()
 	open_dialog_windows.clear()
+	
+	for dialog_window in dialogs_to_close:
+		if dialog_window and is_instance_valid(dialog_window) and not dialog_window.is_queued_for_deletion():
+			dialog_window.queue_free()
