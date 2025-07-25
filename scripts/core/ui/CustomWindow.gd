@@ -22,6 +22,10 @@ extends Window
 @export var button_hover_color: Color = Color(0.3, 0.3, 0.3, 1.0)
 @export var close_button_hover_color: Color = Color(0.8, 0.2, 0.2, 1.0)
 
+# DEBUG
+@export var debug_color: Color = Color.RED
+@export var debug_line_width: int = 2
+
 # UI Components
 var main_container: Control
 var title_bar: Panel
@@ -369,7 +373,7 @@ func _show_transparency_popup_on_hover():
 	
 	# Calculate correct position relative to transparency menu item
 	var options_popup = options_button.get_popup()
-	var button_global_pos = options_button.global_position
+	var button_global_pos = options_button.get_screen_position()
 	
 	# Position where options dropdown appears
 	var dropdown_x = button_global_pos.x
@@ -382,7 +386,7 @@ func _show_transparency_popup_on_hover():
 	# Position transparency popup to the right of the transparency item
 	var popup_pos = Vector2i(
 		int(dropdown_x + options_popup.size.x),  # Right edge of options popup
-		int(dropdown_y + transparency_item_y)   # Aligned with transparency item
+		int(dropdown_y + transparency_item_y - 15)   # Aligned with transparency item
 	)
 	
 	current_transparency_popup.position = popup_pos
