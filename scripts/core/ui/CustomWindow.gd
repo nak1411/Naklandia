@@ -229,6 +229,9 @@ func _connect_signals():
 		options_button.mouse_exited.connect(_on_button_hover.bind(options_button, false))
 
 func _update_title_bar_style():
+	if not title_bar:
+		return
+		
 	var style_box = StyleBoxFlat.new()
 	style_box.bg_color = title_bar_active_color if is_window_focused else title_bar_color
 	style_box.border_width_left = 0
@@ -263,30 +266,15 @@ func _on_options_menu_selected(id: int):
 			_set_transparency(1.0)
 
 func _show_transparency_dialog():
-	# Create a new independent window for the dialog
-	var dialog_window = Window.new()
-	dialog_window.title = "Window Transparency"
-	dialog_window.size = Vector2i(300, 120)
-	dialog_window.unresizable = true
-	dialog_window.always_on_top = true
-	dialog_window.set_flag(Window.FLAG_POPUP, false)
+	# Create a new transparency dialog
+	var dialog_window = DialogWindow.new("Window Transparency", Vector2(300, 120))
+	dialog_window.apply_dialog_theme()
 	
-	# Position relative to this window
-	var window_center = position + size / 2
-	dialog_window.position = Vector2i(window_center - dialog_window.size / 2)
-	
-	# Create content container
-	var vbox = VBoxContainer.new()
-	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	vbox.add_theme_constant_override("margin_left", 10)
-	vbox.add_theme_constant_override("margin_right", 10)
-	vbox.add_theme_constant_override("margin_top", 10)
-	vbox.add_theme_constant_override("margin_bottom", 10)
-	
+	# Create transparency label and slider
 	var label = Label.new()
 	label.text = "Transparency: %d%%" % int(window_transparency * 100)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(label)
+	dialog_window.add_dialog_content(label)
 	
 	var slider = HSlider.new()
 	slider.min_value = 0.1
@@ -294,17 +282,19 @@ func _show_transparency_dialog():
 	slider.step = 0.01
 	slider.value = window_transparency
 	slider.custom_minimum_size.x = 250
-	vbox.add_child(slider)
 	
-	var close_button = Button.new()
-	close_button.text = "Close"
-	close_button.custom_minimum_size = Vector2(80, 30)
-	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vbox.add_child(close_button)
+	var slider_container = HBoxContainer.new()
+	slider_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	slider_container.add_child(slider)
+	dialog_window.add_dialog_content(slider_container)
 	
-	dialog_window.add_child(vbox)
+	# Add close button
+	dialog_window.add_button("Close", func():
+		dialog_window.close_dialog()
+		grab_focus()
+	)
 	
-	# Connect slider
+	# Connect slider to update transparency and label
 	slider.value_changed.connect(func(value):
 		_set_transparency(value)
 		label.text = "Transparency: %d%%" % int(value * 100)
@@ -312,17 +302,10 @@ func _show_transparency_dialog():
 	
 	# Add to scene and show
 	get_tree().current_scene.add_child(dialog_window)
-	dialog_window.popup()
-	dialog_window.grab_focus()
+	dialog_window.show_dialog(self)
 	
 	# Connect close events
-	close_button.pressed.connect(func():
-		dialog_window.queue_free()
-		grab_focus()
-	)
-	
-	dialog_window.close_requested.connect(func():
-		dialog_window.queue_free()
+	dialog_window.dialog_closed.connect(func():
 		grab_focus()
 	)
 

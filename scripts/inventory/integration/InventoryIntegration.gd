@@ -198,7 +198,7 @@ func toggle_inventory():
 
 func _on_inventory_window_closed():
 	# Close any open dialog windows when inventory window is closed
-	if inventory_window and inventory_window.item_actions:
+	if inventory_window and inventory_window.item_actions and inventory_window.item_actions.has_method("close_all_dialogs"):
 		inventory_window.item_actions.close_all_dialogs()
 	
 	is_inventory_open = false
@@ -218,7 +218,7 @@ func close_inventory():
 		return
 	if is_inventory_open:
 		# Close any open dialog windows first
-		if inventory_window and inventory_window.item_actions:
+		if inventory_window and inventory_window.item_actions and inventory_window.item_actions.has_method("close_all_dialogs"):
 			inventory_window.item_actions.close_all_dialogs()
 		
 		inventory_window.visible = false
@@ -514,7 +514,7 @@ func clear_all_inventories():
 	if inventory_manager:
 		for container in inventory_manager.get_all_containers():
 			container.clear()
-	
+
 func refresh_all_ui():
 	"""Refresh window display"""
 	_schedule_ui_refresh()

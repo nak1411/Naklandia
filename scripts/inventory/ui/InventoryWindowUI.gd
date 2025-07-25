@@ -11,13 +11,13 @@ extends CustomWindow
 var inventory_container: VBoxContainer
 var header: InventoryWindowHeader
 var content: InventoryWindowContent
-var item_actions: InventoryItemActions
+var item_actions: RefCounted  # Changed from Node to RefCounted since InventoryItemActions extends RefCounted
 
 # State
 var inventory_manager: InventoryManager
 var open_containers: Array[InventoryContainer] = []
 var current_container: InventoryContainer
-var active_context_menu: InventoryItemActions
+var active_context_menu: RefCounted
 
 # Window state
 var is_locked: bool = false
@@ -60,8 +60,26 @@ func _setup_inventory_ui():
 	content.name = "Content"
 	inventory_container.add_child(content)
 	
-	# Create item actions module
-	item_actions = InventoryItemActions.new(self)
+	# Create item actions module - defer creation to avoid circular dependency
+	call_deferred("_create_item_actions")
+
+func _create_item_actions():
+	# Create item actions after everything is set up
+	var item_actions_script = load("res://scripts/inventory/ui/InventoryItemActions.gd")
+	if item_actions_script:
+		# Create instance with no parameters, then set the parent
+		item_actions = item_actions_script.new()
+		item_actions.set_window_parent(self)
+		
+		# Set inventory manager if available
+		if inventory_manager and item_actions.has_method("set_inventory_manager"):
+			item_actions.set_inventory_manager(inventory_manager)
+		
+		# Set current container if available
+		if current_container and item_actions.has_method("set_current_container"):
+			item_actions.set_current_container(current_container)
+	else:
+		print("Warning: Could not load InventoryItemActions script")
 
 func _connect_inventory_signals():
 	# Connect custom window signals
@@ -80,7 +98,9 @@ func _connect_inventory_signals():
 	content.item_context_menu.connect(_on_item_context_menu)
 	
 	# Item actions signals
-	item_actions.container_refreshed.connect(_on_container_refreshed)
+	if item_actions and item_actions.has_method("connect"):
+		if item_actions.has_signal("container_refreshed"):
+			item_actions.container_refreshed.connect(_on_container_refreshed)
 
 func _find_inventory_manager():
 	var scene_root = get_tree().current_scene
@@ -90,7 +110,8 @@ func _find_inventory_manager():
 		header.set_inventory_manager(inventory_manager)
 		header.set_inventory_window(self)
 		content.set_inventory_manager(inventory_manager)
-		item_actions.set_inventory_manager(inventory_manager)
+		if item_actions and item_actions.has_method("set_inventory_manager"):
+			item_actions.set_inventory_manager(inventory_manager)
 		_populate_container_list()
 
 func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
@@ -148,7 +169,8 @@ func _switch_to_container(container: InventoryContainer):
 		container.compact_items()
 	
 	content.select_container(container)
-	item_actions.set_current_container(container)
+	if item_actions and item_actions.has_method("set_current_container"):
+		item_actions.set_current_container(container)
 	
 	container_switched.emit(container)
 
@@ -158,7 +180,7 @@ func _on_close_requested():
 
 func _close_window():
 	# Close any open dialog windows first
-	if item_actions:
+	if item_actions and item_actions.has_method("close_all_dialogs"):
 		item_actions.close_all_dialogs()
 	
 	visible = false
@@ -212,20 +234,22 @@ func _remove_lock_indicator():
 		lock_indicator.queue_free()
 
 func _on_item_activated(item: InventoryItem, slot: InventorySlotUI):
-	item_actions.show_item_details_dialog(item)
+	if item_actions and item_actions.has_method("show_item_details_dialog"):
+		item_actions.show_item_details_dialog(item)
 
 func _on_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position: Vector2):
-	item_actions.show_item_context_menu(item, slot, position)
+	if item_actions and item_actions.has_method("show_item_context_menu"):
+		item_actions.show_item_context_menu(item, slot, position)
 
 func _on_container_refreshed():
 	refresh_display()
 	refresh_container_list()
 
 func _show_empty_area_context_menu(global_pos: Vector2):
-	if item_actions:
+	if item_actions and item_actions.has_method("show_empty_area_context_menu"):
 		item_actions.show_empty_area_context_menu(global_pos)
 
-func _set_context_menu_active(handler: InventoryItemActions):
+func _set_context_menu_active(handler: RefCounted):
 	active_context_menu = handler
 
 func _clear_context_menu_active():
@@ -237,18 +261,21 @@ func _unhandled_input(event: InputEvent):
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.pressed:
 			# Check if we have a valid popup
-			if active_context_menu.current_popup and is_instance_valid(active_context_menu.current_popup):
-				var popup = active_context_menu.current_popup
-				var popup_rect = Rect2(popup.position, popup.size)
-				var click_pos = mouse_event.global_position
-				
-				if not popup_rect.has_point(click_pos):
-					# Click is outside popup - close it and clear reference
-					active_context_menu._close_current_popup()
-					active_context_menu = null
+			if active_context_menu.has_method("get") and active_context_menu.get("current_popup"):
+				var popup = active_context_menu.get("current_popup")
+				if is_instance_valid(popup):
+					var popup_rect = Rect2(popup.position, popup.size)
+					var click_pos = mouse_event.global_position
+					
+					if not popup_rect.has_point(click_pos):
+						# Click is outside popup - close it and clear reference
+						if active_context_menu.has_method("_close_current_popup"):
+							active_context_menu._close_current_popup()
+						active_context_menu = null
 			else:
 				# No valid popup but we have a reference - close everything and clear it
-				active_context_menu._close_current_popup()
+				if active_context_menu.has_method("_close_current_popup"):
+					active_context_menu._close_current_popup()
 				active_context_menu = null
 	
 	# Handle window-specific keyboard shortcuts only when visible
