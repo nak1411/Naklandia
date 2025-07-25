@@ -217,8 +217,6 @@ func _create_window_buttons():
 	title_bar.add_child(options_button)
 	
 	_setup_options_menu()
-	
-	# Debug overlay setup is now handled in _setup_debug_overlay()
 
 func _connect_signals():
 	# Title bar dragging
@@ -337,7 +335,7 @@ func _check_hover():
 	)
 	
 	# Force a larger height for the options rect to include all items
-	var calculated_popup_height = 5 * 30  # 5 items (including separators) * 30 pixels each
+	var calculated_popup_height = 3 * 30 + 2 * 4  # 3 items * 30 pixels each, 2 seperators * 4 pixels each
 	var options_rect = Rect2(popup_screen_pos, Vector2(options_popup.size.x, calculated_popup_height))
 	
 	# Use viewport mouse position converted to screen coordinates
@@ -375,44 +373,67 @@ func _check_hover():
 	if options_rect.has_point(screen_mouse_pos):
 		# Mouse is over options popup - check which item
 		var local_mouse = screen_mouse_pos - popup_screen_pos
-		var item_height = 28  # Correct item height
-		var item_y_offset = 3  # Y offset to align with actual menu items
-		var item_spacing = 4  # Spacing between menu items
-		var total_item_height = item_height + item_spacing
-		var hovered_item = int((local_mouse.y - item_y_offset) / total_item_height)
+		
+		# Account for different heights: regular items vs separators
+		var regular_item_height = 30.0
+		var separator_height = 4.0
+		var item_y_offset = 0.0
+		
+		# Calculate which actual menu item we're hovering over
+		var current_y = local_mouse.y - item_y_offset
+		var actual_item_index = -1
+		
+		# Map visual position to actual menu indices with corrected bounds
+		# Menu structure: Lock(0), sep(1), Transparency(2), sep(3), Reset(4)
+		if current_y >= 0 and current_y < regular_item_height:
+			actual_item_index = 0  # Lock Window
+		elif current_y >= regular_item_height and current_y < (regular_item_height + separator_height):
+			actual_item_index = 1  # Separator (non-interactive)
+		elif current_y >= (regular_item_height + separator_height) and current_y < (2 * regular_item_height + separator_height):
+			actual_item_index = 2  # Transparency
+		elif current_y >= (2 * regular_item_height + separator_height) and current_y < (2 * regular_item_height + 2 * separator_height):
+			actual_item_index = 3  # Separator (non-interactive)
+		elif current_y >= (2 * regular_item_height + 2 * separator_height):
+			actual_item_index = 4  # Reset Transparency (removed upper bound check)
 		
 		if debug_hover_rects:
-			# Debug: Draw hovered item rect (use screen coordinates directly)
+			# Calculate the actual Y position of the hovered item
+			var item_actual_y = item_y_offset
+			if actual_item_index == 0:
+				item_actual_y = item_y_offset  # Lock Window at top
+			elif actual_item_index == 1:
+				item_actual_y = item_y_offset + regular_item_height  # Separator after Lock
+			elif actual_item_index == 2:
+				item_actual_y = item_y_offset + regular_item_height + separator_height  # Transparency
+			elif actual_item_index == 3:
+				item_actual_y = item_y_offset + 2 * regular_item_height + separator_height  # Separator after Transparency
+			elif actual_item_index == 4:
+				item_actual_y = item_y_offset + 2 * regular_item_height + 2 * separator_height  # Reset Transparency
+			
+			# Debug: Draw hovered item rect at its actual position
 			var item_rect_screen = Rect2(
 				popup_screen_pos.x,
-				popup_screen_pos.y + item_y_offset + (hovered_item * total_item_height),
+				popup_screen_pos.y + item_actual_y,
 				options_rect.size.x,
-				item_height
+				regular_item_height if actual_item_index in [0, 2, 4] else separator_height
 			)
-			_draw_debug_rect(item_rect_screen, Color.YELLOW, "Item " + str(hovered_item))
+			_draw_debug_rect(item_rect_screen, Color.YELLOW, "Item " + str(actual_item_index))
 			
 			# Debug: Show that we detected mouse over options popup
 			_draw_debug_rect(Rect2(screen_mouse_pos - Vector2(7, 7), Vector2(14, 14)), Color.WHITE, "Over Options")
 			
 			# Debug: Print hovered item to console
-			print("Hovered item: ", hovered_item, " at mouse pos: ", local_mouse)
-			print("Item calc: (", local_mouse.y, " - ", item_y_offset, ") / ", total_item_height, " = ", (local_mouse.y - item_y_offset) / total_item_height)
+			print("Hovered item: ", actual_item_index, " at mouse pos: ", local_mouse)
+			print("Current Y: ", current_y, " (bounds check)")
 		
-		# Account for separators: Lock(0), sep(1), Transparency(2), sep(3), Reset Transparency(4)
-		print("Processing item: ", hovered_item)
-		if hovered_item == 2:  # Transparency item
+		# Handle the actual menu item interactions
+		print("Processing item: ", actual_item_index)
+		if actual_item_index == 2:  # Transparency item
 			print("Opening transparency popup")
 			if not current_transparency_popup or not is_instance_valid(current_transparency_popup) or not current_transparency_popup.visible:
 				_show_transparency_popup()
-		elif hovered_item == 0:  # Lock Window - close transparency popup
-			print("Closing transparency popup (Lock Window)")
-			_close_transparency_popup()
-		elif hovered_item == 3 or hovered_item == 4:
-			print("Hovering separator or Reset Transparency - keeping popup open")
-		else:
-			print("Unknown item ", hovered_item, " - no action")
-		# Don't close transparency popup for Reset Transparency (item 4) or separators
-		# Reset Transparency is related to transparency, so keep the popup open
+		# For all other items, do nothing - keep transparency popup open if it exists
+		# Only close via clicking outside or selecting from transparency popup
 	elif over_transparency_popup:
 		# Mouse is over transparency popup - keep it open
 		if debug_hover_rects:
@@ -421,31 +442,12 @@ func _check_hover():
 		pass
 	else:
 		# Mouse is over NEITHER popup (not options popup and not transparency popup)
-		# Only then check if we're in the bridge area
+		# Don't automatically close transparency popup - only close on clicks outside
 		if current_transparency_popup and is_instance_valid(current_transparency_popup) and current_transparency_popup.visible:
-			# Check if mouse is in the "bridge" area between options popup and transparency popup
-			var bridge_rect_screen = Rect2(
-				options_rect.position.x + options_rect.size.x,
-				options_rect.position.y,  # Start from top of options popup
-				50,  # Wider bridge to cover the gap better
-				options_rect.size.y   # Full height of options popup
-			)
-			
 			if debug_hover_rects:
-				# Debug: Draw bridge rect (use screen coordinates directly)
-				_draw_debug_rect(bridge_rect_screen, Color.MAGENTA, "Bridge Area")
-				
-				# Debug: Print bridge area and mouse position
-				print("Bridge area: ", bridge_rect_screen)
-				print("Mouse in bridge: ", bridge_rect_screen.has_point(screen_mouse_pos))
-			
-			if not bridge_rect_screen.has_point(screen_mouse_pos):
-				if debug_hover_rects:
-					print("Closing transparency popup - mouse outside bridge")
-				_close_transparency_popup()
-			elif debug_hover_rects:
-				# Debug: Show that we're in the bridge area
-				_draw_debug_rect(Rect2(screen_mouse_pos - Vector2(8, 8), Vector2(16, 16)), Color.CYAN, "In Bridge")
+				print("Mouse outside menus but keeping transparency popup open - only close on clicks")
+			# Don't close the transparency popup just for moving mouse outside
+			# It will be closed by click detection in other parts of the code
 
 func _show_transparency_popup():
 	# Clean up any existing popup
