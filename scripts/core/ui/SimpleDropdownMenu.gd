@@ -11,6 +11,8 @@ var submenu_popup: PopupPanel
 var item_height: int = 33
 var menu_width: int = 150
 var submenu_width: int = 100
+var item_padding_horizontal: int = 12
+var item_padding_vertical: int = 6
 
 # State
 var hovered_item_index: int = -1
@@ -100,7 +102,7 @@ func _create_menu_item_button(item_data: Dictionary, index: int) -> Button:
 	if item_data.has_submenu:
 		button.text += " ▶"
 	
-	# Style the button
+	# Style the button with padding
 	_style_menu_button(button)
 	
 	# Connect signals
@@ -125,17 +127,36 @@ func _style_popup(popup: PopupPanel):
 	popup.add_theme_stylebox_override("panel", style_box)
 
 func _style_menu_button(button: Button):
-	# Only override what we need, let Godot handle hover automatically
+	# Set font properties
 	button.add_theme_color_override("font_color", Color.WHITE)
 	button.focus_mode = Control.FOCUS_NONE
 	
-	# Set a subtle normal background so hover shows contrast
+	# Create normal style with padding
 	var normal_style = StyleBoxFlat.new()
 	normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0)  # Dark background
-	normal_style.expand_margin_left = 5
+	normal_style.content_margin_left = item_padding_horizontal
+	normal_style.content_margin_right = item_padding_horizontal
+	normal_style.content_margin_top = item_padding_vertical
+	normal_style.content_margin_bottom = item_padding_vertical
 	button.add_theme_stylebox_override("normal", normal_style)
 	
-	# Let Godot's default hover styling work - don't override it!
+	# Create hover style with padding
+	var hover_style = StyleBoxFlat.new()
+	hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)  # Lighter for hover
+	hover_style.content_margin_left = item_padding_horizontal
+	hover_style.content_margin_right = item_padding_horizontal
+	hover_style.content_margin_top = item_padding_vertical
+	hover_style.content_margin_bottom = item_padding_vertical
+	button.add_theme_stylebox_override("hover", hover_style)
+	
+	# Create pressed style with padding
+	var pressed_style = StyleBoxFlat.new()
+	pressed_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)
+	pressed_style.content_margin_left = item_padding_horizontal
+	pressed_style.content_margin_right = item_padding_horizontal
+	pressed_style.content_margin_top = item_padding_vertical
+	pressed_style.content_margin_bottom = item_padding_vertical
+	button.add_theme_stylebox_override("pressed", pressed_style)
 
 func _start_input_polling():
 	# Use a timer to poll for input - this bypasses event routing issues
@@ -235,8 +256,8 @@ func _show_submenu(item_index: int):
 		submenu_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		submenu_button.flat = false  # Enable default hover styling
 		
-		# Style submenu button
-		_style_menu_button(submenu_button)
+		# Style submenu button with padding
+		_style_submenu_button(submenu_button)
 		
 		# Connect submenu button signals
 		submenu_button.pressed.connect(_on_submenu_item_pressed.bind(submenu_item))
@@ -262,6 +283,41 @@ func _show_submenu(item_index: int):
 	get_viewport().add_child(submenu_popup)
 	submenu_popup.show()
 	submenu_visible = true
+
+func _style_submenu_button(button: Button):
+	# Set font properties
+	button.add_theme_color_override("font_color", Color.WHITE)
+	button.focus_mode = Control.FOCUS_NONE
+	
+	# Create normal style with padding (slightly smaller padding for submenu)
+	var submenu_padding_h = item_padding_horizontal - 2
+	var submenu_padding_v = item_padding_vertical - 1
+	
+	var normal_style = StyleBoxFlat.new()
+	normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0)
+	normal_style.content_margin_left = submenu_padding_h
+	normal_style.content_margin_right = submenu_padding_h
+	normal_style.content_margin_top = submenu_padding_v
+	normal_style.content_margin_bottom = submenu_padding_v
+	button.add_theme_stylebox_override("normal", normal_style)
+	
+	# Create hover style with padding
+	var hover_style = StyleBoxFlat.new()
+	hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
+	hover_style.content_margin_left = submenu_padding_h
+	hover_style.content_margin_right = submenu_padding_h
+	hover_style.content_margin_top = submenu_padding_v
+	hover_style.content_margin_bottom = submenu_padding_v
+	button.add_theme_stylebox_override("hover", hover_style)
+	
+	# Create pressed style with padding
+	var pressed_style = StyleBoxFlat.new()
+	pressed_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)
+	pressed_style.content_margin_left = submenu_padding_h
+	pressed_style.content_margin_right = submenu_padding_h
+	pressed_style.content_margin_top = submenu_padding_v
+	pressed_style.content_margin_bottom = submenu_padding_v
+	button.add_theme_stylebox_override("pressed", pressed_style)
 
 func _hide_submenu():
 	manually_hiding_submenu = true
@@ -381,6 +437,11 @@ func is_menu_visible() -> bool:
 
 func clear_items():
 	menu_items.clear()
+
+func set_item_padding(horizontal: int, vertical: int):
+	"""Set the padding for menu items"""
+	item_padding_horizontal = horizontal
+	item_padding_vertical = vertical
 
 func setup_window_options_menu():
 	"""Setup typical window options menu with transparency submenu"""
