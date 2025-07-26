@@ -4,7 +4,6 @@ extends Control
 
 # Menu structure
 var menu_items: Array[Dictionary] = []
-var current_submenu: Control = null
 var main_popup: PopupPanel
 var submenu_popup: PopupPanel
 
@@ -16,6 +15,8 @@ var submenu_width: int = 100
 # State
 var hovered_item_index: int = -1
 var submenu_visible: bool = false
+var current_submenu_index: int = -1
+var manually_hiding_submenu: bool = false
 
 # Signals
 signal item_selected(item_id: String, item_data: Dictionary)
@@ -43,11 +44,15 @@ func show_menu(show_position: Vector2 = Vector2.ZERO):
 		main_popup.position = Vector2i(global_position)
 	
 	main_popup.popup()
+	
+	# Enable global input handling to catch clicks outside menu
+	set_process_unhandled_input(true)
 
 func _create_main_popup():
 	# Clean up existing popup
-	if main_popup:
+	if main_popup and is_instance_valid(main_popup):
 		main_popup.queue_free()
+		main_popup = null
 	
 	main_popup = PopupPanel.new()
 	main_popup.name = "MainMenuPopup"
@@ -63,9 +68,9 @@ func _create_main_popup():
 		var item_button = _create_menu_item_button(item_data, i)
 		vbox.add_child(item_button)
 	
-	# Set popup size
+	# Set popup size through content
 	var popup_height = menu_items.size() * item_height
-	main_popup.custom_minimum_size = Vector2(menu_width, popup_height)
+	vbox.custom_minimum_size = Vector2(menu_width, popup_height)
 	
 	# Style the popup
 	_style_popup(main_popup)
@@ -73,8 +78,9 @@ func _create_main_popup():
 	# Add to scene
 	get_viewport().add_child(main_popup)
 	
-	# Connect signals
-	main_popup.popup_hide.connect(_on_main_popup_hidden)
+	# Connect popup hide signal to prevent unwanted closure during submenu operations
+	main_popup.popup_hide.connect(_on_main_popup_hide)
+	main_popup.visibility_changed.connect(_on_main_popup_visibility_changed)
 
 func _create_menu_item_button(item_data: Dictionary, index: int) -> Button:
 	var button = Button.new()
@@ -93,7 +99,7 @@ func _create_menu_item_button(item_data: Dictionary, index: int) -> Button:
 	# Connect signals
 	button.pressed.connect(_on_menu_item_pressed.bind(index))
 	button.mouse_entered.connect(_on_menu_item_hovered.bind(index))
-	button.mouse_exited.connect(_on_menu_item_unhovered.bind(index))
+	button.gui_input.connect(_on_menu_item_input.bind(index))
 	
 	return button
 
@@ -133,13 +139,18 @@ func _style_menu_button(button: Button):
 func _on_menu_item_pressed(index: int):
 	var item = menu_items[index]
 	
-	if item.has_submenu:
-		# Don't close menu for submenu items
-		return
-	else:
+	if not item.has_submenu:
 		# Regular item selected
 		item_selected.emit(item.id, item)
 		hide_menu()
+
+func _on_menu_item_input(event: InputEvent, index: int):
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			# Right-click anywhere in menu should close it
+			hide_menu()
+			get_viewport().set_input_as_handled()
 
 func _on_menu_item_hovered(index: int):
 	hovered_item_index = index
@@ -150,19 +161,21 @@ func _on_menu_item_hovered(index: int):
 	else:
 		_hide_submenu()
 
-func _on_menu_item_unhovered(index: int):
-	# Don't immediately hide submenu, let mouse movement handle it
-	pass
-
 func _show_submenu(item_index: int):
 	var item = menu_items[item_index]
 	
 	if not item.has_submenu or item.submenu_items.is_empty():
+		_hide_submenu()
 		return
 	
-	# Clean up existing submenu
-	_hide_submenu()
+	# If showing the same submenu, don't recreate it
+	if current_submenu_index == item_index and submenu_visible:
+		return
 	
+	current_submenu_index = item_index
+	_hide_submenu()  # Hide any existing submenu first
+	
+	# Create new submenu popup
 	submenu_popup = PopupPanel.new()
 	submenu_popup.name = "SubmenuPopup"
 	
@@ -182,14 +195,15 @@ func _show_submenu(item_index: int):
 		# Style submenu button
 		_style_menu_button(submenu_button)
 		
-		# Connect submenu button
+		# Connect submenu button signals
 		submenu_button.pressed.connect(_on_submenu_item_pressed.bind(submenu_item))
+		submenu_button.gui_input.connect(_on_submenu_item_input.bind(submenu_item))
 		
 		vbox.add_child(submenu_button)
 	
-	# Set submenu size
+	# Set submenu size through content
 	var submenu_height = item.submenu_items.size() * item_height
-	submenu_popup.custom_minimum_size = Vector2(submenu_width, submenu_height)
+	vbox.custom_minimum_size = Vector2(submenu_width, submenu_height)
 	
 	# Style submenu
 	_style_popup(submenu_popup)
@@ -203,39 +217,90 @@ func _show_submenu(item_index: int):
 	
 	# Add to scene and show
 	get_viewport().add_child(submenu_popup)
-	submenu_popup.popup()
+	submenu_popup.show()
 	submenu_visible = true
-	
-	# Connect submenu signals
-	submenu_popup.popup_hide.connect(_on_submenu_hidden)
 
 func _hide_submenu():
-	if submenu_popup:
+	manually_hiding_submenu = true
+	
+	if submenu_popup and is_instance_valid(submenu_popup):
+		submenu_popup.visible = false
+		if submenu_popup.get_parent():
+			submenu_popup.get_parent().remove_child(submenu_popup)
 		submenu_popup.queue_free()
 		submenu_popup = null
+	
 	submenu_visible = false
+	current_submenu_index = -1
+	
+	# Use a timer to reset the flag after a short delay to catch delayed signals
+	get_tree().create_timer(0.1).timeout.connect(func(): manually_hiding_submenu = false)
 
 func _on_submenu_item_pressed(submenu_item: Dictionary):
 	item_selected.emit(submenu_item.id, submenu_item)
 	hide_menu()
 
-func _on_submenu_hidden():
-	submenu_visible = false
+func _on_submenu_item_input(event: InputEvent, submenu_item: Dictionary):
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			# Right-click anywhere in submenu should close entire menu
+			hide_menu()
+			get_viewport().set_input_as_handled()
 
-func _on_main_popup_hidden():
-	_hide_submenu()
-	hide_menu()
+func _on_main_popup_hide():
+	if manually_hiding_submenu:
+		# Prevent main popup from closing during submenu operations
+		if main_popup and is_instance_valid(main_popup):
+			main_popup.visible = true
+		return
+
+func _on_main_popup_visibility_changed():
+	if manually_hiding_submenu:
+		# Force the main popup to stay visible during submenu operations
+		if main_popup and is_instance_valid(main_popup) and not main_popup.visible:
+			main_popup.visible = true
+		return
 
 func hide_menu():
-	if main_popup:
+	# Disable global input handling
+	set_process_unhandled_input(false)
+	
+	if main_popup and is_instance_valid(main_popup):
 		main_popup.hide()
 		main_popup.queue_free()
-		main_popup = null
+	main_popup = null
+	
 	_hide_submenu()
+
+func _unhandled_input(event: InputEvent):
+	if not is_menu_visible():
+		return
+	
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed:
+			var click_pos = mouse_event.global_position
+			
+			# Check if click is inside main popup
+			if main_popup and is_instance_valid(main_popup):
+				var main_rect = Rect2(main_popup.position, main_popup.size)
+				if main_rect.has_point(click_pos):
+					return  # Click inside main menu, let menu handle it
+			
+			# Check if click is inside submenu popup
+			if submenu_popup and is_instance_valid(submenu_popup) and submenu_visible:
+				var submenu_rect = Rect2(submenu_popup.position, submenu_popup.size)
+				if submenu_rect.has_point(click_pos):
+					return  # Click inside submenu, let submenu handle it
+			
+			# Click outside menu system - close everything (both left and right clicks)
+			hide_menu()
+			get_viewport().set_input_as_handled()
 
 # Public interface
 func is_menu_visible() -> bool:
-	return main_popup != null and main_popup.visible
+	return main_popup != null and is_instance_valid(main_popup) and main_popup.visible
 
 func clear_items():
 	menu_items.clear()
