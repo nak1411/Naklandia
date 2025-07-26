@@ -221,7 +221,7 @@ func _create_separator() -> Control:
 	line.custom_minimum_size = Vector2(0, 1)
 	
 	var line_style = StyleBoxFlat.new()
-	line_style.bg_color = Color.WHITE
+	line_style.bg_color = Color.DIM_GRAY
 	line_style.border_width_left = 0
 	line_style.border_width_right = 0
 	line_style.border_width_top = 0
@@ -506,7 +506,7 @@ func _calculate_item_y_position(item_index: int) -> int:
 
 func _style_submenu_button(button: Button, enabled: bool = true):
 	# Set font properties - match SimpleDropdownMenu exactly
-	button.add_theme_color_override("font_color", Color.WHITE)
+	button.add_theme_color_override("font_color", Color.LIGHT_GRAY)
 	button.focus_mode = Control.FOCUS_NONE
 	button.flat = false  # Enable default hover styling
 	
