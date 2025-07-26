@@ -238,6 +238,14 @@ func _gui_input(event: InputEvent):
 		
 		# Always grab focus for keyboard input
 		grab_focus()
+		
+func _is_shift_held() -> bool:
+	"""Check if shift key is currently held down"""
+	return Input.is_key_pressed(KEY_SHIFT)
+
+func _is_ctrl_held() -> bool:
+	"""Check if ctrl key is currently held down"""
+	return Input.is_key_pressed(KEY_CTRL)
 
 func _focus_inventory_window():
 	# Find the inventory window and focus it

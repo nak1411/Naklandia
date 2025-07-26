@@ -276,11 +276,15 @@ func _start_drag():
 	if not has_item() or get_viewport().get_node_or_null("DragPreview"):
 		return  # Already dragging or no item
 	
+	# Check if shift is held for partial transfer indication
+	var is_partial_transfer = Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1
+	
 	# Create drag data for container list drops
 	var drag_data = {
 		"source_slot": self,
 		"item": item,
 		"container_id": container_id,
+		"partial_transfer": is_partial_transfer,
 		"success_callback": _on_external_drop_result
 	}
 	
@@ -291,11 +295,28 @@ func _start_drag():
 	var preview = _create_drag_preview()
 	get_viewport().add_child(preview)
 	
+	# Add visual indicator for partial transfer
+	if is_partial_transfer:
+		_add_partial_transfer_indicator(preview)
+	
 	# Start following mouse
 	_follow_mouse(preview)
 	
 	# Emit drag started signal
 	item_drag_started.emit(self, item)
+
+func _add_partial_transfer_indicator(preview: Control):
+	"""Add visual indicator showing this is a partial transfer"""
+	var indicator = Label.new()
+	indicator.text = "½"
+	indicator.position = Vector2(preview.size.x - 15, -5)
+	indicator.size = Vector2(12, 12)
+	indicator.add_theme_font_size_override("font_size", 10)
+	indicator.add_theme_color_override("font_color", Color.YELLOW)
+	indicator.add_theme_color_override("font_shadow_color", Color.BLACK)
+	indicator.add_theme_constant_override("shadow_offset_x", 1)
+	indicator.add_theme_constant_override("shadow_offset_y", 1)
+	preview.add_child(indicator)
 
 func _create_drag_preview() -> Control:
 	var preview = Control.new()
@@ -443,6 +464,11 @@ func _attempt_drop_on_slot(target_slot: InventorySlotUI) -> bool:
 	if not target_slot or not has_item():
 		return false
 	
+	# Check for shift+drop with stackable items - open split dialog
+	if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
+		_show_split_stack_dialog()
+		return true
+	
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
 		return false
@@ -468,11 +494,30 @@ func _attempt_drop_on_slot(target_slot: InventorySlotUI) -> bool:
 		# Move to empty slot
 		return _handle_move_to_empty(target_slot, inventory_manager)
 
+func _show_split_stack_dialog():
+	"""Show split stack dialog using the existing item actions system"""
+	var item_actions = _find_item_actions()
+	if item_actions and item_actions.has_method("show_split_stack_dialog"):
+		item_actions.show_split_stack_dialog(item, self)
+
+func _find_item_actions():
+	"""Find the InventoryItemActions instance in the scene"""
+	var current = get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowUI":
+			return current.item_actions
+		current = current.get_parent()
+	return null
+
 func _handle_stack_merge(target_slot: InventorySlotUI, target_item: InventoryItem) -> bool:
 	
 	var space_available = target_item.max_stack_size - target_item.quantity
 	var amount_to_transfer = min(item.quantity, space_available)
 	
+	# Check if shift is held for partial stack transfer
+	if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
+		# Shift+drag: transfer only half the stack (rounded up)
+		amount_to_transfer = min(amount_to_transfer, (item.quantity + 1) / 2)
 	
 	if amount_to_transfer <= 0:
 		return false
