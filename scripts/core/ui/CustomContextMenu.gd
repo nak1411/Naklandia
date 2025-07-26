@@ -79,7 +79,7 @@ func show_context_menu(show_position: Vector2, data: Dictionary = {}, parent_win
 		final_position = show_position
 	
 	# Add small offset to avoid cursor overlap
-	var popup_offset = Vector2i(5, 5)
+	var popup_offset = Vector2i(15, 15)
 	final_position += Vector2(popup_offset)
 	
 	# Add the popup to the viewport
@@ -197,7 +197,7 @@ func _calculate_optimal_width():
 func _calculate_total_height() -> int:
 	"""Calculate total height including separators"""
 	var total_height = 0
-	var separator_height = 8
+	var separator_height = 1  # Changed from 2 to 1
 	
 	for item in menu_items:
 		if item.get("is_separator", false):
@@ -210,16 +210,22 @@ func _calculate_total_height() -> int:
 func _create_separator() -> Control:
 	"""Create a visual separator line"""
 	var separator_container = Control.new()
-	separator_container.custom_minimum_size = Vector2(menu_width, 8)
+	separator_container.custom_minimum_size = Vector2(0, 1)  # Let VBox control width
+	separator_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	separator_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	
 	var line = Panel.new()
 	line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	line.position.y = 3
-	line.size.y = 2
-	line.custom_minimum_size.y = 2
+	line.add_theme_constant_override("margin_left", 4)  # Add some margin from edges
+	line.add_theme_constant_override("margin_right", 4)
+	line.custom_minimum_size = Vector2(0, 1)
 	
 	var line_style = StyleBoxFlat.new()
-	line_style.bg_color = Color(0.4, 0.4, 0.4, 0.6)
+	line_style.bg_color = Color.WHITE
+	line_style.border_width_left = 0
+	line_style.border_width_right = 0
+	line_style.border_width_top = 0
+	line_style.border_width_bottom = 0
 	line.add_theme_stylebox_override("panel", line_style)
 	
 	separator_container.add_child(line)
@@ -274,13 +280,14 @@ func _style_popup(popup: PopupPanel):
 	popup.add_theme_stylebox_override("panel", style_box)
 
 func _style_menu_button(button: Button, enabled: bool = true):
-	# Set font properties
+	# Set font properties - match SimpleDropdownMenu exactly
 	var font_color = Color.WHITE if enabled else Color(0.6, 0.6, 0.6, 1.0)
 	button.add_theme_color_override("font_color", font_color)
 	button.add_theme_color_override("font_disabled_color", Color(0.4, 0.4, 0.4, 1.0))
 	button.focus_mode = Control.FOCUS_NONE
+	button.flat = false  # Enable default button styling including hover
 	
-	# Create normal style with padding
+	# Create normal style with padding - exact same colors as SimpleDropdownMenu
 	var normal_style = StyleBoxFlat.new()
 	normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0) if enabled else Color(0.1, 0.1, 0.1, 1.0)
 	normal_style.content_margin_left = item_padding_horizontal
@@ -290,7 +297,7 @@ func _style_menu_button(button: Button, enabled: bool = true):
 	button.add_theme_stylebox_override("normal", normal_style)
 	
 	if enabled:
-		# Create hover style with padding
+		# Create hover style with padding - exact same color as SimpleDropdownMenu
 		var hover_style = StyleBoxFlat.new()
 		hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
 		hover_style.content_margin_left = item_padding_horizontal
@@ -299,7 +306,7 @@ func _style_menu_button(button: Button, enabled: bool = true):
 		hover_style.content_margin_bottom = item_padding_vertical
 		button.add_theme_stylebox_override("hover", hover_style)
 		
-		# Create pressed style with padding
+		# Create pressed style with padding - exact same color as SimpleDropdownMenu
 		var pressed_style = StyleBoxFlat.new()
 		pressed_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)
 		pressed_style.content_margin_left = item_padding_horizontal
@@ -473,7 +480,7 @@ func _show_submenu(item_index: int):
 
 func _calculate_submenu_height(submenu_items: Array) -> int:
 	var height = 0
-	var separator_height = 8
+	var separator_height = 1  # Changed from 2 to 1
 	
 	for item in submenu_items:
 		if item.get("is_separator", false):
@@ -486,7 +493,7 @@ func _calculate_submenu_height(submenu_items: Array) -> int:
 func _calculate_item_y_position(item_index: int) -> int:
 	"""Calculate Y position of item considering separators"""
 	var y_pos = 0
-	var separator_height = 8
+	var separator_height = 1  # Changed from 2 to 1
 	
 	for i in range(item_index):
 		var item = menu_items[i]
@@ -498,42 +505,40 @@ func _calculate_item_y_position(item_index: int) -> int:
 	return y_pos
 
 func _style_submenu_button(button: Button, enabled: bool = true):
-	# Set font properties
-	var font_color = Color.WHITE if enabled else Color(0.6, 0.6, 0.6, 1.0)
-	button.add_theme_color_override("font_color", font_color)
-	button.add_theme_color_override("font_disabled_color", Color(0.4, 0.4, 0.4, 1.0))
+	# Set font properties - match SimpleDropdownMenu exactly
+	button.add_theme_color_override("font_color", Color.WHITE)
 	button.focus_mode = Control.FOCUS_NONE
+	button.flat = false  # Enable default hover styling
 	
-	# Create normal style with padding (slightly smaller padding for submenu)
+	# Create normal style with padding - exact same padding reduction as SimpleDropdownMenu
 	var submenu_padding_h = item_padding_horizontal - 2
 	var submenu_padding_v = item_padding_vertical - 1
 	
 	var normal_style = StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0) if enabled else Color(0.1, 0.1, 0.1, 1.0)
+	normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0)
 	normal_style.content_margin_left = submenu_padding_h
 	normal_style.content_margin_right = submenu_padding_h
 	normal_style.content_margin_top = submenu_padding_v
 	normal_style.content_margin_bottom = submenu_padding_v
 	button.add_theme_stylebox_override("normal", normal_style)
 	
-	if enabled:
-		# Create hover style with padding
-		var hover_style = StyleBoxFlat.new()
-		hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
-		hover_style.content_margin_left = submenu_padding_h
-		hover_style.content_margin_right = submenu_padding_h
-		hover_style.content_margin_top = submenu_padding_v
-		hover_style.content_margin_bottom = submenu_padding_v
-		button.add_theme_stylebox_override("hover", hover_style)
-		
-		# Create pressed style with padding
-		var pressed_style = StyleBoxFlat.new()
-		pressed_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)
-		pressed_style.content_margin_left = submenu_padding_h
-		pressed_style.content_margin_right = submenu_padding_h
-		pressed_style.content_margin_top = submenu_padding_v
-		pressed_style.content_margin_bottom = submenu_padding_v
-		button.add_theme_stylebox_override("pressed", pressed_style)
+	# Create hover style with padding - exact same color as SimpleDropdownMenu
+	var hover_style = StyleBoxFlat.new()
+	hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
+	hover_style.content_margin_left = submenu_padding_h
+	hover_style.content_margin_right = submenu_padding_h
+	hover_style.content_margin_top = submenu_padding_v
+	hover_style.content_margin_bottom = submenu_padding_v
+	button.add_theme_stylebox_override("hover", hover_style)
+	
+	# Create pressed style with padding - exact same color as SimpleDropdownMenu
+	var pressed_style = StyleBoxFlat.new()
+	pressed_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)
+	pressed_style.content_margin_left = submenu_padding_h
+	pressed_style.content_margin_right = submenu_padding_h
+	pressed_style.content_margin_top = submenu_padding_v
+	pressed_style.content_margin_bottom = submenu_padding_v
+	button.add_theme_stylebox_override("pressed", pressed_style)
 
 func _hide_submenu():
 	manually_hiding_submenu = true
