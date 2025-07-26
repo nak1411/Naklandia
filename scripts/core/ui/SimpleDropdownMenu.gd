@@ -1,4 +1,4 @@
-# SimpleDropdownMenu.gd - Clean dropdown menu with submenu support
+# SimpleDropdownMenu.gd - Clean dropdown menu with submenu support and proper right-click handling
 class_name SimpleDropdownMenu
 extends Control
 
@@ -45,8 +45,12 @@ func show_menu(show_position: Vector2 = Vector2.ZERO):
 	
 	main_popup.popup()
 	
-	# Enable global input handling to catch clicks outside menu
+	# Enable input processing
 	set_process_unhandled_input(true)
+	set_process_input(true)
+	
+	# Start input polling for reliable click detection
+	_start_input_polling()
 
 func _create_main_popup():
 	# Clean up existing popup
@@ -262,9 +266,62 @@ func _on_main_popup_visibility_changed():
 			main_popup.visible = true
 		return
 
+func _start_input_polling():
+	# Use a timer to poll for input - this bypasses event routing issues
+	var input_timer = Timer.new()
+	input_timer.name = "InputPollingTimer"
+	input_timer.wait_time = 0.05  # Poll at 20fps for responsiveness
+	input_timer.timeout.connect(_poll_for_input)
+	add_child(input_timer)
+	input_timer.start()
+
+func _poll_for_input():
+	if not is_menu_visible():
+		return
+	
+	# Check if right mouse button was just pressed
+	if Input.is_action_just_pressed("ui_cancel") or _is_right_click_just_pressed():
+		var mouse_pos = get_global_mouse_position()
+		
+		# Check if we should close menu
+		if _should_close_menu_at_position(mouse_pos):
+			hide_menu()
+
+var _previous_right_click_state: bool = false
+
+func _is_right_click_just_pressed() -> bool:
+	var current_state = Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	var just_pressed = current_state and not _previous_right_click_state
+	_previous_right_click_state = current_state
+	return just_pressed
+
+func _should_close_menu_at_position(mouse_pos: Vector2) -> bool:
+	# Check if click is inside main popup
+	if main_popup and is_instance_valid(main_popup):
+		var main_rect = Rect2(main_popup.position, main_popup.size)
+		if main_rect.has_point(mouse_pos):
+			return false  # Don't close if inside main menu
+	
+	# Check if click is inside submenu popup
+	if submenu_popup and is_instance_valid(submenu_popup) and submenu_visible:
+		var submenu_rect = Rect2(submenu_popup.position, submenu_popup.size)
+		if submenu_rect.has_point(mouse_pos):
+			return false  # Don't close if inside submenu
+	
+	return true  # Close menu
+
 func hide_menu():
-	# Disable global input handling
+	# Disable input processing methods
 	set_process_unhandled_input(false)
+	set_process_input(false)
+	
+	# Clean up polling timer
+	var timer = get_node_or_null("InputPollingTimer")
+	if timer:
+		timer.queue_free()
+	
+	# Reset right-click state
+	_previous_right_click_state = false
 	
 	if main_popup and is_instance_valid(main_popup):
 		main_popup.hide()
@@ -274,6 +331,31 @@ func hide_menu():
 	_hide_submenu()
 
 func _unhandled_input(event: InputEvent):
+	if not is_menu_visible():
+		return
+	
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed:
+			var click_pos = mouse_event.global_position
+			
+			# Check if click is inside main popup
+			if main_popup and is_instance_valid(main_popup):
+				var main_rect = Rect2(main_popup.position, main_popup.size)
+				if main_rect.has_point(click_pos):
+					return  # Click inside main menu, let menu handle it
+			
+			# Check if click is inside submenu popup
+			if submenu_popup and is_instance_valid(submenu_popup) and submenu_visible:
+				var submenu_rect = Rect2(submenu_popup.position, submenu_popup.size)
+				if submenu_rect.has_point(click_pos):
+					return  # Click inside submenu, let submenu handle it
+			
+			# Click outside menu system - close everything (both left and right clicks)
+			hide_menu()
+			get_viewport().set_input_as_handled()
+
+func _input(event: InputEvent):
 	if not is_menu_visible():
 		return
 	
