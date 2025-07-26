@@ -151,6 +151,7 @@ func _create_window_buttons():
 		close_button.size = button_size
 		close_button.position = Vector2(size.x - button_size.x - 8, button_y)
 		close_button.flat = true
+		close_button.focus_mode = Control.FOCUS_NONE
 		close_button.add_theme_font_size_override("font_size", 16)
 		close_button.add_theme_color_override("font_color", Color.WHITE)
 		title_bar.add_child(close_button)
@@ -166,6 +167,7 @@ func _create_window_buttons():
 			max_x -= button_size.x + button_spacing
 		maximize_button.position = Vector2(max_x, button_y)
 		maximize_button.flat = true
+		maximize_button.focus_mode = Control.FOCUS_NONE
 		maximize_button.add_theme_font_size_override("font_size", 12)
 		maximize_button.add_theme_color_override("font_color", Color.WHITE)
 		title_bar.add_child(maximize_button)
@@ -183,6 +185,7 @@ func _create_window_buttons():
 			min_x -= button_size.x + button_spacing
 		minimize_button.position = Vector2(min_x, button_y)
 		minimize_button.flat = true
+		minimize_button.focus_mode = Control.FOCUS_NONE
 		minimize_button.add_theme_font_size_override("font_size", 12)
 		minimize_button.add_theme_color_override("font_color", Color.WHITE)
 		title_bar.add_child(minimize_button)
@@ -201,6 +204,7 @@ func _create_window_buttons():
 		options_x -= button_size.x + button_spacing
 	options_button.position = Vector2(options_x, button_y)
 	options_button.flat = true
+	options_button.focus_mode = Control.FOCUS_NONE  # Remove white highlight
 	options_button.add_theme_font_size_override("font_size", 12)
 	options_button.add_theme_color_override("font_color", Color.WHITE)
 	title_bar.add_child(options_button)

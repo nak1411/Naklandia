@@ -8,7 +8,7 @@ var main_popup: PopupPanel
 var submenu_popup: PopupPanel
 
 # Visual properties
-var item_height: int = 28
+var item_height: int = 33
 var menu_width: int = 150
 var submenu_width: int = 100
 
@@ -17,6 +17,9 @@ var hovered_item_index: int = -1
 var submenu_visible: bool = false
 var current_submenu_index: int = -1
 var manually_hiding_submenu: bool = false
+
+# Input polling for right-click detection
+var _previous_right_click_state: bool = false
 
 # Signals
 signal item_selected(item_id: String, item_data: Dictionary)
@@ -91,7 +94,7 @@ func _create_menu_item_button(item_data: Dictionary, index: int) -> Button:
 	button.text = item_data.text
 	button.custom_minimum_size = Vector2(menu_width, item_height)
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.flat = true
+	button.flat = false  # Enable default button styling including hover
 	
 	# Add submenu indicator
 	if item_data.has_submenu:
@@ -115,30 +118,66 @@ func _style_popup(popup: PopupPanel):
 	style_box.border_width_top = 1
 	style_box.border_width_bottom = 1
 	style_box.border_color = Color(0.4, 0.4, 0.4, 1.0)
-	style_box.corner_radius_top_left = 4
-	style_box.corner_radius_top_right = 4
-	style_box.corner_radius_bottom_left = 4
-	style_box.corner_radius_bottom_right = 4
+	style_box.corner_radius_top_left = 2
+	style_box.corner_radius_top_right = 2
+	style_box.corner_radius_bottom_left = 2
+	style_box.corner_radius_bottom_right = 2
 	popup.add_theme_stylebox_override("panel", style_box)
 
 func _style_menu_button(button: Button):
-	# Normal state
+	# Only override what we need, let Godot handle hover automatically
+	button.add_theme_color_override("font_color", Color.WHITE)
+	button.focus_mode = Control.FOCUS_NONE
+	
+	# Set a subtle normal background so hover shows contrast
 	var normal_style = StyleBoxFlat.new()
-	normal_style.bg_color = Color.TRANSPARENT
+	normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0)  # Dark background
+	normal_style.expand_margin_left = 5
 	button.add_theme_stylebox_override("normal", normal_style)
 	
-	# Hover state
-	var hover_style = StyleBoxFlat.new()
-	hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
-	button.add_theme_stylebox_override("hover", hover_style)
+	# Let Godot's default hover styling work - don't override it!
+
+func _start_input_polling():
+	# Use a timer to poll for input - this bypasses event routing issues
+	var input_timer = Timer.new()
+	input_timer.name = "InputPollingTimer"
+	input_timer.wait_time = 0.05  # Poll at 20fps for responsiveness
+	input_timer.timeout.connect(_poll_for_input)
+	add_child(input_timer)
+	input_timer.start()
+
+func _poll_for_input():
+	if not is_menu_visible():
+		return
 	
-	# Pressed state
-	var pressed_style = StyleBoxFlat.new()
-	pressed_style.bg_color = Color(0.4, 0.4, 0.4, 1.0)
-	button.add_theme_stylebox_override("pressed", pressed_style)
+	# Check if right mouse button was just pressed
+	if Input.is_action_just_pressed("ui_cancel") or _is_right_click_just_pressed():
+		var mouse_pos = get_global_mouse_position()
+		
+		# Check if we should close menu
+		if _should_close_menu_at_position(mouse_pos):
+			hide_menu()
+
+func _is_right_click_just_pressed() -> bool:
+	var current_state = Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	var just_pressed = current_state and not _previous_right_click_state
+	_previous_right_click_state = current_state
+	return just_pressed
+
+func _should_close_menu_at_position(mouse_pos: Vector2) -> bool:
+	# Check if click is inside main popup
+	if main_popup and is_instance_valid(main_popup):
+		var main_rect = Rect2(main_popup.position, main_popup.size)
+		if main_rect.has_point(mouse_pos):
+			return false  # Don't close if inside main menu
 	
-	# Text color
-	button.add_theme_color_override("font_color", Color.WHITE)
+	# Check if click is inside submenu popup
+	if submenu_popup and is_instance_valid(submenu_popup) and submenu_visible:
+		var submenu_rect = Rect2(submenu_popup.position, submenu_popup.size)
+		if submenu_rect.has_point(mouse_pos):
+			return false  # Don't close if inside submenu
+	
+	return true  # Close menu
 
 func _on_menu_item_pressed(index: int):
 	var item = menu_items[index]
@@ -194,7 +233,7 @@ func _show_submenu(item_index: int):
 		submenu_button.text = submenu_item.text
 		submenu_button.custom_minimum_size = Vector2(submenu_width, item_height)
 		submenu_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		submenu_button.flat = true
+		submenu_button.flat = false  # Enable default hover styling
 		
 		# Style submenu button
 		_style_menu_button(submenu_button)
@@ -265,50 +304,6 @@ func _on_main_popup_visibility_changed():
 		if main_popup and is_instance_valid(main_popup) and not main_popup.visible:
 			main_popup.visible = true
 		return
-
-func _start_input_polling():
-	# Use a timer to poll for input - this bypasses event routing issues
-	var input_timer = Timer.new()
-	input_timer.name = "InputPollingTimer"
-	input_timer.wait_time = 0.05  # Poll at 20fps for responsiveness
-	input_timer.timeout.connect(_poll_for_input)
-	add_child(input_timer)
-	input_timer.start()
-
-func _poll_for_input():
-	if not is_menu_visible():
-		return
-	
-	# Check if right mouse button was just pressed
-	if Input.is_action_just_pressed("ui_cancel") or _is_right_click_just_pressed():
-		var mouse_pos = get_global_mouse_position()
-		
-		# Check if we should close menu
-		if _should_close_menu_at_position(mouse_pos):
-			hide_menu()
-
-var _previous_right_click_state: bool = false
-
-func _is_right_click_just_pressed() -> bool:
-	var current_state = Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
-	var just_pressed = current_state and not _previous_right_click_state
-	_previous_right_click_state = current_state
-	return just_pressed
-
-func _should_close_menu_at_position(mouse_pos: Vector2) -> bool:
-	# Check if click is inside main popup
-	if main_popup and is_instance_valid(main_popup):
-		var main_rect = Rect2(main_popup.position, main_popup.size)
-		if main_rect.has_point(mouse_pos):
-			return false  # Don't close if inside main menu
-	
-	# Check if click is inside submenu popup
-	if submenu_popup and is_instance_valid(submenu_popup) and submenu_visible:
-		var submenu_rect = Rect2(submenu_popup.position, submenu_popup.size)
-		if submenu_rect.has_point(mouse_pos):
-			return false  # Don't close if inside submenu
-	
-	return true  # Close menu
 
 func hide_menu():
 	# Disable input processing methods
