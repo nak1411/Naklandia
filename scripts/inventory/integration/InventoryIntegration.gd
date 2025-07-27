@@ -1,4 +1,5 @@
 # InventoryIntegration.gd - Integrates inventory system with player
+# Merged functionality from PlayerInventorySetup for streamlined initialization
 class_name InventoryIntegration
 extends Node
 
@@ -12,14 +13,21 @@ var ui_canvas: CanvasLayer
 var is_inventory_open: bool = false
 var input_consumed: bool = false
 
+# Setup tracking (merged from PlayerInventorySetup)
+var setup_complete: bool = false
+
 # Input action names
 const TOGGLE_INVENTORY = "toggle_inventory"
 
 # Signals
 signal inventory_toggled(is_open: bool)
 signal item_used(item: InventoryItem_Base)
+signal setup_completed() # New signal for when system is fully initialized
 
 func _ready():
+	print("Setting up inventory system...")
+	
+	# Initialize in sequence with proper waiting
 	_setup_input_actions()
 	_initialize_inventory_system()
 	
@@ -32,6 +40,11 @@ func _ready():
 	# Add test items AFTER everything is set up
 	await get_tree().process_frame
 	_add_initial_test_items()
+	
+	# Mark setup as complete
+	setup_complete = true
+	setup_completed.emit()
+	print("Inventory system initialized. Press I to open inventory!")
 
 func _add_initial_test_items():
 	if inventory_manager:
@@ -85,34 +98,6 @@ func _setup_ui():
 		inventory_window.hide()
 		inventory_window.visible = false
 
-func _on_inventory_item_transferred(item: InventoryItem_Base, from_container: String, to_container: String):
-	# Only refresh if transfer involves player inventory
-	var player_inv = inventory_manager.get_player_inventory()
-	if player_inv and (from_container == player_inv.container_id or to_container == player_inv.container_id):
-		_schedule_ui_refresh()
-
-func _on_inventory_transaction_completed(transaction: Dictionary):
-	# Only refresh if transaction involves player inventory
-	var player_inv = inventory_manager.get_player_inventory()
-	if player_inv:
-		var from_container = transaction.get("from_container", "")
-		var to_container = transaction.get("to_container", "")
-		if from_container == player_inv.container_id or to_container == player_inv.container_id:
-			_schedule_ui_refresh()
-
-var _refresh_scheduled: bool = false
-
-func _schedule_ui_refresh():
-	if _refresh_scheduled:
-		return
-	_refresh_scheduled = true
-	call_deferred("_do_ui_refresh")
-
-func _do_ui_refresh():
-	_refresh_scheduled = false
-	if inventory_window and inventory_window.visible:
-		inventory_window.refresh_display()
-
 func _connect_signals():
 	# Player reference
 	player = get_parent() as Player
@@ -144,6 +129,29 @@ func _connect_all_container_signals():
 		if not container.item_moved.is_connected(_on_container_item_moved):
 			container.item_moved.connect(_on_container_item_moved)
 
+# Signal handlers
+func _on_inventory_window_closed():
+	close_inventory()
+
+func _on_container_switched(container_id: String):
+	# Handle container switching logic if needed
+	pass
+
+func _on_inventory_item_transferred(item: InventoryItem_Base, from_container: String, to_container: String):
+	# Only refresh if transfer involves player inventory
+	var player_inv = inventory_manager.get_player_inventory()
+	if player_inv and (from_container == player_inv.container_id or to_container == player_inv.container_id):
+		_schedule_ui_refresh()
+
+func _on_inventory_transaction_completed(transaction: Dictionary):
+	# Only refresh if transaction involves player inventory
+	var player_inv = inventory_manager.get_player_inventory()
+	if player_inv:
+		var from_container = transaction.get("from_container", "")
+		var to_container = transaction.get("to_container", "")
+		if from_container == player_inv.container_id or to_container == player_inv.container_id:
+			_schedule_ui_refresh()
+
 func _on_container_item_changed(item: InventoryItem_Base, position: Vector2i):
 	# Immediate UI refresh when any container changes
 	_schedule_ui_refresh()
@@ -155,10 +163,29 @@ func _on_container_item_moved(item: InventoryItem_Base, from_pos: Vector2i, to_p
 	# Immediate UI refresh when items are moved
 	_schedule_ui_refresh()
 
+# UI refresh management
+var _refresh_scheduled: bool = false
+
+func _schedule_ui_refresh():
+	if _refresh_scheduled:
+		return
+	_refresh_scheduled = true
+	call_deferred("_do_ui_refresh")
+
+func _do_ui_refresh():
+	_refresh_scheduled = false
+	if inventory_window and inventory_window.visible:
+		inventory_window.refresh_display()
+
+# Input handling (enhanced with setup completion check from PlayerInventorySetup)
 func _unhandled_input(event: InputEvent):
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_I:
-			toggle_inventory()
+			print("I key pressed")
+			if setup_complete:
+				toggle_inventory()
+			else:
+				print("Inventory not ready yet!")
 			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_ESCAPE and is_inventory_open:
 			close_inventory()
@@ -170,9 +197,9 @@ func _unhandled_input(event: InputEvent):
 			refresh_all_ui()  # Force complete UI refresh
 			get_viewport().set_input_as_handled()
 
-# Inventory management
+# Inventory UI control
 func toggle_inventory():
-	if input_consumed:
+	if input_consumed or not setup_complete:
 		return
 	
 	input_consumed = true
@@ -182,36 +209,19 @@ func toggle_inventory():
 		print("Inventory window not ready!")
 		return
 	
-	# Check current state and toggle
-	if inventory_window.visible:
-		# Close the inventory - this will also close dialog windows
+	if is_inventory_open:
 		close_inventory()
 	else:
-		# Open the inventory
-		is_inventory_open = true
-		inventory_window.position = Vector2i(((DisplayServer.screen_get_size().x / 2) - 200) / 2, ((DisplayServer.screen_get_size().y / 2) - 200) / 2)
-		inventory_window.visible = true
-		inventory_window.grab_focus()
-		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	
-	inventory_toggled.emit(is_inventory_open)
-
-func _on_inventory_window_closed():
-	# Close any open dialog windows when inventory window is closed
-	if inventory_window and inventory_window.item_actions and inventory_window.item_actions.has_method("close_all_dialogs"):
-		inventory_window.item_actions.close_all_dialogs()
-	
-	is_inventory_open = false
-	# Ensure mouse mode is captured for gameplay
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	inventory_toggled.emit(is_inventory_open)
+		open_inventory()
 
 func open_inventory():
-	if not inventory_window:
-		print("Inventory window not ready!")
+	if not inventory_window or not setup_complete:
 		return
 	if not is_inventory_open:
-		toggle_inventory()
+		inventory_window.visible = true
+		is_inventory_open = true
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		inventory_toggled.emit(is_inventory_open)
 
 func close_inventory():
 	if not inventory_window:
@@ -346,104 +356,30 @@ func _equip_module(item: InventoryItem_Base) -> bool:
 	print("Equipping module: ", item.item_name)
 	return true
 
-# Event handlers
-func _on_container_switched(container: InventoryContainer_Base):
-	print("Switched to container: ", container.container_name)
-
-func _on_item_transferred(item: InventoryItem_Base, from_container: String, to_container: String):
-	print("Item transferred: %s from %s to %s" % [item.item_name, from_container, to_container])
-
-func _on_transaction_completed(transaction: Dictionary):
-	_show_transaction_notification(transaction)
-
-# Item usage
-func _use_item(item: InventoryItem_Base):
-	match item.item_type:
-		InventoryItem_Base.ItemType.CONSUMABLE:
-			_use_consumable_item(item)
-		InventoryItem_Base.ItemType.WEAPON, InventoryItem_Base.ItemType.ARMOR, InventoryItem_Base.ItemType.MODULE:
-			equip_item(item)
-		InventoryItem_Base.ItemType.SKILL_BOOK:
-			_learn_skill_book(item)
-		_:
-			print("Cannot use item: ", item.item_name)
-	
-	item_used.emit(item)
-
-func _use_consumable_item(item: InventoryItem_Base):
-	# TODO: Implement consumable effects
-	match item.item_name.to_lower():
-		"health potion":
-			_heal_player(50)
-		"energy drink":
-			_restore_energy(30)
-		"repair kit":
-			_repair_equipment(25)
-		_:
-			print("Unknown consumable: ", item.item_name)
-	
-	# Consume one item
-	consume_item(item.item_id, 1)
-
-func _learn_skill_book(item: InventoryItem_Base):
-	# TODO: Integrate with skill system
-	print("Learning skill: ", item.item_name)
-	consume_item(item.item_id, 1)
-
-# Player effects
-func _heal_player(amount: int):
-	# TODO: Integrate with player health system
-	print("Healing player for %d health" % amount)
-
-func _restore_energy(amount: int):
-	# TODO: Integrate with player energy system
-	print("Restoring %d energy" % amount)
-
-func _repair_equipment(amount: int):
-	# TODO: Integrate with equipment durability system
-	print("Repairing equipment for %d points" % amount)
-
-# World item conversion
+# Helper methods for world interaction
 func _convert_world_item_to_inventory_item(world_item: Node) -> InventoryItem_Base:
-	# TODO: Convert world objects to inventory items
-	# This would read properties from the world object and create an InventoryItem_Base
-	
-	# Example implementation
-	var item = InventoryItem_Base.new()
-	item.item_name = world_item.name
-	var fallback_id = world_item.name.to_lower().replace(" ", "_")
-	item.item_id = world_item.get("item_id") if world_item.has("item_id") else fallback_id
-	
-	# Set properties based on world item
-	if world_item.has_method("get_item_properties"):
-		var properties = world_item.get_item_properties()
-		item.volume = properties.get("volume") if properties.has("volume") else 1.0
-		item.mass = properties.get("mass") if properties.has("mass") else 1.0
-		item.base_value = properties.get("value") if properties.has("value") else 0.0
-		item.item_type = properties.get("type") if properties.has("type") else InventoryItem_Base.ItemType.MISCELLANEOUS
-	
-	return item
+	# TODO: Implement conversion from world objects to inventory items
+	# This should read the world item's properties and create appropriate inventory item
+	return null
 
 func _create_world_item_from_inventory_item(item: InventoryItem_Base, position: Vector3):
-	# TODO: Create world objects from inventory items
-	# This would spawn a physical object in the world that can be picked up
-	print("Dropping item %s at position %s" % [item.item_name, position])
+	# TODO: Implement creation of world objects from inventory items
+	# This should spawn a world object at the specified position
+	pass
 
-# UI notifications
+# UI Notifications
 func _show_item_pickup_notification(item: InventoryItem_Base):
-	# Create pickup notification
-	var notification = _create_notification("+ %s" % item.item_name, Color.GREEN)
+	var notification = _create_pickup_notification(item)
 	_show_notification(notification, 2.0)
 
-func _show_transaction_notification(transaction: Dictionary):
-	var message = "Moved %s to %s" % [transaction.item_name, transaction.to_container]
-	var notification = _create_notification(message, Color.CYAN)
-	_show_notification(notification, 1.5)
-
-func _create_notification(text: String, color: Color) -> Label:
+func _create_pickup_notification(item: InventoryItem_Base) -> Label:
 	var notification = Label.new()
-	notification.text = text
-	notification.add_theme_color_override("font_color", color)
+	notification.text = "Picked up: " + item.item_name
+	if item.quantity > 1:
+		notification.text += " x" + str(item.quantity)
+	
+	notification.modulate.a = 0.0
+	notification.add_theme_color_override("font_color", Color.GREEN)
 	notification.add_theme_color_override("font_shadow_color", Color.BLACK)
 	notification.add_theme_constant_override("shadow_offset_x", 1)
 	notification.add_theme_constant_override("shadow_offset_y", 1)
@@ -478,7 +414,8 @@ func _play_pickup_sound():
 func save_inventory_state() -> Dictionary:
 	var state = {
 		"inventory_manager": {},
-		"settings": {}
+		"settings": {},
+		"setup_complete": setup_complete
 	}
 	
 	if inventory_manager:
@@ -489,7 +426,7 @@ func save_inventory_state() -> Dictionary:
 
 func load_inventory_state(state: Dictionary):
 	var settings = state.get("settings", {})
-	# No HUD settings to load
+	setup_complete = state.get("setup_complete", false)
 
 # Public interface
 func get_inventory_manager() -> InventoryManager:
@@ -500,6 +437,9 @@ func get_inventory_window() -> InventoryWindow:
 
 func is_inventory_window_open() -> bool:
 	return is_inventory_open
+
+func is_setup_complete() -> bool:
+	return setup_complete
 
 # Debug functions
 func add_test_items():
