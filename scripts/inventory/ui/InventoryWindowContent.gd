@@ -7,6 +7,8 @@ var container_list: ItemList
 var inventory_grid: InventoryGrid
 var mass_info_bar: Panel
 var mass_info_label: Label
+var external_container_list: ItemList = null
+var using_external_container_list: bool = false
 
 # References
 var inventory_manager: InventoryManager
@@ -50,9 +52,22 @@ func _remove_split_container_outline():
 	
 	set_theme(theme)
 
+func set_external_container_list(external_list: ItemList):
+	external_container_list = external_list
+	using_external_container_list = true
+	
+	# If the content is already set up, we need to reconnect signals
+	if external_list:
+		container_list = external_list  # Use the external list as our container_list reference
+
+# Modify the existing _setup_content method
 func _setup_content():
-	_setup_left_panel()
-	_setup_right_panel()
+	if using_external_container_list:
+		# Only setup right panel since left panel is handled externally
+		_setup_right_panel_only()
+	else:
+		# Original behavior
+		_setup_right_panel()
 
 func _setup_left_panel():
 	var left_panel = VBoxContainer.new()
@@ -98,6 +113,34 @@ func _setup_left_panel():
 	
 	# Set up drop area handling
 	_setup_container_drop_handling()
+
+func _setup_right_panel_only():
+	# Create the right panel content directly (no HSplitContainer needed)
+	var inventory_area = VBoxContainer.new()
+	inventory_area.name = "InventoryArea"
+	inventory_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_area.add_theme_constant_override("separation", 4)
+	add_child(inventory_area)
+	
+	_setup_mass_info_bar(inventory_area)
+	
+	var grid_scroll = ScrollContainer.new()
+	grid_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	grid_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	grid_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	inventory_area.add_child(grid_scroll)
+	
+	inventory_grid = InventoryGrid.new()
+	inventory_grid.name = "InventoryGrid"
+	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	grid_scroll.add_child(inventory_grid)
+	
+	# Connect grid signals properly
+	inventory_grid.item_activated.connect(_on_item_activated)
+	inventory_grid.item_context_menu.connect(_on_item_context_menu)
 
 func _setup_right_panel():
 	var inventory_area = VBoxContainer.new()
@@ -186,17 +229,22 @@ func set_inventory_manager(manager: InventoryManager):
 
 func update_containers(containers: Array[InventoryContainer_Base]):
 	open_containers = containers
-	container_list.clear()
 	
-	for container in containers:
-		var total_qty = container.get_total_quantity()
-		var unique_items = container.get_item_count()
+	# Use external container list if available, otherwise use internal one
+	var list_to_update = external_container_list if using_external_container_list else container_list
+	
+	if list_to_update:
+		list_to_update.clear()
 		
-		var container_text = container.container_name
-		
-		container_list.add_item(container_text)
-		var item_index = container_list.get_item_count() - 1
-		container_list.set_item_tooltip(item_index, container_text)
+		for container in containers:
+			var total_qty = container.get_total_quantity()
+			var unique_items = container.get_item_count()
+			
+			var container_text = container.container_name
+			
+			list_to_update.add_item(container_text)
+			var item_index = list_to_update.get_item_count() - 1
+			list_to_update.set_item_tooltip(item_index, container_text)
 
 func select_container(container: InventoryContainer_Base):
 	current_container = container
@@ -214,7 +262,9 @@ func select_container(container: InventoryContainer_Base):
 
 func select_container_index(index: int):
 	if index >= 0 and index < open_containers.size():
-		container_list.select(index)
+		var list_to_use = external_container_list if using_external_container_list else container_list
+		if list_to_use:
+			list_to_use.select(index)
 
 func refresh_display():
 	if inventory_grid and current_container:

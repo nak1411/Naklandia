@@ -43,39 +43,91 @@ func _ready():
 	visible = false
 
 func _setup_inventory_ui():
-	# Create a margin container to add padding between title bar and content
-	var margin_wrapper = MarginContainer.new()
-	margin_wrapper.name = "MarginWrapper"
-	margin_wrapper.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin_wrapper.add_theme_constant_override("margin_top", 8)
-	margin_wrapper.add_theme_constant_override("margin_left", 4)
-	margin_wrapper.add_theme_constant_override("margin_right", 4)
-	margin_wrapper.add_theme_constant_override("margin_bottom", 4)
+	# Create main horizontal container (no margins)
+	var main_hsplit = HSplitContainer.new()
+	main_hsplit.name = "MainHSplit"
+	main_hsplit.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	main_hsplit.split_offset = 200  # Match the container list width
 	
-	# Create main container for inventory content
-	inventory_container = VBoxContainer.new()
-	inventory_container.name = "InventoryContainer_Base"
-	inventory_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inventory_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Add directly to the custom window's content area
+	add_content(main_hsplit)
 	
-	# Add to the margin wrapper
-	margin_wrapper.add_child(inventory_container)
+	# LEFT SIDE: Container list panel (full height, no margins, extends to title bar)
+	var left_container_panel = VBoxContainer.new()
+	left_container_panel.name = "LeftContainerPanel"
+	left_container_panel.custom_minimum_size.x = 180
+	left_container_panel.size_flags_horizontal = Control.SIZE_FILL
+	left_container_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_hsplit.add_child(left_container_panel)
 	
-	# Add wrapper to the custom window's content area
-	add_content(margin_wrapper)
+	# Create the container list directly (no margins, full height)
+	var container_list = ItemList.new()
+	container_list.name = "ContainerList"
+	container_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	container_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container_list.custom_minimum_size = Vector2(160, 200)
+	container_list.auto_height = true
+	container_list.allow_rmb_select = false
+	container_list.mouse_filter = Control.MOUSE_FILTER_PASS
 	
-	# Create header module
+	# Style the container list
+	var list_style = StyleBoxFlat.new()
+	list_style.bg_color = Color(0.1, 0.1, 0.1, 0.9)
+	list_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
+	list_style.border_width_left = 1
+	list_style.border_width_right = 1
+	list_style.border_width_top = 1
+	list_style.border_width_bottom = 1
+	list_style.content_margin_left = 6
+	list_style.content_margin_right = 6
+	list_style.content_margin_top = 4
+	list_style.content_margin_bottom = 4
+	container_list.add_theme_stylebox_override("panel", list_style)
+	
+	left_container_panel.add_child(container_list)
+	
+	# RIGHT SIDE: Header + Content area (matches mass bar width)
+	var right_panel = VBoxContainer.new()
+	right_panel.name = "RightPanel"
+	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	# Add small margins to match the original content area
+	right_panel.add_theme_constant_override("margin_left", 4)
+	right_panel.add_theme_constant_override("margin_right", 4)
+	right_panel.add_theme_constant_override("margin_bottom", 4)
+	
+	main_hsplit.add_child(right_panel)
+	
+	# Header with top margin (positioned over right panel only)
+	var header_wrapper = MarginContainer.new()
+	header_wrapper.name = "HeaderWrapper"
+	header_wrapper.add_theme_constant_override("margin_top", 8)  # Space from title bar
+	right_panel.add_child(header_wrapper)
+	
 	header = InventoryWindowHeader.new()
 	header.name = "Header"
-	inventory_container.add_child(header)
+	header_wrapper.add_child(header)
 	
-	# Create content module
+	# Content area for mass bar + inventory grid (no additional top margin)
 	content = InventoryWindowContent.new()
 	content.name = "Content"
-	inventory_container.add_child(content)
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_panel.add_child(content)
 	
-	# Create item actions module - FIXED: Pass required parent parameter
+	# Tell content to use external container list and skip creating its own left panel
+	content.set_external_container_list(container_list)
+	
+	# Connect the external container list to content
+	container_list.item_selected.connect(_on_container_list_selected)
+	
+	# Create item actions module
 	item_actions = InventoryItemActions.new(self)
+
+# Add this method to handle container list selection
+func _on_container_list_selected(index: int):
+	if content and index >= 0 and index < open_containers.size():
+		content.select_container(open_containers[index])
 
 func _connect_inventory_signals():
 	# Connect custom window signals

@@ -45,7 +45,7 @@ func _ready():
 	call_deferred("_force_button_styling")
 
 func _setup_controls():
-	# Create filter button (regular Button) - now on the left
+	# Create filter button (regular Button) - now positioned over right panel, no left margin needed
 	filter_options = Button.new()
 	filter_options.text = "All Items ▼"
 	filter_options.custom_minimum_size.x = 120
@@ -69,7 +69,7 @@ func _setup_controls():
 	# Search field - now on the right side
 	search_field = LineEdit.new()
 	search_field.placeholder_text = "Search items..."
-	search_field.custom_minimum_size.x = 150
+	search_field.custom_minimum_size.x =200
 	add_child(search_field)
 	
 	# Create dropdown menus but DON'T add them as children to the HBoxContainer
