@@ -45,13 +45,7 @@ func _ready():
 	call_deferred("_force_button_styling")
 
 func _setup_controls():
-	# Search field
-	search_field = LineEdit.new()
-	search_field.placeholder_text = "Search items..."
-	search_field.custom_minimum_size.x = 150
-	add_child(search_field)
-	
-	# Create filter button (regular Button)
+	# Create filter button (regular Button) - now on the left
 	filter_options = Button.new()
 	filter_options.text = "All Items ▼"
 	filter_options.custom_minimum_size.x = 120
@@ -59,13 +53,7 @@ func _setup_controls():
 	_style_custom_filter_button()
 	add_child(filter_options)
 	
-	# Create dropdown menu
-	filter_dropdown = DropDownMenu_Base.new()
-	filter_dropdown.name = "FilterDropdown"
-	add_child(filter_dropdown)
-	_setup_filter_dropdown()
-	
-	# Sort button (regular Button)
+	# Sort button (regular Button) - next to filter on the left
 	sort_button = Button.new()
 	sort_button.text = "Sort ▼"
 	sort_button.custom_minimum_size.x = 80
@@ -73,16 +61,26 @@ func _setup_controls():
 	_style_custom_sort_button()
 	add_child(sort_button)
 	
-	# Create sort dropdown menu
+	# Spacer to push search field to the right
+	var spacer = Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_child(spacer)
+	
+	# Search field - now on the right side
+	search_field = LineEdit.new()
+	search_field.placeholder_text = "Search items..."
+	search_field.custom_minimum_size.x = 150
+	add_child(search_field)
+	
+	# Create dropdown menus but DON'T add them as children to the HBoxContainer
+	# They will be added to the scene when needed
+	filter_dropdown = DropDownMenu_Base.new()
+	filter_dropdown.name = "FilterDropdown"
+	_setup_filter_dropdown()
+	
 	sort_dropdown = DropDownMenu_Base.new()
 	sort_dropdown.name = "SortDropdown"
-	add_child(sort_dropdown)
 	_setup_sort_dropdown()
-	
-	# Right spacer to push everything left
-	var right_spacer = Control.new()
-	right_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	add_child(right_spacer)
 
 func _setup_filter_dropdown():
 	# Add all filter items to dropdown
@@ -91,6 +89,8 @@ func _setup_filter_dropdown():
 	
 	# Connect selection signal
 	filter_dropdown.item_selected.connect(_on_filter_dropdown_selected)
+	# Connect menu close signal to remove from scene
+	filter_dropdown.tree_exiting.connect(_on_filter_dropdown_closed)
 
 func _setup_sort_dropdown():
 	# Add all sort items to dropdown
@@ -99,6 +99,45 @@ func _setup_sort_dropdown():
 	
 	# Connect selection signal
 	sort_dropdown.item_selected.connect(_on_sort_dropdown_selected)
+	# Connect menu close signal to remove from scene
+	sort_dropdown.tree_exiting.connect(_on_sort_dropdown_closed)
+
+func _style_custom_filter_button():
+	# Make the button NOT flat so it can show styling
+	filter_options.flat = false
+	
+	# Style the custom filter button with our desired appearance
+	var style_normal = StyleBoxFlat.new()
+	style_normal.bg_color = Color(0.4, 0.4, 0.4, 1.0)  # Much lighter
+	style_normal.border_width_left = 1
+	style_normal.border_width_right = 1
+	style_normal.border_width_top = 1
+	style_normal.border_width_bottom = 1
+	style_normal.border_color = Color(0.6, 0.6, 0.6, 1.0)
+	# Increased inner padding for better visual spacing
+	style_normal.content_margin_left = 12
+	style_normal.content_margin_right = 12
+	style_normal.content_margin_top = 6
+	style_normal.content_margin_bottom = 6
+	
+	var style_hover = StyleBoxFlat.new()
+	style_hover.bg_color = Color(0.5, 0.5, 0.5, 1.0)  # Even lighter
+	style_hover.border_width_left = 1
+	style_hover.border_width_right = 1
+	style_hover.border_width_top = 1
+	style_hover.border_width_bottom = 1
+	style_hover.border_color = Color(0.7, 0.7, 0.7, 1.0)
+	# Increased inner padding for better visual spacing
+	style_hover.content_margin_left = 12
+	style_hover.content_margin_right = 12
+	style_hover.content_margin_top = 6
+	style_hover.content_margin_bottom = 6
+	
+	filter_options.add_theme_stylebox_override("normal", style_normal)
+	filter_options.add_theme_stylebox_override("hover", style_hover)
+	filter_options.add_theme_stylebox_override("pressed", style_hover)
+	filter_options.add_theme_stylebox_override("focus", style_normal)
+	filter_options.add_theme_color_override("font_color", Color.WHITE)
 
 func _style_custom_sort_button():
 	# Make the button NOT flat so it can show styling
@@ -112,10 +151,11 @@ func _style_custom_sort_button():
 	style_normal.border_width_top = 1
 	style_normal.border_width_bottom = 1
 	style_normal.border_color = Color(0.6, 0.6, 0.6, 1.0)
-	style_normal.content_margin_left = 8
-	style_normal.content_margin_right = 8
-	style_normal.content_margin_top = 4
-	style_normal.content_margin_bottom = 4
+	# Increased inner padding for better visual spacing
+	style_normal.content_margin_left = 12
+	style_normal.content_margin_right = 12
+	style_normal.content_margin_top = 6
+	style_normal.content_margin_bottom = 6
 	
 	var style_hover = StyleBoxFlat.new()
 	style_hover.bg_color = Color(0.5, 0.5, 0.5, 1.0)
@@ -124,10 +164,11 @@ func _style_custom_sort_button():
 	style_hover.border_width_top = 1
 	style_hover.border_width_bottom = 1
 	style_hover.border_color = Color(0.7, 0.7, 0.7, 1.0)
-	style_hover.content_margin_left = 4
-	style_hover.content_margin_right = 8
-	style_hover.content_margin_top = 4
-	style_hover.content_margin_bottom = 4
+	# Increased inner padding for better visual spacing  
+	style_hover.content_margin_left = 12
+	style_hover.content_margin_right = 12
+	style_hover.content_margin_top = 6
+	style_hover.content_margin_bottom = 6
 	
 	sort_button.add_theme_stylebox_override("normal", style_normal)
 	sort_button.add_theme_stylebox_override("hover", style_hover)
@@ -204,46 +245,11 @@ func _apply_custom_theme():
 	# Apply theme to the header container
 	set_theme(header_theme)
 
-func _style_custom_filter_button():
-	# Make the button NOT flat so it can show styling
-	filter_options.flat = false
-	
-	# Style the custom filter button with our desired appearance
-	var style_normal = StyleBoxFlat.new()
-	style_normal.bg_color = Color(0.4, 0.4, 0.4, 1.0)  # Much lighter
-	style_normal.border_width_left = 1
-	style_normal.border_width_right = 1
-	style_normal.border_width_top = 1
-	style_normal.border_width_bottom = 1
-	style_normal.border_color = Color(0.6, 0.6, 0.6, 1.0)
-	style_normal.content_margin_left = 8
-	style_normal.content_margin_right = 8
-	style_normal.content_margin_top = 4
-	style_normal.content_margin_bottom = 4
-	
-	var style_hover = StyleBoxFlat.new()
-	style_hover.bg_color = Color(0.5, 0.5, 0.5, 1.0)  # Even lighter
-	style_hover.border_width_left = 1
-	style_hover.border_width_right = 1
-	style_hover.border_width_top = 1
-	style_hover.border_width_bottom = 1
-	style_hover.border_color = Color(0.7, 0.7, 0.7, 1.0)
-	style_hover.content_margin_left = 8
-	style_hover.content_margin_right = 8
-	style_hover.content_margin_top = 4
-	style_hover.content_margin_bottom = 4
-	
-	filter_options.add_theme_stylebox_override("normal", style_normal)
-	filter_options.add_theme_stylebox_override("hover", style_hover)
-	filter_options.add_theme_stylebox_override("pressed", style_hover)
-	filter_options.add_theme_stylebox_override("focus", style_normal)
-	filter_options.add_theme_color_override("font_color", Color.WHITE)
-
 func _force_button_styling():
 	# Force the filter button to be visible by using modulate
 	filter_options.modulate = Color(0.8, 0.8, 0.8, 1.0)  # Make it 50% brighter
 	
-	# Also force a background color override
+	# Also force a background color override WITH PROPER PADDING
 	filter_options.add_theme_color_override("font_color", Color.DARK_GRAY)
 	var bg_style = StyleBoxFlat.new()
 	bg_style.bg_color = Color.WHITE * 0.4  # 40% white
@@ -252,6 +258,11 @@ func _force_button_styling():
 	bg_style.border_width_top = 1
 	bg_style.border_width_bottom = 1
 	bg_style.border_color = Color.WHITE * 0.6
+	# ADD THE INNER PADDING HERE - this was missing!
+	bg_style.content_margin_left = 12
+	bg_style.content_margin_right = 12
+	bg_style.content_margin_top = 6
+	bg_style.content_margin_bottom = 6
 	
 	filter_options.add_theme_stylebox_override("normal", bg_style)
 	filter_options.add_theme_stylebox_override("hover", bg_style)
@@ -264,13 +275,26 @@ func _force_button_styling():
 	# Force redraw
 	filter_options.queue_redraw()
 	
-	# Also style the sort button the same way
+	# Also style the sort button the same way WITH PROPER PADDING
 	sort_button.modulate = Color(1.5, 1.5, 1.5, 1.0)
 	sort_button.add_theme_color_override("font_color", Color.WHITE)
-	sort_button.add_theme_stylebox_override("normal", bg_style)
-	sort_button.add_theme_stylebox_override("hover", bg_style)
-	sort_button.add_theme_stylebox_override("pressed", bg_style)
-	sort_button.add_theme_stylebox_override("focus", bg_style)
+	var sort_bg_style = StyleBoxFlat.new()
+	sort_bg_style.bg_color = Color.WHITE * 0.4  # 40% white
+	sort_bg_style.border_width_left = 1
+	sort_bg_style.border_width_right = 1
+	sort_bg_style.border_width_top = 1
+	sort_bg_style.border_width_bottom = 1
+	sort_bg_style.border_color = Color.WHITE * 0.6
+	# ADD THE INNER PADDING HERE TOO - this was missing!
+	sort_bg_style.content_margin_left = 12
+	sort_bg_style.content_margin_right = 12
+	sort_bg_style.content_margin_top = 6
+	sort_bg_style.content_margin_bottom = 6
+	
+	sort_button.add_theme_stylebox_override("normal", sort_bg_style)
+	sort_button.add_theme_stylebox_override("hover", sort_bg_style)
+	sort_button.add_theme_stylebox_override("pressed", sort_bg_style)
+	sort_button.add_theme_stylebox_override("focus", sort_bg_style)
 	sort_button.flat = false
 	sort_button.queue_redraw()
 
@@ -281,6 +305,9 @@ func _on_filter_button_pressed():
 	# Show dropdown at button position
 	var button_pos = filter_options.get_screen_position()
 	var dropdown_pos = Vector2(button_pos.x, button_pos.y + filter_options.size.y)
+	
+	# Temporarily add dropdown to scene so it can access viewport
+	get_viewport().add_child(filter_dropdown)
 	filter_dropdown.show_menu(dropdown_pos)
 
 func _on_filter_dropdown_selected(item_id: String, item_data: Dictionary):
@@ -297,6 +324,9 @@ func _on_sort_button_pressed():
 	# Show dropdown at button position
 	var button_pos = sort_button.get_screen_position()
 	var dropdown_pos = Vector2(button_pos.x, button_pos.y + sort_button.size.y)
+	
+	# Temporarily add dropdown to scene so it can access viewport
+	get_viewport().add_child(sort_dropdown)
 	sort_dropdown.show_menu(dropdown_pos)
 
 func _on_sort_dropdown_selected(item_id: String, item_data: Dictionary):
@@ -309,6 +339,16 @@ func _on_sort_dropdown_selected(item_id: String, item_data: Dictionary):
 		sort_button.text = sort_items[index] + " ▼"
 		var sort_type = index as InventoryManager.SortType
 		sort_requested.emit(sort_type)
+
+func _on_filter_dropdown_closed():
+	# Remove filter dropdown from scene when it closes
+	if filter_dropdown and filter_dropdown.get_parent():
+		filter_dropdown.get_parent().remove_child(filter_dropdown)
+
+func _on_sort_dropdown_closed():
+	# Remove sort dropdown from scene when it closes
+	if sort_dropdown and sort_dropdown.get_parent():
+		sort_dropdown.get_parent().remove_child(sort_dropdown)
 
 func _on_sort_selected(id: int):
 	# No longer needed since we're using DropDownMenu_Base
