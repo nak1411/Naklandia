@@ -1,5 +1,5 @@
 # CustomWindow.gd - Custom window implementation with clean dropdown menu
-class_name CustomWindow
+class_name Window_Base
 extends Window
 
 # Window properties
@@ -12,13 +12,13 @@ extends Window
 # Visual properties
 @export var title_bar_height: float = 32.0
 @export var border_width: float = 2.0
-@export var corner_radius: float = 8.0
+@export var corner_radius: float = 2.0
 
 # Colors
 @export var title_bar_color: Color = Color(0.15, 0.15, 0.15, 1.0)
 @export var title_bar_active_color: Color = Color(0.2, 0.2, 0.2, 1.0)
 @export var border_color: Color = Color(0.4, 0.4, 0.4, 1.0)
-@export var border_active_color: Color = Color(0.6, 0.6, 0.8, 1.0)
+@export var border_active_color: Color = Color(0.2, 0.2, 0.2, 1.0)
 @export var button_hover_color: Color = Color(0.3, 0.3, 0.3, 1.0)
 @export var close_button_hover_color: Color = Color(0.8, 0.2, 0.2, 1.0)
 
@@ -214,7 +214,7 @@ func _create_window_buttons():
 
 func _setup_simple_options_menu():
 	# Create simple dropdown menu
-	var dropdown = SimpleDropdownMenu.new()
+	var dropdown = DropDownMenu_Base.new()
 	dropdown.name = "OptionsDropdown"
 	add_child(dropdown)
 	
@@ -250,7 +250,7 @@ func _connect_signals():
 		options_button.mouse_exited.connect(_on_button_hover.bind(options_button, false))
 
 func _show_options_menu():
-	var dropdown = get_node("OptionsDropdown") as SimpleDropdownMenu
+	var dropdown = get_node("OptionsDropdown") as DropDownMenu_Base
 	if dropdown:
 		var button_screen_pos = options_button.get_screen_position()
 		var menu_pos = Vector2(
@@ -284,7 +284,8 @@ func _update_title_bar_style():
 	style_box.border_width_left = 0
 	style_box.border_width_right = 0
 	style_box.border_width_top = 0
-	style_box.border_width_bottom = 1
+	style_box.border_width_bottom = 3
+	style_box.border_blend = true
 	style_box.border_color = border_active_color if is_window_focused else border_color
 	style_box.corner_radius_top_left = corner_radius
 	style_box.corner_radius_top_right = corner_radius

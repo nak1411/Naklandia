@@ -1,5 +1,5 @@
 # SimpleDropdownMenu.gd - Clean dropdown menu with submenu support and proper right-click handling
-class_name SimpleDropdownMenu
+class_name DropDownMenu_Base
 extends Control
 
 # Menu structure

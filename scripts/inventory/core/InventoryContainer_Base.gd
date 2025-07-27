@@ -1,5 +1,5 @@
-# InventoryContainer.gd - EVE-like container with volume constraints
-class_name InventoryContainer
+# InventoryContainer_Base.gd - EVE-like container with volume constraints
+class_name InventoryContainer_Base
 extends Resource
 
 # Container properties
@@ -10,21 +10,21 @@ extends Resource
 @export var grid_height: int = 10
 
 # Container type and restrictions
-@export var container_type: InventoryItem.ContainerType = InventoryItem.ContainerType.GENERAL_CARGO
-@export var allowed_item_types: Array[InventoryItem.ItemType] = []
+@export var container_type: InventoryItem_Base.ContainerType = InventoryItem_Base.ContainerType.GENERAL_CARGO
+@export var allowed_item_types: Array[InventoryItem_Base.ItemType] = []
 @export var is_secure: bool = false
 @export var requires_docking: bool = false
 
 # Items storage
-var items: Array[InventoryItem] = []
+var items: Array[InventoryItem_Base] = []
 var grid_slots: Array = []  # 2D array for grid-based positioning
 
 # Signals
-signal item_added(item: InventoryItem, position: Vector2i)
-signal item_removed(item: InventoryItem, position: Vector2i)
+signal item_added(item: InventoryItem_Base, position: Vector2i)
+signal item_removed(item: InventoryItem_Base, position: Vector2i)
 signal container_full()
 signal volume_exceeded()
-signal item_moved(item: InventoryItem, from_pos: Vector2i, to_pos: Vector2i)
+signal item_moved(item: InventoryItem_Base, from_pos: Vector2i, to_pos: Vector2i)
 
 func _init(id: String = "", name: String = "Container", volume: float = 100.0):
 	container_id = id
@@ -64,7 +64,7 @@ func get_volume_percentage() -> float:
 		return 0.0
 	return (get_current_volume() / max_volume) * 100.0
 
-func has_volume_for_item(item: InventoryItem) -> bool:
+func has_volume_for_item(item: InventoryItem_Base) -> bool:
 	return get_available_volume() >= item.get_total_volume()
 
 # Grid management
@@ -75,7 +75,7 @@ func is_position_valid(pos: Vector2i) -> bool:
 		return false
 	return true
 
-func is_area_free(pos: Vector2i, exclude_item: InventoryItem = null) -> bool:
+func is_area_free(pos: Vector2i, exclude_item: InventoryItem_Base = null) -> bool:
 	if not is_position_valid(pos):
 		return false
 	
@@ -144,14 +144,14 @@ func auto_stack_items():
 					if other_item.quantity <= 0:
 						remove_item(other_item)
 
-func occupy_grid_area(pos: Vector2i, item: InventoryItem):
+func occupy_grid_area(pos: Vector2i, item: InventoryItem_Base):
 	grid_slots[pos.y][pos.x] = item
 
 func clear_grid_area(pos: Vector2i):
 	if pos.y < grid_slots.size() and pos.x < grid_slots[pos.y].size():
 		grid_slots[pos.y][pos.x] = null
 
-func get_item_position(item: InventoryItem) -> Vector2i:
+func get_item_position(item: InventoryItem_Base) -> Vector2i:
 	for y in grid_height:
 		for x in grid_width:
 			if grid_slots[y] and x < grid_slots[y].size() and grid_slots[y][x] == item:
@@ -159,7 +159,7 @@ func get_item_position(item: InventoryItem) -> Vector2i:
 	return Vector2i(-1, -1)
 
 # Item management
-func can_add_item(item: InventoryItem, exclude_item: InventoryItem = null) -> bool:
+func can_add_item(item: InventoryItem_Base, exclude_item: InventoryItem_Base = null) -> bool:
 	if not item or not item.is_valid_item():
 		return false
 	
@@ -186,7 +186,7 @@ func can_add_item(item: InventoryItem, exclude_item: InventoryItem = null) -> bo
 	var has_space = free_pos != Vector2i(-1, -1)
 	return has_space
 
-func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
+func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
 	
 	if not can_add_item(item):
 		return false
@@ -232,7 +232,7 @@ func add_item(item: InventoryItem, position: Vector2i = Vector2i(-1, -1), auto_s
 	return true
 
 # Auto-compact after item removal
-func remove_item(item: InventoryItem) -> bool:
+func remove_item(item: InventoryItem_Base) -> bool:
 	if not item in items:
 		return false
 	
@@ -250,7 +250,7 @@ func remove_item(item: InventoryItem) -> bool:
 	
 	return true
 
-func move_item(item: InventoryItem, new_position: Vector2i) -> bool:
+func move_item(item: InventoryItem_Base, new_position: Vector2i) -> bool:
 	if not item in items:
 		return false
 	
@@ -267,27 +267,27 @@ func move_item(item: InventoryItem, new_position: Vector2i) -> bool:
 	return true
 
 # Search and filtering
-func find_stackable_item(item: InventoryItem) -> InventoryItem:
+func find_stackable_item(item: InventoryItem_Base) -> InventoryItem_Base:
 	for existing_item in items:
 		if existing_item.can_stack_with(item):
 			return existing_item
 	return null
 
-func find_items_by_type(item_type: InventoryItem.ItemType) -> Array[InventoryItem]:
-	var filtered_items: Array[InventoryItem] = []
+func find_items_by_type(item_type: InventoryItem_Base.ItemType) -> Array[InventoryItem_Base]:
+	var filtered_items: Array[InventoryItem_Base] = []
 	for item in items:
 		if item.item_type == item_type:
 			filtered_items.append(item)
 	return filtered_items
 
-func find_items_by_name(name: String) -> Array[InventoryItem]:
-	var filtered_items: Array[InventoryItem] = []
+func find_items_by_name(name: String) -> Array[InventoryItem_Base]:
+	var filtered_items: Array[InventoryItem_Base] = []
 	for item in items:
 		if name.to_lower() in item.item_name.to_lower():
 			filtered_items.append(item)
 	return filtered_items
 
-func find_item_by_id(item_id: String) -> InventoryItem:
+func find_item_by_id(item_id: String) -> InventoryItem_Base:
 	for item in items:
 		if item.item_id == item_id:
 			return item
@@ -341,18 +341,18 @@ func _on_item_modified():
 	pass
 
 # Container type management
-func set_container_type(new_type: InventoryItem.ContainerType):
+func set_container_type(new_type: InventoryItem_Base.ContainerType):
 	container_type = new_type
 	_update_type_restrictions()
 
 func _update_type_restrictions():
 	allowed_item_types.clear()
 	match container_type:
-		InventoryItem.ContainerType.AMMUNITION_BAY:
-			allowed_item_types.append(InventoryItem.ItemType.AMMUNITION)
-		InventoryItem.ContainerType.FUEL_BAY:
-			allowed_item_types.append(InventoryItem.ItemType.RESOURCE)  # Assuming fuel is a resource
-		InventoryItem.ContainerType.SECURE_CONTAINER:
+		InventoryItem_Base.ContainerType.AMMUNITION_BAY:
+			allowed_item_types.append(InventoryItem_Base.ItemType.AMMUNITION)
+		InventoryItem_Base.ContainerType.FUEL_BAY:
+			allowed_item_types.append(InventoryItem_Base.ItemType.RESOURCE)  # Assuming fuel is a resource
+		InventoryItem_Base.ContainerType.SECURE_CONTAINER:
 			is_secure = true
 		_:
 			pass  # Allow all types - keep array empty
@@ -384,13 +384,13 @@ func from_dict(data: Dictionary):
 	max_volume = data.get("max_volume") if data.has("max_volume") else 100.0
 	grid_width = data.get("grid_width") if data.has("grid_width") else 10
 	grid_height = data.get("grid_height") if data.has("grid_height") else 10
-	container_type = data.get("container_type") if data.has("container_type") else InventoryItem.ContainerType.GENERAL_CARGO
+	container_type = data.get("container_type") if data.has("container_type") else InventoryItem_Base.ContainerType.GENERAL_CARGO
 	
 	# Handle allowed_item_types array conversion
 	var allowed_types_data = data.get("allowed_item_types") if data.has("allowed_item_types") else []
 	allowed_item_types.clear()
 	for item_type in allowed_types_data:
-		if item_type is InventoryItem.ItemType:
+		if item_type is InventoryItem_Base.ItemType:
 			allowed_item_types.append(item_type)
 	
 	is_secure = data.get("is_secure") if data.has("is_secure") else false
@@ -402,7 +402,7 @@ func from_dict(data: Dictionary):
 	items.clear()
 	var items_data = data.get("items") if data.has("items") else []
 	for item_data in items_data:
-		var item = InventoryItem.new()
+		var item = InventoryItem_Base.new()
 		item.from_dict(item_data)
 		var grid_pos_data = item_data.get("grid_position") if item_data.has("grid_position") else Vector2i(-1, -1)
 		var grid_pos = Vector2i(-1, -1)

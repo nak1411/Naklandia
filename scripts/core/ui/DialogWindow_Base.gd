@@ -1,6 +1,6 @@
 # DialogWindow.gd - Base dialog class that inherits from CustomWindow
-class_name DialogWindow
-extends CustomWindow
+class_name DialogWindow_Base
+extends Window_Base
 
 # Dialog properties
 @export var dialog_title: String = "Dialog"

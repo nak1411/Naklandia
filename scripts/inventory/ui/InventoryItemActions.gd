@@ -5,10 +5,10 @@ extends RefCounted
 # References
 var window_parent: Window
 var inventory_manager: InventoryManager
-var current_container: InventoryContainer
+var current_container: InventoryContainer_Base
 
 # Context menu system
-var context_menu: CustomContextMenu
+var context_menu: ContextMenu_Base
 var is_context_menu_active: bool = false
 
 # Track open dialog windows for cleanup
@@ -23,7 +23,7 @@ func _init(parent: Window):
 
 func _setup_context_menu():
 	"""Initialize the custom context menu system"""
-	context_menu = CustomContextMenu.new()
+	context_menu = ContextMenu_Base.new()
 	context_menu.name = "InventoryContextMenu"
 	
 	# Connect context menu signals
@@ -36,10 +36,10 @@ func _setup_context_menu():
 func set_inventory_manager(manager: InventoryManager):
 	inventory_manager = manager
 
-func set_current_container(container: InventoryContainer):
+func set_current_container(container: InventoryContainer_Base):
 	current_container = container
 
-func show_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position: Vector2):
+func show_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
 	"""Show context menu for an inventory item"""
 	if is_context_menu_active:
 		_close_context_menu()
@@ -75,7 +75,7 @@ func show_empty_area_context_menu(position: Vector2):
 	context_menu.show_context_menu(position, context_data, window_parent)
 	is_context_menu_active = true
 
-func show_container_context_menu(container: InventoryContainer, position: Vector2):
+func show_container_context_menu(container: InventoryContainer_Base, position: Vector2):
 	"""Show context menu for container management"""
 	if is_context_menu_active:
 		_close_context_menu()
@@ -124,8 +124,8 @@ func _on_context_item_selected(item_id: String, item_data: Dictionary, context_d
 
 func _handle_item_action(action_id: String, context_data: Dictionary):
 	"""Handle actions on inventory items"""
-	var item = context_data.get("item") as InventoryItem
-	var slot = context_data.get("slot") as InventorySlotUI
+	var item = context_data.get("item") as InventoryItem_Base
+	var slot = context_data.get("slot") as InventorySlot
 	
 	if not item:
 		return
@@ -162,7 +162,7 @@ func _handle_empty_area_action(action_id: String, context_data: Dictionary):
 
 func _handle_container_action(action_id: String, context_data: Dictionary):
 	"""Handle container management actions"""
-	var container = context_data.get("container") as InventoryContainer
+	var container = context_data.get("container") as InventoryContainer_Base
 	
 	match action_id:
 		"container_info":
@@ -184,7 +184,7 @@ func _handle_container_action(action_id: String, context_data: Dictionary):
 			if action_id.begins_with("move_to_"):
 				_handle_move_container_items_action(action_id, container)
 
-func _handle_move_item_action(action_id: String, item: InventoryItem):
+func _handle_move_item_action(action_id: String, item: InventoryItem_Base):
 	"""Handle moving individual items between containers"""
 	if not inventory_manager or not current_container:
 		return
@@ -212,13 +212,13 @@ func _handle_move_item_action(action_id: String, item: InventoryItem):
 		if not success:
 			_show_transfer_failed_notification()
 
-func _handle_move_container_items_action(action_id: String, container: InventoryContainer):
+func _handle_move_container_items_action(action_id: String, container: InventoryContainer_Base):
 	"""Handle moving all items from a container"""
 	# Implementation for bulk container moves
 	print("Moving all items from container: ", container.container_name, " with action: ", action_id)
 
 # Dialog methods
-func show_item_details_dialog(item: InventoryItem):
+func show_item_details_dialog(item: InventoryItem_Base):
 	"""Show detailed item information dialog"""
 	var dialog_window = Window.new()
 	dialog_window.title = item.item_name
@@ -259,7 +259,7 @@ func show_item_details_dialog(item: InventoryItem):
 			window_parent.grab_focus()
 	)
 
-func show_container_details_dialog(container: InventoryContainer):
+func show_container_details_dialog(container: InventoryContainer_Base):
 	"""Show detailed container information dialog"""
 	var dialog_window = Window.new()
 	dialog_window.title = container.container_name
@@ -300,7 +300,7 @@ func show_container_details_dialog(container: InventoryContainer):
 			window_parent.grab_focus()
 	)
 
-func show_split_stack_dialog(item: InventoryItem, slot: InventorySlotUI):
+func show_split_stack_dialog(item: InventoryItem_Base, slot: InventorySlot):
 	"""Show split stack dialog"""
 	# Prevent auto-stacking while dialog is open
 	var original_auto_stack = inventory_manager.auto_stack
@@ -388,7 +388,7 @@ func show_split_stack_dialog(item: InventoryItem, slot: InventorySlotUI):
 			window_parent.grab_focus()
 	)
 
-func show_destroy_item_confirmation(item: InventoryItem, slot: InventorySlotUI):
+func show_destroy_item_confirmation(item: InventoryItem_Base, slot: InventorySlot):
 	"""Show confirmation dialog for item destruction"""
 	var dialog_window = Window.new()
 	dialog_window.title = "Destroy Item"
@@ -541,22 +541,22 @@ func show_clear_container_confirmation():
 	)
 
 # Item action implementations
-func use_item(item: InventoryItem, slot: InventorySlotUI):
+func use_item(item: InventoryItem_Base, slot: InventorySlot):
 	"""Use an item (consume, activate, etc.)"""
 	print("Using item: ", item.item_name)
 	# TODO: Implement item usage logic
 
-func equip_item(item: InventoryItem, slot: InventorySlotUI):
+func equip_item(item: InventoryItem_Base, slot: InventorySlot):
 	"""Equip an item (weapons, armor, modules)"""
 	print("Equipping item: ", item.item_name)
 	# TODO: Implement equipment logic
 
-func open_container_item(item: InventoryItem):
+func open_container_item(item: InventoryItem_Base):
 	"""Open a container item"""
 	print("Opening container: ", item.item_name)
 	# TODO: Implement container opening logic
 
-func view_blueprint(item: InventoryItem):
+func view_blueprint(item: InventoryItem_Base):
 	"""View blueprint details"""
 	print("Viewing blueprint: ", item.item_name)
 	# TODO: Implement blueprint viewer
@@ -577,19 +577,19 @@ func sort_container_by_type(sort_type: InventoryManager.SortType):
 	if inventory_manager and current_container:
 		inventory_manager.sort_container(current_container.container_id, sort_type)
 
-func compact_container(container: InventoryContainer):
+func compact_container(container: InventoryContainer_Base):
 	"""Compact a container to remove gaps"""
 	if container:
 		container.compact_items()
 
 # Helper methods
-func _generate_detailed_item_info(item: InventoryItem) -> String:
+func _generate_detailed_item_info(item: InventoryItem_Base) -> String:
 	"""Generate detailed item information text"""
 	var text = "[center][b][font_size=16]%s[/font_size][/b][/center]\n" % item.item_name
-	text += "[center][color=%s]%s[/color][/center]\n\n" % [item.get_rarity_color().to_html(), InventoryItem.ItemRarity.keys()[item.item_rarity]]
+	text += "[center][color=%s]%s[/color][/center]\n\n" % [item.get_rarity_color().to_html(), InventoryItem_Base.ItemRarity.keys()[item.item_rarity]]
 	
 	text += "[b]General Information[/b]\n"
-	text += "Type: %s\n" % InventoryItem.ItemType.keys()[item.item_type]
+	text += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
 	text += "Quantity: %d\n" % item.quantity
 	text += "Max Stack Size: %d\n\n" % item.max_stack_size
 	
@@ -604,7 +604,7 @@ func _generate_detailed_item_info(item: InventoryItem) -> String:
 	if item.is_container:
 		text += "[b]Container Properties[/b]\n"
 		text += "Container Volume: %.2f m³\n" % item.container_volume
-		text += "Container Type: %s\n\n" % InventoryItem.ContainerType.keys()[item.container_type]
+		text += "Container Type: %s\n\n" % InventoryItem_Base.ContainerType.keys()[item.container_type]
 	
 	text += "[b]Flags[/b]\n"
 	text += "Unique: %s\n" % ("Yes" if item.is_unique else "No")
@@ -616,7 +616,7 @@ func _generate_detailed_item_info(item: InventoryItem) -> String:
 	
 	return text
 
-func _generate_detailed_container_info(container: InventoryContainer) -> String:
+func _generate_detailed_container_info(container: InventoryContainer_Base) -> String:
 	"""Generate detailed container information text"""
 	var info = container.get_container_info()
 	
@@ -624,7 +624,7 @@ func _generate_detailed_container_info(container: InventoryContainer) -> String:
 	
 	text += "[b]Container Properties[/b]\n"
 	text += "Container ID: %s\n" % container.container_id
-	text += "Container Type: %s\n" % InventoryItem.ContainerType.keys()[container.container_type]
+	text += "Container Type: %s\n" % InventoryItem_Base.ContainerType.keys()[container.container_type]
 	text += "Grid Size: %d × %d\n\n" % [container.grid_width, container.grid_height]
 	
 	text += "[b]Capacity Information[/b]\n"
@@ -645,7 +645,7 @@ func _generate_detailed_container_info(container: InventoryContainer) -> String:
 	
 	return text
 
-func _perform_split(item: InventoryItem, split_amount: int, original_auto_stack: bool):
+func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_stack: bool):
 	"""Perform the item stack split operation"""
 	if not inventory_manager or not current_container or not item:
 		inventory_manager.auto_stack = original_auto_stack
@@ -657,7 +657,7 @@ func _perform_split(item: InventoryItem, split_amount: int, original_auto_stack:
 		return
 	
 	# Create the new item manually
-	var new_item = InventoryItem.new()
+	var new_item = InventoryItem_Base.new()
 	new_item.item_id = item.item_id
 	new_item.item_name = item.item_name
 	new_item.description = item.description
@@ -743,7 +743,7 @@ func is_context_menu_visible() -> bool:
 	"""Check if context menu is currently visible"""
 	return is_context_menu_active and context_menu and context_menu.is_menu_visible()
 
-func get_context_menu() -> CustomContextMenu:
+func get_context_menu() -> ContextMenu_Base:
 	"""Get reference to the context menu for external use"""
 	return context_menu
 

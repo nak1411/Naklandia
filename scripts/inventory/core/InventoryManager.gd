@@ -2,13 +2,13 @@ class_name InventoryManager
 extends Node
 
 # Container management
-var containers: Dictionary = {}  # container_id -> InventoryContainer
+var containers: Dictionary = {}  # container_id -> InventoryContainer_Base
 var active_containers: Array[String] = []  # Currently open container IDs
 
 # Default containers
-var player_inventory: InventoryContainer
-var player_cargo: InventoryContainer
-var hangar_containers: Array[InventoryContainer] = []
+var player_inventory: InventoryContainer_Base
+var player_cargo: InventoryContainer_Base
+var hangar_containers: Array[InventoryContainer_Base] = []
 
 # Transaction system
 var pending_transfers: Array[Dictionary] = []
@@ -20,9 +20,9 @@ var transaction_history: Array[Dictionary] = []
 @export var save_file_path: String = "user://inventory_save.dat"
 
 # Signals
-signal container_added(container: InventoryContainer)
+signal container_added(container: InventoryContainer_Base)
 signal container_removed(container_id: String)
-signal item_transferred(item: InventoryItem, from_container: String, to_container: String)
+signal item_transferred(item: InventoryItem_Base, from_container: String, to_container: String)
 signal transaction_completed(transaction: Dictionary)
 signal inventory_loaded()
 signal inventory_saved()
@@ -82,24 +82,24 @@ func _input(event):
 
 func _initialize_default_containers():
 	# Create player inventory (limited space, always accessible)
-	player_inventory = InventoryContainer.new("player_inventory", "Personal Inventory", 25.0)
+	player_inventory = InventoryContainer_Base.new("player_inventory", "Personal Inventory", 25.0)
 	player_inventory.grid_width = 5
 	player_inventory.grid_height = 8
 	add_container(player_inventory)
 	
 	# Create player cargo hold (larger space)
-	player_cargo = InventoryContainer.new("player_cargo", "Cargo Hold", 500.0)
+	player_cargo = InventoryContainer_Base.new("player_cargo", "Cargo Hold", 500.0)
 	player_cargo.grid_width = 15
 	player_cargo.grid_height = 20
-	player_cargo.container_type = InventoryItem.ContainerType.SHIP_CARGO
+	player_cargo.container_type = InventoryItem_Base.ContainerType.SHIP_CARGO
 	add_container(player_cargo)
 	
 	# Create hangar containers
 	for i in range(3):
-		var hangar = InventoryContainer.new("hangar_%d" % i, "Hangar Division %d" % (i + 1), 1000.0)
+		var hangar = InventoryContainer_Base.new("hangar_%d" % i, "Hangar Division %d" % (i + 1), 1000.0)
 		hangar.grid_width = 20
 		hangar.grid_height = 25
-		hangar.container_type = InventoryItem.ContainerType.HANGAR_DIVISION
+		hangar.container_type = InventoryItem_Base.ContainerType.HANGAR_DIVISION
 		hangar.requires_docking = true
 		hangar_containers.append(hangar)
 		add_container(hangar)
@@ -113,7 +113,7 @@ func _setup_autosave():
 	add_child(timer)
 
 # Container management
-func add_container(container: InventoryContainer) -> bool:
+func add_container(container: InventoryContainer_Base) -> bool:
 	if container.container_id in containers:
 		return false
 	
@@ -147,17 +147,17 @@ func remove_container(container_id: String) -> bool:
 	container_removed.emit(container_id)
 	return true
 
-func get_container(container_id: String) -> InventoryContainer:
+func get_container(container_id: String) -> InventoryContainer_Base:
 	return containers.get(container_id, null)
 
-func get_all_containers() -> Array[InventoryContainer]:
-	var container_list: Array[InventoryContainer] = []
+func get_all_containers() -> Array[InventoryContainer_Base]:
+	var container_list: Array[InventoryContainer_Base] = []
 	for container in containers.values():
 		container_list.append(container)
 	return container_list
 
-func get_accessible_containers() -> Array[InventoryContainer]:
-	var accessible: Array[InventoryContainer] = []
+func get_accessible_containers() -> Array[InventoryContainer_Base]:
+	var accessible: Array[InventoryContainer_Base] = []
 	
 	for container in containers.values():
 		if not container.requires_docking:
@@ -167,20 +167,20 @@ func get_accessible_containers() -> Array[InventoryContainer]:
 	return accessible
 
 # Item operations
-func add_item_to_container(item: InventoryItem, container_id: String, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
+func add_item_to_container(item: InventoryItem_Base, container_id: String, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
 	var container = get_container(container_id)
 	if not container:
 		return false
 	
 	return container.add_item(item, position, auto_stack)
 
-func remove_item_from_container(item: InventoryItem, container_id: String) -> bool:
+func remove_item_from_container(item: InventoryItem_Base, container_id: String) -> bool:
 	var container = get_container(container_id)
 	if not container:
 		return false
 	return container.remove_item(item)
 
-func transfer_item(item: InventoryItem, from_container_id: String, to_container_id: String, 
+func transfer_item(item: InventoryItem_Base, from_container_id: String, to_container_id: String, 
 				  position: Vector2i = Vector2i(-1, -1), quantity: int = -1) -> bool:
 	var from_container = get_container(from_container_id)
 	var to_container = get_container(to_container_id)
@@ -300,7 +300,7 @@ func transfer_item(item: InventoryItem, from_container_id: String, to_container_
 	transaction_completed.emit(transaction)
 	return true
 
-func _get_item_at_position(container: InventoryContainer, position: Vector2i) -> InventoryItem:
+func _get_item_at_position(container: InventoryContainer_Base, position: Vector2i) -> InventoryItem_Base:
 	if position.y >= 0 and position.y < container.grid_slots.size():
 		if position.x >= 0 and position.x < container.grid_slots[position.y].size():
 			return container.grid_slots[position.y][position.x]
@@ -335,7 +335,7 @@ func find_items_by_name_globally(name: String) -> Array[Dictionary]:
 	
 	return results
 
-func find_items_by_type_globally(item_type: InventoryItem.ItemType) -> Array[Dictionary]:
+func find_items_by_type_globally(item_type: InventoryItem_Base.ItemType) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	
 	for container_id in containers:
@@ -451,8 +451,8 @@ func close_container(container_id: String):
 func is_container_open(container_id: String) -> bool:
 	return container_id in active_containers
 
-func get_open_containers() -> Array[InventoryContainer]:
-	var open_containers: Array[InventoryContainer] = []
+func get_open_containers() -> Array[InventoryContainer_Base]:
+	var open_containers: Array[InventoryContainer_Base] = []
 	for container_id in active_containers:
 		var container = get_container(container_id)
 		if container:
@@ -495,8 +495,8 @@ func get_inventory_summary() -> Dictionary:
 	return summary
 
 # Item creation helpers
-func create_item(item_id: String, name: String, quantity: int = 1) -> InventoryItem:
-	var item = InventoryItem.new(item_id, name)
+func create_item(item_id: String, name: String, quantity: int = 1) -> InventoryItem_Base:
+	var item = InventoryItem_Base.new(item_id, name)
 	item.quantity = quantity
 	return item
 
@@ -505,48 +505,48 @@ func create_sample_items():
 		{
 			"id": "tritanium_ore",
 			"name": "Tritanium Ore",
-			"type": InventoryItem.ItemType.RESOURCE,
+			"type": InventoryItem_Base.ItemType.RESOURCE,
 			"volume": 0.01,
 			"mass": 0.01,
 			"max_stack": 1000,
 			"value": 5.0,
-			"rarity": InventoryItem.ItemRarity.COMMON
+			"rarity": InventoryItem_Base.ItemRarity.COMMON
 		},
 		{
 			"id": "laser_crystal",
 			"name": "Laser Focusing Crystal",
-			"type": InventoryItem.ItemType.MODULE,
+			"type": InventoryItem_Base.ItemType.MODULE,
 			"volume": 5.0,
 			"mass": 2.0,
 			"max_stack": 10,  # Changed from 1 to 10
 			"value": 15000.0,
-			"rarity": InventoryItem.ItemRarity.RARE
+			"rarity": InventoryItem_Base.ItemRarity.RARE
 		},
 		{
 			"id": "ammo_hybrid",
 			"name": "Hybrid Charges",
-			"type": InventoryItem.ItemType.AMMUNITION,
+			"type": InventoryItem_Base.ItemType.AMMUNITION,
 			"volume": 0.025,
 			"mass": 0.01,
 			"max_stack": 500,
 			"value": 100.0,
-			"rarity": InventoryItem.ItemRarity.COMMON
+			"rarity": InventoryItem_Base.ItemRarity.COMMON
 		},
 		{
 			"id": "blueprint_frigate",
 			"name": "Frigate Blueprint",
-			"type": InventoryItem.ItemType.BLUEPRINT,
+			"type": InventoryItem_Base.ItemType.BLUEPRINT,
 			"volume": 0.1,
 			"mass": 0.1,
 			"max_stack": 5,  # Changed from 1 to 5
 			"value": 50000.0,
-			"rarity": InventoryItem.ItemRarity.EPIC
+			"rarity": InventoryItem_Base.ItemRarity.EPIC
 		}
 	]
 	
 	for item_data in items:
 		# Create multiple instances of some items for testing stacking
-		var base_item = InventoryItem.new(item_data.id, item_data.name)
+		var base_item = InventoryItem_Base.new(item_data.id, item_data.name)
 		base_item.item_type = item_data.type
 		base_item.volume = item_data.volume
 		base_item.mass = item_data.mass
@@ -558,7 +558,7 @@ func create_sample_items():
 		if item_data.max_stack > 1:
 			# Add 3 separate stacks of 1 each (so you can test stacking them)
 			for i in range(3):
-				var item = InventoryItem.new()
+				var item = InventoryItem_Base.new()
 				item.item_id = item_data.id  # Set ID explicitly after creation
 				item.item_name = item_data.name
 				item.item_type = item_data.type
@@ -576,7 +576,7 @@ func create_sample_items():
 			player_inventory.add_item(base_item)
 
 # Signal handlers
-func _on_container_item_added(item: InventoryItem, position: Vector2i):
+func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
 	# Only auto-stack if auto_stack is enabled
 	if auto_stack:
 		# Find which container this came from by checking all containers
@@ -586,11 +586,11 @@ func _on_container_item_added(item: InventoryItem, position: Vector2i):
 				auto_stack_container(container_id)
 				break
 
-func _on_container_item_removed(item: InventoryItem, position: Vector2i):
+func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
 	# Handle item removal cleanup
 	pass
 
-func _on_container_item_moved(item: InventoryItem, from_pos: Vector2i, to_pos: Vector2i):
+func _on_container_item_moved(item: InventoryItem_Base, from_pos: Vector2i, to_pos: Vector2i):
 	# Handle item movement
 	pass
 
@@ -667,7 +667,7 @@ func load_inventory():
 			container.from_dict(container_data)
 		else:
 			# Create new container if it doesn't exist
-			container = InventoryContainer.new()
+			container = InventoryContainer_Base.new()
 			container.from_dict(container_data)
 			add_container(container)
 	
@@ -688,13 +688,13 @@ func load_inventory():
 	return true
 
 # Public interface for UI
-func get_player_inventory() -> InventoryContainer:
+func get_player_inventory() -> InventoryContainer_Base:
 	return player_inventory
 
-func get_player_cargo() -> InventoryContainer:
+func get_player_cargo() -> InventoryContainer_Base:
 	return player_cargo
 
-func get_hangar_containers() -> Array[InventoryContainer]:
+func get_hangar_containers() -> Array[InventoryContainer_Base]:
 	return hangar_containers
 
 func _exit_tree():

@@ -5,7 +5,7 @@ extends Node
 # References
 var player: Player
 var inventory_manager: InventoryManager
-var inventory_window: InventoryWindowUI
+var inventory_window: InventoryWindow
 
 # UI Management
 var ui_canvas: CanvasLayer
@@ -17,7 +17,7 @@ const TOGGLE_INVENTORY = "toggle_inventory"
 
 # Signals
 signal inventory_toggled(is_open: bool)
-signal item_used(item: InventoryItem)
+signal item_used(item: InventoryItem_Base)
 
 func _ready():
 	_setup_input_actions()
@@ -72,7 +72,7 @@ func _setup_ui():
 	add_child(ui_canvas)
 	
 	# Create inventory window (initially hidden)
-	inventory_window = InventoryWindowUI.new()
+	inventory_window = InventoryWindow.new()
 	inventory_window.name = "InventoryWindow"
 	inventory_window.visible = false
 	ui_canvas.add_child(inventory_window)
@@ -85,7 +85,7 @@ func _setup_ui():
 		inventory_window.hide()
 		inventory_window.visible = false
 
-func _on_inventory_item_transferred(item: InventoryItem, from_container: String, to_container: String):
+func _on_inventory_item_transferred(item: InventoryItem_Base, from_container: String, to_container: String):
 	# Only refresh if transfer involves player inventory
 	var player_inv = inventory_manager.get_player_inventory()
 	if player_inv and (from_container == player_inv.container_id or to_container == player_inv.container_id):
@@ -144,14 +144,14 @@ func _connect_all_container_signals():
 		if not container.item_moved.is_connected(_on_container_item_moved):
 			container.item_moved.connect(_on_container_item_moved)
 
-func _on_container_item_changed(item: InventoryItem, position: Vector2i):
+func _on_container_item_changed(item: InventoryItem_Base, position: Vector2i):
 	# Immediate UI refresh when any container changes
 	_schedule_ui_refresh()
 	# Also refresh the inventory window's container list text
 	if inventory_window and inventory_window.visible:
 		inventory_window.refresh_container_list()
 
-func _on_container_item_moved(item: InventoryItem, from_pos: Vector2i, to_pos: Vector2i):
+func _on_container_item_moved(item: InventoryItem_Base, from_pos: Vector2i, to_pos: Vector2i):
 	# Immediate UI refresh when items are moved
 	_schedule_ui_refresh()
 
@@ -227,7 +227,7 @@ func close_inventory():
 		inventory_toggled.emit(is_inventory_open)
 
 # Item management
-func add_item_to_inventory(item: InventoryItem) -> bool:
+func add_item_to_inventory(item: InventoryItem_Base) -> bool:
 	var player_inventory = inventory_manager.get_player_inventory()
 	var success = inventory_manager.add_item_to_container(item, player_inventory.container_id)
 	
@@ -237,7 +237,7 @@ func add_item_to_inventory(item: InventoryItem) -> bool:
 	
 	return success
 
-func remove_item_from_inventory(item: InventoryItem) -> bool:
+func remove_item_from_inventory(item: InventoryItem_Base) -> bool:
 	var player_inventory = inventory_manager.get_player_inventory()
 	return inventory_manager.remove_item_from_container(item, player_inventory.container_id)
 
@@ -259,7 +259,7 @@ func consume_item(item_id: String, quantity: int = 1) -> bool:
 	if result.is_empty():
 		return false
 	
-	var item = result.item as InventoryItem
+	var item = result.item as InventoryItem_Base
 	var container_id = result.container_id as String
 	
 	if item.quantity >= quantity:
@@ -283,7 +283,7 @@ func pickup_item(interactable_item: Node):
 			# Play pickup sound
 			_play_pickup_sound()
 
-func drop_item(item: InventoryItem, world_position: Vector3):
+func drop_item(item: InventoryItem_Base, world_position: Vector3):
 	# Remove from inventory
 	var player_inventory = inventory_manager.get_player_inventory()
 	var success = inventory_manager.remove_item_from_container(item, player_inventory.container_id)
@@ -319,58 +319,58 @@ func consume_recipe_materials(recipe: Dictionary) -> bool:
 	return true
 
 # Equipment system integration
-func equip_item(item: InventoryItem) -> bool:
+func equip_item(item: InventoryItem_Base) -> bool:
 	# TODO: Integrate with equipment system
 	match item.item_type:
-		InventoryItem.ItemType.WEAPON:
+		InventoryItem_Base.ItemType.WEAPON:
 			return _equip_weapon(item)
-		InventoryItem.ItemType.ARMOR:
+		InventoryItem_Base.ItemType.ARMOR:
 			return _equip_armor(item)
-		InventoryItem.ItemType.MODULE:
+		InventoryItem_Base.ItemType.MODULE:
 			return _equip_module(item)
 		_:
 			return false
 
-func _equip_weapon(item: InventoryItem) -> bool:
+func _equip_weapon(item: InventoryItem_Base) -> bool:
 	# TODO: Implement weapon equipping
 	print("Equipping weapon: ", item.item_name)
 	return true
 
-func _equip_armor(item: InventoryItem) -> bool:
+func _equip_armor(item: InventoryItem_Base) -> bool:
 	# TODO: Implement armor equipping
 	print("Equipping armor: ", item.item_name)
 	return true
 
-func _equip_module(item: InventoryItem) -> bool:
+func _equip_module(item: InventoryItem_Base) -> bool:
 	# TODO: Implement module equipping
 	print("Equipping module: ", item.item_name)
 	return true
 
 # Event handlers
-func _on_container_switched(container: InventoryContainer):
+func _on_container_switched(container: InventoryContainer_Base):
 	print("Switched to container: ", container.container_name)
 
-func _on_item_transferred(item: InventoryItem, from_container: String, to_container: String):
+func _on_item_transferred(item: InventoryItem_Base, from_container: String, to_container: String):
 	print("Item transferred: %s from %s to %s" % [item.item_name, from_container, to_container])
 
 func _on_transaction_completed(transaction: Dictionary):
 	_show_transaction_notification(transaction)
 
 # Item usage
-func _use_item(item: InventoryItem):
+func _use_item(item: InventoryItem_Base):
 	match item.item_type:
-		InventoryItem.ItemType.CONSUMABLE:
+		InventoryItem_Base.ItemType.CONSUMABLE:
 			_use_consumable_item(item)
-		InventoryItem.ItemType.WEAPON, InventoryItem.ItemType.ARMOR, InventoryItem.ItemType.MODULE:
+		InventoryItem_Base.ItemType.WEAPON, InventoryItem_Base.ItemType.ARMOR, InventoryItem_Base.ItemType.MODULE:
 			equip_item(item)
-		InventoryItem.ItemType.SKILL_BOOK:
+		InventoryItem_Base.ItemType.SKILL_BOOK:
 			_learn_skill_book(item)
 		_:
 			print("Cannot use item: ", item.item_name)
 	
 	item_used.emit(item)
 
-func _use_consumable_item(item: InventoryItem):
+func _use_consumable_item(item: InventoryItem_Base):
 	# TODO: Implement consumable effects
 	match item.item_name.to_lower():
 		"health potion":
@@ -385,7 +385,7 @@ func _use_consumable_item(item: InventoryItem):
 	# Consume one item
 	consume_item(item.item_id, 1)
 
-func _learn_skill_book(item: InventoryItem):
+func _learn_skill_book(item: InventoryItem_Base):
 	# TODO: Integrate with skill system
 	print("Learning skill: ", item.item_name)
 	consume_item(item.item_id, 1)
@@ -404,12 +404,12 @@ func _repair_equipment(amount: int):
 	print("Repairing equipment for %d points" % amount)
 
 # World item conversion
-func _convert_world_item_to_inventory_item(world_item: Node) -> InventoryItem:
+func _convert_world_item_to_inventory_item(world_item: Node) -> InventoryItem_Base:
 	# TODO: Convert world objects to inventory items
-	# This would read properties from the world object and create an InventoryItem
+	# This would read properties from the world object and create an InventoryItem_Base
 	
 	# Example implementation
-	var item = InventoryItem.new()
+	var item = InventoryItem_Base.new()
 	item.item_name = world_item.name
 	var fallback_id = world_item.name.to_lower().replace(" ", "_")
 	item.item_id = world_item.get("item_id") if world_item.has("item_id") else fallback_id
@@ -420,17 +420,17 @@ func _convert_world_item_to_inventory_item(world_item: Node) -> InventoryItem:
 		item.volume = properties.get("volume") if properties.has("volume") else 1.0
 		item.mass = properties.get("mass") if properties.has("mass") else 1.0
 		item.base_value = properties.get("value") if properties.has("value") else 0.0
-		item.item_type = properties.get("type") if properties.has("type") else InventoryItem.ItemType.MISCELLANEOUS
+		item.item_type = properties.get("type") if properties.has("type") else InventoryItem_Base.ItemType.MISCELLANEOUS
 	
 	return item
 
-func _create_world_item_from_inventory_item(item: InventoryItem, position: Vector3):
+func _create_world_item_from_inventory_item(item: InventoryItem_Base, position: Vector3):
 	# TODO: Create world objects from inventory items
 	# This would spawn a physical object in the world that can be picked up
 	print("Dropping item %s at position %s" % [item.item_name, position])
 
 # UI notifications
-func _show_item_pickup_notification(item: InventoryItem):
+func _show_item_pickup_notification(item: InventoryItem_Base):
 	# Create pickup notification
 	var notification = _create_notification("+ %s" % item.item_name, Color.GREEN)
 	_show_notification(notification, 2.0)
@@ -495,7 +495,7 @@ func load_inventory_state(state: Dictionary):
 func get_inventory_manager() -> InventoryManager:
 	return inventory_manager
 
-func get_inventory_window() -> InventoryWindowUI:
+func get_inventory_window() -> InventoryWindow:
 	return inventory_window
 
 func is_inventory_window_open() -> bool:

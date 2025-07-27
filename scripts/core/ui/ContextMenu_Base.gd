@@ -1,5 +1,5 @@
 # CustomContextMenu.gd - Context menu with same styling as SimpleDropdownMenu
-class_name CustomContextMenu
+class_name ContextMenu_Base
 extends Control
 
 # Menu structure
@@ -690,7 +690,7 @@ func get_context_data() -> Dictionary:
 	return context_data
 
 # Quick setup methods for common context menus
-func setup_item_context_menu(item: InventoryItem):
+func setup_item_context_menu(item: InventoryItem_Base):
 	"""Setup a typical inventory item context menu"""
 	clear_items()
 	
@@ -702,13 +702,13 @@ func setup_item_context_menu(item: InventoryItem):
 	add_separator()
 	
 	match item.item_type:
-		InventoryItem.ItemType.CONSUMABLE:
+		InventoryItem_Base.ItemType.CONSUMABLE:
 			add_menu_item("use_item", "Use Item")
-		InventoryItem.ItemType.WEAPON, InventoryItem.ItemType.ARMOR, InventoryItem.ItemType.MODULE:
+		InventoryItem_Base.ItemType.WEAPON, InventoryItem_Base.ItemType.ARMOR, InventoryItem_Base.ItemType.MODULE:
 			add_menu_item("equip_item", "Equip Item")
-		InventoryItem.ItemType.CONTAINER:
+		InventoryItem_Base.ItemType.CONTAINER:
 			add_menu_item("open_container", "Open Container")
-		InventoryItem.ItemType.BLUEPRINT:
+		InventoryItem_Base.ItemType.BLUEPRINT:
 			add_menu_item("view_blueprint", "View Blueprint")
 	
 	add_separator()
@@ -725,7 +725,7 @@ func setup_empty_area_context_menu():
 	add_separator()
 	add_menu_item("clear_container", "Clear Container")
 
-func setup_container_context_menu(container: InventoryContainer):
+func setup_container_context_menu(container: InventoryContainer_Base):
 	"""Setup context menu for container management"""
 	clear_items()
 	

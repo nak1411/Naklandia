@@ -1,5 +1,5 @@
 # InventoryGridUI.gd - Grid-based inventory display with new drag-and-drop system
-class_name InventoryGridUI
+class_name InventoryGrid
 extends Control
 
 # Grid properties
@@ -14,19 +14,19 @@ extends Control
 @export var grid_line_width: float = 1.0
 
 # Container reference
-var container: InventoryContainer
+var container: InventoryContainer_Base
 var container_id: String
 
 # UI components
 var background_panel: Panel
 var grid_container: GridContainer
 var slots: Array = []  # 2D array of InventorySlotUI
-var selected_slots: Array[InventorySlotUI] = []
+var selected_slots: Array[InventorySlot] = []
 
 # Signals
-signal item_selected(item: InventoryItem, slot: InventorySlotUI)
-signal item_activated(item: InventoryItem, slot: InventorySlotUI)
-signal item_context_menu(item: InventoryItem, slot: InventorySlotUI, position: Vector2)
+signal item_selected(item: InventoryItem_Base, slot: InventorySlot)
+signal item_activated(item: InventoryItem_Base, slot: InventorySlot)
+signal item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2)
 
 func _ready():
 	_setup_background()
@@ -72,7 +72,7 @@ func _setup_grid():
 		slots[y].resize(grid_width)
 		
 		for x in grid_width:
-			var slot = InventorySlotUI.new()
+			var slot = InventorySlot.new()
 			slot.slot_size = slot_size
 			slot.set_grid_position(Vector2i(x, y))
 			slot.set_container_id(container_id)
@@ -98,7 +98,7 @@ func _update_grid_size():
 		custom_minimum_size = Vector2(total_width + 16, total_height + 16)  # Add padding
 
 # Container management
-func set_container(new_container: InventoryContainer):
+func set_container(new_container: InventoryContainer_Base):
 	# If it's the same container, don't rebuild - just refresh display
 	if container == new_container and new_container != null:
 		refresh_display()
@@ -202,7 +202,7 @@ func _clear_all_slots():
 			if slots[y][x]:
 				slots[y][x].clear_item()
 
-func _place_item_in_grid(item: InventoryItem, position: Vector2i):
+func _place_item_in_grid(item: InventoryItem_Base, position: Vector2i):
 	if not _is_valid_position(position):
 		return
 	
@@ -285,7 +285,7 @@ func _find_inventory_window():
 	return null
 
 # Slot interaction handlers
-func _on_slot_clicked(slot: InventorySlotUI, event: InputEvent):
+func _on_slot_clicked(slot: InventorySlot, event: InputEvent):
 	# Focus window on any slot click
 	_focus_inventory_window()
 	
@@ -303,7 +303,7 @@ func _on_slot_clicked(slot: InventorySlotUI, event: InputEvent):
 			if mouse_event.double_click:
 				item_activated.emit(slot.get_item(), slot)
 
-func _on_slot_right_clicked(slot: InventorySlotUI, event: InputEvent):
+func _on_slot_right_clicked(slot: InventorySlot, event: InputEvent):
 	# Focus window on right click
 	_focus_inventory_window()
 	
@@ -313,7 +313,7 @@ func _on_slot_right_clicked(slot: InventorySlotUI, event: InputEvent):
 		item_context_menu.emit(slot.get_item(), slot, global_pos)
 		get_viewport().set_input_as_handled()
 
-func _select_single_slot(slot: InventorySlotUI):
+func _select_single_slot(slot: InventorySlot):
 	for selected_slot in selected_slots:
 		if is_instance_valid(selected_slot):
 			selected_slot.set_selected(false)
@@ -324,7 +324,7 @@ func _select_single_slot(slot: InventorySlotUI):
 		slot.set_selected(true)
 		selected_slots.append(slot)
 
-func _toggle_slot_selection(slot: InventorySlotUI):
+func _toggle_slot_selection(slot: InventorySlot):
 	if not slot or not is_instance_valid(slot):
 		return
 		
@@ -337,14 +337,14 @@ func _toggle_slot_selection(slot: InventorySlotUI):
 			selected_slots.append(slot)
 
 # New drag and drop handlers
-func _on_item_drag_started(slot: InventorySlotUI, item: InventoryItem):
+func _on_item_drag_started(slot: InventorySlot, item: InventoryItem_Base):
 	# Highlight valid drop targets
 	_highlight_valid_drop_targets(item)
 	
 	# Dim the source slot
 	slot.modulate.a = 0.5
 
-func _on_item_drag_ended(slot: InventorySlotUI, success: bool):
+func _on_item_drag_ended(slot: InventorySlot, success: bool):
 	# Clear highlighting on all slots, including the source slot
 	_clear_all_highlights()
 	
@@ -355,7 +355,7 @@ func _on_item_drag_ended(slot: InventorySlotUI, success: bool):
 	if success:
 		call_deferred("refresh_display")
 
-func _on_item_dropped_on_slot(source_slot: InventorySlotUI, target_slot: InventorySlotUI):
+func _on_item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot):
 	# This is called after a successful drop operation
 	# The container has already been updated, so just update UI info
 	
@@ -369,7 +369,7 @@ func _update_parent_info():
 	if get_parent() and get_parent().has_method("refresh_container_list"):
 		get_parent().refresh_container_list()
 
-func _highlight_valid_drop_targets(dragged_item: InventoryItem):
+func _highlight_valid_drop_targets(dragged_item: InventoryItem_Base):
 	for y in grid_height:
 		for x in grid_width:
 			var slot = slots[y][x]
@@ -409,7 +409,7 @@ func _clear_all_highlights():
 func _is_valid_position(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < grid_width and pos.y >= 0 and pos.y < grid_height
 
-func get_slot_at_position(global_pos: Vector2) -> InventorySlotUI:
+func get_slot_at_position(global_pos: Vector2) -> InventorySlot:
 	for y in grid_height:
 		for x in grid_width:
 			if y < slots.size() and x < slots[y].size():
@@ -422,23 +422,23 @@ func get_slot_at_position(global_pos: Vector2) -> InventorySlotUI:
 					return slot
 	return null
 
-func get_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlotUI:
+func get_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlot:
 	if _is_valid_position(grid_pos):
 		return slots[grid_pos.y][grid_pos.x]
 	return null
 
 # Container event handlers - DISABLE these during drag operations
-func _on_container_item_added(item: InventoryItem, position: Vector2i):
+func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
 	# Don't refresh during drag operations
 	if not _is_any_slot_dragging():
 		refresh_display()
 
-func _on_container_item_removed(item: InventoryItem, position: Vector2i):
+func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
 	# Don't refresh during drag operations
 	if not _is_any_slot_dragging():
 		refresh_display()
 
-func _on_container_item_moved(item: InventoryItem, from_pos: Vector2i, to_pos: Vector2i):
+func _on_container_item_moved(item: InventoryItem_Base, from_pos: Vector2i, to_pos: Vector2i):
 	# Don't refresh during drag operations
 	if not _is_any_slot_dragging():
 		refresh_display()
@@ -453,8 +453,8 @@ func _is_any_slot_dragging() -> bool:
 	return false
 
 # Selection management
-func get_selected_items() -> Array[InventoryItem]:
-	var items: Array[InventoryItem] = []
+func get_selected_items() -> Array[InventoryItem_Base]:
+	var items: Array[InventoryItem_Base] = []
 	for slot in selected_slots:
 		if slot.has_item():
 			items.append(slot.get_item())

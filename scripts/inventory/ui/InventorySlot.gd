@@ -1,5 +1,5 @@
 # InventorySlotUI.gd - Individual inventory slot with new drag-and-drop system
-class_name InventorySlotUI
+class_name InventorySlot
 extends Control
 
 # Slot properties
@@ -10,7 +10,7 @@ extends Control
 @export var selection_color: Color = Color.CYAN
 
 # Content
-var item: InventoryItem
+var item: InventoryItem_Base
 var grid_position: Vector2i
 var container_id: String
 
@@ -31,11 +31,11 @@ var drag_start_position: Vector2
 var drag_threshold: float = 5.0
 
 # Signals
-signal slot_clicked(slot: InventorySlotUI, event: InputEvent)
-signal slot_right_clicked(slot: InventorySlotUI, event: InputEvent)
-signal item_drag_started(slot: InventorySlotUI, item: InventoryItem)
-signal item_drag_ended(slot: InventorySlotUI, success: bool)
-signal item_dropped_on_slot(source_slot: InventorySlotUI, target_slot: InventorySlotUI)
+signal slot_clicked(slot: InventorySlot, event: InputEvent)
+signal slot_right_clicked(slot: InventorySlot, event: InputEvent)
+signal item_drag_started(slot: InventorySlot, item: InventoryItem_Base)
+signal item_drag_ended(slot: InventorySlot, success: bool)
+signal item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot)
 
 func _init():
 	custom_minimum_size = slot_size
@@ -109,7 +109,7 @@ func _setup_signals():
 	gui_input.connect(_on_gui_input)
 
 # Item management
-func set_item(new_item: InventoryItem):
+func set_item(new_item: InventoryItem_Base):
 	if item and item.quantity_changed.is_connected(_on_item_quantity_changed):
 		item.quantity_changed.disconnect(_on_item_quantity_changed)
 	
@@ -131,7 +131,7 @@ func force_visual_refresh():
 func clear_item():
 	set_item(null)
 
-func get_item() -> InventoryItem:
+func get_item() -> InventoryItem_Base:
 	return item
 
 func has_item() -> bool:
@@ -170,7 +170,7 @@ func _update_item_display():
 	
 	# Set rarity border
 	if rarity_border:
-		if item.item_rarity != InventoryItem.ItemRarity.COMMON:
+		if item.item_rarity != InventoryItem_Base.ItemRarity.COMMON:
 			_show_rarity_border()
 		else:
 			rarity_border.visible = false
@@ -200,7 +200,7 @@ func _update_tooltip():
 		return
 	
 	var tooltip = "%s\n" % item.item_name
-	tooltip += "Type: %s\n" % InventoryItem.ItemType.keys()[item.item_type]
+	tooltip += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
 	tooltip += "Quantity: %d\n" % item.quantity
 	tooltip += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
 	tooltip += "Mass: %.2f kg (%.2f kg total)\n" % [item.mass, item.get_total_mass()]
@@ -442,7 +442,7 @@ func _find_inventory_content():
 		current = current.get_parent()
 	return null
 
-func _find_slot_at_position(global_pos: Vector2) -> InventorySlotUI:
+func _find_slot_at_position(global_pos: Vector2) -> InventorySlot:
 	var grid = _get_inventory_grid()
 	if not grid:
 		return null
@@ -460,7 +460,7 @@ func _find_slot_at_position(global_pos: Vector2) -> InventorySlotUI:
 	
 	return null
 
-func _attempt_drop_on_slot(target_slot: InventorySlotUI) -> bool:
+func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	if not target_slot or not has_item():
 		return false
 	
@@ -509,7 +509,7 @@ func _find_item_actions():
 		current = current.get_parent()
 	return null
 
-func _handle_stack_merge(target_slot: InventorySlotUI, target_item: InventoryItem) -> bool:
+func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_Base) -> bool:
 	
 	var space_available = target_item.max_stack_size - target_item.quantity
 	var amount_to_transfer = min(item.quantity, space_available)
@@ -561,7 +561,7 @@ func _handle_stack_merge(target_slot: InventorySlotUI, target_item: InventoryIte
 		
 		return false
 
-func _handle_item_swap(target_slot: InventorySlotUI, target_item: InventoryItem, inventory_manager: InventoryManager) -> bool:
+func _handle_item_swap(target_slot: InventorySlot, target_item: InventoryItem_Base, inventory_manager: InventoryManager) -> bool:
 	var source_container = inventory_manager.get_container(container_id)
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	
@@ -626,7 +626,7 @@ func _handle_item_swap(target_slot: InventorySlotUI, target_item: InventoryItem,
 		
 		return true
 
-func _handle_move_to_empty(target_slot: InventorySlotUI, inventory_manager: InventoryManager) -> bool:
+func _handle_move_to_empty(target_slot: InventorySlot, inventory_manager: InventoryManager) -> bool:
 	var source_container = inventory_manager.get_container(container_id)
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	
@@ -673,10 +673,10 @@ func _handle_move_to_empty(target_slot: InventorySlotUI, inventory_manager: Inve
 	return true
 
 # Helper methods
-func _get_inventory_grid() -> InventoryGridUI:
+func _get_inventory_grid() -> InventoryGrid:
 	var parent = get_parent()
 	while parent:
-		if parent is InventoryGridUI:
+		if parent is InventoryGrid:
 			return parent
 		parent = parent.get_parent()
 	return null

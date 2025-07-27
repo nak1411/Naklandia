@@ -1,6 +1,6 @@
 # InventoryWindowUI.gd - Using custom window implementation
-class_name InventoryWindowUI
-extends CustomWindow
+class_name InventoryWindow
+extends Window_Base
 
 # Window properties
 @export var inventory_title: String = "Inventory"
@@ -15,15 +15,15 @@ var item_actions: InventoryItemActions
 
 # State
 var inventory_manager: InventoryManager
-var open_containers: Array[InventoryContainer] = []
-var current_container: InventoryContainer
+var open_containers: Array[InventoryContainer_Base] = []
+var current_container: InventoryContainer_Base
 var active_context_menu: InventoryItemActions
 
 # Window state
 var is_locked: bool = false
 
 # Signals
-signal container_switched(container: InventoryContainer)
+signal container_switched(container: InventoryContainer_Base)
 
 func _init():
 	super._init()
@@ -45,7 +45,7 @@ func _ready():
 func _setup_inventory_ui():
 	# Create main container for inventory content
 	inventory_container = VBoxContainer.new()
-	inventory_container.name = "InventoryContainer"
+	inventory_container.name = "InventoryContainer_Base"
 	inventory_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	
 	# Add to the custom window's content area
@@ -138,7 +138,7 @@ func _populate_container_list():
 		_switch_to_container(open_containers[0])
 		content.select_container_index(0)
 
-func _switch_to_container(container: InventoryContainer):
+func _switch_to_container(container: InventoryContainer_Base):
 	if current_container == container:
 		return
 	
@@ -165,7 +165,7 @@ func _close_window():
 	visible = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
-func _on_content_container_selected(container: InventoryContainer):
+func _on_content_container_selected(container: InventoryContainer_Base):
 	_switch_to_container(container)
 
 func _on_search_changed(text: String):
@@ -212,10 +212,10 @@ func _remove_lock_indicator():
 	if lock_indicator:
 		lock_indicator.queue_free()
 
-func _on_item_activated(item: InventoryItem, slot: InventorySlotUI):
+func _on_item_activated(item: InventoryItem_Base, slot: InventorySlot):
 	item_actions.show_item_details_dialog(item)
 
-func _on_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position: Vector2):
+func _on_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
 	item_actions.show_item_context_menu(item, slot, position)
 
 func _on_container_refreshed():

@@ -1,5 +1,5 @@
 # InventoryItem.gd - Core item class with EVE-like properties
-class_name InventoryItem
+class_name InventoryItem_Base
 extends Resource
 
 # Basic item properties
@@ -90,7 +90,7 @@ func get_total_value() -> float:
 	return base_value * quantity
 
 # Stack management
-func can_stack_with(other_item: InventoryItem) -> bool:
+func can_stack_with(other_item: InventoryItem_Base) -> bool:
 	if not other_item:
 		return false
 	
@@ -124,7 +124,7 @@ func remove_from_stack(amount: int) -> int:
 	
 	return amount_to_remove
 
-func split_stack(split_amount: int) -> InventoryItem:
+func split_stack(split_amount: int) -> InventoryItem_Base:
 	if split_amount >= quantity or split_amount <= 0:
 		return null
 	

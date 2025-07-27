@@ -11,15 +11,15 @@ extends Control
 # UI components
 var background_panel: Panel
 var slots_container: HBoxContainer
-var quick_slots: Array[InventorySlotUI] = []
+var quick_slots: Array[InventorySlot] = []
 
 # State
 var inventory_manager: InventoryManager
-var player_inventory: InventoryContainer
+var player_inventory: InventoryContainer_Base
 var selected_slot_index: int = 0
 
 # Signals
-signal quick_slot_used(slot_index: int, item: InventoryItem)
+signal quick_slot_used(slot_index: int, item: InventoryItem_Base)
 signal quick_slot_selected(slot_index: int)
 
 func _ready():
@@ -75,7 +75,7 @@ func _create_quick_slots():
 	quick_slots.clear()
 	
 	for i in slot_count:
-		var slot = InventorySlotUI.new()
+		var slot = InventorySlot.new()
 		slot.slot_size = slot_size
 		slot.set_grid_position(Vector2i(i, 0))
 		
@@ -96,11 +96,11 @@ func _create_quick_slots():
 	# Select first slot by default
 	_select_slot(0)
 	
-func _on_quick_slot_drag_started(slot_index: int, slot: InventorySlotUI, item: InventoryItem):
+func _on_quick_slot_drag_started(slot_index: int, slot: InventorySlot, item: InventoryItem_Base):
 	# Highlight the quick slot being dragged from
 	slot.modulate.a = 0.5
 
-func _on_quick_slot_drag_ended(slot_index: int, slot: InventorySlotUI, success: bool):
+func _on_quick_slot_drag_ended(slot_index: int, slot: InventorySlot, success: bool):
 	# Restore slot appearance
 	slot.modulate.a = 1.0
 	
@@ -108,12 +108,12 @@ func _on_quick_slot_drag_ended(slot_index: int, slot: InventorySlotUI, success: 
 	if success:
 		call_deferred("_refresh_quick_slots")
 
-func _on_quick_slot_dropped(slot_index: int, source_slot: InventorySlotUI, target_slot: InventorySlotUI):
+func _on_quick_slot_dropped(slot_index: int, source_slot: InventorySlot, target_slot: InventorySlot):
 	# Handle drops within the quick slots
 	# The slots have already handled the item transfer
 	call_deferred("_refresh_quick_slots")
 
-func _add_hotkey_label(slot: InventorySlotUI, index: int):
+func _add_hotkey_label(slot: InventorySlot, index: int):
 	var hotkey_label = Label.new()
 	var hotkey_text = str(index + 1) if index < 9 else "0" if index == 9 else ""
 	hotkey_label.text = hotkey_text
@@ -212,18 +212,18 @@ func use_selected_slot():
 			quick_slot_used.emit(selected_slot_index, item)
 			_handle_item_use(item)
 
-func _handle_item_use(item: InventoryItem):
+func _handle_item_use(item: InventoryItem_Base):
 	match item.item_type:
-		InventoryItem.ItemType.CONSUMABLE:
+		InventoryItem_Base.ItemType.CONSUMABLE:
 			_use_consumable(item)
-		InventoryItem.ItemType.WEAPON:
+		InventoryItem_Base.ItemType.WEAPON:
 			_equip_weapon(item)
-		InventoryItem.ItemType.ARMOR:
+		InventoryItem_Base.ItemType.ARMOR:
 			_equip_armor(item)
 		_:
 			print("Cannot use item: ", item.item_name)
 
-func _use_consumable(item: InventoryItem):
+func _use_consumable(item: InventoryItem_Base):
 	# TODO: Implement consumable usage
 	print("Using consumable: ", item.item_name)
 	
@@ -234,11 +234,11 @@ func _use_consumable(item: InventoryItem):
 			inventory_manager.remove_item_from_container(item, player_inventory.container_id)
 		_refresh_quick_slots()
 
-func _equip_weapon(item: InventoryItem):
+func _equip_weapon(item: InventoryItem_Base):
 	# TODO: Implement weapon equipping
 	print("Equipping weapon: ", item.item_name)
 
-func _equip_armor(item: InventoryItem):
+func _equip_armor(item: InventoryItem_Base):
 	# TODO: Implement armor equipping
 	print("Equipping armor: ", item.item_name)
 
@@ -278,18 +278,18 @@ func _select_previous_slot():
 	_select_slot(prev_index)
 
 # Event handlers
-func _on_quick_slot_clicked(slot_index: int, slot: InventorySlotUI, event: InputEvent):
+func _on_quick_slot_clicked(slot_index: int, slot: InventorySlot, event: InputEvent):
 	_select_slot(slot_index)
 	
 	var mouse_event = event as InputEventMouseButton
 	if mouse_event.double_click:
 		use_selected_slot()
 
-func _on_quick_slot_right_clicked(slot_index: int, slot: InventorySlotUI, event: InputEvent):
+func _on_quick_slot_right_clicked(slot_index: int, slot: InventorySlot, event: InputEvent):
 	if slot.has_item():
 		_show_quick_slot_context_menu(slot_index, slot, event.global_position)
 
-func _show_quick_slot_context_menu(slot_index: int, slot: InventorySlotUI, position: Vector2):
+func _show_quick_slot_context_menu(slot_index: int, slot: InventorySlot, position: Vector2):
 	var popup = PopupMenu.new()
 	
 	popup.add_item("Use Item", 0)
@@ -319,12 +319,12 @@ func _remove_from_quick_slot(slot_index: int):
 	if slot_index >= 0 and slot_index < quick_slots.size():
 		quick_slots[slot_index].clear_item()
 
-func _show_item_info(item: InventoryItem):
+func _show_item_info(item: InventoryItem_Base):
 	# Create simple info tooltip
 	var tooltip = AcceptDialog.new()
 	tooltip.title = item.item_name
 	tooltip.dialog_text = "Type: %s\nQuantity: %d\nValue: %.2f ISK" % [
-		InventoryItem.ItemType.keys()[item.item_type],
+		InventoryItem_Base.ItemType.keys()[item.item_type],
 		item.quantity,
 		item.get_total_value()
 	]
@@ -343,7 +343,7 @@ func set_slot_size(size: Vector2):
 	for slot in quick_slots:
 		slot.slot_size = size
 
-func add_item_to_quick_slot(item: InventoryItem, slot_index: int) -> bool:
+func add_item_to_quick_slot(item: InventoryItem_Base, slot_index: int) -> bool:
 	if slot_index < 0 or slot_index >= quick_slots.size():
 		return false
 	
@@ -354,7 +354,7 @@ func remove_item_from_quick_slot(slot_index: int):
 	if slot_index >= 0 and slot_index < quick_slots.size():
 		quick_slots[slot_index].clear_item()
 
-func get_quick_slot_item(slot_index: int) -> InventoryItem:
+func get_quick_slot_item(slot_index: int) -> InventoryItem_Base:
 	if slot_index >= 0 and slot_index < quick_slots.size():
 		return quick_slots[slot_index].get_item()
 	return null
@@ -362,7 +362,7 @@ func get_quick_slot_item(slot_index: int) -> InventoryItem:
 func get_selected_slot_index() -> int:
 	return selected_slot_index
 
-func get_selected_item() -> InventoryItem:
+func get_selected_item() -> InventoryItem_Base:
 	return get_quick_slot_item(selected_slot_index)
 
 # Visual updates
@@ -386,7 +386,7 @@ func animate_slot_use(slot_index: int):
 		tween.tween_property(slot, "scale", Vector2(1.2, 1.2), 0.1)
 		tween.tween_property(slot, "scale", Vector2(1.0, 1.0), 0.1)
 
-func animate_item_pickup(item: InventoryItem):
+func animate_item_pickup(item: InventoryItem_Base):
 	# Create a temporary item icon that flies to the HUD
 	var pickup_icon = TextureRect.new()
 	pickup_icon.texture = item.get_icon_texture()

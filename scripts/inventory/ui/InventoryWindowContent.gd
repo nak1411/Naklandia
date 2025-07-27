@@ -4,19 +4,19 @@ extends HSplitContainer
 
 # UI Components
 var container_list: ItemList
-var inventory_grid: InventoryGridUI
+var inventory_grid: InventoryGrid
 var mass_info_bar: Panel
 var mass_info_label: Label
 
 # References
 var inventory_manager: InventoryManager
-var current_container: InventoryContainer
-var open_containers: Array[InventoryContainer] = []
+var current_container: InventoryContainer_Base
+var open_containers: Array[InventoryContainer_Base] = []
 
 # Signals
-signal container_selected(container: InventoryContainer)
-signal item_activated(item: InventoryItem, slot: InventorySlotUI)
-signal item_context_menu(item: InventoryItem, slot: InventorySlotUI, position: Vector2)
+signal container_selected(container: InventoryContainer_Base)
+signal item_activated(item: InventoryItem_Base, slot: InventorySlot)
+signal item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2)
 
 func _ready():
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -62,22 +62,23 @@ func _setup_left_panel():
 	var left_panel = VBoxContainer.new()
 	left_panel.custom_minimum_size.x = 180
 	left_panel.size_flags_horizontal = Control.SIZE_FILL
+	
 	add_child(left_panel)
 	
-	var container_list_label = Label.new()
-	container_list_label.text = "Containers"
-	container_list_label.add_theme_font_size_override("font_size", 14)
-	container_list_label.add_theme_color_override("font_color", Color.WHITE)
-	container_list_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	container_list_label.custom_minimum_size.y = 25
-	left_panel.add_child(container_list_label)
+	#var container_list_label = Label.new()
+	#container_list_label.text = "Containers"
+	#container_list_label.add_theme_font_size_override("font_size", 14)
+	#container_list_label.add_theme_color_override("font_color", Color.WHITE)
+	#container_list_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	#container_list_label.custom_minimum_size.y = 25
+	#left_panel.add_child(container_list_label)
 	
 	container_list = ItemList.new()
 	container_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	container_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container_list.custom_minimum_size = Vector2(160, 200)
 	container_list.auto_height = true
-	container_list.allow_rmb_select = true
+	container_list.allow_rmb_select = false
 	
 	# Set up drop detection on container list
 	container_list.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -116,7 +117,7 @@ func _setup_right_panel():
 	grid_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	inventory_area.add_child(grid_scroll)
 	
-	inventory_grid = InventoryGridUI.new()
+	inventory_grid = InventoryGrid.new()
 	inventory_grid.name = "InventoryGrid"
 	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -140,10 +141,10 @@ func _setup_mass_info_bar(parent: Control):
 	style_box.border_width_right = 1
 	style_box.border_width_top = 1
 	style_box.border_width_bottom = 1
-	style_box.corner_radius_top_left = 4
-	style_box.corner_radius_top_right = 4
-	style_box.corner_radius_bottom_left = 4
-	style_box.corner_radius_bottom_right = 4
+	style_box.corner_radius_top_left = 2
+	style_box.corner_radius_top_right = 2
+	style_box.corner_radius_bottom_left = 2
+	style_box.corner_radius_bottom_right = 2
 	mass_info_bar.add_theme_stylebox_override("panel", style_box)
 	
 	mass_info_label = Label.new()
@@ -163,17 +164,17 @@ func _on_container_list_selected(index: int):
 	if index >= 0 and index < open_containers.size():
 		container_selected.emit(open_containers[index])
 
-func _on_item_activated(item: InventoryItem, slot: InventorySlotUI):
+func _on_item_activated(item: InventoryItem_Base, slot: InventorySlot):
 	item_activated.emit(item, slot)
 
-func _on_item_context_menu(item: InventoryItem, slot: InventorySlotUI, position: Vector2):
+func _on_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
 	item_context_menu.emit(item, slot, position)
 
 # Public interface
 func set_inventory_manager(manager: InventoryManager):
 	inventory_manager = manager
 
-func update_containers(containers: Array[InventoryContainer]):
+func update_containers(containers: Array[InventoryContainer_Base]):
 	open_containers = containers
 	container_list.clear()
 	
@@ -187,7 +188,7 @@ func update_containers(containers: Array[InventoryContainer]):
 		var item_index = container_list.get_item_count() - 1
 		container_list.set_item_tooltip(item_index, container_text)
 
-func select_container(container: InventoryContainer):
+func select_container(container: InventoryContainer_Base):
 	current_container = container
 	
 	if inventory_grid:
@@ -234,10 +235,10 @@ func update_mass_info():
 	else:
 		mass_info_label.add_theme_color_override("font_color", Color.WHITE)
 
-func get_current_container() -> InventoryContainer:
+func get_current_container() -> InventoryContainer_Base:
 	return current_container
 
-func get_inventory_grid() -> InventoryGridUI:
+func get_inventory_grid() -> InventoryGrid:
 	return inventory_grid
 
 func _setup_container_drop_handling():
@@ -260,7 +261,7 @@ func _update_container_drop_highlights():
 	if not drag_data:
 		return
 	
-	var item = drag_data.get("item") as InventoryItem
+	var item = drag_data.get("item") as InventoryItem_Base
 	if not item:
 		return
 	
@@ -325,8 +326,8 @@ func _try_drop_on_container_list(global_pos: Vector2, drag_data):
 		return false
 	
 	var target_container = open_containers[container_index]
-	var item = drag_data.get("item") as InventoryItem
-	var source_slot = drag_data.get("source_slot") as InventorySlotUI
+	var item = drag_data.get("item") as InventoryItem_Base
+	var source_slot = drag_data.get("source_slot") as InventorySlot
 	
 	# Don't allow dropping on the same container
 	if target_container == current_container:
