@@ -514,11 +514,6 @@ func _handle_stack_merge(target_slot: InventorySlotUI, target_item: InventoryIte
 	var space_available = target_item.max_stack_size - target_item.quantity
 	var amount_to_transfer = min(item.quantity, space_available)
 	
-	# Check if shift is held for partial stack transfer
-	if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
-		# Shift+drag: transfer only half the stack (rounded up)
-		amount_to_transfer = min(amount_to_transfer, (item.quantity + 1) / 2)
-	
 	if amount_to_transfer <= 0:
 		return false
 	
