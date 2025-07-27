@@ -35,10 +35,6 @@ func _remove_split_container_outline():
 	# Create custom grabber style without outlines
 	var grabber_style = StyleBoxFlat.new()
 	grabber_style.bg_color = Color(0.4, 0.4, 0.4, 1.0)
-	grabber_style.corner_radius_top_left = 2
-	grabber_style.corner_radius_top_right = 2
-	grabber_style.corner_radius_bottom_left = 2
-	grabber_style.corner_radius_bottom_right = 2
 	
 	# Remove any border/outline styling
 	var panel_style = StyleBoxFlat.new()
@@ -65,14 +61,6 @@ func _setup_left_panel():
 	
 	add_child(left_panel)
 	
-	#var container_list_label = Label.new()
-	#container_list_label.text = "Containers"
-	#container_list_label.add_theme_font_size_override("font_size", 14)
-	#container_list_label.add_theme_color_override("font_color", Color.WHITE)
-	#container_list_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	#container_list_label.custom_minimum_size.y = 25
-	#left_panel.add_child(container_list_label)
-	
 	container_list = ItemList.new()
 	container_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	container_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -83,6 +71,12 @@ func _setup_left_panel():
 	# Set up drop detection on container list
 	container_list.mouse_filter = Control.MOUSE_FILTER_PASS
 	
+	# Add padding for items inside the container list
+	container_list.add_theme_constant_override("h_separation", 4)
+	container_list.add_theme_constant_override("v_separation", 2)
+	container_list.add_theme_constant_override("item_h_separation", 4)
+	container_list.add_theme_constant_override("item_v_separation", 2)
+	
 	# Keep normal dark background for container list
 	var list_style = StyleBoxFlat.new()
 	list_style.bg_color = Color(0.1, 0.1, 0.1, 0.9)
@@ -91,6 +85,10 @@ func _setup_left_panel():
 	list_style.border_width_right = 1
 	list_style.border_width_top = 1
 	list_style.border_width_bottom = 1
+	list_style.content_margin_left = 6
+	list_style.content_margin_right = 6
+	list_style.content_margin_top = 4
+	list_style.content_margin_bottom = 4
 	container_list.add_theme_stylebox_override("panel", list_style)
 	
 	left_panel.add_child(container_list)
@@ -141,24 +139,36 @@ func _setup_mass_info_bar(parent: Control):
 	style_box.border_width_right = 1
 	style_box.border_width_top = 1
 	style_box.border_width_bottom = 1
-	style_box.corner_radius_top_left = 2
-	style_box.corner_radius_top_right = 2
-	style_box.corner_radius_bottom_left = 2
-	style_box.corner_radius_bottom_right = 2
 	mass_info_bar.add_theme_stylebox_override("panel", style_box)
+	
+	# Create a margin container for padding inside the mass info bar
+	var margin_container = MarginContainer.new()
+	margin_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin_container.add_theme_constant_override("margin_left", 8)
+	margin_container.add_theme_constant_override("margin_right", 8)
+	margin_container.add_theme_constant_override("margin_top", 4)
+	margin_container.add_theme_constant_override("margin_bottom", 4)
+	mass_info_bar.add_child(margin_container)
 	
 	mass_info_label = Label.new()
 	mass_info_label.name = "MassInfoLabel"
 	mass_info_label.text = "No container selected"
 	mass_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mass_info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	mass_info_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mass_info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mass_info_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mass_info_label.add_theme_color_override("font_color", Color.WHITE)
 	mass_info_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	mass_info_label.add_theme_constant_override("shadow_offset_x", 1)
 	mass_info_label.add_theme_constant_override("shadow_offset_y", 1)
 	mass_info_label.add_theme_font_size_override("font_size", 12)
-	mass_info_bar.add_child(mass_info_label)
+	
+	# Enable text clipping to prevent overflow
+	mass_info_label.clip_contents = true
+	mass_info_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	mass_info_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	
+	margin_container.add_child(mass_info_label)
 
 func _on_container_list_selected(index: int):
 	if index >= 0 and index < open_containers.size():

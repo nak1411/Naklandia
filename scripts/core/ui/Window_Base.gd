@@ -12,7 +12,7 @@ extends Window
 # Visual properties
 @export var title_bar_height: float = 32.0
 @export var border_width: float = 2.0
-@export var corner_radius: float = 2.0
+@export var corner_radius: float = 0.0
 
 # Colors
 @export var title_bar_color: Color = Color(0.15, 0.15, 0.15, 1.0)

@@ -120,10 +120,6 @@ func _style_popup(popup: PopupPanel):
 	style_box.border_width_top = 1
 	style_box.border_width_bottom = 1
 	style_box.border_color = Color(0.4, 0.4, 0.4, 1.0)
-	style_box.corner_radius_top_left = 2
-	style_box.corner_radius_top_right = 2
-	style_box.corner_radius_bottom_left = 2
-	style_box.corner_radius_bottom_right = 2
 	popup.add_theme_stylebox_override("panel", style_box)
 
 func _style_menu_button(button: Button):

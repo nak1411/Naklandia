@@ -43,13 +43,26 @@ func _ready():
 	visible = false
 
 func _setup_inventory_ui():
+	# Create a margin container to add padding between title bar and content
+	var margin_wrapper = MarginContainer.new()
+	margin_wrapper.name = "MarginWrapper"
+	margin_wrapper.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin_wrapper.add_theme_constant_override("margin_top", 8)
+	margin_wrapper.add_theme_constant_override("margin_left", 4)
+	margin_wrapper.add_theme_constant_override("margin_right", 4)
+	margin_wrapper.add_theme_constant_override("margin_bottom", 4)
+	
 	# Create main container for inventory content
 	inventory_container = VBoxContainer.new()
 	inventory_container.name = "InventoryContainer_Base"
-	inventory_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	inventory_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
-	# Add to the custom window's content area
-	add_content(inventory_container)
+	# Add to the margin wrapper
+	margin_wrapper.add_child(inventory_container)
+	
+	# Add wrapper to the custom window's content area
+	add_content(margin_wrapper)
 	
 	# Create header module
 	header = InventoryWindowHeader.new()
@@ -129,76 +142,103 @@ func _populate_container_list():
 	)
 	
 	open_containers = containers
-	
-	# Update content module only
 	content.update_containers(open_containers)
 	
-	# Select player inventory first
-	if not open_containers.is_empty():
-		_switch_to_container(open_containers[0])
+	# Auto-select first container
+	if open_containers.size() > 0:
+		select_container(open_containers[0])
 		content.select_container_index(0)
 
-func _switch_to_container(container: InventoryContainer_Base):
-	if current_container == container:
+func select_container(container: InventoryContainer_Base):
+	if not container:
 		return
 	
 	current_container = container
-	
-	# Compact the container before displaying
-	if container and container.get_item_count() > 0:
-		container.compact_items()
-	
 	content.select_container(container)
-	item_actions.set_current_container(container)
+	
+	# Update container list selection
+	for i in range(open_containers.size()):
+		if open_containers[i] == container:
+			content.select_container_index(i)
+			break
 	
 	container_switched.emit(container)
 
-# Event handlers
-func _on_close_requested():
-	_close_window()
+func refresh_display():
+	if content:
+		content.refresh_display()
 
-func _close_window():
-	# Close any open dialog windows first
-	if item_actions:
-		item_actions.close_all_dialogs()
+func refresh_container_list():
+	if not inventory_manager:
+		return
 	
+	var containers = inventory_manager.get_accessible_containers()
+	
+	# Sort containers - player inventory first
+	containers.sort_custom(func(a, b): 
+		if a.container_id == "player_inventory":
+			return true
+		elif b.container_id == "player_inventory":
+			return false
+		return a.container_name < b.container_name
+	)
+	
+	open_containers = containers
+	content.update_containers(open_containers)
+
+func get_current_container() -> InventoryContainer_Base:
+	return current_container
+
+func get_inventory_grid() -> InventoryGrid:
+	if content:
+		return content.get_inventory_grid()
+	return null
+
+# Signal handlers
+func _on_close_requested():
 	visible = false
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-
-func _on_content_container_selected(container: InventoryContainer_Base):
-	_switch_to_container(container)
-
-func _on_search_changed(text: String):
-	# TODO: Implement search filtering
-	pass
-
-func _on_filter_changed(filter_type: int):
-	# TODO: Implement item filtering
-	pass
-
-func _on_sort_requested(sort_type: InventoryManager.SortType):
-	if inventory_manager and current_container:
-		inventory_manager.sort_container(current_container.container_id, sort_type)
-
-func _on_transparency_changed(value: float):
-	if inventory_container:
-		inventory_container.modulate.a = value
 
 func _on_window_locked_changed(locked: bool):
 	is_locked = locked
-	
-	# Add/remove visual indicator
 	if locked:
 		_add_lock_indicator()
 	else:
 		_remove_lock_indicator()
 
+func _on_transparency_changed(transparency: float):
+	# Handle transparency changes
+	pass
+
+func _on_search_changed(text: String):
+	# TODO: Implement search functionality
+	pass
+
+func _on_filter_changed(filter_type: int):
+	# TODO: Implement filter functionality
+	pass
+
+func _on_sort_requested(sort_type: InventoryManager.SortType):
+	if inventory_manager and current_container:
+		inventory_manager.sort_container(current_container.container_id, sort_type)
+		refresh_display()
+
+func _on_content_container_selected(container: InventoryContainer_Base):
+	select_container(container)
+
 func _add_lock_indicator():
-	# Add a yellow bar indicator at the top
 	var lock_indicator = Panel.new()
 	lock_indicator.name = "LockIndicator"
-	lock_indicator.custom_minimum_size.y = 4
+	lock_indicator.custom_minimum_size.y = 25
 	lock_indicator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var lock_label = Label.new()
+	lock_label.text = "🔒 WINDOW LOCKED"
+	lock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lock_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	lock_label.add_theme_color_override("font_color", Color.BLACK)
+	lock_label.add_theme_font_size_override("font_size", 12)
+	lock_indicator.add_child(lock_label)
 	
 	var style_box = StyleBoxFlat.new()
 	style_box.bg_color = Color.YELLOW
@@ -252,78 +292,18 @@ func _unhandled_input(event: InputEvent):
 				active_context_menu._close_current_popup()
 				active_context_menu = null
 	
-	# Handle window-specific keyboard shortcuts only when visible
-	if visible and event is InputEventKey and event.pressed:
+	# Handle window-specific keyboard shortcuts
+	if event is InputEventKey and event.pressed:
 		match event.keycode:
-			KEY_I, KEY_ESCAPE:
-				_close_window()
-				get_viewport().set_input_as_handled()
-			KEY_F5, KEY_F9:
+			KEY_ESCAPE:
+				if visible:
+					visible = false
+					get_viewport().set_input_as_handled()
+			KEY_F5:
 				refresh_display()
 				get_viewport().set_input_as_handled()
-			KEY_HOME:
-				if not is_locked:
-					position = Vector2i(1040, 410)
-				get_viewport().set_input_as_handled()
 
-# Public interface
-func refresh_display():
-	content.refresh_display()
-
-func refresh_container_list():
-	if not inventory_manager:
-		return
-	
-	# Update content module with refreshed container info
-	content.update_containers(open_containers)
-
-func toggle_visibility():
-	if visible:
-		hide()
-	else:
-		show()
-		grab_focus()
-
-func bring_to_front():
-	grab_focus()
-
-func set_transparency(value: float):
-	if inventory_container:
-		inventory_container.modulate.a = value
-	# Use CustomWindow's method
-	super.set_transparency(value)
-
-func get_transparency() -> float:
-	return super.get_transparency()
-
-func set_window_title(new_title: String):
-	super.set_window_title(new_title)
-
-func set_window_locked(locked: bool):
-	is_locked = locked
-	# Use CustomWindow's method
-	super.set_window_locked(locked)
-	_on_window_locked_changed(locked)
-
-func is_window_locked() -> bool:
-	return is_locked
-
-# Theme and styling
+# Theme management
 func apply_custom_theme():
-	var theme = Theme.new()
-	
-	var itemlist_style = StyleBoxFlat.new()
-	itemlist_style.bg_color = Color(0.1, 0.1, 0.1, 0.9)
-	itemlist_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
-	itemlist_style.border_width_left = 1
-	itemlist_style.border_width_right = 1
-	itemlist_style.border_width_top = 1
-	itemlist_style.border_width_bottom = 1
-	itemlist_style.content_margin_left = 8
-	itemlist_style.content_margin_right = 8
-	itemlist_style.content_margin_top = 4
-	itemlist_style.content_margin_bottom = 4
-	
-	# Apply theme to main container
-	if inventory_container:
-		inventory_container.set_theme(theme)
+	# Apply any custom theming to the inventory window
+	pass
