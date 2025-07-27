@@ -42,6 +42,9 @@ func _ready():
 	apply_custom_theme()
 	visible = false
 
+# InventoryWindow.gd - Modified _setup_inventory_ui method for left panel full height layout
+# Replace the existing _setup_inventory_ui method in InventoryWindow.gd
+
 func _setup_inventory_ui():
 	# Create main horizontal container (no margins)
 	var main_hsplit = HSplitContainer.new()
@@ -52,15 +55,17 @@ func _setup_inventory_ui():
 	# Add directly to the custom window's content area
 	add_content(main_hsplit)
 	
-	# LEFT SIDE: Container list panel (full height, no margins, extends to title bar)
-	var left_container_panel = VBoxContainer.new()
+	# LEFT SIDE: Container list panel (full height, small top padding)
+	var left_container_panel = MarginContainer.new()
 	left_container_panel.name = "LeftContainerPanel"
 	left_container_panel.custom_minimum_size.x = 180
 	left_container_panel.size_flags_horizontal = Control.SIZE_FILL
 	left_container_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Add small top margin for padding from title bar
+	left_container_panel.add_theme_constant_override("margin_top", 6)
 	main_hsplit.add_child(left_container_panel)
 	
-	# Create the container list directly (no margins, full height)
+	# Create the container list directly
 	var container_list = ItemList.new()
 	container_list.name = "ContainerList"
 	container_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -102,7 +107,7 @@ func _setup_inventory_ui():
 	# Header with top margin (positioned over right panel only)
 	var header_wrapper = MarginContainer.new()
 	header_wrapper.name = "HeaderWrapper"
-	header_wrapper.add_theme_constant_override("margin_top", 8)  # Space from title bar
+	header_wrapper.add_theme_constant_override("margin_top", 6)  # Space from title bar
 	right_panel.add_child(header_wrapper)
 	
 	header = InventoryWindowHeader.new()

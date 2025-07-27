@@ -69,8 +69,13 @@ func _setup_controls():
 	# Search field - now on the right side
 	search_field = LineEdit.new()
 	search_field.placeholder_text = "Search items..."
-	search_field.custom_minimum_size.x =200
+	search_field.custom_minimum_size.x =150
 	add_child(search_field)
+	
+	# Right margin spacer to give search field breathing room from the right edge
+	var right_margin = Control.new()
+	right_margin.custom_minimum_size.x = 8  # Provide right padding for search field
+	add_child(right_margin)
 	
 	# Create dropdown menus but DON'T add them as children to the HBoxContainer
 	# They will be added to the scene when needed
