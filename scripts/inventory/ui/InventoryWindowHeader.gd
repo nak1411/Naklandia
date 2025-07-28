@@ -8,6 +8,8 @@ var filter_options: Button  # Using Button with DropDownMenu_Base
 var sort_button: Button  # Changed from MenuButton to Button
 var filter_dropdown: DropDownMenu_Base
 var sort_dropdown: DropDownMenu_Base
+var original_header_styles: Dictionary = {}
+var header_transparency_init: bool = false
 
 # References
 var inventory_manager: InventoryManager
@@ -377,4 +379,55 @@ func clear_search():
 
 func set_transparency(transparency: float):
 	current_transparency = transparency
+	
+	# Store originals on first call
+	if not header_transparency_init:
+		_store_original_header_styles()
+		header_transparency_init = true
+	
+	# Apply base modulate
 	modulate.a = transparency
+	
+	# Apply transparency to buttons using stored originals
+	_apply_transparency_from_originals(transparency)
+
+func _store_original_header_styles():
+	if filter_options:
+		var style = filter_options.get_theme_stylebox("normal")
+		if style and style is StyleBoxFlat:
+			original_header_styles["filter_normal"] = style.duplicate()
+	
+	if sort_button:
+		var style = sort_button.get_theme_stylebox("normal")
+		if style and style is StyleBoxFlat:
+			original_header_styles["sort_normal"] = style.duplicate()
+	
+	if search_field:
+		var style = search_field.get_theme_stylebox("normal")
+		if style and style is StyleBoxFlat:
+			original_header_styles["search_normal"] = style.duplicate()
+
+func _apply_transparency_from_originals(transparency: float):
+	# Apply to filter button
+	if filter_options and original_header_styles.has("filter_normal"):
+		var original = original_header_styles["filter_normal"] as StyleBoxFlat
+		var new_style = original.duplicate() as StyleBoxFlat
+		var orig_color = original.bg_color
+		new_style.bg_color = Color(orig_color.r, orig_color.g, orig_color.b, orig_color.a * transparency)
+		filter_options.add_theme_stylebox_override("normal", new_style)
+	
+	# Apply to sort button
+	if sort_button and original_header_styles.has("sort_normal"):
+		var original = original_header_styles["sort_normal"] as StyleBoxFlat
+		var new_style = original.duplicate() as StyleBoxFlat
+		var orig_color = original.bg_color
+		new_style.bg_color = Color(orig_color.r, orig_color.g, orig_color.b, orig_color.a * transparency)
+		sort_button.add_theme_stylebox_override("normal", new_style)
+	
+	# Apply to search field
+	if search_field and original_header_styles.has("search_normal"):
+		var original = original_header_styles["search_normal"] as StyleBoxFlat
+		var new_style = original.duplicate() as StyleBoxFlat
+		var orig_color = original.bg_color
+		new_style.bg_color = Color(orig_color.r, orig_color.g, orig_color.b, orig_color.a * transparency)
+		search_field.add_theme_stylebox_override("normal", new_style)

@@ -424,10 +424,10 @@ func get_transparency() -> float:
 
 func set_transparency(value: float):
 	window_transparency = value
-	if content_background:
-		var current_modulate = content_background.modulate
-		current_modulate.a = value
-		content_background.modulate = current_modulate
+	
+	# Simply modulate the entire content area (everything except title bar)
+	if content_area:
+		content_area.modulate.a = value
 	
 	transparency_changed.emit(value)
 

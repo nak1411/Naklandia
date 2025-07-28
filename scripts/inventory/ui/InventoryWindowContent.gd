@@ -9,6 +9,8 @@ var mass_info_bar: Panel
 var mass_info_label: Label
 var external_container_list: ItemList = null
 var using_external_container_list: bool = false
+var original_content_styles: Dictionary = {}
+var content_transparency_init: bool = false
 
 # References
 var inventory_manager: InventoryManager
@@ -422,3 +424,33 @@ func _try_drop_on_container_list(global_pos: Vector2, drag_data):
 				drag_data.success_callback.call(false)
 	
 	return false
+	
+func set_transparency(transparency: float):
+	# Store originals on first call
+	if not content_transparency_init:
+		_store_original_content_styles()
+		content_transparency_init = true
+	
+	modulate.a = transparency
+	
+	# Apply transparency using stored originals
+	_apply_content_transparency_from_originals(transparency)
+
+func _store_original_content_styles():
+	if mass_info_bar:
+		var style = mass_info_bar.get_theme_stylebox("panel")
+		if style and style is StyleBoxFlat:
+			original_content_styles["mass_panel"] = style.duplicate()
+
+func _apply_content_transparency_from_originals(transparency: float):
+	# Apply to mass info bar
+	if mass_info_bar and original_content_styles.has("mass_panel"):
+		var original = original_content_styles["mass_panel"] as StyleBoxFlat
+		var new_style = original.duplicate() as StyleBoxFlat
+		var orig_color = original.bg_color
+		new_style.bg_color = Color(orig_color.r, orig_color.g, orig_color.b, orig_color.a * transparency)
+		mass_info_bar.add_theme_stylebox_override("panel", new_style)
+	
+	# Apply to inventory grid
+	if inventory_grid and inventory_grid.has_method("set_transparency"):
+		inventory_grid.set_transparency(transparency)

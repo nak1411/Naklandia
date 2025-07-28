@@ -22,6 +22,8 @@ var background_panel: Panel
 var grid_container: GridContainer
 var slots: Array = []  # 2D array of InventorySlotUI
 var selected_slots: Array[InventorySlot] = []
+var original_grid_styles: Dictionary = {}
+var grid_transparency_init: bool = false
 
 # Signals
 signal item_selected(item: InventoryItem_Base, slot: InventorySlot)
@@ -533,3 +535,36 @@ func set_slot_size(new_size: Vector2):
 		for x in grid_width:
 			if slots[y] and x < slots[y].size():
 				slots[y][x].slot_size = new_size
+				
+func set_transparency(transparency: float):
+	# Store originals on first call
+	if not grid_transparency_init:
+		_store_original_grid_styles()
+		grid_transparency_init = true
+	
+	modulate.a = transparency
+	
+	# Apply transparency using stored originals
+	_apply_grid_transparency_from_originals(transparency)
+
+func _store_original_grid_styles():
+	if background_panel:
+		var style = background_panel.get_theme_stylebox("panel")
+		if style and style is StyleBoxFlat:
+			original_grid_styles["background_panel"] = style.duplicate()
+
+func _apply_grid_transparency_from_originals(transparency: float):
+	# Apply to background panel
+	if background_panel and original_grid_styles.has("background_panel"):
+		var original = original_grid_styles["background_panel"] as StyleBoxFlat
+		var new_style = original.duplicate() as StyleBoxFlat
+		var orig_color = original.bg_color
+		new_style.bg_color = Color(orig_color.r, orig_color.g, orig_color.b, orig_color.a * transparency)
+		background_panel.add_theme_stylebox_override("panel", new_style)
+	
+	# Apply transparency to all inventory slots
+	for row in slots:
+		if row:
+			for slot in row:
+				if slot and slot.has_method("set_transparency"):
+					slot.set_transparency(transparency)

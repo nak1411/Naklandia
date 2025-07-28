@@ -12,6 +12,7 @@ var inventory_container: VBoxContainer
 var header: InventoryWindowHeader
 var content: InventoryWindowContent
 var item_actions: InventoryItemActions
+var inventory_integration: InventoryIntegration
 
 # State
 var inventory_manager: InventoryManager
@@ -263,8 +264,69 @@ func _on_window_locked_changed(locked: bool):
 		_remove_lock_indicator()
 
 func _on_transparency_changed(transparency: float):
-	# Handle transparency changes
-	pass
+	# Apply transparency to header elements specifically
+	if header and header.has_method("set_transparency"):
+		header.set_transparency(transparency)
+	
+	# Apply transparency to content area
+	if content and content.has_method("set_transparency"):
+		content.set_transparency(transparency)
+	
+	# Apply transparency to any inventory-specific elements
+	_apply_inventory_transparency(transparency)
+
+func _apply_inventory_transparency(transparency: float):
+	"""Apply transparency to inventory-specific UI elements"""
+	
+	# Find and apply transparency to mass info bar
+	var mass_bar = get_node_or_null("MainContainer/ContentArea/MainHSplit/RightPanel/Content/MassInfoBar")
+	if mass_bar:
+		_apply_panel_transparency_to_node(mass_bar, transparency)
+	
+	# Find and apply transparency to container list
+	var container_list = get_node_or_null("MainContainer/ContentArea/MainHSplit/LeftContainerPanel/ContainerList") 
+	if container_list:
+		_apply_itemlist_transparency_to_node(container_list, transparency)
+	
+	# Find and apply transparency to inventory grid background
+	var grid_areas = _find_nodes_by_name_recursive(self, "InventoryGrid")
+	for grid in grid_areas:
+		if grid.has_method("set_transparency"):
+			grid.set_transparency(transparency)
+
+func _apply_panel_transparency_to_node(node: Control, transparency: float):
+	"""Helper to apply panel transparency to a specific node"""
+	if node is Panel:
+		var style_box = node.get_theme_stylebox("panel")
+		if style_box and style_box is StyleBoxFlat:
+			var style_copy = style_box.duplicate() as StyleBoxFlat
+			var current_color = style_copy.bg_color
+			current_color.a = current_color.a * transparency
+			style_copy.bg_color = current_color
+			node.add_theme_stylebox_override("panel", style_copy)
+
+func _apply_itemlist_transparency_to_node(node: Control, transparency: float):
+	"""Helper to apply itemlist transparency to a specific node"""
+	if node is ItemList:
+		var style_box = node.get_theme_stylebox("panel")
+		if style_box and style_box is StyleBoxFlat:
+			var style_copy = style_box.duplicate() as StyleBoxFlat
+			var current_color = style_copy.bg_color
+			current_color.a = current_color.a * transparency
+			style_copy.bg_color = current_color
+			node.add_theme_stylebox_override("panel", style_copy)
+
+func _find_nodes_by_name_recursive(node: Node, target_name: String) -> Array:
+	"""Find all nodes with a specific name recursively"""
+	var result = []
+	
+	if node.name == target_name:
+		result.append(node)
+	
+	for child in node.get_children():
+		result.append_array(_find_nodes_by_name_recursive(child, target_name))
+	
+	return result
 
 func _on_search_changed(text: String):
 	# TODO: Implement search functionality
@@ -283,6 +345,13 @@ func _on_content_container_selected(container: InventoryContainer_Base):
 	select_container(container)
 
 func _add_lock_indicator():
+	# Find the right panel or content area to add the lock indicator to
+	var target_container = _find_lock_indicator_parent()
+	
+	if not target_container:
+		print("Warning: Could not find suitable parent for lock indicator")
+		return
+	
 	var lock_indicator = Panel.new()
 	lock_indicator.name = "LockIndicator"
 	lock_indicator.custom_minimum_size.y = 25
@@ -301,13 +370,77 @@ func _add_lock_indicator():
 	style_box.bg_color = Color.YELLOW
 	lock_indicator.add_theme_stylebox_override("panel", style_box)
 	
-	inventory_container.add_child(lock_indicator)
-	inventory_container.move_child(lock_indicator, 0)
+	# Add to the appropriate container
+	target_container.add_child(lock_indicator)
+	target_container.move_child(lock_indicator, 0)
+
+func _find_lock_indicator_parent() -> Control:
+	"""Find the best container to add the lock indicator to"""
+	
+	# Try to find RightPanel first (from the new UI structure)
+	var right_panel = get_node_or_null("MainContainer/ContentArea/MainHSplit/RightPanel")
+	if right_panel:
+		return right_panel
+	
+	# Try to find the content area
+	var content_area = get_node_or_null("MainContainer/ContentArea") 
+	if content_area:
+		return content_area
+	
+	# Try to find any VBoxContainer that could work
+	var main_container = get_node_or_null("MainContainer")
+	if main_container:
+		var vboxes = _find_nodes_by_type(main_container, VBoxContainer)
+		if vboxes.size() > 0:
+			return vboxes[0]
+	
+	# Last resort - use the main container itself
+	return get_node_or_null("MainContainer")
+
+func _find_nodes_by_type(parent: Node, type) -> Array:
+	"""Recursively find all nodes of a specific type"""
+	var result = []
+	
+	if parent.get_class() == type.get_class():
+		result.append(parent)
+	
+	for child in parent.get_children():
+		result.append_array(_find_nodes_by_type(child, type))
+	
+	return result
 
 func _remove_lock_indicator():
-	var lock_indicator = inventory_container.get_node_or_null("LockIndicator")
-	if lock_indicator:
-		lock_indicator.queue_free()
+	# Look for lock indicator in multiple possible locations
+	var locations_to_check = [
+		"MainContainer/ContentArea/MainHSplit/RightPanel/LockIndicator",
+		"MainContainer/ContentArea/LockIndicator", 
+		"MainContainer/LockIndicator"
+	]
+	
+	for location in locations_to_check:
+		var lock_indicator = get_node_or_null(location)
+		if lock_indicator:
+			lock_indicator.queue_free()
+			return
+	
+	# If not found in expected locations, search recursively
+	var main_container = get_node_or_null("MainContainer")
+	if main_container:
+		var lock_indicator = _find_lock_indicator_recursive(main_container)
+		if lock_indicator:
+			lock_indicator.queue_free()
+
+func _find_lock_indicator_recursive(node: Node) -> Node:
+	"""Recursively find the lock indicator"""
+	if node.name == "LockIndicator":
+		return node
+	
+	for child in node.get_children():
+		var result = _find_lock_indicator_recursive(child)
+		if result:
+			return result
+	
+	return null
 
 func _on_item_activated(item: InventoryItem_Base, slot: InventorySlot):
 	item_actions.show_item_details_dialog(item)
@@ -352,9 +485,17 @@ func _unhandled_input(event: InputEvent):
 	# Handle window-specific keyboard shortcuts
 	if event is InputEventKey and event.pressed:
 		match event.keycode:
+			KEY_I:
+				# Toggle inventory (close when pressing I while window is open)
+				if visible and inventory_integration:
+					inventory_integration.close_from_window()
+					get_viewport().set_input_as_handled()
 			KEY_ESCAPE:
 				if visible:
-					visible = false
+					if inventory_integration:
+						inventory_integration.close_from_window()
+					else:
+						visible = false
 					get_viewport().set_input_as_handled()
 			KEY_F5:
 				refresh_display()
@@ -364,3 +505,6 @@ func _unhandled_input(event: InputEvent):
 func apply_custom_theme():
 	# Apply any custom theming to the inventory window
 	pass
+	
+func set_inventory_integration(integration: InventoryIntegration):
+	inventory_integration = integration

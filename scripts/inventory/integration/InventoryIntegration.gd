@@ -1,5 +1,4 @@
-# InventoryIntegration.gd - Integrates inventory system with player
-# Merged functionality from PlayerInventorySetup for streamlined initialization
+# InventoryIntegration.gd - Updated with detailed centering debug
 class_name InventoryIntegration
 extends Node
 
@@ -7,14 +6,19 @@ extends Node
 var player: Player
 var inventory_manager: InventoryManager
 var inventory_window: InventoryWindow
+var ui_manager: UIManager
+var fallback_canvas: CanvasLayer  # For when UIManager isn't found
 
 # UI Management
-var ui_canvas: CanvasLayer
 var is_inventory_open: bool = false
 var input_consumed: bool = false
 
-# Setup tracking (merged from PlayerInventorySetup)
+# Setup tracking
 var setup_complete: bool = false
+
+# Position saving
+var saved_position: Vector2i = Vector2i.ZERO
+var position_save_file: String = "user://inventory_window_position.dat"
 
 # Input action names
 const TOGGLE_INVENTORY = "toggle_inventory"
@@ -22,12 +26,21 @@ const TOGGLE_INVENTORY = "toggle_inventory"
 # Signals
 signal inventory_toggled(is_open: bool)
 signal item_used(item: InventoryItem_Base)
-signal setup_completed() # New signal for when system is fully initialized
+signal setup_completed()
 
 func _ready():
 	print("Setting up inventory system...")
 	
-	# Initialize in sequence with proper waiting
+	# Find UI Manager in the scene more thoroughly
+	ui_manager = _find_ui_manager()
+	
+	if not ui_manager:
+		print("Warning: UIManager not found! Creating fallback CanvasLayer")
+		_create_fallback_ui()
+	else:
+		print("Found UIManager: ", ui_manager.name)
+	
+	# Initialize in sequence
 	_setup_input_actions()
 	_initialize_inventory_system()
 	
@@ -45,6 +58,69 @@ func _ready():
 	setup_complete = true
 	setup_completed.emit()
 	print("Inventory system initialized. Press I to open inventory!")
+
+func _find_ui_manager() -> UIManager:
+	# Try multiple ways to find UIManager
+	print("Looking for UIManager...")
+	
+	# First, check if it's in a group
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	print("UI managers in group: ", ui_managers.size())
+	if ui_managers.size() > 0:
+		print("Found UIManager in group: ", ui_managers[0])
+		return ui_managers[0] as UIManager
+	
+	# Then look in the current scene
+	var scene_root = get_tree().current_scene
+	print("Scene root: ", scene_root.name, " children: ", scene_root.get_children().size())
+	
+	for child in scene_root.get_children():
+		print("Child: ", child.name, " type: ", child.get_class())
+		if child.name == "UIManager":
+			print("Found node named UIManager: ", child)
+			# Check if it has UIManager methods instead of type checking
+			if child.has_method("add_window") and child.has_method("get_ui_canvas"):
+				print("UIManager has correct methods - returning it")
+				return child as UIManager
+			else:
+				print("UIManager node doesn't have expected methods")
+		if child is UIManager:
+			print("Found UIManager as child: ", child)
+			return child as UIManager
+	
+	var ui_manager_node = _find_node_by_name_recursive(scene_root, "UIManager")
+	if ui_manager_node:
+		print("Found UIManager recursively: ", ui_manager_node)
+		if ui_manager_node.has_method("add_window") and ui_manager_node.has_method("get_ui_canvas"):
+			print("Recursive UIManager has correct methods - returning it")
+			return ui_manager_node as UIManager
+	
+	print("UIManager not found anywhere!")
+	return null
+
+func _find_node_by_name_recursive(node: Node, target_name: String) -> Node:
+	if node.name == target_name:
+		return node
+	
+	for child in node.get_children():
+		var result = _find_node_by_name_recursive(child, target_name)
+		if result:
+			return result
+	
+	return null
+
+func _create_fallback_ui():
+	# Create fallback CanvasLayer if UIManager not found
+	var canvas_layer = CanvasLayer.new()
+	canvas_layer.name = "InventoryUI"
+	canvas_layer.layer = 15  # Above other UI
+	canvas_layer.visible = true  # Make sure it's visible
+	get_tree().current_scene.add_child(canvas_layer)
+	
+	print("Created fallback CanvasLayer with layer: ", canvas_layer.layer)
+	
+	# Store canvas layer reference separately
+	fallback_canvas = canvas_layer
 
 func _add_initial_test_items():
 	if inventory_manager:
@@ -78,25 +154,45 @@ func _initialize_inventory_system():
 	inventory_manager.load_inventory()
 
 func _setup_ui():
-	# Create UI canvas layer
-	ui_canvas = CanvasLayer.new()
-	ui_canvas.name = "InventoryUI"
-	ui_canvas.layer = 10  # Above other UI
-	add_child(ui_canvas)
-	
 	# Create inventory window (initially hidden)
 	inventory_window = InventoryWindow.new()
 	inventory_window.name = "InventoryWindow"
 	inventory_window.visible = false
-	ui_canvas.add_child(inventory_window)
+	
+	# Override the hardcoded position immediately
+	inventory_window.position = Vector2i.ZERO
+	
+	print("Created inventory window - initial size: ", inventory_window.size, " position: ", inventory_window.position)
+	
+	# Since InventoryWindow extends Window_Base (not Control), add it directly to the scene
+	# Windows should be added to the scene root, not CanvasLayers
+	get_tree().current_scene.add_child(inventory_window)
+	print("Added inventory window directly to scene root (Windows don't work well in CanvasLayers)")
+	
+	# Set up the window to handle its own toggle input
+	if inventory_window.has_method("set_inventory_integration"):
+		inventory_window.set_inventory_integration(self)
+	
+	# Load saved position or center the window
+	await get_tree().process_frame
+	print("After process_frame - window size: ", inventory_window.size, " position: ", inventory_window.position)
+	_load_and_apply_position()
+	
+	# Connect to position change signals to save position when moved
+	_connect_position_signals()
 	
 	# Ensure everything is properly initialized
 	await get_tree().process_frame
 	
-	# Double-check window is hidden
+	# Double-check window is hidden and ensure no flicker
 	if inventory_window:
-		inventory_window.hide()
+		# Make absolutely sure it's hidden
 		inventory_window.visible = false
+		inventory_window.hide()
+		# Force it to stay hidden
+		await get_tree().process_frame
+		inventory_window.visible = false
+		print("Inventory window properly hidden - visible: ", inventory_window.visible)
 
 func _connect_signals():
 	# Player reference
@@ -104,329 +200,273 @@ func _connect_signals():
 	
 	# Inventory window signals
 	if inventory_window:
-		if not inventory_window.window_closed.is_connected(_on_inventory_window_closed):
-			inventory_window.window_closed.connect(_on_inventory_window_closed)
-		inventory_window.container_switched.connect(_on_container_switched)
-	
-	# Inventory manager signals
-	if inventory_manager:
-		inventory_manager.item_transferred.connect(_on_inventory_item_transferred)
-		inventory_manager.transaction_completed.connect(_on_inventory_transaction_completed)
+		# Connect your inventory signals here
+		pass
+
+func _connect_position_signals():
+	if inventory_window:
+		# Connect to position change signal
+		if inventory_window.has_signal("position_changed"):
+			inventory_window.position_changed.connect(_on_window_position_changed)
 		
-		# Connect to all container signals for immediate UI updates
-		_connect_all_container_signals()
+		# Since Window might not have position_changed signal, also check for size_changed
+		if inventory_window.has_signal("size_changed"):
+			inventory_window.size_changed.connect(_on_window_moved)
+		
+		# Alternative: use a timer to periodically check for position changes
+		var position_timer = Timer.new()
+		position_timer.wait_time = 0.5  # Check every half second
+		position_timer.timeout.connect(_check_position_change)
+		position_timer.autostart = true
+		add_child(position_timer)
+		
+		print("Connected position tracking signals")
 
-func _connect_all_container_signals():
-	if not inventory_manager:
+func _on_window_position_changed():
+	_save_window_position()
+
+func _on_window_moved():
+	_save_window_position()
+
+var last_known_position: Vector2i = Vector2i.ZERO
+
+func _check_position_change():
+	if inventory_window and inventory_window.position != last_known_position:
+		last_known_position = inventory_window.position
+		_save_window_position()
+
+func _save_window_position():
+	if not inventory_window:
+		return
+	
+	saved_position = inventory_window.position
+	
+	# Save to file
+	var file = FileAccess.open(position_save_file, FileAccess.WRITE)
+	if file:
+		var save_data = {
+			"position": {
+				"x": saved_position.x,
+				"y": saved_position.y
+			},
+			"timestamp": Time.get_unix_time_from_system()
+		}
+		file.store_string(JSON.stringify(save_data))
+		file.close()
+		print("Saved inventory window position: ", saved_position)
+
+func _load_and_apply_position():
+	# Try to load saved position
+	if FileAccess.file_exists(position_save_file):
+		var file = FileAccess.open(position_save_file, FileAccess.READ)
+		if file:
+			var json_string = file.get_as_text()
+			file.close()
+			
+			var json = JSON.new()
+			var parse_result = json.parse(json_string)
+			
+			if parse_result == OK:
+				var save_data = json.data
+				if save_data.has("position"):
+					var pos_data = save_data.position
+					saved_position = Vector2i(pos_data.x, pos_data.y)
+					
+					# Validate position is still on screen
+					if _is_position_valid(saved_position):
+						inventory_window.position = saved_position
+						last_known_position = saved_position
+						print("Loaded and applied saved position: ", saved_position)
+						return
+					else:
+						print("Saved position is off-screen, centering instead")
+	
+	# If no saved position or invalid position, center the window
+	print("No valid saved position found, centering window")
+	_center_inventory_window_detailed()
+	last_known_position = inventory_window.position
+
+func _is_position_valid(pos: Vector2i) -> bool:
+	"""Check if the position is still valid (on screen)"""
+	var screen_size = DisplayServer.screen_get_size()
+	var window_size = inventory_window.size
+	
+	# Check if window would be completely off screen
+	if pos.x + window_size.x < 0 or pos.y + window_size.y < 0:
+		return false
+	if pos.x > screen_size.x or pos.y > screen_size.y:
+		return false
+	
+	# Check if at least part of the window is visible
+	if pos.x + 100 > screen_size.x or pos.y + 50 > screen_size.y:
+		return false
+	
+	return true
+
+func _input(event):
+	if not setup_complete:
 		return
 		
-	var containers = inventory_manager.get_all_containers()
-	for container in containers:
-		if not container.item_added.is_connected(_on_container_item_changed):
-			container.item_added.connect(_on_container_item_changed)
-		if not container.item_removed.is_connected(_on_container_item_changed):
-			container.item_removed.connect(_on_container_item_changed)
-		if not container.item_moved.is_connected(_on_container_item_moved):
-			container.item_moved.connect(_on_container_item_moved)
+	if event.is_action_pressed(TOGGLE_INVENTORY):
+		toggle_inventory_detailed()
+		get_viewport().set_input_as_handled()  # Consume the input
+		input_consumed = true
 
-# Signal handlers
-func _on_inventory_window_closed():
-	close_inventory()
-
-func _on_container_switched(container_id: String):
-	# Handle container switching logic if needed
-	pass
-
-func _on_inventory_item_transferred(item: InventoryItem_Base, from_container: String, to_container: String):
-	# Only refresh if transfer involves player inventory
-	var player_inv = inventory_manager.get_player_inventory()
-	if player_inv and (from_container == player_inv.container_id or to_container == player_inv.container_id):
-		_schedule_ui_refresh()
-
-func _on_inventory_transaction_completed(transaction: Dictionary):
-	# Only refresh if transaction involves player inventory
-	var player_inv = inventory_manager.get_player_inventory()
-	if player_inv:
-		var from_container = transaction.get("from_container", "")
-		var to_container = transaction.get("to_container", "")
-		if from_container == player_inv.container_id or to_container == player_inv.container_id:
-			_schedule_ui_refresh()
-
-func _on_container_item_changed(item: InventoryItem_Base, position: Vector2i):
-	# Immediate UI refresh when any container changes
-	_schedule_ui_refresh()
-	# Also refresh the inventory window's container list text
-	if inventory_window and inventory_window.visible:
-		inventory_window.refresh_container_list()
-
-func _on_container_item_moved(item: InventoryItem_Base, from_pos: Vector2i, to_pos: Vector2i):
-	# Immediate UI refresh when items are moved
-	_schedule_ui_refresh()
-
-# UI refresh management
-var _refresh_scheduled: bool = false
-
-func _schedule_ui_refresh():
-	if _refresh_scheduled:
+# Also keep the unhandled input as fallback
+func _unhandled_input(event):
+	if not setup_complete:
 		return
-	_refresh_scheduled = true
-	call_deferred("_do_ui_refresh")
+		
+	if event.is_action_pressed(TOGGLE_INVENTORY) and not input_consumed:
+		toggle_inventory_detailed()
+		get_viewport().set_input_as_handled()
+		input_consumed = true
 
-func _do_ui_refresh():
-	_refresh_scheduled = false
-	if inventory_window and inventory_window.visible:
-		inventory_window.refresh_display()
-
-# Input handling (enhanced with setup completion check from PlayerInventorySetup)
-func _unhandled_input(event: InputEvent):
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_I:
-			print("I key pressed")
-			if setup_complete:
-				toggle_inventory()
-			else:
-				print("Inventory not ready yet!")
-			get_viewport().set_input_as_handled()
-		elif event.keycode == KEY_ESCAPE and is_inventory_open:
-			close_inventory()
-			get_viewport().set_input_as_handled()
-		elif event.keycode == KEY_ESCAPE and !is_inventory_open:
-			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-			get_viewport().set_input_as_handled()
-		elif event.keycode == KEY_F9:  # Debug key
-			refresh_all_ui()  # Force complete UI refresh
-			get_viewport().set_input_as_handled()
-
-# Inventory UI control
-func toggle_inventory():
-	if input_consumed or not setup_complete:
-		return
-	
-	input_consumed = true
-	get_tree().process_frame.connect(func(): input_consumed = false, CONNECT_ONE_SHOT)
-	
+func toggle_inventory_detailed():
 	if not inventory_window:
 		print("Inventory window not ready!")
 		return
 	
+	is_inventory_open = !is_inventory_open
+	
+	print("=== INVENTORY TOGGLE DETAILED ===")
+	print("Opening: ", is_inventory_open)
+	print("Window exists: ", inventory_window != null)
+	print("Window valid: ", is_instance_valid(inventory_window))
+	
 	if is_inventory_open:
-		close_inventory()
-	else:
-		open_inventory()
-
-func open_inventory():
-	if not inventory_window or not setup_complete:
-		return
-	if not is_inventory_open:
+		print("Before show - position: ", inventory_window.position, " size: ", inventory_window.size)
+		print("Window visible: ", inventory_window.visible)
+		
+		# Don't re-center if we have a saved position
+		if saved_position == Vector2i.ZERO:
+			_center_inventory_window_detailed()
+		else:
+			# Use saved position but validate it's still on screen
+			if _is_position_valid(saved_position):
+				inventory_window.position = saved_position
+				print("Using saved position: ", saved_position)
+			else:
+				print("Saved position invalid, centering")
+				_center_inventory_window_detailed()
+		
+		# Show the window
 		inventory_window.visible = true
-		is_inventory_open = true
-		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-		inventory_toggled.emit(is_inventory_open)
-
-func close_inventory():
-	if not inventory_window:
-		return
-	if is_inventory_open:
-		# Close any open dialog windows first
-		if inventory_window and inventory_window.item_actions and inventory_window.item_actions.has_method("close_all_dialogs"):
-			inventory_window.item_actions.close_all_dialogs()
+		inventory_window.show()
+		
+		print("After show - position: ", inventory_window.position, " size: ", inventory_window.size)
+		print("Window visible: ", inventory_window.visible)
+		
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	else:
+		print("Hiding inventory window")
+		# Save position before hiding
+		_save_window_position()
 		
 		inventory_window.visible = false
-		is_inventory_open = false
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-		inventory_toggled.emit(is_inventory_open)
+		inventory_window.hide()
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		print("Window hidden - visible: ", inventory_window.visible)
+	
+	inventory_toggled.emit(is_inventory_open)
+	print("======================================")
 
-# Item management
-func add_item_to_inventory(item: InventoryItem_Base) -> bool:
-	var player_inventory = inventory_manager.get_player_inventory()
-	var success = inventory_manager.add_item_to_container(item, player_inventory.container_id)
-	
-	if success:
-		# Show pickup notification
-		_show_item_pickup_notification(item)
-	
-	return success
+func _center_inventory_window():
+	# Redirect to detailed version
+	_center_inventory_window_detailed()
 
-func remove_item_from_inventory(item: InventoryItem_Base) -> bool:
-	var player_inventory = inventory_manager.get_player_inventory()
-	return inventory_manager.remove_item_from_container(item, player_inventory.container_id)
-
-func has_item(item_id: String) -> bool:
-	var result = inventory_manager.find_item_globally(item_id)
-	return not result.is_empty()
-
-func get_item_quantity(item_id: String) -> int:
-	var results = inventory_manager.find_items_by_name_globally(item_id)
-	var total_quantity = 0
+func _center_inventory_window_detailed():
+	if not inventory_window:
+		print("Cannot center - no inventory window")
+		return
 	
-	for result in results:
-		total_quantity += result.item.quantity
+	# Don't use popup_centered during initialization - it makes the window visible
+	var during_setup = not setup_complete
 	
-	return total_quantity
-
-func consume_item(item_id: String, quantity: int = 1) -> bool:
-	var result = inventory_manager.find_item_globally(item_id)
-	if result.is_empty():
-		return false
+	if during_setup:
+		print("During setup - using manual centering only")
+	elif inventory_window.has_method("popup_centered"):
+		print("Using popup_centered() method")
+		inventory_window.popup_centered()
+		print("Position after popup_centered: ", inventory_window.position)
+		return
 	
-	var item = result.item as InventoryItem_Base
-	var container_id = result.container_id as String
+	# Manual centering fallback
+	var screen_size = DisplayServer.screen_get_size()
+	var window_size = inventory_window.size
+	var viewport = get_viewport()
+	var viewport_size = viewport.get_visible_rect().size if viewport else Vector2.ZERO
 	
-	if item.quantity >= quantity:
-		item.remove_from_stack(quantity)
-		if item.quantity <= 0:
-			inventory_manager.remove_item_from_container(item, container_id)
-		return true
+	print("Screen size: ", screen_size)
+	print("Window size: ", window_size)
+	print("Viewport size: ", viewport_size)
 	
-	return false
-
-# Interaction with game systems
-func pickup_item(interactable_item: Node):
-	# Convert world item to inventory item
-	var item = _convert_world_item_to_inventory_item(interactable_item)
-	if item:
-		var success = add_item_to_inventory(item)
-		if success:
-			# Remove from world
-			interactable_item.queue_free()
+	# Check if we're in fullscreen mode
+	var main_window = get_window()
+	var is_fullscreen = main_window.mode == Window.MODE_FULLSCREEN if main_window else false
+	print("Fullscreen mode: ", is_fullscreen)
+	
+	if is_fullscreen:
+		# In fullscreen, center relative to screen
+		var center_pos = Vector2i(
+			(screen_size.x - window_size.x) / 2,
+			(screen_size.y - window_size.y) / 2
+		)
+		print("Fullscreen center calculation: ", center_pos)
+		inventory_window.position = center_pos
+	else:
+		# In windowed mode, center relative to the main game window
+		if main_window:
+			var main_window_pos = main_window.position
+			var main_window_size = main_window.size
 			
-			# Play pickup sound
-			_play_pickup_sound()
-
-func drop_item(item: InventoryItem_Base, world_position: Vector3):
-	# Remove from inventory
-	var player_inventory = inventory_manager.get_player_inventory()
-	var success = inventory_manager.remove_item_from_container(item, player_inventory.container_id)
+			print("Main window position: ", main_window_pos)
+			print("Main window size: ", main_window_size)
+			
+			# Don't use popup_centered_clamped during setup
+			if not during_setup and inventory_window.has_method("popup_centered_clamped"):
+				print("Using popup_centered_clamped()")
+				inventory_window.popup_centered_clamped(main_window_size)
+				print("Position after popup_centered_clamped: ", inventory_window.position)
+				return
+			
+			# Center the inventory window relative to the main game window
+			var center_pos = Vector2i(
+				main_window_pos.x + (main_window_size.x - window_size.x) / 2,
+				main_window_pos.y + (main_window_size.y - window_size.y) / 2
+			)
+			print("Windowed center calculation: ", center_pos)
+			inventory_window.position = center_pos
+			
+			# Also try setting current_screen to ensure it's on the right display
+			if inventory_window.has_method("set_current_screen"):
+				var current_screen = DisplayServer.window_get_current_screen()
+				print("Current screen: ", current_screen)
+				inventory_window.set_current_screen(current_screen)
+		else:
+			print("No main window found, using screen center")
+			var center_pos = Vector2i(
+				(screen_size.x - window_size.x) / 2,
+				(screen_size.y - window_size.y) / 2
+			)
+			inventory_window.position = center_pos
 	
-	if success:
-		# Create world item
-		_create_world_item_from_inventory_item(item, world_position)
+	print("Final inventory window position: ", inventory_window.position)
 
-# Crafting integration
-func has_recipe_materials(recipe: Dictionary) -> bool:
-	var required_materials = recipe.get("materials") if recipe.has("materials") else {}
-	
-	for material_id in required_materials:
-		var required_quantity = required_materials[material_id]
-		var available_quantity = get_item_quantity(material_id)
-		
-		if available_quantity < required_quantity:
-			return false
-	
-	return true
+# Public interface for InventoryWindow to call
+func toggle_from_window():
+	"""Called by InventoryWindow when it handles the 'I' key press"""
+	toggle_inventory_detailed()
 
-func consume_recipe_materials(recipe: Dictionary) -> bool:
-	if not has_recipe_materials(recipe):
-		return false
-	
-	var required_materials = recipe.get("materials") if recipe.has("materials") else {}
-	
-	for material_id in required_materials:
-		var required_quantity = required_materials[material_id]
-		if not consume_item(material_id, required_quantity):
-			return false  # This shouldn't happen if has_recipe_materials passed
-	
-	return true
-
-# Equipment system integration
-func equip_item(item: InventoryItem_Base) -> bool:
-	# TODO: Integrate with equipment system
-	match item.item_type:
-		InventoryItem_Base.ItemType.WEAPON:
-			return _equip_weapon(item)
-		InventoryItem_Base.ItemType.ARMOR:
-			return _equip_armor(item)
-		InventoryItem_Base.ItemType.MODULE:
-			return _equip_module(item)
-		_:
-			return false
-
-func _equip_weapon(item: InventoryItem_Base) -> bool:
-	# TODO: Implement weapon equipping
-	print("Equipping weapon: ", item.item_name)
-	return true
-
-func _equip_armor(item: InventoryItem_Base) -> bool:
-	# TODO: Implement armor equipping
-	print("Equipping armor: ", item.item_name)
-	return true
-
-func _equip_module(item: InventoryItem_Base) -> bool:
-	# TODO: Implement module equipping
-	print("Equipping module: ", item.item_name)
-	return true
-
-# Helper methods for world interaction
-func _convert_world_item_to_inventory_item(world_item: Node) -> InventoryItem_Base:
-	# TODO: Implement conversion from world objects to inventory items
-	# This should read the world item's properties and create appropriate inventory item
-	return null
-
-func _create_world_item_from_inventory_item(item: InventoryItem_Base, position: Vector3):
-	# TODO: Implement creation of world objects from inventory items
-	# This should spawn a world object at the specified position
-	pass
-
-# UI Notifications
-func _show_item_pickup_notification(item: InventoryItem_Base):
-	var notification = _create_pickup_notification(item)
-	_show_notification(notification, 2.0)
-
-func _create_pickup_notification(item: InventoryItem_Base) -> Label:
-	var notification = Label.new()
-	notification.text = "Picked up: " + item.item_name
-	if item.quantity > 1:
-		notification.text += " x" + str(item.quantity)
-	
-	notification.modulate.a = 0.0
-	notification.add_theme_color_override("font_color", Color.GREEN)
-	notification.add_theme_color_override("font_shadow_color", Color.BLACK)
-	notification.add_theme_constant_override("shadow_offset_x", 1)
-	notification.add_theme_constant_override("shadow_offset_y", 1)
-	notification.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	return notification
-
-func _show_notification(notification: Label, duration: float):
-	ui_canvas.add_child(notification)
-	
-	# Position at top of screen
-	notification.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	notification.position.y = 50
-	
-	# Animate
-	var tween = create_tween()
-	tween.parallel().tween_property(notification, "position:y", 10, 0.3)
-	tween.parallel().tween_property(notification, "modulate:a", 1.0, 0.3)
-	
-	# Wait then fade out
-	tween.tween_delay(duration - 0.6)
-	tween.parallel().tween_property(notification, "position:y", -30, 0.3)
-	tween.parallel().tween_property(notification, "modulate:a", 0.0, 0.3)
-	
-	tween.tween_callback(func(): notification.queue_free())
-
-# Audio
-func _play_pickup_sound():
-	# TODO: Play pickup sound effect
-	pass
-
-# Save/Load integration
-func save_inventory_state() -> Dictionary:
-	var state = {
-		"inventory_manager": {},
-		"settings": {},
-		"setup_complete": setup_complete
-	}
-	
-	if inventory_manager:
-		# Inventory manager handles its own serialization
-		pass
-	
-	return state
-
-func load_inventory_state(state: Dictionary):
-	var settings = state.get("settings", {})
-	setup_complete = state.get("setup_complete", false)
+func close_from_window():
+	"""Called by InventoryWindow when it handles the ESC key press"""
+	if is_inventory_open:
+		is_inventory_open = false
+		inventory_window.visible = false
+		inventory_window.hide()
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		inventory_toggled.emit(is_inventory_open)
+		print("Inventory closed from window")
 
 # Public interface
 func get_inventory_manager() -> InventoryManager:
@@ -440,25 +480,3 @@ func is_inventory_window_open() -> bool:
 
 func is_setup_complete() -> bool:
 	return setup_complete
-
-# Debug functions
-func add_test_items():
-	if inventory_manager:
-		inventory_manager.create_sample_items()
-
-func print_inventory_status():
-	if inventory_manager:
-		inventory_manager.print_inventory_status()
-
-func clear_all_inventories():
-	if inventory_manager:
-		for container in inventory_manager.get_all_containers():
-			container.clear()
-
-func refresh_all_ui():
-	"""Refresh window display"""
-	_schedule_ui_refresh()
-
-func refresh_window():
-	if inventory_window:
-		inventory_window.refresh_display()

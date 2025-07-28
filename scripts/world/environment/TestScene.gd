@@ -1,9 +1,11 @@
-# TestScene.gd - Clean production version
+# TestScene.gd - Updated to use UIManager
 extends Node3D
+
+@onready var ui_manager: UIManager
 
 func _ready():
 	setup_materials()
-	setup_ui()
+	setup_ui_manager()  # Use UIManager instead of direct CanvasLayer
 
 func setup_materials():
 	var materials = {
@@ -38,12 +40,25 @@ func _apply_material_to_path(path: String, material: StandardMaterial3D):
 	if node and node is MeshInstance3D:
 		node.material_override = material
 
-func setup_ui():
-	var canvas_layer = CanvasLayer.new()
-	canvas_layer.name = "UI"
-	add_child(canvas_layer)
+func setup_ui_manager():
+	# Create UI Manager
+	ui_manager = UIManager.new()
+	ui_manager.name = "UIManager"
+	add_child(ui_manager)
 	
-	# Add crosshair
+	# Wait for UI Manager to be ready
+	await ui_manager.ready
+	
+	# Add crosshair to HUD
 	var crosshair = CrosshairUI.new()
 	crosshair.name = "Crosshair"
-	canvas_layer.add_child(crosshair)
+	ui_manager.add_hud_element(crosshair)
+	
+	print("UIManager setup complete with crosshair")
+
+func create_sample_menu():
+	# Example sample menu - you can remove this later
+	var sample_label = Label.new()
+	sample_label.text = "Sample Menu (Press ESC to hide)"
+	sample_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	ui_manager.add_menu_element(sample_label)

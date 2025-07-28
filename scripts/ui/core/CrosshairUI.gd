@@ -1,4 +1,4 @@
-# CrosshairUI.gd - Modular crosshair component
+# CrosshairUI.gd - Fixed crosshair positioning
 class_name CrosshairUI
 extends Control
 
@@ -27,8 +27,10 @@ var target_spread: float = 0.0
 var player_ref: CharacterBody3D
 
 func _ready():
-	# Set up the crosshair
+	# Set up the crosshair positioning FIRST
 	base_gap = crosshair_gap
+	
+	# Setup immediately - no need to wait since we're going directly to CanvasLayer
 	_setup_crosshair()
 	
 	# Find player reference
@@ -38,11 +40,14 @@ func _ready():
 	z_index = 100
 
 func _setup_crosshair():
-	# Center the control
-	set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	# Set the control to fill the entire screen
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	
-	# Set size
-	custom_minimum_size = Vector2(crosshair_size * 3, crosshair_size * 3)
+	# Explicitly ensure we fill the entire viewport
+	set_size(get_viewport().get_visible_rect().size)
+	
+	# Set mouse filter so we don't block input
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _find_player_reference():
 	# Try to find player in scene
@@ -99,15 +104,16 @@ func _update_dynamic_crosshair(delta: float):
 	current_spread = lerp(current_spread, target_spread, delta * 10.0)
 
 func _draw():
-	var center = size / 2
+	# Get the actual center of the screen
+	var screen_center = size / 2
 	var gap = base_gap + current_spread
 	var half_size = crosshair_size / 2
 	
 	# Draw crosshair lines
 	if crosshair_outline:
-		_draw_crosshair_line(center, gap, half_size, outline_color, crosshair_thickness + outline_thickness * 2)
+		_draw_crosshair_line(screen_center, gap, half_size, outline_color, crosshair_thickness + outline_thickness * 2)
 	
-	_draw_crosshair_line(center, gap, half_size, crosshair_color, crosshair_thickness)
+	_draw_crosshair_line(screen_center, gap, half_size, crosshair_color, crosshair_thickness)
 
 func _draw_crosshair_line(center: Vector2, gap: float, half_length: float, color: Color, thickness: float):
 	# Horizontal line (left and right)
@@ -140,3 +146,10 @@ func set_crosshair_size(new_size: float):
 
 func set_dynamic_enabled(enabled: bool):
 	enable_dynamic_crosshair = enabled
+
+func set_interaction_state(can_interact: bool):
+	# Change crosshair color when interaction is available
+	if can_interact:
+		crosshair_color = Color.CYAN
+	else:
+		crosshair_color = Color.WHITE
