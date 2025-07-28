@@ -133,8 +133,8 @@ func _add_initial_test_items():
 		inventory_manager.create_sample_items()
 		
 		# Force UI refresh
-		if inventory_window:
-			inventory_window.refresh_display()
+		#if inventory_window:
+			#inventory_window.refresh_display()
 
 func _setup_input_actions():
 	# Add inventory input actions if they don't exist
@@ -162,12 +162,9 @@ func _setup_ui():
 	# Override the hardcoded position immediately
 	inventory_window.position = Vector2i.ZERO
 	
-	print("Created inventory window - initial size: ", inventory_window.size, " position: ", inventory_window.position)
-	
 	# Since InventoryWindow extends Window_Base (not Control), add it directly to the scene
 	# Windows should be added to the scene root, not CanvasLayers
 	get_tree().current_scene.add_child(inventory_window)
-	print("Added inventory window directly to scene root (Windows don't work well in CanvasLayers)")
 	
 	# Set up the window to handle its own toggle input
 	if inventory_window.has_method("set_inventory_integration"):
@@ -175,7 +172,6 @@ func _setup_ui():
 	
 	# Load saved position or center the window
 	await get_tree().process_frame
-	print("After process_frame - window size: ", inventory_window.size, " position: ", inventory_window.position)
 	_load_and_apply_position()
 	
 	# Connect to position change signals to save position when moved
@@ -192,7 +188,6 @@ func _setup_ui():
 		# Force it to stay hidden
 		await get_tree().process_frame
 		inventory_window.visible = false
-		print("Inventory window properly hidden - visible: ", inventory_window.visible)
 
 func _connect_signals():
 	# Player reference
@@ -253,7 +248,6 @@ func _save_window_position():
 		}
 		file.store_string(JSON.stringify(save_data))
 		file.close()
-		print("Saved inventory window position: ", saved_position)
 
 func _load_and_apply_position():
 	# Try to load saved position
@@ -324,20 +318,11 @@ func _unhandled_input(event):
 
 func toggle_inventory_detailed():
 	if not inventory_window:
-		print("Inventory window not ready!")
 		return
 	
 	is_inventory_open = !is_inventory_open
 	
-	print("=== INVENTORY TOGGLE DETAILED ===")
-	print("Opening: ", is_inventory_open)
-	print("Window exists: ", inventory_window != null)
-	print("Window valid: ", is_instance_valid(inventory_window))
-	
 	if is_inventory_open:
-		print("Before show - position: ", inventory_window.position, " size: ", inventory_window.size)
-		print("Window visible: ", inventory_window.visible)
-		
 		# Don't re-center if we have a saved position
 		if saved_position == Vector2i.ZERO:
 			_center_inventory_window_detailed()
@@ -354,22 +339,16 @@ func toggle_inventory_detailed():
 		inventory_window.visible = true
 		inventory_window.show()
 		
-		print("After show - position: ", inventory_window.position, " size: ", inventory_window.size)
-		print("Window visible: ", inventory_window.visible)
-		
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	else:
-		print("Hiding inventory window")
 		# Save position before hiding
 		_save_window_position()
 		
 		inventory_window.visible = false
 		inventory_window.hide()
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		print("Window hidden - visible: ", inventory_window.visible)
 	
 	inventory_toggled.emit(is_inventory_open)
-	print("======================================")
 
 func _center_inventory_window():
 	# Redirect to detailed version

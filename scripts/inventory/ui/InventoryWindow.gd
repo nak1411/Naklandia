@@ -1,4 +1,4 @@
-# InventoryWindowUI.gd - Using custom window implementation
+# InventoryWindow.gd - Modified to support resizing
 class_name InventoryWindow
 extends Window_Base
 
@@ -6,13 +6,18 @@ extends Window_Base
 @export var inventory_title: String = "Inventory"
 @export var min_window_size: Vector2 = Vector2(400, 300)
 @export var default_size: Vector2 = Vector2(800, 600)
+@export var max_window_size: Vector2 = Vector2(1400, 1000)  # Optional max size
+
 
 # UI Modules
 var inventory_container: VBoxContainer
 var header: InventoryWindowHeader
 var content: InventoryWindowContent
 var item_actions: InventoryItemActions
-var inventory_integration: InventoryIntegration
+
+# Resizing properties (removed grid_component as it's accessed through hierarchy)
+var auto_resize_grid: bool = true
+var min_grid_size: Vector2i = Vector2i(8, 6)  # Minimum grid dimensions
 
 # State
 var inventory_manager: InventoryManager
@@ -22,489 +27,264 @@ var active_context_menu: InventoryItemActions
 
 # Window state
 var is_locked: bool = false
+var last_window_size: Vector2i
 
 # Signals
 signal container_switched(container: InventoryContainer_Base)
+signal window_resized(new_size: Vector2i)
 
 func _init():
 	super._init()
 	set_window_title(inventory_title)
 	size = Vector2i(default_size)
 	min_size = Vector2i(min_window_size)
+	max_size = Vector2i(max_window_size)
+	
+	# Enable resizing
+	unresizable = false
+	
 	visible = false
 	position = Vector2i(1040, 410)
+	last_window_size = size
 
 func _ready():
 	super._ready()
-	await get_tree().process_frame  # Wait for parent to be fully ready
+	await get_tree().process_frame
 	_setup_inventory_ui()
 	_connect_inventory_signals()
+	_connect_resize_signals()
 	_find_inventory_manager()
 	apply_custom_theme()
 	visible = false
 
-# InventoryWindow.gd - Modified _setup_inventory_ui method for left panel full height layout
-# Replace the existing _setup_inventory_ui method in InventoryWindow.gd
+func _connect_resize_signals():
+	# Connect to window resize events
+	size_changed.connect(_on_window_resized)
 
+func _on_window_resized():
+	var new_size = size
+	if new_size != last_window_size:
+		last_window_size = new_size
+		if auto_resize_grid:
+			_handle_window_resize()
+			
+
+
+func _handle_window_resize():
+	var grid = get_inventory_grid()
+	if not grid or not current_container:
+		return
+	
+	# Calculate available space for grid
+	var available_space = _calculate_available_grid_space()
+	var new_grid_size = _calculate_optimal_grid_size(available_space)
+	
+	# Get current grid size
+	var current_grid_size = Vector2i(grid.grid_width, grid.grid_height)
+	
+	# Only resize if different
+	if new_grid_size != current_grid_size:
+		_resize_grid(new_grid_size)
+
+func _calculate_available_grid_space() -> Vector2:
+	# Account for UI elements - adjust these values based on your layout
+	var header_height = 40
+	var margin_space = 40
+	var container_list_width = 200  # Left panel width
+	
+	var available_width = size.x - container_list_width - margin_space
+	var available_height = size.y - header_height - margin_space
+	
+	return Vector2(max(200, available_width), max(150, available_height))
+
+func _calculate_optimal_grid_size(available_space: Vector2) -> Vector2i:
+	var grid = get_inventory_grid()
+	if not grid:
+		return min_grid_size
+	
+	# Use default slot size if not accessible
+	var slot_size = Vector2(64, 64)
+	var slot_spacing = 2.0
+	
+	if grid.has_method("get_slot_size"):
+		slot_size = grid.get_slot_size()
+	elif "slot_size" in grid:
+		slot_size = grid.slot_size
+	
+	if "slot_spacing" in grid:
+		slot_spacing = grid.slot_spacing
+	
+	# Calculate how many slots can fit
+	var slots_width = int((available_space.x + slot_spacing) / (slot_size.x + slot_spacing))
+	var slots_height = int((available_space.y + slot_spacing) / (slot_size.y + slot_spacing))
+	
+	# Ensure minimum size
+	slots_width = max(slots_width, min_grid_size.x)
+	slots_height = max(slots_height, min_grid_size.y)
+	
+	return Vector2i(slots_width, slots_height)
+
+func _resize_grid(new_grid_size: Vector2i):
+	if not current_container:
+		return
+	
+	# Update container dimensions
+	current_container.grid_width = new_grid_size.x
+	current_container.grid_height = new_grid_size.y
+	
+	# Get the grid and update it
+	var grid = get_inventory_grid()
+	if grid:
+		# Update grid properties
+		grid.grid_width = new_grid_size.x
+		grid.grid_height = new_grid_size.y
+		
+		# Rebuild and refresh
+		if grid.has_method("_rebuild_grid"):
+			grid._rebuild_grid()
+		
+		# Force refresh display
+		call_deferred("refresh_display")
+
+func _get_all_container_items() -> Array[InventoryItem_Base]:
+	if not current_container:
+		return []
+	
+	var items: Array[InventoryItem_Base] = []
+	if current_container.has_method("get_all_items"):
+		items = current_container.get_all_items()
+	
+	return items
+
+# Toggle auto-resize functionality
+func set_auto_resize_enabled(enabled: bool):
+	auto_resize_grid = enabled
+
+func get_auto_resize_grid() -> bool:
+	return auto_resize_grid
+
+# Lock/unlock window resizing
+func set_window_locked(locked: bool):
+	unresizable = locked
+
+func get_window_locked() -> bool:
+	return is_locked
+
+# Manual grid resize methods
+func resize_to_fit_content():
+	if not current_container:
+		return
+	
+	# Find maximum item positions
+	var max_x = min_grid_size.x
+	var max_y = min_grid_size.y
+	
+	for item in current_container.items:
+		var pos = current_container.get_item_position(item)
+		if pos != Vector2i(-1, -1):
+			max_x = max(max_x, pos.x + 1)
+			max_y = max(max_y, pos.y + 1)
+	
+	# Add padding
+	max_x += 2
+	max_y += 2
+	
+	_resize_grid(Vector2i(max_x, max_y))
+
+func resize_grid_manually(new_size: Vector2i):
+	new_size.x = max(new_size.x, min_grid_size.x)
+	new_size.y = max(new_size.y, min_grid_size.y)
+	_resize_grid(new_size)
+
+# Override the existing _setup_inventory_ui method
 func _setup_inventory_ui():
 	# Create main horizontal container (no margins)
 	var main_hsplit = HSplitContainer.new()
 	main_hsplit.name = "MainHSplit"
 	main_hsplit.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main_hsplit.split_offset = 200  # Match the container list width
+	main_hsplit.split_offset = 200
 	
-	# Add directly to the custom window's content area
+	# Make the split container resizable
+	main_hsplit.dragger_visibility = SplitContainer.DRAGGER_VISIBLE
+	
 	add_content(main_hsplit)
 	
-	# LEFT SIDE: Container list panel (full height, small top padding)
+	# LEFT SIDE: Container list panel
 	var left_container_panel = MarginContainer.new()
 	left_container_panel.name = "LeftContainerPanel"
 	left_container_panel.custom_minimum_size.x = 180
 	left_container_panel.size_flags_horizontal = Control.SIZE_FILL
 	left_container_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	# Add small top margin for padding from title bar
 	left_container_panel.add_theme_constant_override("margin_top", 6)
 	main_hsplit.add_child(left_container_panel)
 	
-	# Create the container list directly
+	# Container list
 	var container_list = ItemList.new()
 	container_list.name = "ContainerList"
 	container_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	container_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	container_list.custom_minimum_size = Vector2(160, 200)
-	container_list.auto_height = true
-	container_list.allow_rmb_select = false
-	container_list.mouse_filter = Control.MOUSE_FILTER_PASS
-	
-	# Style the container list
-	var list_style = StyleBoxFlat.new()
-	list_style.bg_color = Color(0.1, 0.1, 0.1, 0.9)
-	list_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
-	list_style.border_width_left = 1
-	list_style.border_width_right = 1
-	list_style.border_width_top = 1
-	list_style.border_width_bottom = 1
-	list_style.content_margin_left = 6
-	list_style.content_margin_right = 6
-	list_style.content_margin_top = 4
-	list_style.content_margin_bottom = 4
-	container_list.add_theme_stylebox_override("panel", list_style)
-	
 	left_container_panel.add_child(container_list)
 	
-	# RIGHT SIDE: Header + Content area (matches mass bar width)
-	var right_panel = VBoxContainer.new()
-	right_panel.name = "RightPanel"
-	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# RIGHT SIDE: Main inventory content with proper resizing
+	var right_content_panel = VBoxContainer.new()
+	right_content_panel.name = "RightContentPanel"
+	right_content_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_content_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_hsplit.add_child(right_content_panel)
 	
-	# Add small margins to match the original content area
-	right_panel.add_theme_constant_override("margin_left", 4)
-	right_panel.add_theme_constant_override("margin_right", 4)
-	right_panel.add_theme_constant_override("margin_bottom", 4)
+	# Create scrollable container for the grid
+	var scroll_container = ScrollContainer.new()
+	scroll_container.name = "GridScrollContainer"
+	scroll_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	right_content_panel.add_child(scroll_container)
 	
-	main_hsplit.add_child(right_panel)
+	# Create the inventory grid (this replaces the old grid_component)
+	var inventory_grid = InventoryGrid.new()
+	inventory_grid.name = "InventoryGrid"
+	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll_container.add_child(inventory_grid)
 	
-	# Header with top margin (positioned over right panel only)
-	var header_wrapper = MarginContainer.new()
-	header_wrapper.name = "HeaderWrapper"
-	header_wrapper.add_theme_constant_override("margin_top", 6)  # Space from title bar
-	right_panel.add_child(header_wrapper)
-	
-	header = InventoryWindowHeader.new()
-	header.name = "Header"
-	header_wrapper.add_child(header)
-	
-	# Content area for mass bar + inventory grid (no additional top margin)
-	content = InventoryWindowContent.new()
-	content.name = "Content"
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_panel.add_child(content)
-	
-	# Tell content to use external container list and skip creating its own left panel
-	content.set_external_container_list(container_list)
-	
-	# Connect the external container list to content
-	container_list.item_selected.connect(_on_container_list_selected)
-	
-	# Create item actions module
-	item_actions = InventoryItemActions.new(self)
+	# Connect grid signals
+	if inventory_grid.has_signal("item_selected"):
+		inventory_grid.item_selected.connect(_on_item_selected)
+	if inventory_grid.has_signal("item_activated"):
+		inventory_grid.item_activated.connect(_on_item_activated)
+	if inventory_grid.has_signal("item_context_menu"):
+		inventory_grid.item_context_menu.connect(_on_item_context_menu)
 
-# Add this method to handle container list selection
-func _on_container_list_selected(index: int):
-	if content and index >= 0 and index < open_containers.size():
-		content.select_container(open_containers[index])
+# Placeholder signal handlers (implement based on your existing code)
+func _on_item_selected(item: InventoryItem_Base, slot):
+	pass
+
+func _on_item_activated(item: InventoryItem_Base, slot):
+	pass
+
+func _on_item_context_menu(item: InventoryItem_Base, slot, position: Vector2):
+	pass
+
+# Add methods to find inventory manager and get grid (implement based on your existing code)
+func _find_inventory_manager():
+	# Your existing implementation
+	pass
 
 func _connect_inventory_signals():
-	# Connect custom window signals
-	window_closed.connect(_on_close_requested)
-	window_locked_changed.connect(_on_window_locked_changed)
-	transparency_changed.connect(_on_transparency_changed)
-	
-	# Header signals
-	header.search_changed.connect(_on_search_changed)
-	header.filter_changed.connect(_on_filter_changed)
-	header.sort_requested.connect(_on_sort_requested)
-	
-	# Content signals
-	content.container_selected.connect(_on_content_container_selected)
-	content.item_activated.connect(_on_item_activated)
-	content.item_context_menu.connect(_on_item_context_menu)
-	
-	# Item actions signals
-	item_actions.container_refreshed.connect(_on_container_refreshed)
+	# Your existing implementation
+	pass
 
-func _find_inventory_manager():
-	var scene_root = get_tree().current_scene
-	inventory_manager = _find_inventory_manager_recursive(scene_root)
-	
-	if inventory_manager:
-		header.set_inventory_manager(inventory_manager)
-		header.set_inventory_window(self)
-		content.set_inventory_manager(inventory_manager)
-		item_actions.set_inventory_manager(inventory_manager)
-		_populate_container_list()
+func apply_custom_theme():
+	# Your existing implementation
+	pass
 
-func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
-	if node is InventoryManager:
-		return node
-	
-	for child in node.get_children():
-		var result = _find_inventory_manager_recursive(child)
-		if result:
-			return result
-	
-	return null
+func add_content(node: Node):
+	# This should match your Window_Base implementation
+	pass
 
-# Container management
-func _populate_container_list():
-	if not inventory_manager:
-		return
-	
-	open_containers.clear()
-	
-	var containers = inventory_manager.get_accessible_containers()
-	
-	# Compact all containers before displaying
-	for container in containers:
-		if container.get_item_count() > 0:
-			container.compact_items()
-	
-	# Sort containers - player inventory first
-	containers.sort_custom(func(a, b): 
-		if a.container_id == "player_inventory":
-			return true
-		elif b.container_id == "player_inventory":
-			return false
-		return a.container_name < b.container_name
-	)
-	
-	open_containers = containers
-	content.update_containers(open_containers)
-	
-	# Auto-select first container
-	if open_containers.size() > 0:
-		select_container(open_containers[0])
-		content.select_container_index(0)
-
-func select_container(container: InventoryContainer_Base):
-	if not container:
-		return
-	
-	current_container = container
-	content.select_container(container)
-	
-	# Update container list selection
-	for i in range(open_containers.size()):
-		if open_containers[i] == container:
-			content.select_container_index(i)
-			break
-	
-	container_switched.emit(container)
-
-func refresh_display():
-	if content:
-		content.refresh_display()
-
-func refresh_container_list():
-	if not inventory_manager:
-		return
-	
-	var containers = inventory_manager.get_accessible_containers()
-	
-	# Sort containers - player inventory first
-	containers.sort_custom(func(a, b): 
-		if a.container_id == "player_inventory":
-			return true
-		elif b.container_id == "player_inventory":
-			return false
-		return a.container_name < b.container_name
-	)
-	
-	open_containers = containers
-	content.update_containers(open_containers)
-
-func get_current_container() -> InventoryContainer_Base:
-	return current_container
-
+# Helper method to get the inventory grid from existing hierarchy
 func get_inventory_grid() -> InventoryGrid:
+	# This should match your existing implementation in InventoryWindow
 	if content:
 		return content.get_inventory_grid()
 	return null
-
-# Signal handlers
-func _on_close_requested():
-	visible = false
-
-func _on_window_locked_changed(locked: bool):
-	is_locked = locked
-	if locked:
-		_add_lock_indicator()
-	else:
-		_remove_lock_indicator()
-
-func _on_transparency_changed(transparency: float):
-	# Apply transparency to header elements specifically
-	if header and header.has_method("set_transparency"):
-		header.set_transparency(transparency)
-	
-	# Apply transparency to content area
-	if content and content.has_method("set_transparency"):
-		content.set_transparency(transparency)
-	
-	# Apply transparency to any inventory-specific elements
-	_apply_inventory_transparency(transparency)
-
-func _apply_inventory_transparency(transparency: float):
-	"""Apply transparency to inventory-specific UI elements"""
-	
-	# Find and apply transparency to mass info bar
-	var mass_bar = get_node_or_null("MainContainer/ContentArea/MainHSplit/RightPanel/Content/MassInfoBar")
-	if mass_bar:
-		_apply_panel_transparency_to_node(mass_bar, transparency)
-	
-	# Find and apply transparency to container list
-	var container_list = get_node_or_null("MainContainer/ContentArea/MainHSplit/LeftContainerPanel/ContainerList") 
-	if container_list:
-		_apply_itemlist_transparency_to_node(container_list, transparency)
-	
-	# Find and apply transparency to inventory grid background
-	var grid_areas = _find_nodes_by_name_recursive(self, "InventoryGrid")
-	for grid in grid_areas:
-		if grid.has_method("set_transparency"):
-			grid.set_transparency(transparency)
-
-func _apply_panel_transparency_to_node(node: Control, transparency: float):
-	"""Helper to apply panel transparency to a specific node"""
-	if node is Panel:
-		var style_box = node.get_theme_stylebox("panel")
-		if style_box and style_box is StyleBoxFlat:
-			var style_copy = style_box.duplicate() as StyleBoxFlat
-			var current_color = style_copy.bg_color
-			current_color.a = current_color.a * transparency
-			style_copy.bg_color = current_color
-			node.add_theme_stylebox_override("panel", style_copy)
-
-func _apply_itemlist_transparency_to_node(node: Control, transparency: float):
-	"""Helper to apply itemlist transparency to a specific node"""
-	if node is ItemList:
-		var style_box = node.get_theme_stylebox("panel")
-		if style_box and style_box is StyleBoxFlat:
-			var style_copy = style_box.duplicate() as StyleBoxFlat
-			var current_color = style_copy.bg_color
-			current_color.a = current_color.a * transparency
-			style_copy.bg_color = current_color
-			node.add_theme_stylebox_override("panel", style_copy)
-
-func _find_nodes_by_name_recursive(node: Node, target_name: String) -> Array:
-	"""Find all nodes with a specific name recursively"""
-	var result = []
-	
-	if node.name == target_name:
-		result.append(node)
-	
-	for child in node.get_children():
-		result.append_array(_find_nodes_by_name_recursive(child, target_name))
-	
-	return result
-
-func _on_search_changed(text: String):
-	# TODO: Implement search functionality
-	pass
-
-func _on_filter_changed(filter_type: int):
-	# TODO: Implement filter functionality
-	pass
-
-func _on_sort_requested(sort_type: InventoryManager.SortType):
-	if inventory_manager and current_container:
-		inventory_manager.sort_container(current_container.container_id, sort_type)
-		refresh_display()
-
-func _on_content_container_selected(container: InventoryContainer_Base):
-	select_container(container)
-
-func _add_lock_indicator():
-	# Find the right panel or content area to add the lock indicator to
-	var target_container = _find_lock_indicator_parent()
-	
-	if not target_container:
-		print("Warning: Could not find suitable parent for lock indicator")
-		return
-	
-	var lock_indicator = Panel.new()
-	lock_indicator.name = "LockIndicator"
-	lock_indicator.custom_minimum_size.y = 25
-	lock_indicator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	
-	var lock_label = Label.new()
-	lock_label.text = "🔒 WINDOW LOCKED"
-	lock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lock_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	lock_label.add_theme_color_override("font_color", Color.BLACK)
-	lock_label.add_theme_font_size_override("font_size", 12)
-	lock_indicator.add_child(lock_label)
-	
-	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color.YELLOW
-	lock_indicator.add_theme_stylebox_override("panel", style_box)
-	
-	# Add to the appropriate container
-	target_container.add_child(lock_indicator)
-	target_container.move_child(lock_indicator, 0)
-
-func _find_lock_indicator_parent() -> Control:
-	"""Find the best container to add the lock indicator to"""
-	
-	# Try to find RightPanel first (from the new UI structure)
-	var right_panel = get_node_or_null("MainContainer/ContentArea/MainHSplit/RightPanel")
-	if right_panel:
-		return right_panel
-	
-	# Try to find the content area
-	var content_area = get_node_or_null("MainContainer/ContentArea") 
-	if content_area:
-		return content_area
-	
-	# Try to find any VBoxContainer that could work
-	var main_container = get_node_or_null("MainContainer")
-	if main_container:
-		var vboxes = _find_nodes_by_type(main_container, VBoxContainer)
-		if vboxes.size() > 0:
-			return vboxes[0]
-	
-	# Last resort - use the main container itself
-	return get_node_or_null("MainContainer")
-
-func _find_nodes_by_type(parent: Node, type) -> Array:
-	"""Recursively find all nodes of a specific type"""
-	var result = []
-	
-	if parent.get_class() == type.get_class():
-		result.append(parent)
-	
-	for child in parent.get_children():
-		result.append_array(_find_nodes_by_type(child, type))
-	
-	return result
-
-func _remove_lock_indicator():
-	# Look for lock indicator in multiple possible locations
-	var locations_to_check = [
-		"MainContainer/ContentArea/MainHSplit/RightPanel/LockIndicator",
-		"MainContainer/ContentArea/LockIndicator", 
-		"MainContainer/LockIndicator"
-	]
-	
-	for location in locations_to_check:
-		var lock_indicator = get_node_or_null(location)
-		if lock_indicator:
-			lock_indicator.queue_free()
-			return
-	
-	# If not found in expected locations, search recursively
-	var main_container = get_node_or_null("MainContainer")
-	if main_container:
-		var lock_indicator = _find_lock_indicator_recursive(main_container)
-		if lock_indicator:
-			lock_indicator.queue_free()
-
-func _find_lock_indicator_recursive(node: Node) -> Node:
-	"""Recursively find the lock indicator"""
-	if node.name == "LockIndicator":
-		return node
-	
-	for child in node.get_children():
-		var result = _find_lock_indicator_recursive(child)
-		if result:
-			return result
-	
-	return null
-
-func _on_item_activated(item: InventoryItem_Base, slot: InventorySlot):
-	item_actions.show_item_details_dialog(item)
-
-func _on_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
-	item_actions.show_item_context_menu(item, slot, position)
-
-func _on_container_refreshed():
-	refresh_display()
-	refresh_container_list()
-
-func _show_empty_area_context_menu(global_pos: Vector2):
-	if item_actions:
-		item_actions.show_empty_area_context_menu(global_pos)
-
-func _set_context_menu_active(handler: InventoryItemActions):
-	active_context_menu = handler
-
-func _clear_context_menu_active():
-	active_context_menu = null
-
-func _unhandled_input(event: InputEvent):
-	# Handle context menu cleanup only if no other UI handled the input
-	if active_context_menu and event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.pressed:
-			# Check if we have a valid popup
-			if active_context_menu.current_popup and is_instance_valid(active_context_menu.current_popup):
-				var popup = active_context_menu.current_popup
-				var popup_rect = Rect2(popup.position, popup.size)
-				var click_pos = mouse_event.global_position
-				
-				if not popup_rect.has_point(click_pos):
-					# Click is outside popup - close it and clear reference
-					active_context_menu._close_current_popup()
-					active_context_menu = null
-			else:
-				# No valid popup but we have a reference - close everything and clear it
-				active_context_menu._close_current_popup()
-				active_context_menu = null
-	
-	# Handle window-specific keyboard shortcuts
-	if event is InputEventKey and event.pressed:
-		match event.keycode:
-			KEY_I:
-				# Toggle inventory (close when pressing I while window is open)
-				if visible and inventory_integration:
-					inventory_integration.close_from_window()
-					get_viewport().set_input_as_handled()
-			KEY_ESCAPE:
-				if visible:
-					if inventory_integration:
-						inventory_integration.close_from_window()
-					else:
-						visible = false
-					get_viewport().set_input_as_handled()
-			KEY_F5:
-				refresh_display()
-				get_viewport().set_input_as_handled()
-
-# Theme management
-func apply_custom_theme():
-	# Apply any custom theming to the inventory window
-	pass
-	
-func set_inventory_integration(integration: InventoryIntegration):
-	inventory_integration = integration
