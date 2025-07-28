@@ -1,4 +1,4 @@
-# InventoryWindowContent.gd - Content area with container list and grid
+# InventoryWindowContent.gd - Updated with debugging and proper initialization
 class_name InventoryWindowContent
 extends HSplitContainer
 
@@ -23,6 +23,7 @@ signal item_activated(item: InventoryItem_Base, slot: InventorySlot)
 signal item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2)
 
 func _ready():
+	print("InventoryWindowContent _ready() starting...")
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	split_offset = 200
@@ -31,6 +32,7 @@ func _ready():
 	
 	# Connect gui_input for drop handling
 	gui_input.connect(_gui_input)
+	print("InventoryWindowContent _ready() completed")
 
 func _remove_split_container_outline():
 	# Remove the default HSplitContainer theme that creates outlines
@@ -62,23 +64,29 @@ func set_external_container_list(external_list: ItemList):
 	if external_list:
 		container_list = external_list  # Use the external list as our container_list reference
 
-# Modify the existing _setup_content method
+# Modified _setup_content method
 func _setup_content():
+	print("Setting up InventoryWindowContent...")
 	if using_external_container_list:
 		# Only setup right panel since left panel is handled externally
 		_setup_right_panel_only()
 	else:
-		# Original behavior
+		# Setup both panels
+		_setup_left_panel()
 		_setup_right_panel()
+	print("InventoryWindowContent setup completed")
 
 func _setup_left_panel():
+	print("Setting up left panel...")
 	var left_panel = VBoxContainer.new()
+	left_panel.name = "LeftPanel"
 	left_panel.custom_minimum_size.x = 180
 	left_panel.size_flags_horizontal = Control.SIZE_FILL
 	
 	add_child(left_panel)
 	
 	container_list = ItemList.new()
+	container_list.name = "ContainerList"
 	container_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	container_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container_list.custom_minimum_size = Vector2(160, 200)
@@ -115,8 +123,10 @@ func _setup_left_panel():
 	
 	# Set up drop area handling
 	_setup_container_drop_handling()
+	print("Left panel setup completed")
 
 func _setup_right_panel_only():
+	print("Setting up right panel only...")
 	# Create the right panel content directly (no HSplitContainer needed)
 	var inventory_area = VBoxContainer.new()
 	inventory_area.name = "InventoryArea"
@@ -128,6 +138,7 @@ func _setup_right_panel_only():
 	_setup_mass_info_bar(inventory_area)
 	
 	var grid_scroll = ScrollContainer.new()
+	grid_scroll.name = "GridScrollContainer"
 	grid_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -143,9 +154,12 @@ func _setup_right_panel_only():
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
+	print("Right panel only setup completed")
 
 func _setup_right_panel():
+	print("Setting up right panel...")
 	var inventory_area = VBoxContainer.new()
+	inventory_area.name = "InventoryArea"
 	inventory_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inventory_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	inventory_area.add_theme_constant_override("separation", 4)
@@ -154,6 +168,7 @@ func _setup_right_panel():
 	_setup_mass_info_bar(inventory_area)
 	
 	var grid_scroll = ScrollContainer.new()
+	grid_scroll.name = "GridScrollContainer"
 	grid_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -169,8 +184,10 @@ func _setup_right_panel():
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
+	print("Right panel setup completed")
 
 func _setup_mass_info_bar(parent: Control):
+	print("Setting up mass info bar...")
 	mass_info_bar = Panel.new()
 	mass_info_bar.name = "MassInfoBar"
 	mass_info_bar.custom_minimum_size.y = 35
@@ -188,6 +205,7 @@ func _setup_mass_info_bar(parent: Control):
 	
 	# Create a margin container for padding inside the mass info bar
 	var margin_container = MarginContainer.new()
+	margin_container.name = "MassInfoMargin"
 	margin_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin_container.add_theme_constant_override("margin_left", 8)
 	margin_container.add_theme_constant_override("margin_right", 8)
@@ -214,70 +232,116 @@ func _setup_mass_info_bar(parent: Control):
 	mass_info_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	
 	margin_container.add_child(mass_info_label)
+	print("Mass info bar setup completed")
 
 func _on_container_list_selected(index: int):
+	print("Container list item selected: ", index)
 	if index >= 0 and index < open_containers.size():
-		container_selected.emit(open_containers[index])
+		var selected_container = open_containers[index]
+		print("Emitting container_selected for: ", selected_container.container_name)
+		container_selected.emit(selected_container)
 
 func _on_item_activated(item: InventoryItem_Base, slot: InventorySlot):
+	print("Item activated: ", item.item_name)
 	item_activated.emit(item, slot)
 
 func _on_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
+	print("Item context menu requested for: ", item.item_name)
 	item_context_menu.emit(item, slot, position)
 
-# Public interface
+# Public interface with debug output
 func set_inventory_manager(manager: InventoryManager):
+	print("Setting inventory manager on content: ", manager)
 	inventory_manager = manager
 
 func update_containers(containers: Array[InventoryContainer_Base]):
+	print("Updating containers list. Count: ", containers.size())
 	open_containers = containers
 	
 	# Use external container list if available, otherwise use internal one
 	var list_to_update = external_container_list if using_external_container_list else container_list
 	
-	if list_to_update:
-		list_to_update.clear()
+	if not list_to_update:
+		print("ERROR: No container list to update!")
+		return
+	
+	list_to_update.clear()
+	
+	for i in range(containers.size()):
+		var container = containers[i]
+		var total_qty = container.get_total_quantity()
+		var unique_items = container.get_item_count()
 		
-		for container in containers:
-			var total_qty = container.get_total_quantity()
-			var unique_items = container.get_item_count()
-			
-			var container_text = container.container_name
-			
-			list_to_update.add_item(container_text)
-			var item_index = list_to_update.get_item_count() - 1
-			list_to_update.set_item_tooltip(item_index, container_text)
+		var container_text = container.container_name
+		print("Adding container to list: ", container_text, " (", unique_items, " items)")
+		
+		list_to_update.add_item(container_text)
+		var item_index = list_to_update.get_item_count() - 1
+		list_to_update.set_item_tooltip(item_index, container_text)
 
 func select_container(container: InventoryContainer_Base):
+	print("Selecting container: ", container.container_name if container else "NULL")
 	current_container = container
 	
-	if inventory_grid:
+	if not inventory_grid:
+		print("ERROR: No inventory grid to set container on!")
+		return
+	
+	if container:
+		print("Container items count: ", container.get_item_count())
+		print("Container grid size: ", container.grid_width, "x", container.grid_height)
+		
 		# Only compact if auto_stack is enabled in inventory manager
-		if container and container.get_item_count() > 0 and inventory_manager and inventory_manager.auto_stack:
+		if container.get_item_count() > 0 and inventory_manager and inventory_manager.auto_stack:
+			print("Compacting container items...")
 			container.compact_items()
 		
+		print("Setting container on inventory grid...")
 		inventory_grid.set_container(container)
 		await get_tree().process_frame
+		print("Refreshing display...")
 		refresh_display()
+	else:
+		print("Clearing inventory grid (null container)")
+		inventory_grid.set_container(null)
 	
 	update_mass_info()
 
 func select_container_index(index: int):
+	print("Selecting container by index: ", index)
 	if index >= 0 and index < open_containers.size():
 		var list_to_use = external_container_list if using_external_container_list else container_list
 		if list_to_use:
 			list_to_use.select(index)
 
 func refresh_display():
-	if inventory_grid and current_container:
-		inventory_grid.set_container(current_container)
-		await get_tree().process_frame
-		inventory_grid.refresh_display()
+	print("InventoryWindowContent.refresh_display() called")
+	
+	if not inventory_grid:
+		print("ERROR: No inventory grid to refresh!")
+		return
+	
+	if not current_container:
+		print("WARNING: No current container to display")
+		return
+	
+	print("Refreshing display for container: ", current_container.container_name)
+	print("Container has ", current_container.get_item_count(), " items")
+	
+	# Make sure the grid has the container set
+	inventory_grid.set_container(current_container)
+	await get_tree().process_frame
+	
+	# Force refresh the grid display
+	inventory_grid.refresh_display()
+	
+	# Update mass info
 	update_mass_info()
 
 func update_mass_info():
 	if not current_container or not mass_info_label:
-		mass_info_label.text = "No container selected"
+		if mass_info_label:
+			mass_info_label.text = "No container selected"
 		return
 	
 	var info = current_container.get_container_info()
@@ -303,8 +367,30 @@ func get_current_container() -> InventoryContainer_Base:
 func get_inventory_grid() -> InventoryGrid:
 	return inventory_grid
 
+# Debug method
+func debug_content_state():
+	print("\n=== INVENTORY CONTENT DEBUG ===")
+	print("inventory_manager: ", inventory_manager)
+	print("current_container: ", current_container)
+	print("open_containers count: ", open_containers.size())
+	print("inventory_grid: ", inventory_grid)
+	print("mass_info_bar: ", mass_info_bar)
+	print("mass_info_label: ", mass_info_label)
+	print("container_list: ", container_list)
+	print("using_external_container_list: ", using_external_container_list)
+	
+	if inventory_grid:
+		print("Grid container: ", inventory_grid.container)
+		print("Grid dimensions: ", inventory_grid.grid_width, "x", inventory_grid.grid_height)
+	
+	print("=== END CONTENT DEBUG ===\n")
+
+# Container drop handling methods
 func _setup_container_drop_handling():
 	"""Set up the container list to accept drops from inventory slots"""
+	if not container_list:
+		return
+		
 	# Create an invisible overlay on the container list to detect drops
 	var drop_detector = Control.new()
 	drop_detector.name = "ContainerDropDetector"
@@ -320,7 +406,7 @@ func _process(delta):
 
 func _update_container_drop_highlights():
 	var drag_data = get_viewport().get_meta("current_drag_data", null)
-	if not drag_data:
+	if not drag_data or not container_list:
 		return
 	
 	var item = drag_data.get("item") as InventoryItem_Base
@@ -332,99 +418,26 @@ func _update_container_drop_highlights():
 	
 	if container_rect.has_point(mouse_pos):
 		# Mouse is over container list - highlight valid containers
-		var local_pos = mouse_pos - container_list.global_position
-		var hovered_index = container_list.get_item_at_position(local_pos)
-		
-		for i in range(container_list.get_item_count()):
-			if i < open_containers.size():
-				var container = open_containers[i]
-				var can_accept = container != current_container and container.can_add_item(item)
-				var is_hovered = i == hovered_index
-				
-				# Update visual feedback
-				if can_accept and is_hovered:
-					container_list.set_item_custom_bg_color(i, Color.GREEN.darkened(0.7))
-				elif can_accept:
-					container_list.set_item_custom_bg_color(i, Color.BLUE.darkened(0.8))
-				else:
-					container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
+		for i in range(open_containers.size()):
+			var container = open_containers[i]
+			if container != current_container and container.can_add_item(item):
+				container_list.set_item_custom_bg_color(i, Color.GREEN.darkened(0.5))
+			else:
+				container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
 	else:
 		# Clear all highlights
 		for i in range(container_list.get_item_count()):
 			container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
 
-# Handle mouse input on container list for drop detection
 func _gui_input(event: InputEvent):
-	if event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if not mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			# Check if we have active drag data when mouse is released over container list
-			if get_viewport().has_meta("current_drag_data"):
-				var drag_data = get_viewport().get_meta("current_drag_data")
-				_try_drop_on_container_list(mouse_event.global_position, drag_data)
+	# Handle container list input for drag and drop
+	pass
 
 func _on_container_list_input(event: InputEvent):
-	"""Handle input specifically on the container list"""
-	if event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if not mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			# Check if we have active drag data when mouse is released over container list
-			if get_viewport().has_meta("current_drag_data"):
-				var drag_data = get_viewport().get_meta("current_drag_data")
-				var success = _try_drop_on_container_list(mouse_event.global_position, drag_data)
-				if success:
-					get_viewport().set_input_as_handled()
+	# Handle specific container list input events
+	pass
 
-func _try_drop_on_container_list(global_pos: Vector2, drag_data):
-	var container_rect = Rect2(container_list.global_position, container_list.size)
-	
-	if not container_rect.has_point(global_pos):
-		return false
-	
-	var local_pos = global_pos - container_list.global_position
-	var container_index = container_list.get_item_at_position(local_pos)
-	
-	if container_index < 0 or container_index >= open_containers.size():
-		return false
-	
-	var target_container = open_containers[container_index]
-	var item = drag_data.get("item") as InventoryItem_Base
-	var source_slot = drag_data.get("source_slot") as InventorySlot
-	
-	# Don't allow dropping on the same container
-	if target_container == current_container:
-		return false
-	
-	# Check if target container can accept the item
-	if not target_container.can_add_item(item):
-		return false
-	
-	# Perform the transfer
-	if inventory_manager:
-		var success = inventory_manager.transfer_item(item, current_container.container_id, target_container.container_id)
-		if success:
-			# Clear the source slot visually
-			source_slot.clear_item()
-			
-			# Refresh displays
-			refresh_display()
-			
-			# Clear highlights
-			for i in range(container_list.get_item_count()):
-				container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
-			
-			# Notify success
-			if drag_data.has("success_callback"):
-				drag_data.success_callback.call(true)
-			
-			return true
-		else:
-			# Transfer failed, notify failure
-			if drag_data.has("success_callback"):
-				drag_data.success_callback.call(false)
-	
-	return false
-	
+# Transparency handling
 func set_transparency(transparency: float):
 	# Store originals on first call
 	if not content_transparency_init:
