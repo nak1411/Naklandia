@@ -516,15 +516,40 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	print("Target position: ", target_slot.grid_position)
 	print("Target slot has item: ", target_slot.has_item())
 	
-	# Attempt the transfer
-	var success = inventory_manager.transfer_item(
-		item,
-		container_id,
-		target_slot.container_id,
-		target_slot.grid_position
-	)
-	print("Transfer result: ", success)
-	return success
+	# Handle different cases
+	if not target_slot.has_item():
+		# Empty target slot - normal transfer
+		var success = inventory_manager.transfer_item(
+			item,
+			container_id,
+			target_slot.container_id,
+			target_slot.grid_position
+		)
+		print("Transfer result: ", success)
+		return success
+	else:
+		# Target slot has an item
+		var target_item = target_slot.get_item()
+		
+		# Try stacking first if possible
+		if item.can_stack_with(target_item):
+			var success = inventory_manager.transfer_item(
+				item,
+				container_id,
+				target_slot.container_id,
+				target_slot.grid_position
+			)
+			print("Stack transfer result: ", success)
+			return success
+		else:
+			# Items can't stack - perform swap
+			print("Attempting to swap items")
+			var success = inventory_manager.swap_items(
+				item, container_id, grid_position,
+				target_item, target_slot.container_id, target_slot.grid_position
+			)
+			print("Swap result: ", success)
+			return success
 
 func _show_split_stack_dialog():
 	# Implementation for splitting stacks would go here

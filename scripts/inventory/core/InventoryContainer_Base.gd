@@ -158,7 +158,7 @@ func get_item_position(item: InventoryItem_Base) -> Vector2i:
 	return Vector2i(-1, -1)
 
 # Item management
-func can_add_item(item: InventoryItem_Base, exclude_item: InventoryItem_Base = null) -> bool:
+func can_add_item(item: InventoryItem_Base, exclude_item: InventoryItem_Base = null, position: Vector2i = Vector2i(-1, -1)) -> bool:
 	if not item or not item.is_valid_item():
 		return false
 	
@@ -174,26 +174,41 @@ func can_add_item(item: InventoryItem_Base, exclude_item: InventoryItem_Base = n
 	if not allowed_item_types.is_empty() and not item.item_type in allowed_item_types:
 		return false
 	
-	# Check for stacking possibility (exclude the item being moved)
+	# For specific position requests, check if that position is available
+	if position != Vector2i(-1, -1):
+		if not is_area_free(position, exclude_item):
+			# Check if we can stack with item at target position
+			var target_item = null
+			if position.y < grid_slots.size() and position.x < grid_slots[position.y].size():
+				target_item = grid_slots[position.y][position.x]
+			
+			if target_item and target_item != exclude_item and item.can_stack_with(target_item):
+				return target_item.quantity + item.quantity <= target_item.max_stack_size
+			else:
+				return false
+		else:
+			return true  # Position is free and all other checks passed
+	
+	# For auto-placement, check for stacking possibility (exclude the item being moved)
 	var existing_item = find_stackable_item(item)
 	if existing_item and existing_item != exclude_item:
 		var can_stack = existing_item.quantity + item.quantity <= existing_item.max_stack_size
 		return can_stack
 	
-	# Check grid space
+	# Check grid space for new item placement
 	var free_pos = find_free_position()
 	var has_space = free_pos != Vector2i(-1, -1)
 	return has_space
 
 func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
 	
-	if not can_add_item(item):
+	if not can_add_item(item, item):  # Pass the item itself as exclude_item for same-container moves
 		return false
 	
 	# Try to stack with existing item first (only if auto_stack is enabled)
 	if auto_stack:
 		var existing_item = find_stackable_item(item)
-		if existing_item:
+		if existing_item and existing_item != item:  # Don't stack with itself
 			var space_available = existing_item.max_stack_size - existing_item.quantity
 			var amount_to_stack = min(item.quantity, space_available)
 			
@@ -210,18 +225,26 @@ func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), a
 	var final_position = position
 	if position == Vector2i(-1, -1):
 		final_position = find_free_position()
-	elif not is_area_free(position):
+	elif not is_area_free(position, item):  # Pass the item as exclude_item
 		final_position = find_free_position()
 	
 	if final_position == Vector2i(-1, -1):
 		container_full.emit()
 		return false
 	
+	# If this is a move within the same container, clear the old position first
+	if item in items:
+		var old_position = get_item_position(item)
+		if old_position != Vector2i(-1, -1):
+			clear_grid_area(old_position)
+	else:
+		# Only add to items array if it's not already there
+		items.append(item)
+	
 	# Place item in grid
 	occupy_grid_area(final_position, item)
-	items.append(item)
 	
-	# Connect to item signals
+	# Connect to item signals only if not already connected
 	if not item.quantity_changed.is_connected(_on_item_quantity_changed):
 		item.quantity_changed.connect(_on_item_quantity_changed)
 	if not item.item_modified.is_connected(_on_item_modified):
@@ -345,6 +368,11 @@ func set_container_type(new_type: InventoryItem_Base.ContainerType):
 	_update_type_restrictions()
 
 func _update_type_restrictions():
+	# Don't apply restrictions to personal inventory containers
+	if container_id == "player_inventory" or container_id == "player_cargo" or container_id.begins_with("hangar_"):
+		allowed_item_types.clear()  # Allow all types
+		return
+	
 	allowed_item_types.clear()
 	match container_type:
 		InventoryItem_Base.ContainerType.AMMUNITION_BAY:
@@ -355,6 +383,7 @@ func _update_type_restrictions():
 			is_secure = true
 		_:
 			pass  # Allow all types - keep array empty
+
 
 # Serialization
 func to_dict() -> Dictionary:

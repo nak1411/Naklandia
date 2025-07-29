@@ -85,6 +85,8 @@ func _initialize_default_containers():
 	player_inventory = InventoryContainer_Base.new("player_inventory", "Personal Inventory", 25.0)
 	player_inventory.grid_width = 5
 	player_inventory.grid_height = 8
+	# Ensure it allows all item types by keeping allowed_item_types empty
+	player_inventory.allowed_item_types.clear()
 	add_container(player_inventory)
 	
 	# Create player cargo hold (larger space)
@@ -92,6 +94,8 @@ func _initialize_default_containers():
 	player_cargo.grid_width = 15
 	player_cargo.grid_height = 20
 	player_cargo.container_type = InventoryItem_Base.ContainerType.SHIP_CARGO
+	# Ensure cargo also allows all item types
+	player_cargo.allowed_item_types.clear()
 	add_container(player_cargo)
 	
 	# Create hangar containers
@@ -101,6 +105,8 @@ func _initialize_default_containers():
 		hangar.grid_height = 25
 		hangar.container_type = InventoryItem_Base.ContainerType.HANGAR_DIVISION
 		hangar.requires_docking = true
+		# Ensure hangars allow all item types
+		hangar.allowed_item_types.clear()
 		hangar_containers.append(hangar)
 		add_container(hangar)
 
@@ -185,23 +191,37 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 	var from_container = get_container(from_container_id)
 	var to_container = get_container(to_container_id)
 	
+	print("=== TRANSFER DEBUG START ===")
+	print("Item: ", item.item_name, " (", item.item_type, ")")
+	print("From container: ", from_container_id if from_container else "NULL")
+	print("To container: ", to_container_id if to_container else "NULL")
+	print("Position: ", position)
+	print("Quantity: ", quantity)
+	
 	if not from_container or not to_container:
+		print("ERROR: Container not found!")
 		return false
 	
 	if not item in from_container.items:
+		print("ERROR: Item not in source container!")
 		return false
 	
 	# Handle transfer quantity
 	var transfer_quantity = quantity if quantity > 0 else item.quantity
 	var transfer_item = item
 	
+	print("Transfer quantity: ", transfer_quantity)
+	print("Item quantity: ", item.quantity)
+	
 	# Declare transaction variable once at function level
 	var transaction: Dictionary
 	
 	# For same container transfers to specific positions, check if target has stackable item
 	if from_container == to_container and position != Vector2i(-1, -1):
+		print("Same container transfer to specific position")
 		var target_item = _get_item_at_position(to_container, position)
 		if target_item and target_item != item and item.can_stack_with(target_item):
+			print("Stacking with target item")
 			# Stack with target item
 			var space_available = target_item.max_stack_size - target_item.quantity
 			var amount_to_stack = min(transfer_quantity, space_available)
@@ -213,7 +233,7 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 				if item.quantity <= 0:
 					from_container.remove_item(item)
 				
-				# Record transaction (reuse the declared variable)
+				# Record transaction
 				transaction = {
 					"item_name": item.item_name,
 					"quantity": amount_to_stack,
@@ -226,12 +246,15 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 				
 				item_transferred.emit(item, from_container_id, to_container_id)
 				transaction_completed.emit(transaction)
+				print("=== TRANSFER SUCCESS (STACKED) ===")
 				return true
 	
 	# Check if we can stack with existing items in target container (for different containers)
 	if from_container != to_container:
+		print("Different container transfer - checking for stackable items")
 		var stackable_item = to_container.find_stackable_item(item)
 		if stackable_item and transfer_quantity <= (stackable_item.max_stack_size - stackable_item.quantity):
+			print("Found stackable item, stacking")
 			# We can stack completely - handle the stacking
 			if transfer_quantity < item.quantity:
 				# Partial transfer - reduce source quantity
@@ -243,7 +266,7 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 				stackable_item.quantity += transfer_quantity
 			
 			# Record transaction
-				transaction = {
+			transaction = {
 				"item_name": item.item_name,
 				"quantity": transfer_quantity,
 				"from_container": from_container_id,
@@ -255,38 +278,64 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 			
 			item_transferred.emit(transfer_item, from_container_id, to_container_id)
 			transaction_completed.emit(transaction)
+			print("=== TRANSFER SUCCESS (CROSS-CONTAINER STACK) ===")
 			return true
 	
 	# Can't stack or only partial stack possible - handle as separate item
+	print("No stacking possible, handling as separate item")
 	if transfer_quantity < item.quantity:
+		print("Splitting stack")
 		transfer_item = item.split_stack(transfer_quantity)
 		if not transfer_item:
+			print("ERROR: Failed to split stack!")
 			return false
 	
 	# Check if target container can accept the item
-	if not to_container.can_add_item(transfer_item):
+	print("Checking if target container can accept item...")
+	print("Target container allowed types: ", to_container.allowed_item_types)
+	print("Item type: ", transfer_item.item_type)
+	print("Item volume: ", transfer_item.get_total_volume())
+	print("Container available volume: ", to_container.get_available_volume())
+	
+	if not to_container.can_add_item(transfer_item, item if from_container == to_container else null, position):
+		print("ERROR: Target container cannot accept item!")
+		print("  - Volume check: ", to_container.get_available_volume() >= transfer_item.get_total_volume())
+		print("  - Type check: ", to_container.allowed_item_types.is_empty() or transfer_item.item_type in to_container.allowed_item_types)
+		print("  - Grid space check: ", to_container.find_free_position() != Vector2i(-1, -1))
+		
 		# If we split the stack, restore it
 		if transfer_quantity < item.quantity and transfer_item:
 			item.add_to_stack(transfer_item.quantity)
+		print("=== TRANSFER FAILED (CAN'T ADD) ===")
 		return false
+	
+	print("Target container can accept item, proceeding...")
 	
 	# Remove from source container
 	var remove_success = from_container.remove_item(transfer_item if transfer_quantity < item.quantity else item)
 	if not remove_success:
+		print("ERROR: Failed to remove from source container!")
 		# If we split the stack, restore it
 		if transfer_quantity < item.quantity and transfer_item:
 			item.add_to_stack(transfer_item.quantity)
+		print("=== TRANSFER FAILED (REMOVE) ===")
 		return false
+	
+	print("Removed from source container, adding to target...")
 	
 	# Add to target container
 	var add_success = to_container.add_item(transfer_item, position)
 	if not add_success:
+		print("ERROR: Failed to add to target container!")
 		# Restore to source container
 		from_container.add_item(transfer_item if transfer_quantity < item.quantity else item)
 		# Restore split if we made one
 		if transfer_quantity < item.quantity and transfer_item:
 			item.add_to_stack(transfer_item.quantity)
+		print("=== TRANSFER FAILED (ADD) ===")
 		return false
+	
+	print("Successfully added to target container!")
 	
 	# Record transaction
 	transaction = {
@@ -301,6 +350,90 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 	
 	item_transferred.emit(transfer_item, from_container_id, to_container_id)
 	transaction_completed.emit(transaction)
+	print("=== TRANSFER SUCCESS ===")
+	return true
+	
+func swap_items(item1: InventoryItem_Base, container1_id: String, pos1: Vector2i,
+				item2: InventoryItem_Base, container2_id: String, pos2: Vector2i) -> bool:
+	var container1 = get_container(container1_id)
+	var container2 = get_container(container2_id)
+	
+	if not container1 or not container2:
+		print("ERROR: Invalid containers for swap")
+		return false
+	
+	if not item1 in container1.items or not item2 in container2.items:
+		print("ERROR: Items not in their respective containers")
+		return false
+	
+	print("=== SWAP DEBUG START ===")
+	print("Item1: ", item1.item_name, " at ", pos1, " in ", container1_id)
+	print("Item2: ", item2.item_name, " at ", pos2, " in ", container2_id)
+	
+	# Check if both containers can accept the swapped items
+	if not container1.can_add_item(item2, item1, pos1):
+		print("ERROR: Container1 cannot accept item2")
+		return false
+	
+	if not container2.can_add_item(item1, item2, pos2):
+		print("ERROR: Container2 cannot accept item1")
+		return false
+	
+	# Perform the swap by temporarily removing both items and then placing them
+	var remove1_success = container1.remove_item(item1)
+	var remove2_success = container2.remove_item(item2)
+	
+	if not remove1_success or not remove2_success:
+		print("ERROR: Failed to remove items for swap")
+		# Restore items if one removal failed
+		if remove1_success:
+			container1.add_item(item1, pos1)
+		if remove2_success:
+			container2.add_item(item2, pos2)
+		return false
+	
+	# Add items to their new positions
+	var add1_success = container2.add_item(item1, pos2)
+	var add2_success = container1.add_item(item2, pos1)
+	
+	if not add1_success or not add2_success:
+		print("ERROR: Failed to add items during swap - restoring original positions")
+		# Restore original positions
+		if not add1_success:
+			container1.add_item(item1, pos1)
+		if not add2_success:
+			container2.add_item(item2, pos2)
+		return false
+	
+	# Record transactions for both items
+	var transaction1 = {
+		"item_name": item1.item_name,
+		"quantity": item1.quantity,
+		"from_container": container1_id,
+		"to_container": container2_id,
+		"timestamp": Time.get_unix_time_from_system(),
+		"swapped": true
+	}
+	
+	var transaction2 = {
+		"item_name": item2.item_name,
+		"quantity": item2.quantity,
+		"from_container": container2_id,
+		"to_container": container1_id,
+		"timestamp": Time.get_unix_time_from_system(),
+		"swapped": true
+	}
+	
+	transaction_history.append(transaction1)
+	transaction_history.append(transaction2)
+	
+	# Emit signals
+	item_transferred.emit(item1, container1_id, container2_id)
+	item_transferred.emit(item2, container2_id, container1_id)
+	transaction_completed.emit(transaction1)
+	transaction_completed.emit(transaction2)
+	
+	print("=== SWAP SUCCESS ===")
 	return true
 
 func _get_item_at_position(container: InventoryContainer_Base, position: Vector2i) -> InventoryItem_Base:
