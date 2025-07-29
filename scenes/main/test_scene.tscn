@@ -1,10 +1,11 @@
-[gd_scene load_steps=15 format=3 uid="uid://r45rejc363d"]
+[gd_scene load_steps=16 format=3 uid="uid://r45rejc363d"]
 
 [ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
 [ext_resource type="PackedScene" uid="uid://b2wfoje26x7fv" path="res://scenes/player/player.tscn" id="2_d2t3o"]
 [ext_resource type="PackedScene" uid="uid://3crjjuj2n4na" path="res://scenes/objects/test_switch.tscn" id="3_ny3xg"]
 [ext_resource type="Script" uid="uid://b3iucqrkcqb3h" path="res://scripts/ui/core/CrosshairUI.gd" id="4_ny3xg"]
 [ext_resource type="Script" uid="uid://cntwihsabk552" path="res://scripts/inventory/ui/InventoryWindow.gd" id="5_sa75b"]
+[ext_resource type="Script" uid="uid://bes7x5gnitjur" path="res://scripts/ui/core/PauseMenu.gd" id="6_sa75b"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_ia1lp"]
 ground_color = Color(0.3, 0.3, 0.4, 1)
@@ -132,3 +133,9 @@ offset_bottom = 40.0
 [node name="InventoryWindow" type="Window" parent="UIManager/UICanvas/MenuContainer"]
 script = ExtResource("5_sa75b")
 metadata/_custom_type_script = "uid://cntwihsabk552"
+
+[node name="PauseMenu" type="Control" parent="UIManager/UICanvas/MenuContainer"]
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("6_sa75b")
