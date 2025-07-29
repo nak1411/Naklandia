@@ -370,7 +370,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	
 	# Add to scene and show
 	window_parent.get_tree().current_scene.add_child(dialog_window)
-	dialog_window.popup()
+	dialog_window.popup_centered()
 	dialog_window.grab_focus()
 	
 	# Connect button events
