@@ -29,6 +29,7 @@ var is_occupied: bool = false
 var is_dragging: bool = false
 var drag_start_position: Vector2
 var drag_threshold: float = 5.0
+var drag_preview_created: bool = false
 
 # Signals
 signal slot_clicked(slot: InventorySlot, event: InputEvent)
@@ -256,6 +257,7 @@ func _on_gui_input(event: InputEvent):
 			if mouse_event.pressed:
 				if has_item():
 					is_dragging = true
+					drag_preview_created = false  # Reset the flag
 					drag_start_position = mouse_event.global_position
 				slot_clicked.emit(self, mouse_event)
 			else:
@@ -263,18 +265,22 @@ func _on_gui_input(event: InputEvent):
 				if is_dragging:
 					_handle_drag_end(mouse_event.global_position)
 					is_dragging = false
+					drag_preview_created = false  # Reset the flag
 		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
 			slot_right_clicked.emit(self, mouse_event)
 			get_viewport().set_input_as_handled()
 	
 	elif event is InputEventMouseMotion and is_dragging:
 		var distance = event.global_position.distance_to(drag_start_position)
-		if distance > drag_threshold and has_item():
+		if distance > drag_threshold and has_item() and not drag_preview_created:
 			_start_drag()
 
 func _start_drag():
-	if not has_item() or get_viewport().get_node_or_null("DragPreview"):
-		return  # Already dragging or no item
+	if not has_item() or drag_preview_created:
+		return  # Already created preview or no item
+	
+	# Set flag to prevent multiple calls
+	drag_preview_created = true
 	
 	# Check if shift is held for partial transfer indication
 	var is_partial_transfer = Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1
@@ -381,7 +387,12 @@ func _follow_mouse(preview: Control):
 	preview.set_meta("position_timer", timer)
 
 func _update_preview_position(preview: Control):
-	if not is_instance_valid(preview):
+	if not is_instance_valid(preview) or not is_dragging:
+		# Clean up the timer if dragging stopped
+		var timer = preview.get_meta("position_timer", null)
+		if timer and is_instance_valid(timer):
+			timer.stop()
+			timer.queue_free()
 		return
 	
 	# Check if this preview belongs to this slot
@@ -395,25 +406,91 @@ func _update_preview_position(preview: Control):
 func _handle_drag_end(end_position: Vector2):
 	if not has_item():
 		is_dragging = false
+		drag_preview_created = false
 		return
 	
-	# Clean up drag preview and timer
-	var preview = get_viewport().get_node_or_null("DragPreview")
-	if not preview:
-		# Try finding it in the drag canvas
-		var drag_canvas = get_tree().root.get_node_or_null("DragCanvas")
-		if drag_canvas:
-			preview = drag_canvas.get_node_or_null("DragPreview")
-	
-	if preview and preview.get_meta("source_slot", null) == self:
-		var timer = preview.get_meta("position_timer", null)
-		if timer and is_instance_valid(timer):
-			timer.queue_free()
+	# Clean up drag preview and timer - only if this slot created it
+	if drag_preview_created:
+		var preview = get_viewport().get_node_or_null("DragPreview")
+		if not preview:
+			# Try finding it in the drag canvas
+			var drag_canvas = get_tree().root.get_node_or_null("DragCanvas")
+			if drag_canvas:
+				preview = drag_canvas.get_node_or_null("DragPreview")
 		
-		# Clean up the drag canvas
-		var drag_canvas = preview.get_meta("drag_canvas", null)
-		if drag_canvas and is_instance_valid(drag_canvas):
-			drag_canvas.queue_free()
+		if preview and preview.get_meta("source_slot", null) == self:
+			var timer = preview.get_meta("position_timer", null)
+			if timer and is_instance_valid(timer):
+				timer.stop()
+				timer.queue_free()
+			
+			# Clean up the drag canvas
+			var drag_canvas = preview.get_meta("drag_canvas", null)
+			if drag_canvas and is_instance_valid(drag_canvas):
+				drag_canvas.queue_free()
+	
+	# Clear drag data from viewport
+	if get_viewport().has_meta("current_drag_data"):
+		get_viewport().remove_meta("current_drag_data")
+	
+	# Try to drop on a slot
+	var target_slot = _find_slot_at_position(end_position)
+	var drop_successful = false
+	
+	if target_slot:
+		drop_successful = _attempt_drop_on_slot(target_slot)
+	
+	# Emit drag ended signal
+	item_drag_ended.emit(self, drop_successful)
+	
+	# Reset dragging state
+	is_dragging = false
+	drag_preview_created = false
+	
+func _cleanup_all_drag_previews():
+	"""Clean up any existing drag previews in the scene"""
+	
+	# Clean up any drag canvas nodes
+	var root = get_tree().root
+	var drag_canvases = []
+	
+	# Find all DragCanvas nodes
+	for child in root.get_children():
+		if child.name == "DragCanvas":
+			drag_canvases.append(child)
+	
+	# Clean them up
+	for canvas in drag_canvases:
+		if is_instance_valid(canvas):
+			canvas.queue_free()
+	
+	# Also clean up any loose DragPreview nodes
+	var drag_previews = []
+	
+	# Check viewport for DragPreview
+	var viewport_preview = get_viewport().get_node_or_null("DragPreview")
+	if viewport_preview:
+		drag_previews.append(viewport_preview)
+	
+	# Check root for DragPreview
+	var root_preview = root.get_node_or_null("DragPreview")
+	if root_preview:
+		drag_previews.append(root_preview)
+	
+	# Clean up previews and their timers
+	for preview in drag_previews:
+		if is_instance_valid(preview):
+			var timer = preview.get_meta("position_timer", null)
+			if timer and is_instance_valid(timer):
+				timer.stop()
+				timer.queue_free()
+			preview.queue_free()
+	
+	# Clean up any orphaned timers on this slot
+	for child in get_children():
+		if child is Timer and child.name.begins_with("@Timer"):
+			child.stop()
+			child.queue_free()
 
 func _on_external_drop_result(success: bool):
 	"""Called when an external drop (like container list) completes"""
