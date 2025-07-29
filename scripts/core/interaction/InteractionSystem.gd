@@ -1,4 +1,4 @@
-# InteractionSystem.gd - Clean production version
+# InteractionSystem.gd - Fixed crosshair connection
 class_name InteractionSystem
 extends Node
 
@@ -7,9 +7,10 @@ extends Node
 @export var interaction_distance: float = 3.0
 @export var interaction_layer: int = 2  # Physics layer for interactables
 
-# Component references - using untyped variables to avoid class loading issues
+# Component references
 var raycaster: Node
 var ui: Node
+var crosshair_ref: CrosshairUI
 
 # Current interaction state
 var current_interactable: Interactable = null
@@ -34,6 +35,30 @@ func _ready():
 	# Setup UI
 	if ui:
 		ui.setup_interaction_ui()
+	
+	# Find crosshair reference
+	_find_crosshair_reference()
+
+func _find_crosshair_reference():
+	# Wait a frame for UI to be set up
+	await get_tree().process_frame
+	
+	# Try to find UIManager first
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		var ui_manager = ui_managers[0]
+		if ui_manager.has_method("get_crosshair"):
+			crosshair_ref = ui_manager.get_crosshair()
+			print("InteractionSystem: Found crosshair via UIManager")
+			return
+	
+	# Fallback: search recursively
+	var scene_root = get_tree().current_scene
+	crosshair_ref = _find_crosshair_recursive(scene_root)
+	if crosshair_ref:
+		print("InteractionSystem: Found crosshair recursively")
+	else:
+		print("InteractionSystem: Warning - Crosshair not found")
 
 func _process(_delta):
 	# Update raycaster
@@ -91,14 +116,14 @@ func _on_interactable_lost():
 	interactable_lost.emit()
 
 func _update_crosshair_interaction():
-	# Find crosshair and update it
-	var scene_root = get_tree().current_scene
-	var crosshair = _find_crosshair_recursive(scene_root)
-	if crosshair and crosshair.has_method("set_interaction_state"):
-		crosshair.set_interaction_state(interaction_available)
+	# Update crosshair if we have a reference
+	if crosshair_ref and crosshair_ref.has_method("set_interaction_state"):
+		crosshair_ref.set_interaction_state(interaction_available)
 
-func _find_crosshair_recursive(node: Node) -> Node:
-	if node.name == "Crosshair":
+func _find_crosshair_recursive(node: Node) -> CrosshairUI:
+	if node is CrosshairUI:
+		return node
+	if node.name == "Crosshair" and node is CrosshairUI:
 		return node
 	
 	for child in node.get_children():
@@ -121,4 +146,4 @@ func get_interaction_distance() -> float:
 func set_interaction_distance(distance: float):
 	interaction_distance = distance
 	if raycaster:
-		raycaster.set_raycast_distance(distance)
+		raycaster.setup_raycaster(distance, interaction_layer)

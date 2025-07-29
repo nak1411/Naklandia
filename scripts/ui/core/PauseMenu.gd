@@ -1,27 +1,24 @@
 # PauseMenu.gd
-# Attach this script to a Control node in UIManager/UICanvas/MenuContainer
+# Attach this script to a CanvasLayer node for proper layering
 
-extends Control
-
-
+extends CanvasLayer
 
 var is_paused = false
 var inventory_integration: InventoryIntegration
 var inventory_unfocused_once = false
 
-var background_panel = Panel
-var menu_panel = Panel
-var resume_button = Panel
-var settings_button = Panel
-var exit_button = Panel
+var pause_menu_control: Control
+var background_panel: Panel
+var menu_panel: Panel
+var resume_button: Button
+var settings_button: Button
+var exit_button: Button
 
 func _ready():
-	# Set up the pause menu to fill the screen and be initially hidden
-	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Set up the canvas layer to render above everything
+	layer = 100  # Very high layer to ensure it's above inventory
 	visible = false
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	# Set high z-index to appear on top of all other UI elements
-	z_index = 1000
 	
 	print("PauseMenu: Starting setup...")
 	
@@ -101,14 +98,19 @@ func handle_inventory_escape() -> bool:
 	return false  # Let inventory handle it normally
 
 func _setup_menu_ui():
+	# Create main control container
+	pause_menu_control = Control.new()
+	pause_menu_control.name = "PauseMenuControl"
+	pause_menu_control.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pause_menu_control.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(pause_menu_control)
+	
 	# Create semi-transparent background
 	background_panel = Panel.new()
 	background_panel.name = "BackgroundPanel"
 	background_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	background_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	# Ensure background also has high z-index
-	background_panel.z_index = 999
-	add_child(background_panel)
+	pause_menu_control.add_child(background_panel)
 	
 	# Style the background
 	var bg_style = StyleBoxFlat.new()
@@ -119,7 +121,10 @@ func _setup_menu_ui():
 	menu_panel = Panel.new()
 	menu_panel.name = "MenuPanel"
 	menu_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	menu_panel.custom_minimum_size = Vector2(300, 200)
+	menu_panel.custom_minimum_size = Vector2(400, 300)
+	menu_panel.size = Vector2(400, 300)
+	# Center the panel by offsetting by half its size
+	menu_panel.position = Vector2(-200, -150)  # -width/2, -height/2
 	background_panel.add_child(menu_panel)
 	
 	# Style the menu panel
@@ -145,33 +150,33 @@ func _setup_menu_ui():
 	
 	# Add margin container for padding
 	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 30)
-	margin.add_theme_constant_override("margin_right", 30)
-	margin.add_theme_constant_override("margin_top", 30)
-	margin.add_theme_constant_override("margin_bottom", 30)
+	margin.add_theme_constant_override("margin_left", 40)
+	margin.add_theme_constant_override("margin_right", 40)
+	margin.add_theme_constant_override("margin_top", 40)
+	margin.add_theme_constant_override("margin_bottom", 40)
 	vbox.add_child(margin)
 	
 	var button_container = VBoxContainer.new()
-	button_container.add_theme_constant_override("separation", 15)
+	button_container.add_theme_constant_override("separation", 20)
 	margin.add_child(button_container)
 	
 	# Create buttons
 	resume_button = Button.new()
 	resume_button.name = "ResumeButton"
 	resume_button.text = "Resume Game"
-	resume_button.custom_minimum_size.y = 40
+	resume_button.custom_minimum_size.y = 50
 	button_container.add_child(resume_button)
 	
 	settings_button = Button.new()
 	settings_button.name = "SettingsButton"
 	settings_button.text = "Settings"
-	settings_button.custom_minimum_size.y = 40
+	settings_button.custom_minimum_size.y = 50
 	button_container.add_child(settings_button)
 	
 	exit_button = Button.new()
 	exit_button.name = "ExitButton"
 	exit_button.text = "Exit Game"
-	exit_button.custom_minimum_size.y = 40
+	exit_button.custom_minimum_size.y = 50
 	button_container.add_child(exit_button)
 
 func _unhandled_input(event):
@@ -179,21 +184,27 @@ func _unhandled_input(event):
 	if event.is_action_pressed("ui_cancel") and not event.is_echo():
 		print("PauseMenu: Escape key pressed!")
 		
-		# Check inventory status
+		# Check inventory status first
 		if inventory_integration:
 			var inv_open = inventory_integration.is_inventory_window_open()
 			var inv_window = inventory_integration.get_inventory_window()
-			var inv_visible = inv_window.visible if inv_window else "null"
 			var inv_has_focus = inv_window.has_focus() if inv_window else false
 			
-			print("PauseMenu: Inventory is_open: ", inv_open)
-			print("PauseMenu: Inventory visible: ", inv_visible)
-			print("PauseMenu: Inventory has_focus: ", inv_has_focus)
-		else:
-			print("PauseMenu: No inventory integration found")
+			print("PauseMenu: Inventory open: ", inv_open, ", has focus: ", inv_has_focus)
+			
+			# If inventory is open and has focus, let it handle the first escape
+			if inv_open and inv_has_focus:
+				print("PauseMenu: Letting inventory handle escape first")
+				return
+			
+			# If inventory is open but unfocused, open pause menu
+			if inv_open and not inv_has_focus:
+				print("PauseMenu: Inventory unfocused, opening pause menu")
+				toggle_pause()
+				get_viewport().set_input_as_handled()
+				return
 		
-		# TEMPORARY: Force pause menu to open regardless of inventory state
-		print("PauseMenu: Force opening pause menu for debugging!")
+		# If no inventory or inventory is closed, toggle pause menu
 		toggle_pause()
 		get_viewport().set_input_as_handled()
 

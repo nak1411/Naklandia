@@ -111,6 +111,3 @@ script = ExtResource("4_ny3xg")
 
 [node name="PauseMenu" type="CanvasLayer" parent="."]
 script = ExtResource("6_sa75b")
-
-[node name="InventoryLayer" type="CanvasLayer" parent="."]
-layer = 50
