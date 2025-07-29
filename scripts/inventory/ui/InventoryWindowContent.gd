@@ -233,6 +233,130 @@ func _setup_mass_info_bar(parent: Control):
 	
 	margin_container.add_child(mass_info_label)
 	print("Mass info bar setup completed")
+	
+func _try_drop_on_container_list(drop_position: Vector2, drag_data: Dictionary) -> bool:
+	"""Handle dropping items onto the container list"""
+	if not container_list or not drag_data:
+		return false
+	
+	var item = drag_data.get("item") as InventoryItem_Base
+	var source_container_id = drag_data.get("container_id", "")
+	var source_slot = drag_data.get("source_slot")
+	var is_partial_transfer = drag_data.get("partial_transfer", false)
+	
+	if not item or source_container_id.is_empty():
+		return false
+	
+	# Check if the drop position is over the container list
+	var container_rect = Rect2(container_list.global_position, container_list.size)
+	if not container_rect.has_point(drop_position):
+		return false
+	
+	# Find which container item in the list was clicked
+	var local_pos = container_list.to_local(drop_position)
+	var item_index = -1
+	
+	# Calculate which item in the list is at this position
+	for i in range(container_list.get_item_count()):
+		var item_rect = container_list.get_item_rect(i)
+		if item_rect.has_point(local_pos):
+			item_index = i
+			break
+	
+	if item_index < 0 or item_index >= open_containers.size():
+		return false
+	
+	var target_container = open_containers[item_index]
+	if not target_container or target_container.container_id == source_container_id:
+		return false  # Can't drop on same container or invalid container
+	
+	# Check if the target container can accept this item
+	if not target_container.can_add_item(item):
+		return false
+	
+	# Get the inventory manager
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	var transfer_success = false
+	
+	if is_partial_transfer and item.quantity > 1:
+		# Show split dialog for partial transfer
+		_show_split_transfer_dialog(item, source_container_id, target_container.container_id, source_slot)
+		transfer_success = true  # Dialog will handle the actual transfer
+	else:
+		# Transfer the entire item
+		transfer_success = inventory_manager.transfer_item(
+			item, 
+			source_container_id, 
+			target_container.container_id
+		)
+	
+	if transfer_success:
+		# Call the success callback if provided
+		var callback = drag_data.get("success_callback")
+		if callback and callback is Callable:
+			callback.call(true)
+		
+		# Update the UI
+		call_deferred("refresh_container_list")
+		call_deferred("refresh_display")
+	
+	return transfer_success
+	
+func _show_split_transfer_dialog(item: InventoryItem_Base, from_container_id: String, to_container_id: String, source_slot):
+	"""Show dialog for splitting item quantity during transfer"""
+	# Create a simple dialog for quantity selection
+	var dialog = AcceptDialog.new()
+	dialog.title = "Transfer Quantity"
+	dialog.size = Vector2(300, 150)
+	
+	var vbox = VBoxContainer.new()
+	dialog.add_child(vbox)
+	
+	var label = Label.new()
+	label.text = "How many %s to transfer? (Max: %d)" % [item.item_name, item.quantity]
+	vbox.add_child(label)
+	
+	var spinbox = SpinBox.new()
+	spinbox.min_value = 1
+	spinbox.max_value = item.quantity
+	spinbox.value = 1
+	spinbox.step = 1
+	vbox.add_child(spinbox)
+	
+	var button_container = HBoxContainer.new()
+	vbox.add_child(button_container)
+	
+	var transfer_button = Button.new()
+	transfer_button.text = "Transfer"
+	button_container.add_child(transfer_button)
+	
+	var cancel_button = Button.new()
+	cancel_button.text = "Cancel"
+	button_container.add_child(cancel_button)
+	
+	# Connect signals
+	transfer_button.pressed.connect(func():
+		var quantity = int(spinbox.value)
+		var inventory_manager = _get_inventory_manager()
+		if inventory_manager:
+			var success = inventory_manager.transfer_item(item, from_container_id, to_container_id, Vector2i(-1, -1), quantity)
+			if success and source_slot and source_slot.has_method("_on_external_drop_result"):
+				source_slot._on_external_drop_result(true)
+			refresh_container_list()
+			refresh_display()
+		dialog.queue_free()
+	)
+	
+	cancel_button.pressed.connect(func():
+		dialog.queue_free()
+	)
+	
+	# Add to scene and show
+	get_viewport().add_child(dialog)
+	dialog.popup_centered()
 
 func _on_container_list_selected(index: int):
 	print("Container list item selected: ", index)
@@ -248,6 +372,47 @@ func _on_item_activated(item: InventoryItem_Base, slot: InventorySlot):
 func _on_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
 	print("Item context menu requested for: ", item.item_name)
 	item_context_menu.emit(item, slot, position)
+	
+func _get_inventory_manager() -> InventoryManager:
+	"""Get the inventory manager instance"""
+	# Check if we already have a reference
+	if inventory_manager:
+		return inventory_manager
+	
+	# Try to find it through the parent InventoryWindow
+	var current = self
+	while current:
+		if current.has_method("get_inventory_manager"):
+			return current.get_inventory_manager()
+		if current.has_meta("inventory_manager"):
+			return current.get_meta("inventory_manager")
+		current = current.get_parent()
+	
+	# Try to find InventoryIntegration in the scene tree
+	var scene_root = get_tree().current_scene
+	if scene_root:
+		var integration = scene_root.find_child("InventoryIntegration", true, false)
+		if integration and integration.has_method("get") and integration.get("inventory_manager"):
+			return integration.inventory_manager
+	
+	# Search for Player node with InventoryIntegration component
+	var player = scene_root.find_child("Player", true, false) if scene_root else null
+	if player:
+		var player_integration = player.find_child("InventoryIntegration", true, false)
+		if player_integration and player_integration.inventory_manager:
+			return player_integration.inventory_manager
+	
+	return null
+
+func refresh_container_list():
+	"""Refresh the container list display"""
+	if not container_list:
+		return
+	
+	container_list.clear()
+	for container in open_containers:
+		if container:
+			container_list.add_item(container.container_name)
 
 # Public interface with debug output
 func set_inventory_manager(manager: InventoryManager):
@@ -315,19 +480,11 @@ func select_container_index(index: int):
 			list_to_use.select(index)
 
 func refresh_display():
-	print("InventoryWindowContent.refresh_display() called")
-	
 	if not inventory_grid:
-		print("ERROR: No inventory grid to refresh!")
 		return
 	
 	if not current_container:
-		print("WARNING: No current container to display")
 		return
-	
-	print("Refreshing display for container: ", current_container.container_name)
-	print("Container has ", current_container.get_item_count(), " items")
-	
 	# Make sure the grid has the container set
 	inventory_grid.set_container(current_container)
 	await get_tree().process_frame

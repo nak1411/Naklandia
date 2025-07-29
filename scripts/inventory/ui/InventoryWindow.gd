@@ -392,15 +392,12 @@ func _on_sort_requested(sort_type):
 # Content signal handlers - FIXED FUNCTION NAMES
 func _on_container_selected_from_content(container: InventoryContainer_Base):
 	print("InventoryWindow: Container selected from content: ", container.container_name if container else "None")
-	
-	# Update our current container 
+	# Update our current container but don't call select_container to avoid infinite loop
 	current_container = container
 	
-	# IMPORTANT: Also call select_container on the content to update the grid and mass info
-	if content and content.has_method("select_container"):
-		# Don't emit the signal again since we're already handling it
-		content.select_container(container)
-		print("✓ Updated content with selected container")
+	# Update mass info through the content
+	if content and content.has_method("update_mass_info"):
+		content.update_mass_info()
 	
 	container_switched.emit(container)
 

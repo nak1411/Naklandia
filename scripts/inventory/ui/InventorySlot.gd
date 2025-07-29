@@ -81,55 +81,34 @@ func _setup_visual_components():
 	# Quantity label
 	quantity_label = Label.new()
 	quantity_label.name = "QuantityLabel"
-	quantity_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	quantity_label.position = Vector2(-20, -16)
-	quantity_label.size = Vector2(18, 14)
 	quantity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	quantity_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	quantity_label.add_theme_font_size_override("font_size", 10)
+	quantity_label.position = Vector2(slot_size.x - 20, slot_size.y - 16)
+	quantity_label.size = Vector2(18, 14)
 	quantity_label.add_theme_color_override("font_color", Color.WHITE)
 	quantity_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	quantity_label.add_theme_constant_override("shadow_offset_x", 1)
 	quantity_label.add_theme_constant_override("shadow_offset_y", 1)
+	quantity_label.add_theme_font_size_override("font_size", 10)
 	quantity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	quantity_label.visible = false
 	add_child(quantity_label)
 	
-	# Rarity border (initially hidden)
+	# Rarity border
 	rarity_border = NinePatchRect.new()
 	rarity_border.name = "RarityBorder"
 	rarity_border.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	rarity_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rarity_border.visible = false
 	add_child(rarity_border)
-	
-	_update_visual_state()
 
 func _setup_signals():
-	mouse_filter = Control.MOUSE_FILTER_PASS
 	gui_input.connect(_on_gui_input)
 
 # Item management
 func set_item(new_item: InventoryItem_Base):
-	if item and item.quantity_changed.is_connected(_on_item_quantity_changed):
-		item.quantity_changed.disconnect(_on_item_quantity_changed)
-	
 	item = new_item
-	is_occupied = item != null
-	
-	if item:
-		item.quantity_changed.connect(_on_item_quantity_changed)
-	
-	_update_item_display()
-	
-	if visible:
-		queue_redraw()
-	
-func force_visual_refresh():
-	queue_redraw()
-	_update_visual_state()
-
-func clear_item():
-	set_item(null)
+	_update_display()
 
 func get_item() -> InventoryItem_Base:
 	return item
@@ -137,36 +116,46 @@ func get_item() -> InventoryItem_Base:
 func has_item() -> bool:
 	return item != null
 
-# Visual updates
-func _update_item_display():
+func clear_item():
+	item = null
+	_update_display()
+
+func set_grid_position(pos: Vector2i):
+	grid_position = pos
+
+func get_grid_position() -> Vector2i:
+	return grid_position
+
+func set_container_id(id: String):
+	container_id = id
+
+func get_container_id() -> String:
+	return container_id
+
+func _update_display():
+	is_occupied = has_item()
+	
 	if not item:
-		if item_icon:
-			item_icon.texture = null
-			item_icon.visible = false
-		if quantity_label:
-			quantity_label.text = ""
-			quantity_label.visible = false
-		if rarity_border:
-			rarity_border.visible = false
+		item_icon.texture = null
+		quantity_label.visible = false
+		rarity_border.visible = false
 		tooltip_text = ""
+		_update_visual_state()
 		return
 	
-	# Set icon
-	var icon_texture = item.get_icon_texture()
-	if icon_texture:
-		item_icon.texture = icon_texture
-		item_icon.visible = true
+	# Set item icon
+	var texture = item.get_icon_texture()
+	if texture:
+		item_icon.texture = texture
 	else:
 		_create_fallback_icon()
-		item_icon.visible = true
 	
-	# Always show quantity for any amount > 1
+	# Set quantity
 	if item.quantity > 1:
 		quantity_label.text = str(item.quantity)
 		quantity_label.visible = true
 	else:
-		quantity_label.text = "1"
-		quantity_label.visible = true
+		quantity_label.visible = false
 	
 	# Set rarity border
 	if rarity_border:
@@ -273,8 +262,13 @@ func _on_gui_input(event: InputEvent):
 			_start_drag()
 
 func _start_drag():
-	if not has_item() or get_viewport().get_node_or_null("DragPreview"):
-		return  # Already dragging or no item
+	if not has_item():
+		return  # No item to drag
+	
+	# Check if already dragging by looking for existing drag layer
+	var existing_layer = get_viewport().get_node_or_null("DragLayer")
+	if existing_layer:
+		return  # Already dragging
 	
 	# Check if shift is held for partial transfer indication
 	var is_partial_transfer = Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1
@@ -293,7 +287,16 @@ func _start_drag():
 	
 	# Create drag preview
 	var preview = _create_drag_preview()
-	get_viewport().add_child(preview)
+	
+	# Create a CanvasLayer to ensure the preview is on top of everything
+	var drag_layer = CanvasLayer.new()
+	drag_layer.name = "DragLayer"
+	drag_layer.layer = 100  # Very high layer to be on top
+	get_viewport().add_child(drag_layer)
+	drag_layer.add_child(preview)
+	
+	# Store reference to the layer for cleanup
+	preview.set_meta("drag_layer", drag_layer)
 	
 	# Add visual indicator for partial transfer
 	if is_partial_transfer:
@@ -301,6 +304,10 @@ func _start_drag():
 	
 	# Start following mouse
 	_follow_mouse(preview)
+	
+	# Force initial position update
+	var mouse_pos = get_global_mouse_position()
+	preview.global_position = mouse_pos - preview.size / 2
 	
 	# Emit drag started signal
 	item_drag_started.emit(self, item)
@@ -322,7 +329,7 @@ func _create_drag_preview() -> Control:
 	var preview = Control.new()
 	preview.name = "DragPreview"
 	preview.size = size
-	preview.z_index = 1000
+	preview.z_index = 4096  # Much higher z_index to ensure it's on top
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
 	# Copy visual elements
@@ -334,6 +341,8 @@ func _create_drag_preview() -> Control:
 	
 	var preview_icon = TextureRect.new()
 	preview_icon.texture = item_icon.texture
+	# Remove debug prints and fix preview position to actually follow mouse
+	print("Original texture: ", item_icon.texture, " Item has get_icon_texture: ", item.has_method("get_icon_texture") if item else "no item")
 	preview_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	preview_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	preview_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -389,15 +398,31 @@ func _handle_drag_end(end_position: Vector2):
 		is_dragging = false
 		return
 	
-	# Clean up drag preview and timer
-	var preview = get_viewport().get_node_or_null("DragPreview")
+	# Clean up drag preview, timer, and layer
+	var preview = null
+	var drag_layer = get_viewport().get_node_or_null("DragLayer")
+	if drag_layer:
+		preview = drag_layer.get_node_or_null("DragPreview")
+	
+	if not preview:
+		# Fallback: try finding it directly in viewport
+		preview = get_viewport().get_node_or_null("DragPreview")
+	
 	if preview and preview.get_meta("source_slot", null) == self:
 		var timer = preview.get_meta("position_timer", null)
 		if timer and is_instance_valid(timer):
 			timer.queue_free()
-		preview.queue_free()
+		
+		# Clean up the canvas layer (which will also clean up the preview)
+		if drag_layer and is_instance_valid(drag_layer):
+			drag_layer.queue_free()
+		elif preview:
+			preview.queue_free()
 	
 	var success = false
+	
+	# Debug the drop attempt
+	print("Attempting drop at position: ", end_position)
 	
 	# Check if we dropped on container list first
 	var container_content = _find_inventory_content()
@@ -406,12 +431,15 @@ func _handle_drag_end(end_position: Vector2):
 		if get_viewport().has_meta("current_drag_data"):
 			var drag_data = get_viewport().get_meta("current_drag_data")
 			success = container_content._try_drop_on_container_list(end_position, drag_data)
+			print("Container drop result: ", success)
 	
 	# If container drop failed, try slot drop
 	if not success:
 		var target_slot = _find_slot_at_position(end_position)
+		print("Target slot found: ", target_slot)
 		if target_slot and target_slot != self:
 			success = _attempt_drop_on_slot(target_slot)
+			print("Slot drop result: ", success)
 			if success:
 				# Emit the dropped signal for successful drops
 				item_dropped_on_slot.emit(self, target_slot)
@@ -471,6 +499,7 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
+		print("No inventory manager found")
 		return false
 	
 	# Get containers
@@ -478,240 +507,61 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	
 	if not source_container or not target_container:
+		print("Invalid containers - source: ", source_container, " target: ", target_container)
 		return false
 	
-	# Handle different drop scenarios
-	if target_slot.has_item():
-		var target_item = target_slot.get_item()
-		
-		# Try stacking if items are compatible
-		if item.can_stack_with(target_item):
-			return _handle_stack_merge(target_slot, target_item)
-		else:
-			# Swap items
-			return _handle_item_swap(target_slot, target_item, inventory_manager)
-	else:
-		# Move to empty slot
-		return _handle_move_to_empty(target_slot, inventory_manager)
+	print("Source container: ", source_container.container_name, " Target container: ", target_container.container_name)
+	print("Source item: ", item.item_name, " quantity: ", item.quantity)
+	print("Target position: ", target_slot.grid_position)
+	print("Target slot has item: ", target_slot.has_item())
+	
+	# Attempt the transfer
+	var success = inventory_manager.transfer_item(
+		item,
+		container_id,
+		target_slot.container_id,
+		target_slot.grid_position
+	)
+	print("Transfer result: ", success)
+	return success
 
 func _show_split_stack_dialog():
-	"""Show split stack dialog using the existing item actions system"""
-	var item_actions = _find_item_actions()
-	if item_actions and item_actions.has_method("show_split_stack_dialog"):
-		item_actions.show_split_stack_dialog(item, self)
+	# Implementation for splitting stacks would go here
+	# For now, just transfer the whole stack
+	print("Split stack dialog not implemented yet")
+	pass
 
-func _find_item_actions():
-	"""Find the InventoryItemActions instance in the scene"""
+func _get_inventory_manager():
+	# Find the inventory manager in the scene hierarchy
 	var current = get_parent()
 	while current:
-		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowUI":
-			return current.item_actions
+		if current.has_method("get_inventory_manager"):
+			return current.get_inventory_manager()
+		if current.has_meta("inventory_manager"):
+			return current.get_meta("inventory_manager")
+		current = current.get_parent()
+	
+	# Try to find InventoryIntegration in the scene tree
+	var scene_root = get_tree().current_scene
+	if scene_root:
+		var integration = scene_root.find_child("InventoryIntegration", true, false)
+		if integration and integration.has_method("get") and integration.get("inventory_manager"):
+			return integration.inventory_manager
+	
+	# Search for Player node with InventoryIntegration component
+	var player = scene_root.find_child("Player", true, false) if scene_root else null
+	if player:
+		var player_integration = player.find_child("InventoryIntegration", true, false)
+		if player_integration and player_integration.inventory_manager:
+			return player_integration.inventory_manager
+	
+	return null
+
+func _get_inventory_grid():
+	# Find the parent inventory grid
+	var current = get_parent()
+	while current:
+		if current is InventoryGrid:
+			return current
 		current = current.get_parent()
 	return null
-
-func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_Base) -> bool:
-	
-	var space_available = target_item.max_stack_size - target_item.quantity
-	var amount_to_transfer = min(item.quantity, space_available)
-	
-	if amount_to_transfer <= 0:
-		return false
-	
-	# Direct stacking without using transfer system for same container
-	if container_id == target_slot.container_id:
-		# Update quantities directly
-		target_item.quantity += amount_to_transfer
-		item.quantity -= amount_to_transfer
-		
-		
-		# Update displays
-		target_slot._update_item_display()
-		
-		if item.quantity <= 0:
-			# Source item fully consumed
-			var source_container = _get_inventory_manager().get_container(container_id)
-			if source_container:
-				source_container.remove_item(item)
-			clear_item()
-		else:
-			_update_item_display()
-		
-		return true
-	else:
-		# Different container stacking - use transfer system
-		var inventory_manager = _get_inventory_manager()
-		if not inventory_manager:
-			return false
-		
-		# Use the inventory manager's transfer system for different containers
-		var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, target_slot.grid_position, amount_to_transfer)
-		
-		if success:
-			# Update displays - the transfer system handles the logic
-			if item.quantity <= 0:
-				# Source item fully consumed
-				clear_item()
-			else:
-				_update_item_display()
-			
-			# Update target display
-			target_slot._update_item_display()
-			
-			return true
-		
-		return false
-
-func _handle_item_swap(target_slot: InventorySlot, target_item: InventoryItem_Base, inventory_manager: InventoryManager) -> bool:
-	var source_container = inventory_manager.get_container(container_id)
-	var target_container = inventory_manager.get_container(target_slot.container_id)
-	
-	# Store items and positions temporarily
-	var temp_source_item = item
-	var temp_target_item = target_item
-	var source_pos = grid_position
-	var target_pos = target_slot.grid_position
-	
-	# For same container swaps, use move_item which is more reliable
-	if source_container == target_container:
-		# Clear the grid positions manually first
-		source_container.clear_grid_area(source_pos)
-		source_container.clear_grid_area(target_pos)
-		
-		# Place items at swapped positions
-		source_container.occupy_grid_area(target_pos, temp_source_item)
-		source_container.occupy_grid_area(source_pos, temp_target_item)
-		
-		# Update visual slots immediately
-		clear_item()
-		target_slot.clear_item()
-		target_slot.set_item(temp_source_item)
-		set_item(temp_target_item)
-		
-		# Emit move signals instead of add/remove to avoid refresh_display
-		source_container.item_moved.emit(temp_source_item, source_pos, target_pos)
-		source_container.item_moved.emit(temp_target_item, target_pos, source_pos)
-		
-		return true
-	else:
-		# Different containers - use the existing logic but without signals
-		var source_success = source_container.remove_item(temp_source_item)
-		var target_success = target_container.remove_item(temp_target_item)
-		
-		if not source_success or not target_success:
-			return false
-		
-		# Clear visual slots
-		clear_item()
-		target_slot.clear_item()
-		
-		# Add to new containers at specific positions
-		target_container.occupy_grid_area(target_pos, temp_source_item)
-		source_container.occupy_grid_area(source_pos, temp_target_item)
-		target_container.items.append(temp_source_item)
-		source_container.items.append(temp_target_item)
-		
-		# Reconnect signals
-		temp_source_item.quantity_changed.connect(target_container._on_item_quantity_changed)
-		temp_source_item.item_modified.connect(target_container._on_item_modified)
-		temp_target_item.quantity_changed.connect(source_container._on_item_quantity_changed)
-		temp_target_item.item_modified.connect(source_container._on_item_modified)
-		
-		# Update visual slots
-		target_slot.set_item(temp_source_item)
-		set_item(temp_target_item)
-		
-		# Only emit item_added signals for cross-container moves
-		target_container.item_added.emit(temp_source_item, target_pos)
-		source_container.item_added.emit(temp_target_item, source_pos)
-		
-		return true
-
-func _handle_move_to_empty(target_slot: InventorySlot, inventory_manager: InventoryManager) -> bool:
-	var source_container = inventory_manager.get_container(container_id)
-	var target_container = inventory_manager.get_container(target_slot.container_id)
-	
-	if not source_container or not target_container:
-		return false
-	
-	# Check if target container can accept the item
-	if not target_container.can_add_item(item, item):
-		return false
-	
-	# Store the item reference before removing it
-	var temp_item = item
-	
-	# For same container moves, use move_item instead of remove/add
-	if source_container == target_container:
-		var move_success = source_container.move_item(temp_item, target_slot.grid_position)
-		if move_success:
-			# Update visual slots immediately - NO compacting
-			clear_item()
-			target_slot.set_item(temp_item)
-			return true
-		else:
-			return false
-	
-	# For different containers, remove from source and add to target
-	var source_success = source_container.remove_item(temp_item)
-	if not source_success:
-		return false
-	
-	# Clear the source slot visually
-	clear_item()
-	
-	# Add to target container at the specific position - NO compacting
-	var target_success = target_container.add_item(temp_item, target_slot.grid_position)
-	if not target_success:
-		# Restore to source if target add failed
-		source_container.add_item(temp_item, grid_position)
-		set_item(temp_item)
-		return false
-	
-	# Set the target slot visually
-	target_slot.set_item(temp_item)
-	
-	return true
-
-# Helper methods
-func _get_inventory_grid() -> InventoryGrid:
-	var parent = get_parent()
-	while parent:
-		if parent is InventoryGrid:
-			return parent
-		parent = parent.get_parent()
-	return null
-
-func _get_inventory_manager() -> InventoryManager:
-	var scene_root = get_tree().current_scene
-	return _find_inventory_manager_recursive(scene_root)
-
-func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
-	if node is InventoryManager:
-		return node
-	
-	for child in node.get_children():
-		var result = _find_inventory_manager_recursive(child)
-		if result:
-			return result
-	
-	return null
-
-# Signal handlers
-func _on_item_quantity_changed(new_quantity: int):
-	_update_item_display()
-	
-	if new_quantity <= 0:
-		clear_item()
-
-# Public interface
-func set_grid_position(pos: Vector2i):
-	grid_position = pos
-
-func get_grid_position() -> Vector2i:
-	return grid_position
-
-func set_container_id(id: String):
-	container_id = id
-
-func get_container_id() -> String:
-	return container_id
