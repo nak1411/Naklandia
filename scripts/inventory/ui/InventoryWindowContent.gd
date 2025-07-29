@@ -261,3 +261,93 @@ func debug_content_state():
 	print("  - current_container: ", current_container.container_name if current_container else "None")
 	print("  - inventory_grid: ", inventory_grid != null)
 	print("  - open_containers count: ", open_containers.size())
+
+# Drag and drop functionality for container list
+func _try_drop_on_container_list(drop_position: Vector2, drag_data: Dictionary) -> bool:
+	"""Handle dropping items onto the container list"""
+	if not container_list or not drag_data:
+		return false
+	
+	var item = drag_data.get("item") as InventoryItem_Base
+	var source_container_id = drag_data.get("container_id", "")
+	var is_partial_transfer = drag_data.get("partial_transfer", false)
+	
+	if not item:
+		return false
+	
+	# Check if drop position is over the container list
+	var container_rect = Rect2(container_list.global_position, container_list.size)
+	if not container_rect.has_point(drop_position):
+		return false
+	
+	# Find which container was dropped on
+	var dropped_index = container_list.get_item_at_position(drop_position - container_list.global_position, true)
+	if dropped_index < 0 or dropped_index >= open_containers.size():
+		return false
+	
+	var target_container = open_containers[dropped_index]
+	if not target_container or target_container.container_id == source_container_id:
+		return false
+	
+	# Try to transfer the item
+	var success = false
+	if inventory_manager:
+		if is_partial_transfer and item.quantity > 1:
+			# Show quantity selection dialog
+			show_transfer_quantity_dialog(item, source_container_id, target_container.container_id)
+			success = true  # Assume success since dialog will handle it
+		else:
+			# Full transfer
+			success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id)
+	
+	return success
+
+func show_transfer_quantity_dialog(item: InventoryItem_Base, from_container_id: String, to_container_id: String, source_slot = null):
+	"""Show dialog for selecting transfer quantity"""
+	var dialog = AcceptDialog.new()
+	dialog.title = "Transfer Quantity"
+	dialog.size = Vector2i(300, 150)
+	
+	var vbox = VBoxContainer.new()
+	dialog.add_child(vbox)
+	
+	var label = Label.new()
+	label.text = "Transfer %s (Max: %d)" % [item.item_name, item.quantity]
+	vbox.add_child(label)
+	
+	var spinbox = SpinBox.new()
+	spinbox.min_value = 1
+	spinbox.max_value = item.quantity
+	spinbox.value = 1
+	spinbox.step = 1
+	vbox.add_child(spinbox)
+	
+	var button_container = HBoxContainer.new()
+	vbox.add_child(button_container)
+	
+	var transfer_button = Button.new()
+	transfer_button.text = "Transfer"
+	button_container.add_child(transfer_button)
+	
+	var cancel_button = Button.new()
+	cancel_button.text = "Cancel"
+	button_container.add_child(cancel_button)
+	
+	# Connect signals
+	transfer_button.pressed.connect(func():
+		var quantity = int(spinbox.value)
+		if inventory_manager:
+			var success = inventory_manager.transfer_item(item, from_container_id, to_container_id, Vector2i(-1, -1), quantity)
+			if success and source_slot and source_slot.has_method("_on_external_drop_result"):
+				source_slot._on_external_drop_result(true)
+			refresh_display()
+		dialog.queue_free()
+	)
+	
+	cancel_button.pressed.connect(func():
+		dialog.queue_free()
+	)
+	
+	# Add to scene and show
+	get_viewport().add_child(dialog)
+	dialog.popup_centered()
