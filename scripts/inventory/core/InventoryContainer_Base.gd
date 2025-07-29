@@ -200,27 +200,30 @@ func can_add_item(item: InventoryItem_Base, exclude_item: InventoryItem_Base = n
 	var has_space = free_pos != Vector2i(-1, -1)
 	return has_space
 
-func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
+func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true, prevent_merge: bool = false) -> bool:
+	if not item:
+		return false
 	
+	# Use the existing can_add_item method
 	if not can_add_item(item, item):  # Pass the item itself as exclude_item for same-container moves
 		return false
 	
-	# Try to stack with existing item first (only if auto_stack is enabled)
-	if auto_stack:
-		var existing_item = find_stackable_item(item)
-		if existing_item and existing_item != item:  # Don't stack with itself
-			var space_available = existing_item.max_stack_size - existing_item.quantity
+	# Try to stack with existing items first (unless prevent_merge is true or auto_stack is false)
+	if auto_stack and not prevent_merge:
+		var stackable_item = find_stackable_item(item)
+		if stackable_item and stackable_item != item:  # Don't stack with itself
+			var space_available = stackable_item.max_stack_size - stackable_item.quantity
 			var amount_to_stack = min(item.quantity, space_available)
 			
 			if amount_to_stack > 0:
-				existing_item.quantity += amount_to_stack
+				stackable_item.quantity += amount_to_stack
 				item.quantity -= amount_to_stack
 				
 				# If we stacked everything, we're done
 				if item.quantity <= 0:
-					item_added.emit(item, get_item_position(existing_item))
+					item_added.emit(item, get_item_position(stackable_item))
 					return true
-
+	
 	# Find placement position
 	var final_position = position
 	if position == Vector2i(-1, -1):
@@ -252,6 +255,17 @@ func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), a
 	
 	item_added.emit(item, final_position)
 	return true
+
+func _find_inventory_manager_recursive(node: Node):
+	if node.get_script() and node.get_script().get_global_name() == "InventoryManager":
+		return node
+	
+	for child in node.get_children():
+		var result = _find_inventory_manager_recursive(child)
+		if result:
+			return result
+	
+	return null
 
 # Auto-compact after item removal
 func remove_item(item: InventoryItem_Base) -> bool:

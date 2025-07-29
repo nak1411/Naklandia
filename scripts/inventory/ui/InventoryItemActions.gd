@@ -10,6 +10,7 @@ var current_container: InventoryContainer_Base
 # Context menu system
 var context_menu: ContextMenu_Base
 var is_context_menu_active: bool = false
+var is_in_split_drop_operation: bool = false
 
 # Track open dialog windows for cleanup
 var open_dialog_windows: Array[Window] = []
@@ -38,7 +39,7 @@ func set_inventory_manager(manager: InventoryManager):
 
 func set_current_container(container: InventoryContainer_Base):
 	current_container = container
-
+	
 func show_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
 	"""Show context menu for an inventory item"""
 	print("InventoryItemActions: show_item_context_menu called for item: ", item.item_name if item else "null")
@@ -309,11 +310,14 @@ func show_container_details_dialog(container: InventoryContainer_Base):
 			window_parent.grab_focus()
 	)
 
-func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
+func show_split_stack_dialog(item: InventoryItem_Base, slot: InventorySlot):
 	"""Show split stack dialog"""
-	# Prevent auto-stacking while dialog is open
+	print("InventoryItemActions: Opening split dialog for: ", item.item_name)
+	
+	# Set flag to prevent auto-stacking and indicate we're in a split operation
 	var original_auto_stack = inventory_manager.auto_stack
 	inventory_manager.auto_stack = false
+	is_in_split_drop_operation = true
 	
 	var dialog_window = Window.new()
 	dialog_window.title = "Split Stack"
@@ -376,15 +380,16 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	# Connect button events
 	split_button.pressed.connect(func():
 		var split_amount = int(spinbox.value)
-		inventory_manager.auto_stack = original_auto_stack
 		_perform_split(item, split_amount, original_auto_stack)
 		_safe_cleanup_dialog(dialog_window)
+		# Note: Don't clear split operation state here - let the drag operation handle it
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
 	)
 	
 	cancel_button.pressed.connect(func():
 		inventory_manager.auto_stack = original_auto_stack
+		is_in_split_drop_operation = false  # Clear immediately on cancel
 		_safe_cleanup_dialog(dialog_window)
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
@@ -392,6 +397,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	
 	dialog_window.close_requested.connect(func():
 		inventory_manager.auto_stack = original_auto_stack
+		is_in_split_drop_operation = false  # Clear immediately on close
 		_safe_cleanup_dialog(dialog_window)
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
@@ -653,17 +659,29 @@ func _generate_detailed_container_info(container: InventoryContainer_Base) -> St
 	text += "Requires Docking: %s\n" % ("Yes" if container.requires_docking else "No")
 	
 	return text
+	
+func is_split_operation_active() -> bool:
+	"""Check if we're currently in a split drop operation"""
+	return is_in_split_drop_operation
 
 func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_stack: bool):
 	"""Perform the item stack split operation"""
 	if not inventory_manager or not current_container or not item:
 		inventory_manager.auto_stack = original_auto_stack
+		is_in_split_drop_operation = false
 		return
 	
 	# Validate split amount
 	if split_amount <= 0 or split_amount >= item.quantity:
 		inventory_manager.auto_stack = original_auto_stack
+		is_in_split_drop_operation = false
 		return
+	
+	# Disable auto-stack globally and set split operation flag
+	inventory_manager.auto_stack = false
+	is_in_split_drop_operation = true
+	
+	print("Split operation starting - auto_stack disabled, flag set")
 	
 	# Create the new item manually
 	var new_item = InventoryItem_Base.new()
@@ -689,28 +707,48 @@ func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_s
 	var free_position = current_container.find_free_position()
 	
 	if free_position == Vector2i(-1, -1):
-		# No free space - can't split
+		# No free space - can't split, restore settings
 		inventory_manager.auto_stack = original_auto_stack
+		is_in_split_drop_operation = false
 		return
 	
 	# Reduce the original item's quantity BEFORE adding the new item
 	item.quantity -= split_amount
 	
-	# Add the new item to container with auto_stack explicitly disabled
-	var success = current_container.add_item(new_item, free_position, false)
+	# Add the new item to container with auto_stack disabled and prevent_merge enabled
+	var success = current_container.add_item(new_item, free_position, false, true)  # prevent_merge = true
 	
 	if not success:
-		# Failed to add - restore original quantity
+		# Failed to add - restore original quantity and settings
 		item.quantity += split_amount
 		item.quantity_changed.emit(item.quantity)
+		inventory_manager.auto_stack = original_auto_stack
+		is_in_split_drop_operation = false
+		
+func clear_split_operation_state(restore_auto_stack: bool = true):
+	"""Manually clear split operation state - called when drag completes"""
+	print("Clearing split operation state, restore_auto_stack: ", restore_auto_stack)
+	is_in_split_drop_operation = false
 	
-	# Always restore auto-stack setting
-	inventory_manager.auto_stack = original_auto_stack
+	if restore_auto_stack and inventory_manager:
+		inventory_manager.auto_stack = true
+		print("Auto-stack restored to true")
+
+func _has_other_active_split_operations() -> bool:
+	"""Check if there are other active split operations in the system"""
+	# For now, just return false - we can expand this if needed
+	return false
 
 func _show_transfer_failed_notification():
 	"""Show notification when item transfer fails"""
 	print("Item transfer failed - insufficient space or invalid container")
 	# TODO: Implement visual notification system
+	
+func restore_auto_stack_if_safe():
+	"""Restore auto_stack only if no split operations are currently active"""
+	if not is_in_split_drop_operation and inventory_manager:
+		inventory_manager.auto_stack = true
+		print("Auto-stack safely restored")
 
 func _safe_cleanup_dialog(dialog_window: Window):
 	"""Safely clean up a dialog window with proper validity checks"""

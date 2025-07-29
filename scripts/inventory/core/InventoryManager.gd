@@ -13,6 +13,7 @@ var hangar_containers: Array[InventoryContainer_Base] = []
 # Transaction system
 var pending_transfers: Array[Dictionary] = []
 var transaction_history: Array[Dictionary] = []
+var is_split_drop_operation: bool = false
 
 # Settings
 @export var auto_stack: bool = true
@@ -353,6 +354,180 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 	print("=== TRANSFER SUCCESS ===")
 	return true
 	
+func transfer_item_no_stack(item: InventoryItem_Base, from_container_id: String, to_container_id: String, 
+				  position: Vector2i = Vector2i(-1, -1), quantity: int = -1) -> bool:
+	"""Transfer item without any automatic stacking - used for split operations"""
+	var from_container = get_container(from_container_id)
+	var to_container = get_container(to_container_id)
+	
+	print("=== NO-STACK TRANSFER DEBUG START ===")
+	print("Item: ", item.item_name, " (", item.item_type, ")")
+	print("From container: ", from_container_id if from_container else "NULL")
+	print("To container: ", to_container_id if to_container else "NULL")
+	print("Position: ", position)
+	print("Quantity: ", quantity)
+	
+	if not from_container or not to_container:
+		print("ERROR: Container not found!")
+		return false
+	
+	if not item in from_container.items:
+		print("ERROR: Item not in source container!")
+		return false
+	
+	# Handle transfer quantity
+	var transfer_quantity = quantity if quantity > 0 else item.quantity
+	var transfer_item = item
+	
+	print("Transfer quantity: ", transfer_quantity)
+	print("Item quantity: ", item.quantity)
+	
+	# For partial transfers, split the stack
+	if transfer_quantity < item.quantity:
+		print("Splitting stack for partial transfer")
+		transfer_item = item.split_stack(transfer_quantity)
+		if not transfer_item:
+			print("ERROR: Failed to split stack!")
+			return false
+	
+	# Check if target container can accept the item (without stacking)
+	print("Checking if target container can accept item (no stacking)...")
+	if not to_container.can_add_item(transfer_item, item if from_container == to_container else null, position):
+		print("ERROR: Target container cannot accept item!")
+		# If we split the stack, restore it
+		if transfer_quantity < item.quantity and transfer_item:
+			item.add_to_stack(transfer_item.quantity)
+		return false
+	
+	print("Target container can accept item, proceeding...")
+	
+	# Remove from source container
+	var remove_success = from_container.remove_item(transfer_item if transfer_quantity < item.quantity else item)
+	if not remove_success:
+		print("ERROR: Failed to remove from source container!")
+		# If we split the stack, restore it
+		if transfer_quantity < item.quantity and transfer_item:
+			item.add_to_stack(transfer_item.quantity)
+		return false
+	
+	print("Removed from source container, adding to target...")
+	
+	# Add to target container with auto_stack disabled and prevent_merge enabled
+	var add_success = to_container.add_item(transfer_item, position, false, true)  # auto_stack=false, prevent_merge=true
+	if not add_success:
+		print("ERROR: Failed to add to target container!")
+		# Restore to source container
+		from_container.add_item(transfer_item if transfer_quantity < item.quantity else item)
+		# Restore split if we made one
+		if transfer_quantity < item.quantity and transfer_item:
+			item.add_to_stack(transfer_item.quantity)
+		return false
+	
+	print("Successfully added to target container!")
+	
+	# Record transaction
+	var transaction = {
+		"item_name": transfer_item.item_name,
+		"quantity": transfer_item.quantity,
+		"from_container": from_container_id,
+		"to_container": to_container_id,
+		"timestamp": Time.get_unix_time_from_system(),
+		"stacked": false,
+		"split_operation": true
+	}
+	transaction_history.append(transaction)
+	
+	item_transferred.emit(transfer_item, from_container_id, to_container_id)
+	transaction_completed.emit(transaction)
+	print("=== NO-STACK TRANSFER SUCCESS ===")
+	return true
+	
+func swap_items_no_stack(item1: InventoryItem_Base, container1_id: String, pos1: Vector2i,
+				item2: InventoryItem_Base, container2_id: String, pos2: Vector2i) -> bool:
+	"""Swap items without allowing auto-stacking - used for split operations"""
+	var container1 = get_container(container1_id)
+	var container2 = get_container(container2_id)
+	
+	if not container1 or not container2:
+		print("ERROR: Invalid containers for no-stack swap")
+		return false
+	
+	if not item1 in container1.items or not item2 in container2.items:
+		print("ERROR: Items not in their respective containers")
+		return false
+	
+	print("=== NO-STACK SWAP DEBUG START ===")
+	print("Item1: ", item1.item_name, " at ", pos1, " in ", container1_id)
+	print("Item2: ", item2.item_name, " at ", pos2, " in ", container2_id)
+	
+	# Check if both containers can accept the swapped items
+	if not container1.can_add_item(item2, item1, pos1):
+		print("ERROR: Container1 cannot accept item2")
+		return false
+	
+	if not container2.can_add_item(item1, item2, pos2):
+		print("ERROR: Container2 cannot accept item1")
+		return false
+	
+	# Perform the swap by temporarily removing both items and then placing them
+	var remove1_success = container1.remove_item(item1)
+	var remove2_success = container2.remove_item(item2)
+	
+	if not remove1_success or not remove2_success:
+		print("ERROR: Failed to remove items for no-stack swap")
+		# Restore items if one removal failed
+		if remove1_success:
+			container1.add_item(item1, pos1, false, true)  # no auto-stack, prevent merge
+		if remove2_success:
+			container2.add_item(item2, pos2, false, true)  # no auto-stack, prevent merge
+		return false
+	
+	# Add items to their new positions with auto_stack=false and prevent_merge=true
+	var add1_success = container2.add_item(item1, pos2, false, true)  # auto_stack=false, prevent_merge=true
+	var add2_success = container1.add_item(item2, pos1, false, true)  # auto_stack=false, prevent_merge=true
+	
+	if not add1_success or not add2_success:
+		print("ERROR: Failed to add items during no-stack swap - restoring original positions")
+		# Restore original positions
+		if not add1_success:
+			container1.add_item(item1, pos1, false, true)
+		if not add2_success:
+			container2.add_item(item2, pos2, false, true)
+		return false
+	
+	# Record transactions for both items
+	var transaction1 = {
+		"item_name": item1.item_name,
+		"quantity": item1.quantity,
+		"from_container": container1_id,
+		"to_container": container2_id,
+		"timestamp": Time.get_unix_time_from_system(),
+		"swapped": true,
+		"split_operation": true
+	}
+	
+	var transaction2 = {
+		"item_name": item2.item_name,
+		"quantity": item2.quantity,
+		"from_container": container2_id,
+		"to_container": container1_id,
+		"timestamp": Time.get_unix_time_from_system(),
+		"swapped": true,
+		"split_operation": true
+	}
+	
+	transaction_history.append(transaction1)
+	transaction_history.append(transaction2)
+	
+	# Emit signals
+	item_transferred.emit(item1, container1_id, container2_id)
+	item_transferred.emit(item2, container2_id, container1_id)
+	transaction_completed.emit(transaction1)
+	transaction_completed.emit(transaction2)
+	
+	print("=== NO-STACK SWAP SUCCESS ===")
+	return true
+	
 func swap_items(item1: InventoryItem_Base, container1_id: String, pos1: Vector2i,
 				item2: InventoryItem_Base, container2_id: String, pos2: Vector2i) -> bool:
 	var container1 = get_container(container1_id)
@@ -488,10 +663,15 @@ func find_items_by_type_globally(item_type: InventoryItem_Base.ItemType) -> Arra
 
 # Auto-stacking and sorting
 func auto_stack_container(container_id: String):
+	# Don't auto-stack during split operations
+	if is_split_drop_operation:
+		return
+		
 	var container = get_container(container_id)
 	if not container:
 		return
 	
+	# Rest of existing auto_stack_container logic...
 	var items_to_process = container.items.duplicate()
 	
 	for i in range(items_to_process.size()):
@@ -512,18 +692,23 @@ func auto_stack_container(container_id: String):
 				else:
 					other_item.quantity = remaining
 	
-	# Compact after stacking to eliminate gaps
-	container.compact_items()
+	# Compact after stacking to eliminate gaps (only if not split operation)
+	if not is_split_drop_operation:
+		container.compact_items()
+
+func compact_container(container_id: String):
+	"""Compacts a container to remove gaps between items"""
+	# Don't compact during split operations
+	if is_split_drop_operation:
+		return
+		
+	var container = get_container(container_id)
+	if container:
+		container.compact_items()
 
 func auto_stack_all_containers():
 	for container_id in containers:
 		auto_stack_container(container_id)
-		
-func compact_container(container_id: String):
-	"""Compacts a container to remove gaps between items"""
-	var container = get_container(container_id)
-	if container:
-		container.compact_items()
 
 func compact_all_containers():
 	"""Compacts all containers to remove gaps"""
@@ -713,14 +898,32 @@ func create_sample_items():
 
 # Signal handlers
 func _on_container_item_added(item: InventoryItem_Base, _position: Vector2i):
-	# Only auto-stack if auto_stack is enabled
+	# Don't auto-stack if auto_stack is disabled (which happens during split operations)
 	if auto_stack:
+		print("Auto-stacking item: ", item.item_name)
 		# Find which container this came from by checking all containers
 		for container_id in containers:
 			var container = containers[container_id]
 			if item in container.items:
 				auto_stack_container(container_id)
 				break
+	else:
+		print("Auto-stack disabled, skipping for item: ", item.item_name)
+					
+func _check_for_active_split_operations(node: Node) -> bool:
+	"""Recursively check for active split operations in the scene tree"""
+	# Check if this node has item_actions with active split operation
+	if "item_actions" in node and node.item_actions != null:
+		if node.item_actions.has_method("is_split_operation_active") and node.item_actions.is_split_operation_active():
+			print("Found active split operation in: ", node.name)
+			return true
+	
+	# Check children
+	for child in node.get_children():
+		if _check_for_active_split_operations(child):
+			return true
+	
+	return false
 
 func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i):
 	# Handle item removal cleanup

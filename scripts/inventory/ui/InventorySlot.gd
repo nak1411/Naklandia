@@ -454,6 +454,12 @@ func _handle_drag_end(end_position: Vector2):
 	# Clear any highlighting on this slot
 	set_highlighted(false)
 	
+	# Always clear split operation state after any drag attempt (successful or not)
+	var item_actions = _get_inventory_item_actions()
+	if item_actions and item_actions.has_method("clear_split_operation_state"):
+		print("Clearing split operation state after drag attempt")
+		item_actions.clear_split_operation_state(true)  # Always restore auto_stack
+	
 	# Emit drag ended signal
 	item_drag_ended.emit(self, success)
 
@@ -493,15 +499,15 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	if not target_slot or not has_item():
 		return false
 	
-	# Check for shift+drop with stackable items - open split dialog
-	if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
-		_show_split_stack_dialog()
-		return true
-	
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
 		print("No inventory manager found")
 		return false
+	
+	# Check for shift+drop with stackable items - open split dialog
+	if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
+		_show_split_stack_dialog()
+		return true
 	
 	# Get containers
 	var source_container = inventory_manager.get_container(container_id)
@@ -516,46 +522,126 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	print("Target position: ", target_slot.grid_position)
 	print("Target slot has item: ", target_slot.has_item())
 	
+	# Check if this is a split operation (by checking item actions)
+	var item_actions = _get_inventory_item_actions()
+	var is_split_operation = item_actions and item_actions.has_method("is_split_operation_active") and item_actions.is_split_operation_active()
+	
+	print("Is split operation: ", is_split_operation)
+	
 	# Handle different cases
 	if not target_slot.has_item():
-		# Empty target slot - normal transfer
-		var success = inventory_manager.transfer_item(
-			item,
-			container_id,
-			target_slot.container_id,
-			target_slot.grid_position
-		)
+		# Empty target slot
+		var success: bool
+		if is_split_operation:
+			# Use no-stack transfer for split operations - ALWAYS for splits
+			print("Using no-stack transfer for split operation to empty slot")
+			if inventory_manager.has_method("transfer_item_no_stack"):
+				success = inventory_manager.transfer_item_no_stack(
+					item,
+					container_id,
+					target_slot.container_id,
+					target_slot.grid_position
+				)
+			else:
+				print("ERROR: transfer_item_no_stack method not found!")
+				success = false
+		else:
+			# Normal transfer
+			print("Using normal transfer to empty slot")
+			success = inventory_manager.transfer_item(
+				item,
+				container_id,
+				target_slot.container_id,
+				target_slot.grid_position
+			)
 		print("Transfer result: ", success)
 		return success
 	else:
 		# Target slot has an item
 		var target_item = target_slot.get_item()
 		
-		# Try stacking first if possible
-		if item.can_stack_with(target_item):
-			var success = inventory_manager.transfer_item(
-				item,
-				container_id,
-				target_slot.container_id,
-				target_slot.grid_position
-			)
-			print("Stack transfer result: ", success)
-			return success
+		# For split operations, never try to stack - always swap without stacking
+		if is_split_operation:
+			print("Split operation - using no-stack swap")
+			if inventory_manager.has_method("swap_items_no_stack"):
+				var success = inventory_manager.swap_items_no_stack(
+					item, container_id, grid_position,
+					target_item, target_slot.container_id, target_slot.grid_position
+				)
+				print("No-stack swap result: ", success)
+				return success
+			else:
+				print("ERROR: swap_items_no_stack method not found!")
+				return false
 		else:
-			# Items can't stack - perform swap
-			print("Attempting to swap items")
-			var success = inventory_manager.swap_items(
-				item, container_id, grid_position,
-				target_item, target_slot.container_id, target_slot.grid_position
-			)
-			print("Swap result: ", success)
-			return success
+			# Normal drop logic - try stacking first if possible
+			if item.can_stack_with(target_item):
+				print("Items can stack - using normal transfer")
+				var success = inventory_manager.transfer_item(
+					item,
+					container_id,
+					target_slot.container_id,
+					target_slot.grid_position
+				)
+				print("Stack transfer result: ", success)
+				return success
+			else:
+				# Items can't stack - perform normal swap
+				print("Items can't stack - using normal swap")
+				var success = inventory_manager.swap_items(
+					item, container_id, grid_position,
+					target_item, target_slot.container_id, target_slot.grid_position
+				)
+				print("Swap result: ", success)
+				return success
 
 func _show_split_stack_dialog():
-	# Implementation for splitting stacks would go here
-	# For now, just transfer the whole stack
-	print("Split stack dialog not implemented yet")
-	pass
+	"""Show the split stack dialog via the inventory item actions"""
+	print("Showing split stack dialog for item: ", item.item_name)
+	
+	# Find the inventory item actions handler
+	var item_actions = _get_inventory_item_actions()
+	if item_actions:
+		item_actions.show_split_stack_dialog(item, self)
+	else:
+		print("ERROR: Could not find InventoryItemActions to show split dialog")
+
+func _get_inventory_item_actions():
+	"""Find the InventoryItemActions in the scene hierarchy"""
+	var current = get_parent()
+	while current:
+		# Look for InventoryWindow (not InventoryWindowUI)
+		if current.get_script() and current.get_script().resource_path.ends_with("InventoryWindow.gd"):
+			# Check if it has item_actions property
+			if current.has_method("get_item_actions"):
+				return current.get_item_actions()
+			elif "item_actions" in current:
+				return current.item_actions
+		
+		# Also check for any node that has item_actions
+		if "item_actions" in current and current.item_actions != null:
+			return current.item_actions
+			
+		current = current.get_parent()
+	
+	# If still not found, try searching the scene tree more broadly
+	var scene_root = get_tree().current_scene
+	if scene_root:
+		return _find_item_actions_recursive(scene_root)
+	
+	return null
+
+func _find_item_actions_recursive(node: Node):
+	"""Recursively search for item_actions in the scene tree"""
+	if "item_actions" in node and node.item_actions != null:
+		return node.item_actions
+	
+	for child in node.get_children():
+		var result = _find_item_actions_recursive(child)
+		if result:
+			return result
+	
+	return null
 
 func _get_inventory_manager():
 	# Find the inventory manager in the scene hierarchy

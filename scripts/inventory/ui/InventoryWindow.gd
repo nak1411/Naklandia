@@ -664,6 +664,9 @@ func set_window_title(title: String):
 func add_content(content_node: Control):
 	if content_area:
 		content_area.add_child(content_node)
+		
+func get_item_actions():
+	return item_actions
 
 func get_window_locked() -> bool:
 	return is_locked
