@@ -25,6 +25,7 @@ extends Node
 @onready var mesh_instance: MeshInstance3D = get_parent().get_node("MeshInstance3D")
 
 # Signals
+@warning_ignore("unused_signal")
 signal state_changed(new_state)
 
 # Internal state

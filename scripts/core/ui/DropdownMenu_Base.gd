@@ -204,7 +204,7 @@ func _on_menu_item_pressed(index: int):
 		item_selected.emit(item.id, item)
 		hide_menu()
 
-func _on_menu_item_input(event: InputEvent, index: int):
+func _on_menu_item_input(event: InputEvent, _index: int):
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
@@ -335,7 +335,7 @@ func _on_submenu_item_pressed(submenu_item: Dictionary):
 	item_selected.emit(submenu_item.id, submenu_item)
 	hide_menu()
 
-func _on_submenu_item_input(event: InputEvent, submenu_item: Dictionary):
+func _on_submenu_item_input(event: InputEvent, _submenu_item: Dictionary):
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:

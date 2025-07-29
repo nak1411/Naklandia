@@ -25,7 +25,6 @@ const TOGGLE_INVENTORY = "toggle_inventory"
 
 # Signals
 signal inventory_toggled(is_open: bool)
-signal item_used(item: InventoryItem_Base)
 signal setup_completed()
 
 func _ready():
@@ -115,7 +114,7 @@ func _create_fallback_ui():
 	canvas_layer.name = "InventoryUI"
 	canvas_layer.layer = 15  # Above other UI
 	canvas_layer.visible = true  # Make sure it's visible
-	get_tree().current_scene.add_child(canvas_layer)
+	get_tree().current_scene.add_child.call_deferred(canvas_layer)
 	
 	print("Created fallback CanvasLayer with layer: ", canvas_layer.layer)
 	
@@ -164,7 +163,7 @@ func _setup_ui():
 	
 	# Since InventoryWindow extends Window_Base (not Control), add it directly to the scene
 	# Windows should be added to the scene root, not CanvasLayers
-	get_tree().current_scene.add_child(inventory_window)
+	get_tree().current_scene.add_child.call_deferred(inventory_window)
 	
 	# Set up the window to handle its own toggle input
 	if inventory_window.has_method("set_inventory_integration"):

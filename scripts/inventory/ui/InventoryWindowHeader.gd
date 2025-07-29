@@ -313,7 +313,7 @@ func _on_filter_button_pressed():
 	else:
 		print("ERROR: Filter dropdown doesn't have show_menu method!")
 
-func _on_filter_dropdown_selected(item_id: String, item_data: Dictionary):
+func _on_filter_dropdown_selected(item_id: String, _item_data: Dictionary):
 	print("Filter dropdown selected: ", item_id)
 	
 	# Extract index from item_id (format: "filter_0", "filter_1", etc.)
@@ -350,7 +350,7 @@ func _on_sort_button_pressed():
 	else:
 		print("ERROR: Sort dropdown doesn't have show_menu method!")
 
-func _on_sort_dropdown_selected(item_id: String, item_data: Dictionary):
+func _on_sort_dropdown_selected(item_id: String, _item_data: Dictionary):
 	print("Sort dropdown selected: ", item_id)
 	
 	# Extract index from item_id (format: "sort_0", "sort_1", etc.)

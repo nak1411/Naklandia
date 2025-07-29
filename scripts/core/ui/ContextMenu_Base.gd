@@ -387,7 +387,7 @@ func _on_menu_item_pressed(index: int):
 		item_selected.emit(item.id, item, context_data)
 		hide_menu()
 
-func _on_menu_item_input(event: InputEvent, index: int):
+func _on_menu_item_input(event: InputEvent, _index: int):
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
@@ -504,7 +504,7 @@ func _calculate_item_y_position(item_index: int) -> int:
 	
 	return y_pos
 
-func _style_submenu_button(button: Button, enabled: bool = true):
+func _style_submenu_button(button: Button, _enabled: bool = true):
 	# Set font properties - match SimpleDropdownMenu exactly
 	button.add_theme_color_override("font_color", Color.LIGHT_GRAY)
 	button.focus_mode = Control.FOCUS_NONE
@@ -561,7 +561,7 @@ func _on_submenu_item_pressed(submenu_item: Dictionary):
 		item_selected.emit(submenu_item.id, submenu_item, context_data)
 		hide_menu()
 
-func _on_submenu_item_input(event: InputEvent, submenu_item: Dictionary):
+func _on_submenu_item_input(event: InputEvent, _submenu_item: Dictionary):
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
@@ -725,7 +725,7 @@ func setup_empty_area_context_menu():
 	add_separator()
 	add_menu_item("clear_container", "Clear Container")
 
-func setup_container_context_menu(container: InventoryContainer_Base):
+func setup_container_context_menu(_container: InventoryContainer_Base):
 	"""Setup context menu for container management"""
 	clear_items()
 	

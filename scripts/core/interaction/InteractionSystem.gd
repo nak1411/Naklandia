@@ -35,7 +35,7 @@ func _ready():
 	if ui:
 		ui.setup_interaction_ui()
 
-func _process(delta):
+func _process(_delta):
 	# Update raycaster
 	if raycaster:
 		raycaster.update_raycast()

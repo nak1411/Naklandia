@@ -4,7 +4,7 @@ extends Control
 
 # Grid properties
 @export var slot_size: Vector2 = Vector2(64, 64)
-@export var slot_spacing: float = 2.0
+@export var slot_spacing: int = 2
 @export var grid_width: int = 0
 @export var grid_height: int = 0
 
@@ -357,7 +357,7 @@ func _on_item_drag_ended(slot: InventorySlot, success: bool):
 	if success:
 		call_deferred("refresh_display")
 
-func _on_item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot):
+func _on_item_dropped_on_slot(_source_slot: InventorySlot, _target_slot: InventorySlot):
 	# This is called after a successful drop operation
 	# The container has already been updated, so just update UI info
 	
@@ -430,17 +430,17 @@ func get_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlot:
 	return null
 
 # Container event handlers - DISABLE these during drag operations
-func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
+func _on_container_item_added(_item: InventoryItem_Base, _position: Vector2i):
 	# Don't refresh during drag operations
 	if not _is_any_slot_dragging():
 		refresh_display()
 
-func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
+func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i):
 	# Don't refresh during drag operations
 	if not _is_any_slot_dragging():
 		refresh_display()
 
-func _on_container_item_moved(item: InventoryItem_Base, from_pos: Vector2i, to_pos: Vector2i):
+func _on_container_item_moved(_item: InventoryItem_Base, _from_pos: Vector2i, _to_pos: Vector2i):
 	# Don't refresh during drag operations
 	if not _is_any_slot_dragging():
 		refresh_display()

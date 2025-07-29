@@ -106,7 +106,7 @@ func _on_context_menu_closed():
 	if window_parent and is_instance_valid(window_parent):
 		window_parent.grab_focus()
 
-func _on_context_item_selected(item_id: String, item_data: Dictionary, context_data: Dictionary):
+func _on_context_item_selected(item_id: String, _item_data: Dictionary, context_data: Dictionary):
 	"""Handle context menu item selection"""
 	var action_type = context_data.get("action_type", "")
 	
@@ -150,7 +150,7 @@ func _handle_item_action(action_id: String, context_data: Dictionary):
 			if action_id.begins_with("move_to_"):
 				_handle_move_item_action(action_id, item)
 
-func _handle_empty_area_action(action_id: String, context_data: Dictionary):
+func _handle_empty_area_action(action_id: String, _context_data: Dictionary):
 	"""Handle actions on empty inventory areas"""
 	match action_id:
 		"stack_all":
@@ -300,7 +300,7 @@ func show_container_details_dialog(container: InventoryContainer_Base):
 			window_parent.grab_focus()
 	)
 
-func show_split_stack_dialog(item: InventoryItem_Base, slot: InventorySlot):
+func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	"""Show split stack dialog"""
 	# Prevent auto-stacking while dialog is open
 	var original_auto_stack = inventory_manager.auto_stack
@@ -388,7 +388,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, slot: InventorySlot):
 			window_parent.grab_focus()
 	)
 
-func show_destroy_item_confirmation(item: InventoryItem_Base, slot: InventorySlot):
+func show_destroy_item_confirmation(item: InventoryItem_Base, _slot: InventorySlot):
 	"""Show confirmation dialog for item destruction"""
 	var dialog_window = Window.new()
 	dialog_window.title = "Destroy Item"
@@ -541,12 +541,12 @@ func show_clear_container_confirmation():
 	)
 
 # Item action implementations
-func use_item(item: InventoryItem_Base, slot: InventorySlot):
+func use_item(item: InventoryItem_Base, _slot: InventorySlot):
 	"""Use an item (consume, activate, etc.)"""
 	print("Using item: ", item.item_name)
 	# TODO: Implement item usage logic
 
-func equip_item(item: InventoryItem_Base, slot: InventorySlot):
+func equip_item(item: InventoryItem_Base, _slot: InventorySlot):
 	"""Equip an item (weapons, armor, modules)"""
 	print("Equipping item: ", item.item_name)
 	# TODO: Implement equipment logic

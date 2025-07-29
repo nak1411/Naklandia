@@ -3,15 +3,17 @@
 
 extends Control
 
-@onready var background_panel = $BackgroundPanel
-@onready var menu_panel = $BackgroundPanel/MenuPanel
-@onready var resume_button = $BackgroundPanel/MenuPanel/VBoxContainer/ResumeButton
-@onready var settings_button = $BackgroundPanel/MenuPanel/VBoxContainer/SettingsButton
-@onready var exit_button = $BackgroundPanel/MenuPanel/VBoxContainer/ExitButton
+
 
 var is_paused = false
 var inventory_integration: InventoryIntegration
 var inventory_unfocused_once = false
+
+var background_panel = Panel
+var menu_panel = Panel
+var resume_button = Panel
+var settings_button = Panel
+var exit_button = Panel
 
 func _ready():
 	# Set up the pause menu to fill the screen and be initially hidden
@@ -20,6 +22,8 @@ func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	# Set high z-index to appear on top of all other UI elements
 	z_index = 1000
+	
+	print("PauseMenu: Starting setup...")
 	
 	# Find and setup inventory integration
 	_find_and_setup_inventory_integration()
@@ -31,25 +35,35 @@ func _ready():
 	resume_button.pressed.connect(_on_resume_pressed)
 	settings_button.pressed.connect(_on_settings_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
+	
+	print("PauseMenu: Setup complete!")
 
 func _find_and_setup_inventory_integration():
 	# Look for InventoryIntegration in the scene
 	var scene_root = get_tree().current_scene
+	print("PauseMenu: Looking for InventoryIntegration in scene...")
 	
 	for child in scene_root.get_children():
+		print("PauseMenu: Found child: ", child.name, " (", child.get_class(), ")")
 		if child is InventoryIntegration:
 			inventory_integration = child
+			print("PauseMenu: Found InventoryIntegration!")
 			break
 	
 	if not inventory_integration:
 		# Try to find it by name
+		print("PauseMenu: Searching recursively...")
 		var found_node = _find_node_by_name_recursive(scene_root, "InventoryIntegration")
 		if found_node and found_node is InventoryIntegration:
 			inventory_integration = found_node
+			print("PauseMenu: Found InventoryIntegration recursively!")
 	
 	# Add a reference to the pause menu in the inventory integration
 	if inventory_integration:
 		inventory_integration.set("pause_menu", self)
+		print("PauseMenu: Connected to InventoryIntegration")
+	else:
+		print("PauseMenu: WARNING - InventoryIntegration not found!")
 
 func _find_node_by_name_recursive(node: Node, target_name: String) -> Node:
 	if node.name == target_name:
@@ -163,22 +177,25 @@ func _setup_menu_ui():
 func _unhandled_input(event):
 	# Handle escape when no inventory is consuming it
 	if event.is_action_pressed("ui_cancel") and not event.is_echo():
+		print("PauseMenu: Escape key pressed!")
+		
 		# Check inventory status
 		if inventory_integration:
 			var inv_open = inventory_integration.is_inventory_window_open()
 			var inv_window = inventory_integration.get_inventory_window()
+			var inv_visible = inv_window.visible if inv_window else "null"
 			var inv_has_focus = inv_window.has_focus() if inv_window else false
 			
-			# If inventory is open but NOT focused, open pause menu
-			if inv_open and not inv_has_focus:
-				toggle_pause()
-				get_viewport().set_input_as_handled()
-				return
+			print("PauseMenu: Inventory is_open: ", inv_open)
+			print("PauseMenu: Inventory visible: ", inv_visible)
+			print("PauseMenu: Inventory has_focus: ", inv_has_focus)
+		else:
+			print("PauseMenu: No inventory integration found")
 		
-		# If no inventory or inventory is closed, open pause menu
-		if not inventory_integration or not inventory_integration.is_inventory_window_open():
-			toggle_pause()
-			get_viewport().set_input_as_handled()
+		# TEMPORARY: Force pause menu to open regardless of inventory state
+		print("PauseMenu: Force opening pause menu for debugging!")
+		toggle_pause()
+		get_viewport().set_input_as_handled()
 
 func toggle_pause():
 	is_paused = !is_paused
@@ -195,8 +212,15 @@ func toggle_pause():
 		# Resume the game
 		get_tree().paused = false
 		visible = false
-		# Hide mouse cursor and capture it for FPS gameplay
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		
+		# Check if inventory is still open before setting mouse mode
+		if inventory_integration and inventory_integration.is_inventory_window_open():
+			# Keep mouse visible for inventory interaction
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			# Don't re-focus inventory - let it stay unfocused so "I" key works
+		else:
+			# Hide mouse cursor and capture it for FPS gameplay
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		
 		# Reset inventory unfocus state when closing pause menu
 		inventory_unfocused_once = false

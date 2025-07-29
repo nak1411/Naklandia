@@ -76,7 +76,7 @@ func _update_player_state(run_pressed: bool, crouch_pressed: bool):
 func _on_movement_state_changed(new_state: PlayerState):
 	current_state = new_state
 
-func _on_interactable_found(interactable: Interactable):
+func _on_interactable_found(_interactable: Interactable):
 	# Handle when an interactable is found
 	pass
 
@@ -84,7 +84,7 @@ func _on_interactable_lost():
 	# Handle when interactable is lost
 	pass
 
-func _on_interaction_performed(interactable: Interactable):
+func _on_interaction_performed(_interactable: Interactable):
 	# Handle successful interaction
 	pass
 

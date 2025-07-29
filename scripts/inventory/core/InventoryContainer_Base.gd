@@ -23,7 +23,6 @@ var grid_slots: Array = []  # 2D array for grid-based positioning
 signal item_added(item: InventoryItem_Base, position: Vector2i)
 signal item_removed(item: InventoryItem_Base, position: Vector2i)
 signal container_full()
-signal volume_exceeded()
 signal item_moved(item: InventoryItem_Base, from_pos: Vector2i, to_pos: Vector2i)
 
 func _init(id: String = "", name: String = "Container", volume: float = 100.0):
@@ -332,7 +331,7 @@ func get_total_value() -> float:
 	return total_value
 
 # Signal handlers
-func _on_item_quantity_changed(new_quantity: int):
+func _on_item_quantity_changed(_new_quantity: int):
 	# Handle item quantity changes (for UI updates)
 	pass
 

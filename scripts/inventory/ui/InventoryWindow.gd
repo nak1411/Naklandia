@@ -212,7 +212,7 @@ func _on_options_pressed():
 	else:
 		print("ERROR: Options dropdown doesn't have show_menu method!")
 
-func _on_options_dropdown_selected(item_id: String, item_data: Dictionary):
+func _on_options_dropdown_selected(item_id: String, _item_data: Dictionary):
 	print("Options dropdown selected: ", item_id)
 	
 	match item_id:
@@ -426,7 +426,7 @@ func _on_window_resized():
 		_handle_window_resize(new_size)
 		window_resized.emit(new_size)
 
-func _handle_window_resize(new_size: Vector2i):
+func _handle_window_resize(_new_size: Vector2i):
 	if not auto_resize_grid:
 		return
 	
@@ -562,10 +562,10 @@ func _on_close_requested():
 func _on_content_container_selected(container: InventoryContainer_Base):
 	select_container(container)
 
-func _on_content_item_activated(item: InventoryItem_Base, slot: InventorySlot):
+func _on_content_item_activated(item: InventoryItem_Base, _slot: InventorySlot):
 	print("Item activated: ", item.item_name)
 
-func _on_content_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
+func _on_content_item_context_menu(item: InventoryItem_Base, _slot: InventorySlot, _position: Vector2):
 	print("Item context menu for: ", item.item_name)
 
 # Find inventory manager implementation
@@ -598,3 +598,13 @@ func _connect_inventory_signals():
 
 func apply_custom_theme():
 	pass
+	
+func _unhandled_input(event: InputEvent):
+	if not visible or not is_window_focused:
+		return
+	
+	if event.is_action_pressed("ui_cancel") and not event.is_echo():
+		# Unfocus the inventory window on escape
+		_on_window_focus_exited()  # Use this instead of release_focus()
+		get_viewport().set_input_as_handled()
+		print("Inventory window unfocused by escape")

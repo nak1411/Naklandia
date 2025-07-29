@@ -98,8 +98,11 @@ func _setup_custom_ui():
 	# Title bar - make sure it's at the top and receives input
 	title_bar = Panel.new()
 	title_bar.name = "TitleBar"
-	title_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	title_bar.size.y = title_bar_height
+	title_bar.anchor_left = 0.0
+	title_bar.anchor_top = 0.0
+	title_bar.anchor_right = 1.0
+	title_bar.anchor_bottom = 0.0
+	title_bar.offset_bottom = title_bar_height
 	title_bar.mouse_filter = Control.MOUSE_FILTER_PASS
 	title_bar.z_index = 100  # Ensure title bar is on top
 	main_container.add_child(title_bar)
@@ -127,9 +130,13 @@ func _setup_custom_ui():
 	# Content area (below title bar) - adjust position and size
 	content_area = Control.new()
 	content_area.name = "ContentArea"
-	content_area.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	content_area.position.y = title_bar_height
-	content_area.size.y -= title_bar_height
+	content_area = Control.new()
+	content_area.name = "ContentArea"
+	content_area.anchor_left = 0.0
+	content_area.anchor_top = 0.0
+	content_area.anchor_right = 1.0
+	content_area.anchor_bottom = 1.0
+	content_area.offset_top = title_bar_height
 	content_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content_area.z_index = 1  # Below title bar
 	main_container.add_child(content_area)
@@ -152,7 +159,6 @@ func _setup_custom_ui():
 	print("Window_Base UI setup completed")
 
 func add_content(content: Control):
-	print("Adding content to Window_Base: ", content.name if content else "NULL")
 	
 	if not content_area:
 		print("ERROR: No content area available!")
@@ -466,7 +472,7 @@ func _update_button_positions():
 		return
 		
 	var button_size = Vector2(title_bar_height - 4, title_bar_height - 4)
-	var button_y = 2
+	var _button_y = 2
 	var button_spacing = button_size.x + 2
 	var start_x = size.x - button_spacing
 	

@@ -269,7 +269,7 @@ func update_containers(containers: Array[InventoryContainer_Base]):
 	
 	for i in range(containers.size()):
 		var container = containers[i]
-		var total_qty = container.get_total_quantity()
+		var _total_qty = container.get_total_quantity()
 		var unique_items = container.get_item_count()
 		
 		var container_text = container.container_name
@@ -399,7 +399,7 @@ func _setup_container_drop_handling():
 	drop_detector.z_index = 10
 	container_list.add_child(drop_detector)
 
-func _process(delta):
+func _process(_delta):
 	# Check for ongoing drags and highlight valid drop targets
 	if get_viewport().has_meta("current_drag_data"):
 		_update_container_drop_highlights()
@@ -429,11 +429,11 @@ func _update_container_drop_highlights():
 		for i in range(container_list.get_item_count()):
 			container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
 
-func _gui_input(event: InputEvent):
+func _gui_input(_event: InputEvent):
 	# Handle container list input for drag and drop
 	pass
 
-func _on_container_list_input(event: InputEvent):
+func _on_container_list_input(_event: InputEvent):
 	# Handle specific container list input events
 	pass
 

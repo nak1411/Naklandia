@@ -24,7 +24,7 @@ func _create_pbr_material(albedo: Color, roughness: float, metallic: float, name
 	material.albedo_color = albedo
 	material.roughness = roughness
 	material.metallic = metallic
-	material.specular = 0.5
+	material.metallic_specular = 0.5
 	material.clearcoat_enabled = metallic > 0.5
 	material.clearcoat = 0.3 if metallic > 0.5 else 0.0
 	material.normal_enabled = true

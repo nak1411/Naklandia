@@ -195,6 +195,9 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 	var transfer_quantity = quantity if quantity > 0 else item.quantity
 	var transfer_item = item
 	
+	# Declare transaction variable once at function level
+	var transaction: Dictionary
+	
 	# For same container transfers to specific positions, check if target has stackable item
 	if from_container == to_container and position != Vector2i(-1, -1):
 		var target_item = _get_item_at_position(to_container, position)
@@ -210,8 +213,8 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 				if item.quantity <= 0:
 					from_container.remove_item(item)
 				
-				# Record transaction
-				var transaction = {
+				# Record transaction (reuse the declared variable)
+				transaction = {
 					"item_name": item.item_name,
 					"quantity": amount_to_stack,
 					"from_container": from_container_id,
@@ -240,7 +243,7 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 				stackable_item.quantity += transfer_quantity
 			
 			# Record transaction
-			var transaction = {
+				transaction = {
 				"item_name": item.item_name,
 				"quantity": transfer_quantity,
 				"from_container": from_container_id,
@@ -286,7 +289,7 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 		return false
 	
 	# Record transaction
-	var transaction = {
+	transaction = {
 		"item_name": transfer_item.item_name,
 		"quantity": transfer_item.quantity,
 		"from_container": from_container_id,
@@ -576,7 +579,7 @@ func create_sample_items():
 			player_inventory.add_item(base_item)
 
 # Signal handlers
-func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
+func _on_container_item_added(item: InventoryItem_Base, _position: Vector2i):
 	# Only auto-stack if auto_stack is enabled
 	if auto_stack:
 		# Find which container this came from by checking all containers
@@ -586,11 +589,11 @@ func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
 				auto_stack_container(container_id)
 				break
 
-func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
+func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i):
 	# Handle item removal cleanup
 	pass
 
-func _on_container_item_moved(item: InventoryItem_Base, from_pos: Vector2i, to_pos: Vector2i):
+func _on_container_item_moved(_item: InventoryItem_Base, _from_pos: Vector2i, _to_pos: Vector2i):
 	# Handle item movement
 	pass
 
