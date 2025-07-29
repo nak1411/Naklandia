@@ -68,6 +68,12 @@ func _ready():
 	# Make sure window starts hidden
 	visible = false
 
+func _process(_delta):
+	# Check if size changed and update buttons accordingly
+	if Vector2i(size) != last_window_size:
+		last_window_size = Vector2i(size)
+		_on_size_changed()
+
 func _setup_window_ui():
 	# Main container
 	main_container = Control.new()
@@ -164,6 +170,8 @@ func _setup_window_ui():
 	_setup_options_dropdown()
 
 func _setup_content():
+	print("Setting up inventory content...")
+	
 	# Create main inventory container
 	inventory_container = VBoxContainer.new()
 	inventory_container.name = "InventoryContainer"
@@ -180,6 +188,7 @@ func _setup_content():
 		header.search_changed.connect(_on_search_changed)
 		header.filter_changed.connect(_on_filter_changed)
 		header.sort_requested.connect(_on_sort_requested)
+		print("✓ Header signals connected")
 	
 	# Create main content using InventoryWindowContent
 	content = InventoryWindowContent.new()
@@ -187,15 +196,25 @@ func _setup_content():
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	inventory_container.add_child(content)
 	
-	# Connect content signals
+	print("Content setup - waiting for content to be ready...")
+	await get_tree().process_frame
+	
+	# Connect content signals with correct function names
 	if content:
-		content.container_selected.connect(_on_content_container_selected)
-		content.item_activated.connect(_on_content_item_activated)
-		content.item_context_menu.connect(_on_content_item_context_menu)
+		content.container_selected.connect(_on_container_selected_from_content)
+		content.item_activated.connect(_on_item_activated_from_content)
+		content.item_context_menu.connect(_on_item_context_menu_from_content)
+		print("✓ Content signals connected")
+	
+	# Debug content state
+	if content.has_method("debug_content_state"):
+		content.debug_content_state()
 	
 	# Initialize content with inventory manager if available
 	if inventory_manager:
 		_initialize_inventory_content()
+	
+	print("✓ Inventory content setup complete")
 
 func _setup_options_dropdown():
 	# Create options dropdown menu
@@ -220,14 +239,62 @@ func _setup_options_dropdown():
 
 func _initialize_inventory_content():
 	"""Initialize the inventory content with the inventory manager"""
+	print("Initializing inventory content with manager...")
+	
 	if content and content.has_method("set_inventory_manager"):
 		content.set_inventory_manager(inventory_manager)
+		print("✓ Content connected to inventory manager")
 	
-	# Set up initial container
-	var player_inventory = inventory_manager.get_player_inventory()
-	if player_inventory:
-		open_containers.append(player_inventory)
-		select_container(player_inventory)
+	# Get all accessible containers, not just player inventory
+	var all_containers = inventory_manager.get_accessible_containers()
+	print("Found ", all_containers.size(), " accessible containers:")
+	for container in all_containers:
+		print("  - ", container.container_name, " (", container.container_id, ")")
+	
+	if all_containers.size() > 0:
+		open_containers.clear()
+		open_containers.append_array(all_containers)
+		
+		# Set player inventory as default if available, otherwise use first container
+		var default_container = null
+		for container in all_containers:
+			if container.container_id == "player_inventory":
+				default_container = container
+				break
+		
+		if not default_container:
+			default_container = all_containers[0]
+		
+		# IMPORTANT: Set the current container first
+		current_container = default_container
+		
+		# Then select it in the content
+		if content and content.has_method("select_container"):
+			content.select_container(default_container)
+			print("✓ Selected default container in content: ", default_container.container_name)
+		
+		print("✓ Default container selected: ", default_container.container_name)
+	
+	# Update containers list in content with ALL containers
+	if content and content.has_method("update_containers"):
+		content.update_containers(all_containers)
+		print("✓ Updated containers in content with all accessible containers")
+		
+		# Select the default container in the list
+		var default_index = 0
+		for i in range(all_containers.size()):
+			if all_containers[i] == current_container:
+				default_index = i
+				break
+		
+		if content.has_method("select_container_index"):
+			content.select_container_index(default_index)
+			print("✓ Selected container index ", default_index, " in list")
+	
+	# Force a refresh of the display
+	if content and content.has_method("refresh_display"):
+		content.refresh_display()
+		print("✓ Refreshed content display")
 
 func _on_title_bar_input(event: InputEvent):
 	if is_locked:
@@ -293,12 +360,6 @@ func _on_size_changed():
 	
 	window_resized.emit(Vector2i(size))
 
-func _process(_delta):
-	# Check if size changed and update buttons accordingly
-	if Vector2i(size) != last_window_size:
-		last_window_size = Vector2i(size)
-		_on_size_changed()
-
 func _update_button_positions():
 	if not title_bar:
 		return
@@ -328,26 +389,58 @@ func _on_sort_requested(sort_type):
 	# TODO: Implement sorting
 	pass
 
-# Content signal handlers
-func _on_content_container_selected(container: InventoryContainer_Base):
-	select_container(container)
+# Content signal handlers - FIXED FUNCTION NAMES
+func _on_container_selected_from_content(container: InventoryContainer_Base):
+	print("InventoryWindow: Container selected from content: ", container.container_name if container else "None")
+	
+	# Update our current container 
+	current_container = container
+	
+	# IMPORTANT: Also call select_container on the content to update the grid and mass info
+	if content and content.has_method("select_container"):
+		# Don't emit the signal again since we're already handling it
+		content.select_container(container)
+		print("✓ Updated content with selected container")
+	
+	container_switched.emit(container)
 
-func _on_content_item_activated(item: InventoryItem_Base, _slot: InventorySlot):
-	pass
+func _on_item_activated_from_content(item: InventoryItem_Base, _slot: InventorySlot):
+	print("Item activated: ", item.item_name)
 
-func _on_content_item_context_menu(item: InventoryItem_Base, _slot: InventorySlot, _position: Vector2):
-	pass
+func _on_item_context_menu_from_content(item: InventoryItem_Base, _slot: InventorySlot, _position: Vector2):
+	print("Item context menu for: ", item.item_name)
 
 # Container management
 func select_container(container: InventoryContainer_Base):
 	if container == current_container:
 		return
 	
+	print("InventoryWindow: Selecting container: ", container.container_name if container else "None")
+	if container:
+		print("  - Container grid size: ", container.grid_width, "x", container.grid_height)
+	
 	current_container = container
-	if content and content.has_method("set_current_container"):
-		content.set_current_container(container)
+	if content and content.has_method("select_container"):
+		content.select_container(container)
+		print("✓ Selected container in content")
+		
+		# Force the grid to update its size
+		var grid = get_inventory_grid()
+		if grid and container:
+			print("  - Updating grid dimensions to: ", container.grid_width, "x", container.grid_height)
+			grid.grid_width = container.grid_width
+			grid.grid_height = container.grid_height
+			if grid.has_method("_rebuild_grid"):
+				await grid._rebuild_grid()
+			grid.refresh_display()
+			print("✓ Grid updated for new container")
 	
 	container_switched.emit(container)
+
+func update_mass_info():
+	"""Update the mass info bar - delegate to content"""
+	if content and content.has_method("update_mass_info"):
+		content.update_mass_info()
 
 # Window management methods
 func show_window():
@@ -489,6 +582,27 @@ func _resize_inventory_grid(new_size: Vector2i):
 	if content and content.has_method("resize_grid"):
 		content.resize_grid(new_size)
 
+func get_inventory_grid() -> InventoryGrid:
+	if content and content.has_method("get_inventory_grid"):
+		return content.get_inventory_grid()
+	elif content:
+		# Try to find the grid manually if the method doesn't exist
+		var grid = _find_node_recursive(content, "InventoryGrid")
+		if grid and grid is InventoryGrid:
+			return grid as InventoryGrid
+	return null
+
+func _find_node_recursive(node: Node, target_name: String) -> Node:
+	if node.name == target_name:
+		return node
+	
+	for child in node.get_children():
+		var result = _find_node_recursive(child, target_name)
+		if result:
+			return result
+	
+	return null
+
 # Public interface methods
 func set_inventory_integration(integration):
 	pass
@@ -500,11 +614,6 @@ func set_inventory_manager(manager: InventoryManager):
 
 func get_current_container() -> InventoryContainer_Base:
 	return current_container
-
-func get_inventory_grid() -> InventoryGrid:
-	if content and content.has_method("get_inventory_grid"):
-		return content.get_inventory_grid()
-	return null
 
 func set_window_title(title: String):
 	inventory_title = title
