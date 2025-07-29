@@ -293,7 +293,16 @@ func _start_drag():
 	
 	# Create drag preview
 	var preview = _create_drag_preview()
-	get_viewport().add_child(preview)
+	
+	# Create a high-priority canvas layer for the drag preview
+	var drag_canvas = CanvasLayer.new()
+	drag_canvas.name = "DragCanvas"
+	drag_canvas.layer = 200  # Higher than inventory (50) and pause (100)
+	get_tree().root.add_child(drag_canvas)
+	drag_canvas.add_child(preview)
+	
+	# Store reference to the canvas for cleanup
+	preview.set_meta("drag_canvas", drag_canvas)
 	
 	# Add visual indicator for partial transfer
 	if is_partial_transfer:
@@ -322,7 +331,6 @@ func _create_drag_preview() -> Control:
 	var preview = Control.new()
 	preview.name = "DragPreview"
 	preview.size = size
-	preview.z_index = 1000
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
 	# Copy visual elements
@@ -391,42 +399,21 @@ func _handle_drag_end(end_position: Vector2):
 	
 	# Clean up drag preview and timer
 	var preview = get_viewport().get_node_or_null("DragPreview")
+	if not preview:
+		# Try finding it in the drag canvas
+		var drag_canvas = get_tree().root.get_node_or_null("DragCanvas")
+		if drag_canvas:
+			preview = drag_canvas.get_node_or_null("DragPreview")
+	
 	if preview and preview.get_meta("source_slot", null) == self:
 		var timer = preview.get_meta("position_timer", null)
 		if timer and is_instance_valid(timer):
 			timer.queue_free()
-		preview.queue_free()
-	
-	var success = false
-	
-	# Check if we dropped on container list first
-	var container_content = _find_inventory_content()
-	if container_content:
-		# Try container list drop first
-		if get_viewport().has_meta("current_drag_data"):
-			var drag_data = get_viewport().get_meta("current_drag_data")
-			success = container_content._try_drop_on_container_list(end_position, drag_data)
-	
-	# If container drop failed, try slot drop
-	if not success:
-		var target_slot = _find_slot_at_position(end_position)
-		if target_slot and target_slot != self:
-			success = _attempt_drop_on_slot(target_slot)
-			if success:
-				# Emit the dropped signal for successful drops
-				item_dropped_on_slot.emit(self, target_slot)
-	
-	# Clear drag data
-	get_viewport().remove_meta("current_drag_data")
-	
-	# Reset dragging state immediately
-	is_dragging = false
-	
-	# Clear any highlighting on this slot
-	set_highlighted(false)
-	
-	# Emit drag ended signal
-	item_drag_ended.emit(self, success)
+		
+		# Clean up the drag canvas
+		var drag_canvas = preview.get_meta("drag_canvas", null)
+		if drag_canvas and is_instance_valid(drag_canvas):
+			drag_canvas.queue_free()
 
 func _on_external_drop_result(success: bool):
 	"""Called when an external drop (like container list) completes"""
