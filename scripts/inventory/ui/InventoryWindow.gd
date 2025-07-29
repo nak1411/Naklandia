@@ -65,6 +65,9 @@ func _ready():
 	_setup_window_ui()
 	_setup_content()
 	
+	# Setup item actions handler
+	_setup_item_actions()
+	
 	# Make sure window starts hidden
 	visible = false
 
@@ -73,6 +76,41 @@ func _process(_delta):
 	if Vector2i(size) != last_window_size:
 		last_window_size = Vector2i(size)
 		_on_size_changed()
+		
+func _setup_item_actions():
+	"""Initialize the item actions handler for context menus"""
+	print("Setting up item actions handler...")
+	
+	# Find the Window that contains this InventoryWindow
+	var parent_window = _find_parent_window()
+	if not parent_window:
+		print("ERROR: Could not find parent Window for InventoryItemActions")
+		return
+	
+	item_actions = InventoryItemActions.new(parent_window)
+	
+	if inventory_manager:
+		item_actions.set_inventory_manager(inventory_manager)
+	
+	if current_container:
+		item_actions.set_current_container(current_container)
+	
+	print("✓ Item actions handler setup complete")
+
+func _find_parent_window() -> Window:
+	"""Find the Window that contains this InventoryWindow"""
+	var current_node = get_parent()
+	while current_node:
+		if current_node is Window:
+			return current_node as Window
+		current_node = current_node.get_parent()
+	
+	# If no Window parent found, try to get the main window
+	var main_window = get_viewport()
+	if main_window is Window:
+		return main_window as Window
+	
+	return null
 
 func _setup_window_ui():
 	# Main container
@@ -241,20 +279,13 @@ func _initialize_inventory_content():
 	"""Initialize the inventory content with the inventory manager"""
 	print("Initializing inventory content with manager...")
 	
-	if content and content.has_method("set_inventory_manager"):
-		content.set_inventory_manager(inventory_manager)
-		print("✓ Content connected to inventory manager")
-	
-	# Get all accessible containers, not just player inventory
+	# Get all accessible containers
 	var all_containers = inventory_manager.get_accessible_containers()
 	print("Found ", all_containers.size(), " accessible containers:")
 	for container in all_containers:
 		print("  - ", container.container_name, " (", container.container_id, ")")
 	
 	if all_containers.size() > 0:
-		open_containers.clear()
-		open_containers.append_array(all_containers)
-		
 		# Set player inventory as default if available, otherwise use first container
 		var default_container = null
 		for container in all_containers:
@@ -265,36 +296,24 @@ func _initialize_inventory_content():
 		if not default_container:
 			default_container = all_containers[0]
 		
-		# IMPORTANT: Set the current container first
+		# Set the current container
 		current_container = default_container
+		print("✓ Set current container: ", default_container.container_name)
 		
-		# Then select it in the content
+		# Update containers list in content
+		if content and content.has_method("update_containers"):
+			content.update_containers(all_containers)
+			print("✓ Updated containers in content")
+		
+		# Select the default container
 		if content and content.has_method("select_container"):
 			content.select_container(default_container)
-			print("✓ Selected default container in content: ", default_container.container_name)
+			print("✓ Selected default container in content")
 		
-		print("✓ Default container selected: ", default_container.container_name)
-	
-	# Update containers list in content with ALL containers
-	if content and content.has_method("update_containers"):
-		content.update_containers(all_containers)
-		print("✓ Updated containers in content with all accessible containers")
-		
-		# Select the default container in the list
-		var default_index = 0
-		for i in range(all_containers.size()):
-			if all_containers[i] == current_container:
-				default_index = i
-				break
-		
-		if content.has_method("select_container_index"):
-			content.select_container_index(default_index)
-			print("✓ Selected container index ", default_index, " in list")
-	
-	# Force a refresh of the display
-	if content and content.has_method("refresh_display"):
-		content.refresh_display()
-		print("✓ Refreshed content display")
+		# Set current container on item actions if it exists
+		if item_actions:
+			item_actions.set_current_container(default_container)
+			print("✓ Set current container on item actions")
 
 func _on_title_bar_input(event: InputEvent):
 	if is_locked:
@@ -404,8 +423,14 @@ func _on_container_selected_from_content(container: InventoryContainer_Base):
 func _on_item_activated_from_content(item: InventoryItem_Base, _slot: InventorySlot):
 	print("Item activated: ", item.item_name)
 
-func _on_item_context_menu_from_content(item: InventoryItem_Base, _slot: InventorySlot, _position: Vector2):
+func _on_item_context_menu_from_content(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
 	print("Item context menu for: ", item.item_name)
+	print("InventoryWindow: Calling item_actions.show_item_context_menu")
+	
+	if item_actions:
+		item_actions.show_item_context_menu(item, slot, position)
+	else:
+		print("ERROR: item_actions is null!")
 
 # Container management
 func select_container(container: InventoryContainer_Base):
@@ -417,6 +442,11 @@ func select_container(container: InventoryContainer_Base):
 		print("  - Container grid size: ", container.grid_width, "x", container.grid_height)
 	
 	current_container = container
+	
+	# Update item actions with current container
+	if item_actions:
+		item_actions.set_current_container(container)
+	
 	if content and content.has_method("select_container"):
 		content.select_container(container)
 		print("✓ Selected container in content")
@@ -605,9 +635,23 @@ func set_inventory_integration(integration):
 	pass
 
 func set_inventory_manager(manager: InventoryManager):
+	print("InventoryWindow: Setting inventory manager: ", manager)
 	inventory_manager = manager
-	if content_area and inventory_container:
+	
+	# Set inventory manager on content
+	if content and content.has_method("set_inventory_manager"):
+		content.set_inventory_manager(manager)
+		print("✓ Set inventory manager on content")
+	
+	# Set inventory manager on item actions
+	if item_actions:
+		item_actions.set_inventory_manager(manager)
+		print("✓ Set inventory manager on item actions")
+	
+	# Initialize the content if we have both content and manager
+	if content and inventory_manager:
 		_initialize_inventory_content()
+		print("✓ Initialized inventory content")
 
 func get_current_container() -> InventoryContainer_Base:
 	return current_container

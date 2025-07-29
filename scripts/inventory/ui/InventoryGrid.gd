@@ -309,9 +309,14 @@ func _on_slot_right_clicked(slot: InventorySlot, event: InputEvent):
 	# Focus window on right click
 	_focus_inventory_window()
 	
+	print("InventoryGrid: _on_slot_right_clicked called")
+	print("InventoryGrid: Slot has item: ", slot.has_item())
+	
 	if slot.has_item():
 		var mouse_event = event as InputEventMouseButton
 		var global_pos = mouse_event.global_position
+		print("InventoryGrid: Emitting item_context_menu signal for item: ", slot.get_item().item_name)
+		print("InventoryGrid: Global position: ", global_pos)
 		item_context_menu.emit(slot.get_item(), slot, global_pos)
 		get_viewport().set_input_as_handled()
 

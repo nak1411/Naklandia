@@ -41,11 +41,19 @@ func set_current_container(container: InventoryContainer_Base):
 
 func show_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
 	"""Show context menu for an inventory item"""
+	print("InventoryItemActions: show_item_context_menu called for item: ", item.item_name if item else "null")
+	print("InventoryItemActions: Position: ", position)
+	print("InventoryItemActions: Context menu exists: ", context_menu != null)
+	print("InventoryItemActions: Window parent exists: ", window_parent != null)
+	
 	if is_context_menu_active:
+		print("InventoryItemActions: Closing existing context menu")
 		_close_context_menu()
 	
 	# Setup the context menu for this item
+	print("InventoryItemActions: Setting up context menu for item...")
 	context_menu.setup_item_context_menu(item)
+	print("InventoryItemActions: Context menu setup complete, showing menu...")
 	
 	# Show at position with context data and parent window
 	var context_data = {
@@ -57,6 +65,7 @@ func show_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, posit
 	
 	context_menu.show_context_menu(position, context_data, window_parent)
 	is_context_menu_active = true
+	print("InventoryItemActions: Context menu should now be visible")
 
 func show_empty_area_context_menu(position: Vector2):
 	"""Show context menu for empty inventory area"""

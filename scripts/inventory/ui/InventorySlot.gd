@@ -253,6 +253,7 @@ func _on_gui_input(event: InputEvent):
 					_handle_drag_end(mouse_event.global_position)
 					is_dragging = false
 		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			print("InventorySlot: Right-click detected on slot with item: ", item.item_name if item else "no item")
 			slot_right_clicked.emit(self, mouse_event)
 			get_viewport().set_input_as_handled()
 	

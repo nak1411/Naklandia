@@ -1,4 +1,4 @@
-# CustomContextMenu.gd - Context menu with same styling as SimpleDropdownMenu
+# CustomContextMenu.gd - Context menu with CanvasLayer to appear on top
 class_name ContextMenu_Base
 extends Control
 
@@ -6,6 +6,7 @@ extends Control
 var menu_items: Array[Dictionary] = []
 var main_popup: PopupPanel
 var submenu_popup: PopupPanel
+var context_canvas: CanvasLayer  # New: Canvas layer for proper z-ordering
 
 # Visual properties
 var item_height: int = 33
@@ -61,36 +62,48 @@ func add_separator():
 	menu_items.append(separator)
 
 func show_context_menu(show_position: Vector2, data: Dictionary = {}, parent_window: Window = null):
+	print("ContextMenu_Base: show_context_menu called at position: ", show_position)
 	context_data = data
 	_create_main_popup()
 	
 	# Get viewport and calculate proper position
 	var viewport = get_viewport()
 	if not viewport:
+		print("ContextMenu_Base: ERROR - No viewport found!")
 		return
+	
+	print("ContextMenu_Base: Viewport found, creating canvas layer")
 	
 	var final_position: Vector2
 	
 	# If we have a parent window (like inventory window), use its positioning
 	if parent_window:
 		final_position = show_position + Vector2(parent_window.position)
+		print("ContextMenu_Base: Using parent window position: ", parent_window.position)
 	else:
 		# Fallback to viewport positioning
 		final_position = show_position
+		print("ContextMenu_Base: Using viewport positioning")
 	
 	# Add small offset to avoid cursor overlap
 	var popup_offset = Vector2i(15, 15)
 	final_position += Vector2(popup_offset)
 	
-	# Add the popup to the viewport
-	viewport.add_child(main_popup)
+	# Create CanvasLayer for proper z-ordering (same approach as drag preview)
+	context_canvas = CanvasLayer.new()
+	context_canvas.name = "ContextMenuLayer"
+	context_canvas.layer = 101  # Higher than drag layer (100) to appear on top
+	viewport.add_child(context_canvas)
+	print("ContextMenu_Base: Canvas layer created and added to viewport")
+	
+	# Add the popup to the canvas layer instead of viewport
+	context_canvas.add_child(main_popup)
+	print("ContextMenu_Base: Popup added to canvas layer")
 	
 	# Set position and show
 	main_popup.position = Vector2i(final_position)
 	main_popup.popup()
-	
-	# Delay input processing to avoid immediate closure
-	await get_tree().process_frame
+	print("ContextMenu_Base: Popup shown at position: ", final_position)
 	
 	# Enable input processing
 	set_process_unhandled_input(true)
@@ -98,6 +111,10 @@ func show_context_menu(show_position: Vector2, data: Dictionary = {}, parent_win
 	
 	# Start input polling for reliable click detection with delay
 	_start_input_polling_delayed()
+	
+	# Delay input processing to avoid immediate closure
+	await get_tree().process_frame
+	print("ContextMenu_Base: Context menu setup complete")
 
 func _calculate_screen_position(desired_position: Vector2) -> Vector2:
 	"""Calculate menu position ensuring it stays within screen bounds"""
@@ -127,6 +144,7 @@ func _calculate_screen_position(desired_position: Vector2) -> Vector2:
 	return final_pos
 
 func _create_main_popup():
+	print("ContextMenu_Base: _create_main_popup called")
 	# Clean up existing popup
 	if main_popup and is_instance_valid(main_popup):
 		if main_popup.get_parent():
@@ -136,6 +154,7 @@ func _create_main_popup():
 	
 	main_popup = PopupPanel.new()
 	main_popup.name = "ContextMenuPopup"
+	print("ContextMenu_Base: PopupPanel created")
 	
 	# Create container for menu items
 	var vbox = VBoxContainer.new()
@@ -146,6 +165,7 @@ func _create_main_popup():
 	if auto_size:
 		_calculate_optimal_width()
 	
+	print("ContextMenu_Base: Creating ", menu_items.size(), " menu items")
 	# Create menu items
 	for i in range(menu_items.size()):
 		var item_data = menu_items[i]
@@ -160,11 +180,10 @@ func _create_main_popup():
 	# Set popup size through content
 	var popup_height = _calculate_total_height()
 	vbox.custom_minimum_size = Vector2(menu_width, popup_height)
+	print("ContextMenu_Base: Popup size set to: ", Vector2(menu_width, popup_height))
 	
 	# Style the popup
 	_style_popup(main_popup)
-	
-	# NOTE: Don't add to scene here - will be added in show_context_menu()
 	
 	# Connect popup signals
 	main_popup.popup_hide.connect(_on_main_popup_hide)
@@ -197,7 +216,7 @@ func _calculate_optimal_width():
 func _calculate_total_height() -> int:
 	"""Calculate total height including separators"""
 	var total_height = 0
-	var separator_height = 1  # Changed from 2 to 1
+	var separator_height = 1
 	
 	for item in menu_items:
 		if item.get("is_separator", false):
@@ -210,13 +229,13 @@ func _calculate_total_height() -> int:
 func _create_separator() -> Control:
 	"""Create a visual separator line"""
 	var separator_container = Control.new()
-	separator_container.custom_minimum_size = Vector2(0, 1)  # Let VBox control width
+	separator_container.custom_minimum_size = Vector2(0, 1)
 	separator_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	separator_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	
 	var line = Panel.new()
 	line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	line.add_theme_constant_override("margin_left", 4)  # Add some margin from edges
+	line.add_theme_constant_override("margin_left", 4)
 	line.add_theme_constant_override("margin_right", 4)
 	line.custom_minimum_size = Vector2(0, 1)
 	
@@ -267,37 +286,24 @@ func _style_popup(popup: PopupPanel):
 	style_box.border_width_top = 1
 	style_box.border_width_bottom = 1
 	style_box.border_color = Color(0.4, 0.4, 0.4, 1.0)
-	style_box.corner_radius_top_left = 2
-	style_box.corner_radius_top_right = 2
-	style_box.corner_radius_bottom_left = 2
-	style_box.corner_radius_bottom_right = 2
-	
-	# Add subtle shadow effect
-	style_box.shadow_color = Color(0, 0, 0, 0.3)
-	style_box.shadow_size = 4
-	style_box.shadow_offset = Vector2(2, 2)
-	
 	popup.add_theme_stylebox_override("panel", style_box)
 
 func _style_menu_button(button: Button, enabled: bool = true):
-	# Set font properties - match SimpleDropdownMenu exactly
-	var font_color = Color.WHITE if enabled else Color(0.6, 0.6, 0.6, 1.0)
-	button.add_theme_color_override("font_color", font_color)
-	button.add_theme_color_override("font_disabled_color", Color(0.4, 0.4, 0.4, 1.0))
+	# Set font properties
+	button.add_theme_color_override("font_color", Color.WHITE if enabled else Color.GRAY)
 	button.focus_mode = Control.FOCUS_NONE
-	button.flat = false  # Enable default button styling including hover
-	
-	# Create normal style with padding - exact same colors as SimpleDropdownMenu
-	var normal_style = StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0) if enabled else Color(0.1, 0.1, 0.1, 1.0)
-	normal_style.content_margin_left = item_padding_horizontal
-	normal_style.content_margin_right = item_padding_horizontal
-	normal_style.content_margin_top = item_padding_vertical
-	normal_style.content_margin_bottom = item_padding_vertical
-	button.add_theme_stylebox_override("normal", normal_style)
 	
 	if enabled:
-		# Create hover style with padding - exact same color as SimpleDropdownMenu
+		# Create normal style with padding
+		var normal_style = StyleBoxFlat.new()
+		normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0)
+		normal_style.content_margin_left = item_padding_horizontal
+		normal_style.content_margin_right = item_padding_horizontal
+		normal_style.content_margin_top = item_padding_vertical
+		normal_style.content_margin_bottom = item_padding_vertical
+		button.add_theme_stylebox_override("normal", normal_style)
+		
+		# Create hover style with padding
 		var hover_style = StyleBoxFlat.new()
 		hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
 		hover_style.content_margin_left = item_padding_horizontal
@@ -306,7 +312,7 @@ func _style_menu_button(button: Button, enabled: bool = true):
 		hover_style.content_margin_bottom = item_padding_vertical
 		button.add_theme_stylebox_override("hover", hover_style)
 		
-		# Create pressed style with padding - exact same color as SimpleDropdownMenu
+		# Create pressed style with padding
 		var pressed_style = StyleBoxFlat.new()
 		pressed_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)
 		pressed_style.content_margin_left = item_padding_horizontal
@@ -368,7 +374,7 @@ func _should_close_menu_at_position(mouse_pos: Vector2) -> bool:
 		if main_rect.has_point(mouse_pos):
 			return false  # Don't close if inside main menu
 	
-	# Check if click is inside submenu popup
+	# Check if click is inside submenu popup  
 	if submenu_popup and is_instance_valid(submenu_popup) and submenu_visible:
 		var submenu_rect = Rect2(submenu_popup.position, submenu_popup.size)
 		if submenu_rect.has_point(mouse_pos):
@@ -473,14 +479,18 @@ func _show_submenu(item_index: int):
 	)
 	submenu_popup.position = submenu_pos
 	
-	# Add to scene and show
-	get_viewport().add_child(submenu_popup)
+	# Add to same canvas layer if it exists, otherwise to viewport
+	if context_canvas:
+		context_canvas.add_child(submenu_popup)
+	else:
+		get_viewport().add_child(submenu_popup)
+	
 	submenu_popup.show()
 	submenu_visible = true
 
 func _calculate_submenu_height(submenu_items: Array) -> int:
 	var height = 0
-	var separator_height = 1  # Changed from 2 to 1
+	var separator_height = 1
 	
 	for item in submenu_items:
 		if item.get("is_separator", false):
@@ -493,7 +503,7 @@ func _calculate_submenu_height(submenu_items: Array) -> int:
 func _calculate_item_y_position(item_index: int) -> int:
 	"""Calculate Y position of item considering separators"""
 	var y_pos = 0
-	var separator_height = 1  # Changed from 2 to 1
+	var separator_height = 1
 	
 	for i in range(item_index):
 		var item = menu_items[i]
@@ -504,41 +514,42 @@ func _calculate_item_y_position(item_index: int) -> int:
 	
 	return y_pos
 
-func _style_submenu_button(button: Button, _enabled: bool = true):
+func _style_submenu_button(button: Button, enabled: bool = true):
 	# Set font properties - match SimpleDropdownMenu exactly
-	button.add_theme_color_override("font_color", Color.LIGHT_GRAY)
+	button.add_theme_color_override("font_color", Color.LIGHT_GRAY if enabled else Color.GRAY)
 	button.focus_mode = Control.FOCUS_NONE
 	button.flat = false  # Enable default hover styling
 	
-	# Create normal style with padding - exact same padding reduction as SimpleDropdownMenu
-	var submenu_padding_h = item_padding_horizontal - 2
-	var submenu_padding_v = item_padding_vertical - 1
-	
-	var normal_style = StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0)
-	normal_style.content_margin_left = submenu_padding_h
-	normal_style.content_margin_right = submenu_padding_h
-	normal_style.content_margin_top = submenu_padding_v
-	normal_style.content_margin_bottom = submenu_padding_v
-	button.add_theme_stylebox_override("normal", normal_style)
-	
-	# Create hover style with padding - exact same color as SimpleDropdownMenu
-	var hover_style = StyleBoxFlat.new()
-	hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
-	hover_style.content_margin_left = submenu_padding_h
-	hover_style.content_margin_right = submenu_padding_h
-	hover_style.content_margin_top = submenu_padding_v
-	hover_style.content_margin_bottom = submenu_padding_v
-	button.add_theme_stylebox_override("hover", hover_style)
-	
-	# Create pressed style with padding - exact same color as SimpleDropdownMenu
-	var pressed_style = StyleBoxFlat.new()
-	pressed_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)
-	pressed_style.content_margin_left = submenu_padding_h
-	pressed_style.content_margin_right = submenu_padding_h
-	pressed_style.content_margin_top = submenu_padding_v
-	pressed_style.content_margin_bottom = submenu_padding_v
-	button.add_theme_stylebox_override("pressed", pressed_style)
+	if enabled:
+		# Create normal style with padding - exact same padding reduction as SimpleDropdownMenu
+		var submenu_padding_h = item_padding_horizontal - 2
+		var submenu_padding_v = item_padding_vertical - 1
+		
+		var normal_style = StyleBoxFlat.new()
+		normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0)
+		normal_style.content_margin_left = submenu_padding_h
+		normal_style.content_margin_right = submenu_padding_h
+		normal_style.content_margin_top = submenu_padding_v
+		normal_style.content_margin_bottom = submenu_padding_v
+		button.add_theme_stylebox_override("normal", normal_style)
+		
+		# Create hover style with padding - exact same color as SimpleDropdownMenu
+		var hover_style = StyleBoxFlat.new()
+		hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
+		hover_style.content_margin_left = submenu_padding_h
+		hover_style.content_margin_right = submenu_padding_h
+		hover_style.content_margin_top = submenu_padding_v
+		hover_style.content_margin_bottom = submenu_padding_v
+		button.add_theme_stylebox_override("hover", hover_style)
+		
+		# Create pressed style with padding - exact same color as SimpleDropdownMenu
+		var pressed_style = StyleBoxFlat.new()
+		pressed_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)
+		pressed_style.content_margin_left = submenu_padding_h
+		pressed_style.content_margin_right = submenu_padding_h
+		pressed_style.content_margin_top = submenu_padding_v
+		pressed_style.content_margin_bottom = submenu_padding_v
+		button.add_theme_stylebox_override("pressed", pressed_style)
 
 func _hide_submenu():
 	manually_hiding_submenu = true
@@ -584,6 +595,7 @@ func _on_main_popup_visibility_changed():
 		return
 
 func hide_menu():
+	print("ContextMenu_Base: hide_menu called")
 	# Disable input processing methods
 	set_process_unhandled_input(false)
 	set_process_input(false)
@@ -610,6 +622,11 @@ func hide_menu():
 	main_popup = null
 	
 	_hide_submenu()
+	
+	# Clean up canvas layer
+	if context_canvas and is_instance_valid(context_canvas):
+		context_canvas.queue_free()
+		context_canvas = null
 	
 	# Emit closed signal
 	menu_closed.emit()
@@ -692,6 +709,9 @@ func get_context_data() -> Dictionary:
 # Quick setup methods for common context menus
 func setup_item_context_menu(item: InventoryItem_Base):
 	"""Setup a typical inventory item context menu"""
+	print("ContextMenu_Base: setup_item_context_menu called for item: ", item.item_name if item else "null")
+	print("ContextMenu_Base: Item type: ", item.item_type if item else "null")
+	
 	clear_items()
 	
 	add_menu_item("item_info", "Item Information")
@@ -715,6 +735,8 @@ func setup_item_context_menu(item: InventoryItem_Base):
 	
 	if item.can_be_destroyed:
 		add_menu_item("destroy_item", "Destroy Item")
+	
+	print("ContextMenu_Base: Menu items added: ", menu_items.size())
 
 func setup_empty_area_context_menu():
 	"""Setup context menu for empty inventory areas"""
