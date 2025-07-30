@@ -8,6 +8,7 @@ extends Control
 @export var border_width: float = 0.0
 @export var highlight_color: Color = Color.YELLOW
 @export var selection_color: Color = Color.CYAN
+@export var slot_padding: int = 8
 
 # Content
 var item: InventoryItem_Base
@@ -32,6 +33,13 @@ var drag_start_position: Vector2
 var drag_threshold: float = 5.0
 var drag_preview_created: bool = false
 
+# Tooltip
+var tooltip: PanelContainer
+var tooltip_label: RichTextLabel
+var is_showing_tooltip: bool = false
+var tooltip_timer: float = 0.0
+var tooltip_delay: float = 0.2
+
 # Signals
 signal slot_clicked(slot: InventorySlot, event: InputEvent)
 signal slot_right_clicked(slot: InventorySlot, event: InputEvent)
@@ -46,6 +54,106 @@ func _init():
 func _ready():
 	_setup_visual_components()
 	_setup_signals()
+	
+func _process(delta):
+	# Handle tooltip delay
+	if tooltip_timer > 0:
+		tooltip_timer -= delta
+		if tooltip_timer <= 0 and item and not is_showing_tooltip:
+			_show_tooltip()
+	
+func _setup_tooltip():
+	# Get the inventory window or scene root
+	var inventory_window = _find_inventory_canvas_layer()
+	if not inventory_window:
+		return
+	
+	# Create tooltip panel
+	tooltip = PanelContainer.new()
+	tooltip.name = "ItemTooltip"
+	tooltip.visible = false
+	tooltip.z_index = 1000
+	
+	# Style the tooltip panel
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = Color(0.1, 0.1, 0.1, 0.95)
+	style_box.border_width_left = 1
+	style_box.border_width_right = 1
+	style_box.border_width_top = 1
+	style_box.border_width_bottom = 1
+	style_box.border_color = Color(0.5, 0.5, 0.5, 1.0)
+	style_box.content_margin_left = 8
+	style_box.content_margin_right = 8
+	style_box.content_margin_top = 6
+	style_box.content_margin_bottom = 6
+	tooltip.add_theme_stylebox_override("panel", style_box)
+	
+	# Create tooltip label
+	tooltip_label = RichTextLabel.new()
+	tooltip_label.bbcode_enabled = true
+	tooltip_label.fit_content = true
+	tooltip_label.add_theme_font_size_override("normal_font_size", 12)
+	tooltip_label.custom_minimum_size = Vector2(200, 0)
+	tooltip.add_child(tooltip_label)
+	
+	# Add to inventory window instead of CanvasLayer
+	inventory_window.add_child(tooltip)
+
+func _find_inventory_canvas_layer() -> CanvasLayer:
+	# Look for InventoryLayer in the scene
+	var scene_root = get_tree().current_scene
+	var inventory_layer = scene_root.get_node_or_null("InventoryLayer")
+	if inventory_layer and inventory_layer is CanvasLayer:
+		return inventory_layer
+	
+	# Alternative approach: traverse up from the slot to find the CanvasLayer
+	var current = get_parent()
+	while current:
+		if current is CanvasLayer:
+			return current
+		current = current.get_parent()
+	
+	return null
+
+func _show_tooltip():
+	if not item or is_showing_tooltip:
+		return
+	
+	if not tooltip:
+		_setup_tooltip()
+	
+	if not tooltip:
+		return
+	
+	# Update tooltip content
+	tooltip_label.text = _get_tooltip_text()
+	
+	# Position below the slot
+	var tooltip_pos = global_position + Vector2(((slot_size.x / 2) + slot_padding / 2) - (tooltip.size.x / 2), slot_size.y + 5)
+	tooltip.position = tooltip_pos
+	tooltip.visible = true
+	is_showing_tooltip = true
+
+func _hide_tooltip():
+	if tooltip and tooltip.visible:
+		tooltip.visible = false
+	is_showing_tooltip = false
+
+func _get_tooltip_text() -> String:
+	if not item:
+		return ""
+	
+	var tooltip = "[b]%s[/b]\n" % item.item_name
+	tooltip += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
+	tooltip += "Quantity: %d\n" % item.quantity
+	tooltip += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
+	tooltip += "Mass: %.2f kg (%.2f kg total)\n" % [item.mass, item.get_total_mass()]
+	tooltip += "Value: %.2f ISK (%.2f ISK total)" % [item.base_value, item.get_total_value()]
+	
+	if not item.description.is_empty():
+		tooltip += "\n\n[i]%s[/i]" % item.description
+	
+	return tooltip
 
 func _setup_visual_components():
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -71,8 +179,8 @@ func _setup_visual_components():
 	content_container.name = "ContentContainer"
 	# Add margins to create visual spacing (adjust these values as needed)
 	content_container.set_offsets_preset(Control.PRESET_FULL_RECT)
-	content_container.position = Vector2(8, 8)  # Top-left margin
-	content_container.size = slot_size - Vector2(8, 8)  # Reduce size by margin amount
+	content_container.position = Vector2(slot_padding, slot_padding)  # Top-left margin
+	content_container.size = slot_size - Vector2(slot_padding, slot_padding)  # Reduce size by margin amount
 	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(content_container)
 	
@@ -129,14 +237,32 @@ func _setup_visual_components():
 func _setup_signals():
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	gui_input.connect(_on_gui_input)
+	
+	# Add mouse hover events for custom tooltip
+	mouse_entered.connect(_on_mouse_entered)
+	mouse_exited.connect(_on_mouse_exited)
+	
+func _on_mouse_entered():
+	if item:
+		tooltip_timer = tooltip_delay
+
+func _on_mouse_exited():
+	tooltip_timer = 0.0
+	_hide_tooltip()
 
 # Item management
 func set_item(new_item: InventoryItem_Base):
 	if item and item.quantity_changed.is_connected(_on_item_quantity_changed):
 		item.quantity_changed.disconnect(_on_item_quantity_changed)
-	
+		
+	# Hide any existing tooltip when item changes
+	_hide_tooltip()
+
 	item = new_item
 	is_occupied = item != null
+	
+	# Clear built-in tooltip since we're using custom
+	tooltip_text = ""
 	
 	if item:
 		item.quantity_changed.connect(_on_item_quantity_changed)
@@ -208,7 +334,7 @@ func _update_tooltip():
 # Calculate tooltip position (same position where Godot would show the tooltip)
 func get_tooltip_position() -> Vector2:
 	# Position the popup just to the right and slightly below the slot
-	var tooltip_offset = Vector2(slot_size.x + 5, 0)
+	var tooltip_offset = Vector2(slot_size.y + 5, 0)
 	return global_position + tooltip_offset
 
 # Visual state management

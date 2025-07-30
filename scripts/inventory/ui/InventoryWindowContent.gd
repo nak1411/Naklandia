@@ -258,7 +258,7 @@ func update_containers(containers: Array[InventoryContainer_Base]):
 		
 		list_to_update.add_item(container_text)
 		var item_index = list_to_update.get_item_count() - 1
-		list_to_update.set_item_tooltip(item_index, container_text)
+		container_list.set_item_tooltip_enabled(item_index, false)
 
 func select_container(container: InventoryContainer_Base):
 	current_container = container
