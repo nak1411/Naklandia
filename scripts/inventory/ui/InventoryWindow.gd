@@ -428,6 +428,8 @@ func _on_filter_changed(filter_type: int):
 func _on_sort_requested(sort_type):
 	# TODO: Implement sorting
 	pass
+	
+
 
 # Content signal handlers - FIXED FUNCTION NAMES
 func _on_container_selected_from_content(container: InventoryContainer_Base):

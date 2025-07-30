@@ -689,6 +689,91 @@ func load_inventory():
 	inventory_loaded.emit()
 	print("Inventory loaded from: ", save_file_path)
 	return true
+	
+func can_transfer_item_volume_based(item: InventoryItem_Base, from_container_id: String, to_container_id: String) -> bool:
+	"""Check if an item can be transferred based on volume constraints"""
+	var from_container = get_container(from_container_id)
+	var to_container = get_container(to_container_id)
+	
+	if not from_container or not to_container:
+		return false
+	
+	if not item in from_container.items:
+		return false
+	
+	# Check if target container has volume for the item
+	return to_container.has_volume_for_item(item)
+
+func get_container_capacity_info(container_id: String) -> Dictionary:
+	"""Get detailed capacity information for a container"""
+	var container = get_container(container_id)
+	if not container:
+		return {}
+	
+	return {
+		"container_name": container.container_name,
+		"volume_used": container.get_current_volume(),
+		"volume_max": container.max_volume,
+		"volume_available": container.get_available_volume(),
+		"volume_percentage": container.get_volume_percentage(),
+		"item_count": container.items.size(),
+		"total_quantity": container.get_total_quantity(),
+		"total_mass": container.get_total_mass(),
+		"total_value": container.get_total_value()
+	}
+
+func find_container_with_space_for_item(item: InventoryItem_Base, exclude_container: String = "") -> String:
+	"""Find a container that has space for the given item"""
+	for container_id in containers:
+		if container_id == exclude_container:
+			continue
+		
+		var container = containers[container_id]
+		if container.has_volume_for_item(item):
+			return container_id
+	
+	return ""
+
+func auto_organize_by_volume():
+	"""Organize items across containers to optimize volume usage"""
+	var all_items: Array[InventoryItem_Base] = []
+	var container_capacities: Dictionary = {}
+	
+	# Collect all items and container info
+	for container_id in containers:
+		var container = containers[container_id]
+		container_capacities[container_id] = {
+			"max_volume": container.max_volume,
+			"current_volume": 0.0,
+			"items": []
+		}
+		
+		for item in container.items.duplicate():
+			all_items.append(item)
+			container.remove_item(item)
+	
+	# Sort items by volume (largest first) for better packing
+	all_items.sort_custom(func(a, b): return a.get_total_volume() > b.get_total_volume())
+	
+	# Distribute items to containers with available space
+	for item in all_items:
+		var placed = false
+		
+		# Try to find a container with enough space
+		for container_id in containers:
+			var container = containers[container_id]
+			if container.has_volume_for_item(item):
+				container.add_item(item)
+				placed = true
+				break
+		
+		if not placed:
+			# If no container has space, put it back in the first available container
+			# This shouldn't happen in a properly managed system
+			print("Warning: Could not place item ", item.item_name, " - insufficient volume in all containers")
+			if containers.size() > 0:
+				var first_container = containers[containers.keys()[0]]
+				first_container.add_item(item, Vector2i(-1, -1), false)  # Force add without volume check
 
 # Public interface for UI
 func get_player_inventory() -> InventoryContainer_Base:

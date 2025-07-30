@@ -124,6 +124,52 @@ func set_item(new_item: InventoryItem_Base):
 	
 	if visible:
 		queue_redraw()
+		
+func _can_accept_item_volume_check(incoming_item: InventoryItem_Base) -> bool:
+	"""Check if this slot can accept an item based on volume constraints"""
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	var target_container = inventory_manager.get_container(container_id)
+	if not target_container:
+		return false
+	
+	# If slot is empty, check if container has volume for the item
+	if not has_item():
+		return target_container.has_volume_for_item(incoming_item)
+	
+	# If slot has item, check if they can stack
+	if item.can_stack_with(incoming_item):
+		var combined_quantity = item.quantity + incoming_item.quantity
+		if combined_quantity <= item.max_stack_size:
+			# For stacking, we don't need additional volume since we're combining items
+			# The incoming item's volume will be "absorbed" into the existing stack
+			return true
+	
+	# For swapping items, check if we have enough volume
+	# Remove current item volume, add incoming item volume
+	var volume_difference = incoming_item.get_total_volume() - item.get_total_volume()
+	
+	if volume_difference <= 0:
+		# Incoming item is smaller or same size, always fits
+		return true
+	else:
+		# Incoming item is larger, check if we have enough extra volume
+		return target_container.get_available_volume() >= volume_difference
+		
+func _show_volume_feedback(can_drop: bool):
+	"""Show visual feedback for volume constraints during drag"""
+	if can_drop:
+		# Green tint for valid drop
+		modulate = Color(0.8, 1.2, 0.8, 1.0)
+	else:
+		# Red tint for invalid drop (volume exceeded)
+		modulate = Color(1.2, 0.8, 0.8, 1.0)
+
+func _clear_volume_feedback():
+	"""Clear volume feedback colors"""
+	modulate = Color(1.0, 1.0, 1.0, 1.0)
 	
 func force_visual_refresh():
 	queue_redraw()
@@ -274,6 +320,37 @@ func _on_gui_input(event: InputEvent):
 		var distance = event.global_position.distance_to(drag_start_position)
 		if distance > drag_threshold and has_item() and not drag_preview_created:
 			_start_drag()
+		
+		# Add volume feedback during drag - only if drag preview exists
+		if drag_preview_created:
+			_update_drag_volume_feedback(event.global_position)
+			
+func _update_drag_volume_feedback(mouse_position: Vector2):
+	"""Update volume feedback while dragging"""
+	if not has_item():
+		return
+	
+	# Clear previous feedback first
+	_clear_all_volume_feedback()
+	
+	# Find what slot is under the cursor
+	var target_slot = _find_slot_at_position(mouse_position)
+	
+	if target_slot and target_slot != self:
+		var can_accept = target_slot._can_accept_item_volume_check(item)
+		target_slot._show_volume_feedback(can_accept)
+
+func _clear_all_volume_feedback():
+	"""Clear volume feedback from all slots in the grid"""
+	var grid = _get_inventory_grid()
+	if not grid:
+		return
+	
+	for y in range(grid.slots.size()):
+		for x in range(grid.slots[y].size()):
+			var slot = grid.slots[y][x]
+			if slot and slot != self:
+				slot._clear_volume_feedback()
 
 func _start_drag():
 	if not has_item() or drag_preview_created:
@@ -408,6 +485,15 @@ func _handle_drag_end(end_position: Vector2):
 		is_dragging = false
 		drag_preview_created = false
 		return
+	
+	# Clear all volume feedback
+	var grid = _get_inventory_grid()
+	if grid:
+		for y in range(grid.slots.size()):
+			for x in range(grid.slots[y].size()):
+				var slot = grid.slots[y][x]
+				if slot and slot != self:
+					slot._clear_volume_feedback()
 	
 	# Clean up drag preview and timer
 	if drag_preview_created:
@@ -576,26 +662,26 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	if not inventory_manager:
 		return false
 	
-	# Get containers
-	var source_container = inventory_manager.get_container(container_id)
-	var target_container = inventory_manager.get_container(target_slot.container_id)
-	
-	if not source_container or not target_container:
+	# Volume-based validation instead of position-based
+	if not target_slot._can_accept_item_volume_check(item):
 		return false
 	
 	# Handle different drop scenarios
 	if target_slot.has_item():
-		var target_item = target_slot.get_item()
-		
-		# Try stacking if items are compatible
-		if item.can_stack_with(target_item):
-			return _handle_stack_merge(target_slot, target_item)
-		else:
-			# Swap items
-			return _handle_item_swap(target_slot, target_item, inventory_manager)
+		return _handle_stack_or_swap(target_slot, inventory_manager)
 	else:
-		# Move to empty slot
 		return _handle_move_to_empty(target_slot, inventory_manager)
+		
+func _handle_stack_or_swap(target_slot: InventorySlot, inventory_manager: InventoryManager) -> bool:
+	"""Handle stacking or swapping with target slot that has an item"""
+	var target_item = target_slot.get_item()
+	
+	# Try stacking if items are compatible
+	if item.can_stack_with(target_item):
+		return _handle_stack_merge(target_slot, target_item)
+	else:
+		# Swap items if they can't stack
+		return _handle_item_swap(target_slot, target_item, inventory_manager)
 
 func _show_split_stack_dialog():
 	"""Show split stack dialog using the existing item actions system"""
@@ -736,23 +822,22 @@ func _handle_move_to_empty(target_slot: InventorySlot, inventory_manager: Invent
 	if not source_container or not target_container:
 		return false
 	
-	# Check if target container can accept the item
-	if not target_container.can_add_item(item, item):
+	# Volume-based check instead of position check
+	if not target_container.has_volume_for_item(item):
 		return false
 	
 	# Store the item reference before removing it
 	var temp_item = item
 	
-	# For same container moves, use move_item instead of remove/add
+	# For same container moves, just update the visual position
 	if source_container == target_container:
-		var move_success = source_container.move_item(temp_item, target_slot.grid_position)
-		if move_success:
-			# Update visual slots immediately - NO compacting
-			clear_item()
-			target_slot.set_item(temp_item)
-			return true
-		else:
-			return false
+		# Clear the source slot visually
+		clear_item()
+		# Set the target slot visually
+		target_slot.set_item(temp_item)
+		# Emit move signal for any listeners
+		source_container.item_moved.emit(temp_item, grid_position, target_slot.grid_position)
+		return true
 	
 	# For different containers, remove from source and add to target
 	var source_success = source_container.remove_item(temp_item)
@@ -762,11 +847,11 @@ func _handle_move_to_empty(target_slot: InventorySlot, inventory_manager: Invent
 	# Clear the source slot visually
 	clear_item()
 	
-	# Add to target container at the specific position - NO compacting
-	var target_success = target_container.add_item(temp_item, target_slot.grid_position)
+	# Add to target container - let it handle volume validation
+	var target_success = target_container.add_item(temp_item, target_slot.grid_position, false)
 	if not target_success:
 		# Restore to source if target add failed
-		source_container.add_item(temp_item, grid_position)
+		source_container.add_item(temp_item, grid_position, false)
 		set_item(temp_item)
 		return false
 	

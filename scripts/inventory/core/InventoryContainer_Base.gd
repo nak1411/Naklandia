@@ -39,20 +39,55 @@ func _generate_unique_id() -> String:
 	return "container_" + str(Time.get_unix_time_from_system()) + "_" + str(randi() % 10000)
 
 func _initialize_grid():
+	# In volume-based system, we don't maintain a fixed grid internally
+	# The grid is managed by the UI layer
 	grid_slots.clear()
-	grid_slots.resize(grid_height)
-	
-	for y in grid_height:
-		grid_slots[y] = []
-		grid_slots[y].resize(grid_width)
-		for x in grid_width:
-			grid_slots[y][x] = null
+	# Keep grid_slots as an empty array - UI will handle positioning
 
 # Volume management
 func get_current_volume() -> float:
 	var total_volume = 0.0
+	var processed_items = {}  # Track processed items to prevent duplicates
+	
 	for item in items:
-		total_volume += item.get_total_volume()
+		# Safety check for null items
+		if not item:
+			continue
+		
+		# Safety check for invalid item data
+		if not item.has_method("get_total_volume"):
+			continue
+		
+		# Create a unique key for this item instance
+		var item_key = str(item.get_instance_id())
+		
+		# Skip if we've already processed this exact item instance
+		if processed_items.has(item_key):
+			print("Warning: Duplicate item found in container: ", item.item_name)
+			continue
+		
+		processed_items[item_key] = true
+		
+		# Safe volume calculation with bounds checking
+		var item_volume = 0.0
+		var item_quantity = max(0, item.quantity)  # Ensure non-negative
+		var item_unit_volume = max(0.0, item.volume)  # Ensure non-negative
+		
+		# Prevent overflow with reasonable limits
+		if item_quantity > 0 and item_unit_volume > 0:
+			if item_quantity > 1000000 or item_unit_volume > 1000000:
+				print("Warning: Item has extreme values - ", item.item_name, " Qty:", item_quantity, " Vol:", item_unit_volume)
+				item_volume = min(item_quantity * item_unit_volume, 1000000.0)  # Cap at 1M
+			else:
+				item_volume = item_quantity * item_unit_volume
+		
+		total_volume += item_volume
+		
+		# Safety check for runaway volume calculation
+		if total_volume > 1000000.0:  # 1 million m³ is unreasonably large
+			print("Error: Total volume exceeded reasonable limits. Stopping calculation.")
+			break
+	
 	return total_volume
 
 func get_available_volume() -> float:
@@ -68,51 +103,33 @@ func has_volume_for_item(item: InventoryItem_Base) -> bool:
 
 # Grid management
 func is_position_valid(pos: Vector2i) -> bool:
-	if pos.x < 0 or pos.y < 0:
-		return false
-	if pos.x >= grid_width or pos.y >= grid_height:
-		return false
-	return true
+	# In volume-based system, any position is potentially valid
+	# The actual constraint is volume, not grid position
+	return pos.x >= 0 and pos.y >= 0
 
 func is_area_free(pos: Vector2i, exclude_item: InventoryItem_Base = null) -> bool:
-	if not is_position_valid(pos):
-		return false
-	
-	var slot_item = grid_slots[pos.y][pos.x]
-	return slot_item == null or slot_item == exclude_item
+	# Let the UI grid handle position conflicts
+	# For the container, we only care about volume
+	return get_available_volume() > 0
 
 func find_free_position() -> Vector2i:
-	for y in range(grid_height):
-		for x in range(grid_width):
-			var pos = Vector2i(x, y)
-			if is_area_free(pos):
-				return pos
-	
-	return Vector2i(-1, -1)
+	# In volume-based system, this is handled by the grid UI
+	# Return a placeholder position
+	return Vector2i(0, 0)
 	
 # Auto-compacting with stacking functionality
 func compact_items():
-	"""Stacks identical items first, then moves all items to eliminate gaps"""
+	"""Stacks identical items first - positioning is handled by UI"""
 	
 	if items.is_empty():
 		return
 	
-	# First, auto-stack all compatible items
+	# Only auto-stack - don't handle positioning here
 	auto_stack_items()
 	
-	# Then compact to remove gaps
-	var items_to_place = items.duplicate()
-	
-	# Clear the grid
-	_initialize_grid()
-	items.clear()
-	
-	# Re-add items in sequence, filling from top-left
-	for item in items_to_place:
-		var free_pos = find_free_position()
-		if free_pos != Vector2i(-1, -1):
-			occupy_grid_area(free_pos, item)
-			items.append(item)
+	# Signal that items have been reorganized
+	for item in items:
+		item_moved.emit(item, Vector2i(-1, -1), Vector2i(-1, -1))
 
 func auto_stack_items():
 	"""Automatically stack identical items within this container"""
@@ -144,17 +161,17 @@ func auto_stack_items():
 						remove_item(other_item)
 
 func occupy_grid_area(pos: Vector2i, item: InventoryItem_Base):
-	grid_slots[pos.y][pos.x] = item
+	# Volume-based system doesn't track grid positions in the container
+	# This is handled by the UI layer
+	pass
 
 func clear_grid_area(pos: Vector2i):
-	if pos.y < grid_slots.size() and pos.x < grid_slots[pos.y].size():
-		grid_slots[pos.y][pos.x] = null
+	# Volume-based system doesn't track grid positions in the container
+	# This is handled by the UI layer
+	pass
 
 func get_item_position(item: InventoryItem_Base) -> Vector2i:
-	for y in grid_height:
-		for x in grid_width:
-			if grid_slots[y] and x < grid_slots[y].size() and grid_slots[y][x] == item:
-				return Vector2i(x, y)
+	# Return invalid position - let UI manage positioning
 	return Vector2i(-1, -1)
 
 # Item management
@@ -180,11 +197,11 @@ func can_add_item(item: InventoryItem_Base, exclude_item: InventoryItem_Base = n
 		var can_stack = existing_item.quantity + item.quantity <= existing_item.max_stack_size
 		return can_stack
 	
-	# Check grid space
-	var free_pos = find_free_position()
-	var has_space = free_pos != Vector2i(-1, -1)
-	return has_space
+	# Volume-based system: if we have volume, we can accept the item
+	# The grid will expand as needed
+	return true
 
+# Replace the add_item method to work with dynamic positioning
 func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
 	
 	if not can_add_item(item):
@@ -206,19 +223,8 @@ func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), a
 					item_added.emit(item, get_item_position(existing_item))
 					return true
 
-	# Find placement position
-	var final_position = position
-	if position == Vector2i(-1, -1):
-		final_position = find_free_position()
-	elif not is_area_free(position):
-		final_position = find_free_position()
-	
-	if final_position == Vector2i(-1, -1):
-		container_full.emit()
-		return false
-	
-	# Place item in grid
-	occupy_grid_area(final_position, item)
+	# For volume-based system, position is managed by the grid
+	# We just add the item and let the grid handle positioning
 	items.append(item)
 	
 	# Connect to item signals
@@ -227,8 +233,17 @@ func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), a
 	if not item.item_modified.is_connected(_on_item_modified):
 		item.item_modified.connect(_on_item_modified)
 	
-	item_added.emit(item, final_position)
+	# The grid will handle positioning, so we emit with an invalid position
+	# The grid will assign a proper position
+	item_added.emit(item, Vector2i(-1, -1))
 	return true
+	
+func assign_dynamic_position(item: InventoryItem_Base, position: Vector2i):
+	"""Assign a position to an item for grid display purposes"""
+	if item in items:
+		# This is now just for display - the actual constraint is volume
+		# The grid system will track positions visually
+		pass
 
 # Auto-compact after item removal
 func remove_item(item: InventoryItem_Base) -> bool:
@@ -253,16 +268,9 @@ func move_item(item: InventoryItem_Base, new_position: Vector2i) -> bool:
 	if not item in items:
 		return false
 	
-	var old_position = get_item_position(item)
-	
-	if not is_area_free(new_position, item):
-		return false
-	
-	# Clear old position and set new position
-	clear_grid_area(old_position)
-	occupy_grid_area(new_position, item)
-	
-	item_moved.emit(item, old_position, new_position)
+	# In volume-based system, "moving" an item doesn't change its container validity
+	# Just emit the signal for UI updates
+	item_moved.emit(item, Vector2i(-1, -1), new_position)
 	return true
 
 # Search and filtering
