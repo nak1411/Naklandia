@@ -40,15 +40,38 @@ func _init(title: String = "Dialog", size: Vector2 = Vector2(400, 300)):
 
 func _ready():
 	super._ready()
+	call_deferred("_setup_dialog_content_deferred")
+	
+func _initialize_dialog():
+	"""Initialize dialog after everything is ready"""
+	# Ensure we're in the tree and parent is ready
+	if not is_inside_tree():
+		await tree_entered
+	
 	# Wait for parent initialization to complete
 	await get_tree().process_frame
+	
+	_setup_dialog_content()
+	_connect_dialog_signals()
+	
+func _setup_dialog_content_deferred():
+	"""Setup dialog content after the window is properly in the tree"""
+	# Ensure we're in the tree before proceeding
+	if not is_inside_tree():
+		await tree_entered
+	
 	_setup_dialog_content()
 	_connect_dialog_signals()
 
 func _setup_dialog_content():
-	# Wait for parent to be ready
+	# Wait for parent content_area to be ready
 	if not content_area:
 		await get_tree().process_frame
+	
+	# Ensure we have a content area before proceeding
+	if not content_area:
+		push_error("DialogWindow_Base: No content_area available!")
+		return
 	
 	# Create main content container
 	dialog_content = VBoxContainer.new()
@@ -63,7 +86,7 @@ func _setup_dialog_content():
 	# Add to the custom window's content area
 	add_content(dialog_content)
 	
-	# Create button container (will be populated by derived classes)
+	# Create button container
 	button_container = HBoxContainer.new()
 	button_container.name = "ButtonContainer"
 	button_container.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -82,7 +105,7 @@ func _on_dialog_close_requested():
 func add_dialog_content(content: Control):
 	"""Add content to the dialog above the button area"""
 	# Ensure dialog content is ready
-	if not dialog_content:
+	if not dialog_content and is_inside_tree():
 		await get_tree().process_frame
 	
 	if dialog_content and button_container:
@@ -95,7 +118,7 @@ func add_dialog_content(content: Control):
 func add_button(text: String, action: Callable = Callable()) -> Button:
 	"""Add a button to the dialog's button container"""
 	# Ensure button container is ready
-	if not button_container:
+	if not button_container and is_inside_tree():
 		await get_tree().process_frame
 	
 	var button = Button.new()

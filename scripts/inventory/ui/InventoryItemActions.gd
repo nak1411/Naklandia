@@ -301,105 +301,73 @@ func show_container_details_dialog(container: InventoryContainer_Base):
 	)
 
 func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
-	"""Show split stack dialog"""
+	"""Show split stack dialog using DialogWindow_Base"""
 	# Prevent auto-stacking while dialog is open
 	var original_auto_stack = inventory_manager.auto_stack
 	inventory_manager.auto_stack = false
 	
-	var dialog_window = Window.new()
-	dialog_window.title = "Split Stack"
-	dialog_window.size = Vector2i(300, 180)
-	dialog_window.unresizable = true
-	dialog_window.always_on_top = true
-	dialog_window.set_flag(Window.FLAG_POPUP, false)
+	# Create dialog using the base class
+	var dialog_window = DialogWindow_Base.new("Split Stack", Vector2(300, 180))
+	dialog_window.center_on_parent = true
 	
 	# Track this dialog window
 	open_dialog_windows.append(dialog_window)
 	
-	# For canvas layers, position relative to screen center instead
-	var screen_size = DisplayServer.screen_get_size()
-	var center_position = Vector2i(screen_size / 2)
-	var dialog_position = center_position - dialog_window.size / 2
+	# Add to scene FIRST so it gets properly initialized
+	window_parent.get_tree().current_scene.add_child(dialog_window)
 	
-	# Ensure dialog stays within screen bounds
-	dialog_position.x = clamp(dialog_position.x, 50, screen_size.x - dialog_window.size.x - 50)
-	dialog_position.y = clamp(dialog_position.y, 50, screen_size.y - dialog_window.size.y - 50)
+	# Wait for dialog to be fully ready
+	if not dialog_window.is_node_ready():
+		await dialog_window.ready
 	
-	dialog_window.position = dialog_position
+	# Wait one more frame to ensure all components are initialized
+	await dialog_window.get_tree().process_frame
 	
-	# Create content container
-	var vbox = VBoxContainer.new()
-	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	vbox.add_theme_constant_override("margin_left", 15)
-	vbox.add_theme_constant_override("margin_right", 15)
-	vbox.add_theme_constant_override("margin_top", 15)
-	vbox.add_theme_constant_override("margin_bottom", 15)
-	vbox.add_theme_constant_override("separation", 10)
+	# Now add content - check if dialog_content exists
+	if not dialog_window.dialog_content:
+		push_error("Dialog content not initialized!")
+		return
 	
+	# Create the split stack content
 	var label = Label.new()
 	label.text = "Split %s (Current: %d)" % [item.item_name, item.quantity]
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(label)
+	dialog_window.add_dialog_content(label)
 	
-	var spinbox = SpinBox.new()
-	spinbox.min_value = 1
-	spinbox.max_value = item.quantity - 1
-	spinbox.value = min(1, item.quantity - 1)
-	spinbox.custom_minimum_size = Vector2(150, 30)
-	spinbox.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vbox.add_child(spinbox)
+	# Create spinbox using the dialog's helper method
+	var spinbox = dialog_window.create_spinbox(1, item.quantity - 1, min(1, item.quantity - 1))
 	
-	var button_container = HBoxContainer.new()
-	button_container.alignment = BoxContainer.ALIGNMENT_CENTER
-	button_container.add_theme_constant_override("separation", 10)
-	vbox.add_child(button_container)
+	# Add buttons
+	var split_button = await dialog_window.add_button("Split")
+	var cancel_button = await dialog_window.add_button("Cancel")
 	
-	var split_button = Button.new()
-	split_button.text = "Split"
-	split_button.custom_minimum_size = Vector2(80, 35)
-	button_container.add_child(split_button)
-	
-	var cancel_button = Button.new()
-	cancel_button.text = "Cancel"
-	cancel_button.custom_minimum_size = Vector2(80, 35)
-	button_container.add_child(cancel_button)
-	
-	dialog_window.add_child(vbox)
-	
-	# Add to scene and show
-	window_parent.get_tree().current_scene.add_child(dialog_window)
-	dialog_window.popup()
-	dialog_window.grab_focus()
-	
-	# Connect button events with validity checks
+	# Connect button events
 	split_button.pressed.connect(func():
-		if not is_instance_valid(dialog_window) or not dialog_window.is_inside_tree():
-			return
 		var split_amount = int(spinbox.value)
 		inventory_manager.auto_stack = original_auto_stack
 		_perform_split(item, split_amount, original_auto_stack)
-		_safe_cleanup_dialog(dialog_window)
+		dialog_window.close_dialog()
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
 	)
 	
 	cancel_button.pressed.connect(func():
-		if not is_instance_valid(dialog_window) or not dialog_window.is_inside_tree():
-			return
+		inventory_manager.auto_stack = original_auto_stack
+		dialog_window.close_dialog()
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
+	)
+	
+	# Connect close event
+	dialog_window.dialog_closed.connect(func():
 		inventory_manager.auto_stack = original_auto_stack
 		_safe_cleanup_dialog(dialog_window)
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
 	)
 	
-	dialog_window.close_requested.connect(func():
-		if not is_instance_valid(dialog_window) or not dialog_window.is_inside_tree():
-			return
-		inventory_manager.auto_stack = original_auto_stack
-		_safe_cleanup_dialog(dialog_window)
-		if window_parent and is_instance_valid(window_parent):
-			window_parent.grab_focus()
-	)
+	# Show the dialog
+	dialog_window.show_dialog(window_parent)
 
 func show_destroy_item_confirmation(item: InventoryItem_Base, _slot: InventorySlot):
 	"""Show confirmation dialog for item destruction"""
