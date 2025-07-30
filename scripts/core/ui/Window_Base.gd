@@ -332,10 +332,6 @@ func _on_button_hover(button: Button, hovering: bool):
 func _create_hover_style(color: Color) -> StyleBoxFlat:
 	var style = StyleBoxFlat.new()
 	style.bg_color = color
-	style.corner_radius_top_left = 4
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_left = 4
-	style.corner_radius_bottom_right = 4
 	return style
 
 # Window state management

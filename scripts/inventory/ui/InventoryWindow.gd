@@ -96,10 +96,6 @@ func _setup_window_ui():
 	bg_style.border_width_top = border_width
 	bg_style.border_width_bottom = border_width
 	bg_style.border_color = border_color
-	bg_style.corner_radius_top_left = 8
-	bg_style.corner_radius_top_right = 8
-	bg_style.corner_radius_bottom_left = 8
-	bg_style.corner_radius_bottom_right = 8
 	background_panel.add_theme_stylebox_override("panel", bg_style)
 	
 	# Title bar
@@ -116,8 +112,6 @@ func _setup_window_ui():
 	# Style title bar
 	var title_style = StyleBoxFlat.new()
 	title_style.bg_color = title_bar_color
-	title_style.corner_radius_top_left = 8
-	title_style.corner_radius_top_right = 8
 	title_bar.add_theme_stylebox_override("panel", title_style)
 	
 	# Title label

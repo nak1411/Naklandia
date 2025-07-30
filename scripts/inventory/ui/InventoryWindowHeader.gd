@@ -199,7 +199,6 @@ func _style_custom_sort_button():
 	style_normal.content_margin_right = 12
 	style_normal.content_margin_top = 6
 	style_normal.content_margin_bottom = 6
-	style_normal.corner_radius_top_left = 0
 	
 	# Create hover style
 	var style_hover = StyleBoxFlat.new()
