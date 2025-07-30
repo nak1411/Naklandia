@@ -105,7 +105,7 @@ func _setup_left_panel():
 	
 	# Keep normal dark background for container list
 	var list_style = StyleBoxFlat.new()
-	list_style.bg_color = Color(0.1, 0.1, 0.1, 0.9)
+	list_style.bg_color = Color(0.1, 0.1, 0.1, 1.0)
 	list_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
 	list_style.border_width_left = 1
 	list_style.border_width_right = 1

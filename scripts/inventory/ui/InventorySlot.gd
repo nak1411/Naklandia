@@ -80,7 +80,7 @@ func _setup_visual_components():
 	quantity_bg = Panel.new()
 	quantity_bg.name = "QuantityBackground"
 	quantity_bg.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	quantity_bg.position = Vector2(-22, -20)
+	quantity_bg.position = Vector2(-22, -22)
 	quantity_bg.size = Vector2(22, 22)
 	quantity_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	quantity_bg.visible = false  # Initially hidden
