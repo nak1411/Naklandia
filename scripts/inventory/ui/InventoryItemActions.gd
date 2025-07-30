@@ -25,6 +25,7 @@ func _setup_context_menu():
 	"""Initialize the custom context menu system"""
 	context_menu = ContextMenu_Base.new()
 	context_menu.name = "InventoryContextMenu"
+	context_menu.process_priority = 100  # Lower priority than dialogs
 	
 	# Connect context menu signals
 	context_menu.item_selected.connect(_on_context_item_selected)
@@ -94,9 +95,18 @@ func show_container_context_menu(container: InventoryContainer_Base, position: V
 
 func _close_context_menu():
 	"""Close the active context menu"""
-	if context_menu and context_menu.is_menu_visible():
-		context_menu.hide_menu()
+	print("_close_context_menu called")
+	if context_menu and is_instance_valid(context_menu):
+		print("Context menu is valid, checking if visible")
+		if context_menu.is_menu_visible():
+			print("Context menu is visible, hiding it")
+			context_menu.hide_menu()
+		else:
+			print("Context menu not visible")
+	else:
+		print("Context menu not valid")
 	is_context_menu_active = false
+	print("_close_context_menu finished")
 
 func _on_context_menu_closed():
 	"""Handle context menu closure"""
@@ -108,8 +118,10 @@ func _on_context_menu_closed():
 
 func _on_context_item_selected(item_id: String, _item_data: Dictionary, context_data: Dictionary):
 	"""Handle context menu item selection"""
+	# Don't close the context menu immediately - defer it
 	var action_type = context_data.get("action_type", "")
 	
+	# Process the action first, then close the menu
 	match action_type:
 		"item":
 			_handle_item_action(item_id, context_data)
@@ -118,12 +130,22 @@ func _on_context_item_selected(item_id: String, _item_data: Dictionary, context_
 		"container":
 			_handle_container_action(item_id, context_data)
 	
+	# Close the context menu after a brief delay to allow event processing to complete
+	call_deferred("_close_context_menu_delayed")
+	
 	# Emit refresh signal for most actions
 	if not item_id.begins_with("item_info") and not item_id.begins_with("container_info"):
 		container_refreshed.emit()
+		
+func _close_context_menu_delayed():
+	"""Close context menu with a small delay to prevent input processing errors"""
+	await window_parent.get_tree().process_frame
+	_close_context_menu()
 
 func _handle_item_action(action_id: String, context_data: Dictionary):
 	"""Handle actions on inventory items"""
+	print("_handle_item_action called with action_id: ", action_id)
+	
 	var item = context_data.get("item") as InventoryItem_Base
 	var slot = context_data.get("slot") as InventorySlot
 	
@@ -132,9 +154,11 @@ func _handle_item_action(action_id: String, context_data: Dictionary):
 	
 	match action_id:
 		"item_info":
-			show_item_details_dialog(item)
+			print("Showing item details dialog")
+			call_deferred("show_item_details_dialog", item)
 		"split_stack":
-			show_split_stack_dialog(item, slot)
+			print("About to show split stack dialog")
+			call_deferred("show_split_stack_dialog", item, slot)
 		"use_item":
 			use_item(item, slot)
 		"equip_item":
@@ -144,9 +168,8 @@ func _handle_item_action(action_id: String, context_data: Dictionary):
 		"view_blueprint":
 			view_blueprint(item)
 		"destroy_item":
-			show_destroy_item_confirmation(item, slot)
+			call_deferred("show_destroy_item_confirmation", item, slot)
 		_:
-			# Handle move actions
 			if action_id.begins_with("move_to_"):
 				_handle_move_item_action(action_id, item)
 
@@ -215,7 +238,6 @@ func _handle_move_item_action(action_id: String, item: InventoryItem_Base):
 func _handle_move_container_items_action(action_id: String, container: InventoryContainer_Base):
 	"""Handle moving all items from a container"""
 	# Implementation for bulk container moves
-	print("Moving all items from container: ", container.container_name, " with action: ", action_id)
 
 # Dialog methods
 func show_item_details_dialog(item: InventoryItem_Base):
@@ -302,6 +324,17 @@ func show_container_details_dialog(container: InventoryContainer_Base):
 
 func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	"""Show split stack dialog using DialogWindow_Base"""
+	print("show_split_stack_dialog called")
+	
+	# Close context menu first and wait for cleanup
+	if is_context_menu_active:
+		print("Closing context menu")
+		_close_context_menu()
+		await window_parent.get_tree().process_frame
+		print("Context menu closed")
+	
+	print("Creating dialog window")
+	
 	# Prevent auto-stacking while dialog is open
 	var original_auto_stack = inventory_manager.auto_stack
 	inventory_manager.auto_stack = false
@@ -321,7 +354,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 		await dialog_window.ready
 	
 	# Wait one more frame to ensure all components are initialized
-	await dialog_window.get_tree().process_frame
+	await window_parent.get_tree().process_frame
 	
 	# Now add content - check if dialog_content exists
 	if not dialog_window.dialog_content:
@@ -524,23 +557,15 @@ func show_clear_container_confirmation():
 # Item action implementations
 func use_item(item: InventoryItem_Base, _slot: InventorySlot):
 	"""Use an item (consume, activate, etc.)"""
-	print("Using item: ", item.item_name)
-	# TODO: Implement item usage logic
 
 func equip_item(item: InventoryItem_Base, _slot: InventorySlot):
 	"""Equip an item (weapons, armor, modules)"""
-	print("Equipping item: ", item.item_name)
-	# TODO: Implement equipment logic
 
 func open_container_item(item: InventoryItem_Base):
 	"""Open a container item"""
-	print("Opening container: ", item.item_name)
-	# TODO: Implement container opening logic
 
 func view_blueprint(item: InventoryItem_Base):
 	"""View blueprint details"""
-	print("Viewing blueprint: ", item.item_name)
-	# TODO: Implement blueprint viewer
 
 # Container action implementations
 func stack_all_items():
@@ -681,8 +706,6 @@ func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_s
 
 func _show_transfer_failed_notification():
 	"""Show notification when item transfer fails"""
-	print("Item transfer failed - insufficient space or invalid container")
-	# TODO: Implement visual notification system
 
 func _safe_cleanup_dialog(dialog_window: Window):
 	"""Safely clean up a dialog window with proper validity checks"""

@@ -22,6 +22,11 @@ signal dialog_closed()
 
 func _init(title: String = "Dialog", size: Vector2 = Vector2(400, 300)):
 	super._init()
+	
+	# DISABLE input processing during initialization to prevent the error
+	set_process_input(false)
+	set_process_unhandled_input(false)
+	
 	dialog_title = title
 	dialog_size = size
 	
@@ -53,6 +58,11 @@ func _initialize_dialog():
 	
 	_setup_dialog_content()
 	_connect_dialog_signals()
+	
+	# Re-enable input processing now that dialog is fully initialized
+	if is_modal:
+		set_process_input(true)
+		set_process_unhandled_input(true)
 	
 func _setup_dialog_content_deferred():
 	"""Setup dialog content after the window is properly in the tree"""
@@ -157,6 +167,17 @@ func show_dialog(parent: Window = null):
 		parent_window = parent
 		if center_on_parent:
 			center_on_window(parent)
+	else:
+		# If no parent, center on screen
+		var screen_size = DisplayServer.screen_get_size()
+		var center_position = Vector2i(screen_size / 2)
+		var dialog_position = center_position - size / 2
+		
+		# Ensure dialog stays within screen bounds
+		dialog_position.x = clamp(dialog_position.x, 50, screen_size.x - size.x - 50)
+		dialog_position.y = clamp(dialog_position.y, 50, screen_size.y - size.y - 50)
+		
+		position = dialog_position
 	
 	popup()
 	grab_focus()
@@ -164,11 +185,23 @@ func show_dialog(parent: Window = null):
 func center_on_window(parent: Window):
 	"""Center this dialog on the specified parent window"""
 	if parent:
-		var parent_center = parent.position + parent.size / 2
-		position = Vector2i(parent_center - size / 2)
+		# For canvas layers, use screen center instead of parent position
+		var screen_size = DisplayServer.window_get_size()
+		var center_position = Vector2i(screen_size / 2)
+		var dialog_position = center_position - size / 2
+		
+		# Ensure dialog stays within screen bounds
+		dialog_position.x = clamp(dialog_position.x, 50, screen_size.x - size.x - 50)
+		dialog_position.y = clamp(dialog_position.y, 50, screen_size.y - size.y - 50)
+		
+		position = dialog_position
 
 func close_dialog():
 	"""Close the dialog and clean up"""
+	# Disable input processing first
+	set_process_input(false)
+	set_process_unhandled_input(false)
+	
 	visible = false
 	queue_free()
 
@@ -225,7 +258,7 @@ func create_rich_text_area(bbcode_text: String) -> RichTextLabel:
 
 # Input handling for modal behavior
 func _input(event: InputEvent):
-	if not visible or not is_modal:
+	if not is_inside_tree() or not dialog_content or not button_container:
 		return
 	
 	if event is InputEventKey and event.pressed:

@@ -36,6 +36,10 @@ signal menu_closed()
 func _init():
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	custom_minimum_size = Vector2(min_width, item_height)
+	
+	# Disable input processing by default - only enable when menu is shown
+	set_process_input(false)
+	set_process_unhandled_input(false)
 
 func add_menu_item(id: String, text: String, icon: Texture2D = null, enabled: bool = true, has_submenu: bool = false, submenu_items: Array = []):
 	var item = {
@@ -61,6 +65,10 @@ func add_separator():
 	menu_items.append(separator)
 
 func show_context_menu(show_position: Vector2, data: Dictionary = {}, parent_window: Window = null):
+	# Enable input processing when showing menu
+	set_process_input(true)
+	set_process_unhandled_input(true)
+	
 	context_data = data
 	_create_main_popup()
 	
@@ -351,7 +359,7 @@ func _start_input_polling_delayed():
 	delay_timer.start()
 
 func _poll_for_input():
-	if not is_menu_visible():
+	if not is_inside_tree() or not is_menu_visible():
 		return
 	
 	# Check if right mouse button was just pressed or escape
@@ -591,7 +599,8 @@ func _on_main_popup_visibility_changed():
 		return
 
 func hide_menu():
-	# Disable input processing methods
+	# FIRST - Disable ALL input processing immediately
+	set_process_input(false)
 	set_process_unhandled_input(false)
 	set_process_input(false)
 	
@@ -600,7 +609,7 @@ func hide_menu():
 	if timer:
 		timer.queue_free()
 	
-	# Clean up delay timer
+	# Clean up delay timer  
 	var delay_timer = get_node_or_null("DelayTimer")
 	if delay_timer:
 		delay_timer.queue_free()
@@ -622,6 +631,10 @@ func hide_menu():
 	menu_closed.emit()
 
 func _unhandled_input(event: InputEvent):
+	# Immediately return if not in tree or if manually hiding
+	if not is_inside_tree():
+		return
+		
 	if not is_menu_visible():
 		return
 	
@@ -647,6 +660,10 @@ func _unhandled_input(event: InputEvent):
 			get_viewport().set_input_as_handled()
 
 func _input(event: InputEvent):
+	# Immediately return if not in tree or if manually hiding
+	if not is_inside_tree() or manually_hiding_submenu:
+		return
+		
 	if not is_menu_visible():
 		return
 	

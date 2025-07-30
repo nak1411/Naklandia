@@ -35,7 +35,6 @@ func _input(event):
 	# Debug key to regenerate sample items
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_F10:
-			print("F10 pressed - regenerating sample items")
 			# Clear all containers completely
 			for container in containers.values():
 				container.clear()
@@ -45,9 +44,7 @@ func _input(event):
 			
 			# Create fresh sample items
 			create_sample_items()
-			print("Sample items regenerated with correct stack sizes")
 		elif event.keycode == KEY_F11:
-			print("F11 pressed - debugging item properties")
 			var player_inv = get_player_inventory()
 			if player_inv:
 				for item in player_inv.items:
@@ -55,7 +52,6 @@ func _input(event):
 						item.item_name, item.item_id, item.quantity, item.max_stack_size, item.is_unique
 					])
 		elif event.keycode == KEY_F12:
-			print("F12 pressed - fixing existing item IDs")
 			var player_inv = get_player_inventory()
 			if player_inv:
 				for item in player_inv.items:
@@ -63,22 +59,18 @@ func _input(event):
 					if item.item_name == "Laser Focusing Crystal":
 						item.item_id = "laser_crystal"
 						item.max_stack_size = 10
-						print("Fixed laser crystal: %s" % item.item_id)
 					# Fix blueprints
 					elif item.item_name == "Frigate Blueprint":
 						item.item_id = "blueprint_frigate"
 						item.max_stack_size = 5
-						print("Fixed blueprint: %s" % item.item_id)
 					# Fix tritanium
 					elif item.item_name == "Tritanium Ore":
 						item.item_id = "tritanium_ore"
 						item.max_stack_size = 1000
-						print("Fixed tritanium: %s" % item.item_id)
 					# Fix ammo
 					elif item.item_name == "Hybrid Charges":
 						item.item_id = "ammo_hybrid"
 						item.max_stack_size = 500
-						print("Fixed ammo: %s" % item.item_id)
 
 func _initialize_default_containers():
 	# Create player inventory (limited space, always accessible)
@@ -618,14 +610,10 @@ func save_inventory():
 		file.store_string(JSON.stringify(save_data))
 		file.close()
 		inventory_saved.emit()
-		print("Inventory saved to: ", save_file_path)
-	else:
-		print("Failed to save inventory!")
 
 func load_inventory():
 	var file = FileAccess.open(save_file_path, FileAccess.READ)
 	if not file:
-		print("No save file found, creating sample items")
 		create_sample_items()
 		return false
 	
@@ -635,7 +623,6 @@ func load_inventory():
 	var json = JSON.new()
 	var parse_result = json.parse(json_string)
 	if parse_result != OK:
-		print("Failed to parse save file!")
 		# If save file is corrupted, create new sample items
 		create_sample_items()
 		return false
@@ -654,7 +641,6 @@ func load_inventory():
 				break
 	
 	if needs_refresh:
-		print("Old save file detected with incorrect stack sizes, creating fresh sample items")
 		create_sample_items()
 		return false
 	
@@ -687,7 +673,6 @@ func load_inventory():
 	auto_sort = settings.get("auto_sort") if settings.has("auto_sort") else false
 	
 	inventory_loaded.emit()
-	print("Inventory loaded from: ", save_file_path)
 	return true
 
 # Public interface for UI
