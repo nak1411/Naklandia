@@ -316,9 +316,16 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	# Track this dialog window
 	open_dialog_windows.append(dialog_window)
 	
-	# Position relative to inventory window
-	var inventory_center = window_parent.position + window_parent.size / 2
-	dialog_window.position = Vector2i(inventory_center - dialog_window.size / 2)
+	# For canvas layers, position relative to screen center instead
+	var screen_size = DisplayServer.screen_get_size()
+	var center_position = Vector2i(screen_size / 2)
+	var dialog_position = center_position - dialog_window.size / 2
+	
+	# Ensure dialog stays within screen bounds
+	dialog_position.x = clamp(dialog_position.x, 50, screen_size.x - dialog_window.size.x - 50)
+	dialog_position.y = clamp(dialog_position.y, 50, screen_size.y - dialog_window.size.y - 50)
+	
+	dialog_window.position = dialog_position
 	
 	# Create content container
 	var vbox = VBoxContainer.new()
@@ -364,8 +371,10 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	dialog_window.popup()
 	dialog_window.grab_focus()
 	
-	# Connect button events
+	# Connect button events with validity checks
 	split_button.pressed.connect(func():
+		if not is_instance_valid(dialog_window) or not dialog_window.is_inside_tree():
+			return
 		var split_amount = int(spinbox.value)
 		inventory_manager.auto_stack = original_auto_stack
 		_perform_split(item, split_amount, original_auto_stack)
@@ -375,6 +384,8 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	)
 	
 	cancel_button.pressed.connect(func():
+		if not is_instance_valid(dialog_window) or not dialog_window.is_inside_tree():
+			return
 		inventory_manager.auto_stack = original_auto_stack
 		_safe_cleanup_dialog(dialog_window)
 		if window_parent and is_instance_valid(window_parent):
@@ -382,6 +393,8 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	)
 	
 	dialog_window.close_requested.connect(func():
+		if not is_instance_valid(dialog_window) or not dialog_window.is_inside_tree():
+			return
 		inventory_manager.auto_stack = original_auto_stack
 		_safe_cleanup_dialog(dialog_window)
 		if window_parent and is_instance_valid(window_parent):
@@ -712,9 +725,19 @@ func _safe_cleanup_dialog(dialog_window: Window):
 	if dialog_window in open_dialog_windows:
 		open_dialog_windows.erase(dialog_window)
 	
-	# Only queue for deletion if it's still valid and not already queued
-	if is_instance_valid(dialog_window) and not dialog_window.is_queued_for_deletion():
-		dialog_window.queue_free()
+	# Disconnect all signals first to prevent input handling on destroyed nodes
+	if is_instance_valid(dialog_window):
+		# Disconnect window signals
+		if dialog_window.close_requested.is_connected(_safe_cleanup_dialog):
+			dialog_window.close_requested.disconnect(_safe_cleanup_dialog)
+		
+		# Remove from scene tree first to stop input processing
+		if dialog_window.get_parent():
+			dialog_window.get_parent().remove_child(dialog_window)
+		
+		# Then queue for deletion
+		if not dialog_window.is_queued_for_deletion():
+			dialog_window.queue_free()
 
 func close_all_dialogs():
 	"""Close all open dialog windows - called when inventory is closed"""
@@ -723,8 +746,18 @@ func close_all_dialogs():
 	open_dialog_windows.clear()
 	
 	for dialog_window in dialogs_to_close:
-		if dialog_window and is_instance_valid(dialog_window) and not dialog_window.is_queued_for_deletion():
-			dialog_window.queue_free()
+		if dialog_window and is_instance_valid(dialog_window):
+			# Disconnect signals first
+			if dialog_window.close_requested.is_connected(_safe_cleanup_dialog):
+				dialog_window.close_requested.disconnect(_safe_cleanup_dialog)
+			
+			# Remove from tree first
+			if dialog_window.get_parent():
+				dialog_window.get_parent().remove_child(dialog_window)
+			
+			# Then queue for deletion
+			if not dialog_window.is_queued_for_deletion():
+				dialog_window.queue_free()
 
 # Public interface for compatibility
 func has_action_method(method_name: String) -> bool:
