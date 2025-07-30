@@ -153,23 +153,27 @@ func _on_cancelled():
 # Dialog management
 func show_dialog(parent: Window = null):
 	"""Show the dialog, optionally centering on a parent window"""
-	if parent:
-		parent_window = parent
-		if center_on_parent:
-			center_on_window(parent)
+	parent_window = parent
 	
-	popup()
+	# Simple center positioning
+	var viewport_size = DisplayServer.window_get_size()
+	var center_pos = (viewport_size - size) / 2
+	position = Vector2i(center_pos)
+	
+	# Make the window visible
+	visible = true
 	grab_focus()
 
 func center_on_window(parent: Window):
 	"""Center this dialog on the specified parent window"""
-	if parent:
-		var parent_center = parent.position + parent.size / 2
-		position = Vector2i(parent_center - size / 2)
+	var viewport_size = DisplayServer.window_get_size()
+	var center_pos = (viewport_size - size) / 2
+	position = Vector2i(center_pos)
 
 func close_dialog():
-	"""Close the dialog and clean up"""
-	visible = false
+	"""Close the dialog window"""
+	if visible:
+		hide()
 	queue_free()
 
 # Utility methods for common dialog types
