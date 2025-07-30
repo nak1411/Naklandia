@@ -7,6 +7,9 @@ extends Control
 @export var default_size: Vector2 = Vector2(800, 600)
 @export var min_window_size: Vector2 = Vector2(400, 300)
 @export var max_window_size: Vector2 = Vector2(1400, 1000)
+@export var can_resize: bool = true
+@export var resize_border_width: float = 8.0
+@export var resize_corner_size: float = 16.0
 
 # UI Components
 var main_container: Control
@@ -31,6 +34,27 @@ var open_containers: Array[InventoryContainer_Base] = []
 var current_container: InventoryContainer_Base
 var is_locked: bool = false
 var last_window_size: Vector2i
+var is_resizing: bool = false
+var resize_mode: ResizeMode = ResizeMode.NONE
+var resize_start_position: Vector2
+var resize_start_size: Vector2
+var resize_start_mouse: Vector2
+
+# Resize overlay
+var resize_overlay: Control
+var resize_areas: Array[Control] = []
+
+enum ResizeMode {
+	NONE,
+	LEFT,
+	RIGHT,
+	TOP,
+	BOTTOM,
+	TOP_LEFT,
+	TOP_RIGHT,
+	BOTTOM_LEFT,
+	BOTTOM_RIGHT
+}
 
 # Options dropdown
 var options_button: Button
@@ -70,6 +94,22 @@ func _process(_delta):
 	if Vector2i(size) != last_window_size:
 		last_window_size = Vector2i(size)
 		_on_size_changed()
+	
+	# Handle resizing
+	if is_resizing and can_resize:
+		_handle_resize()
+		
+func _gui_input(event: InputEvent):
+	if not can_resize or is_locked:
+		return
+	
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed:
+				_handle_resize_start(mouse_event.global_position)
+			else:
+				_handle_resize_end()
 
 func _setup_window_ui():
 	# Main container
@@ -162,6 +202,9 @@ func _setup_window_ui():
 	
 	# Create options dropdown
 	_setup_options_dropdown()
+	
+	if can_resize:
+		_create_resize_overlay()
 	
 func _setup_lock_indicator():
 	# Create lock indicator icon using a label with lock emoji
@@ -594,6 +637,282 @@ func _find_node_recursive(node: Node, target_name: String) -> Node:
 			return result
 	
 	return null
+	
+func _handle_resize_start(mouse_pos: Vector2):
+	var resize_area = _get_resize_area(mouse_pos)
+	if resize_area != ResizeMode.NONE:
+		is_resizing = true
+		resize_mode = resize_area
+		resize_start_position = position
+		resize_start_size = size
+		resize_start_mouse = mouse_pos
+		get_viewport().set_input_as_handled()
+
+func _handle_resize_end():
+	if is_resizing:
+		is_resizing = false
+		resize_mode = ResizeMode.NONE
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+func _handle_resize():
+	if not is_resizing:
+		return
+		
+	var current_mouse = get_viewport().get_mouse_position()
+	var mouse_delta = current_mouse - resize_start_mouse
+	
+	var new_position = resize_start_position
+	var new_size = resize_start_size
+	
+	match resize_mode:
+		ResizeMode.LEFT:
+			new_position.x = resize_start_position.x + mouse_delta.x
+			new_size.x = resize_start_size.x - mouse_delta.x
+		ResizeMode.RIGHT:
+			new_size.x = resize_start_size.x + mouse_delta.x
+		ResizeMode.TOP:
+			new_position.y = resize_start_position.y + mouse_delta.y
+			new_size.y = resize_start_size.y - mouse_delta.y
+		ResizeMode.BOTTOM:
+			new_size.y = resize_start_size.y + mouse_delta.y
+		ResizeMode.TOP_LEFT:
+			new_position.x = resize_start_position.x + mouse_delta.x
+			new_position.y = resize_start_position.y + mouse_delta.y
+			new_size.x = resize_start_size.x - mouse_delta.x
+			new_size.y = resize_start_size.y - mouse_delta.y
+		ResizeMode.TOP_RIGHT:
+			new_position.y = resize_start_position.y + mouse_delta.y
+			new_size.x = resize_start_size.x + mouse_delta.x
+			new_size.y = resize_start_size.y - mouse_delta.y
+		ResizeMode.BOTTOM_LEFT:
+			new_position.x = resize_start_position.x + mouse_delta.x
+			new_size.x = resize_start_size.x - mouse_delta.x
+			new_size.y = resize_start_size.y + mouse_delta.y
+		ResizeMode.BOTTOM_RIGHT:
+			new_size.x = resize_start_size.x + mouse_delta.x
+			new_size.y = resize_start_size.y + mouse_delta.y
+	
+	# Apply minimum and maximum size constraints
+	new_size.x = clampf(new_size.x, min_window_size.x, max_window_size.x)
+	new_size.y = clampf(new_size.y, min_window_size.y, max_window_size.y)
+	
+	# Adjust position if we hit size limits while resizing from top/left
+	if resize_mode in [ResizeMode.LEFT, ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_LEFT]:
+		if new_size.x == min_window_size.x or new_size.x == max_window_size.x:
+			new_position.x = resize_start_position.x + resize_start_size.x - new_size.x
+	
+	if resize_mode in [ResizeMode.TOP, ResizeMode.TOP_LEFT, ResizeMode.TOP_RIGHT]:
+		if new_size.y == min_window_size.y or new_size.y == max_window_size.y:
+			new_position.y = resize_start_position.y + resize_start_size.y - new_size.y
+	
+	# Apply new position and size
+	position = new_position
+	size = new_size
+	
+	# Emit resize signal
+	window_resized.emit(Vector2i(size))
+
+func _get_resize_area(mouse_pos: Vector2) -> ResizeMode:
+	var local_pos = mouse_pos - global_position
+	
+	# Check if mouse is within resize borders
+	var in_left = local_pos.x <= resize_border_width
+	var in_right = local_pos.x >= size.x - resize_border_width
+	var in_top = local_pos.y <= resize_border_width
+	var in_bottom = local_pos.y >= size.y - resize_border_width
+	
+	# Check corners first (they take priority)
+	if in_top and in_left and local_pos.x <= resize_corner_size and local_pos.y <= resize_corner_size:
+		return ResizeMode.TOP_LEFT
+	elif in_top and in_right and local_pos.x >= size.x - resize_corner_size and local_pos.y <= resize_corner_size:
+		return ResizeMode.TOP_RIGHT
+	elif in_bottom and in_left and local_pos.x <= resize_corner_size and local_pos.y >= size.y - resize_corner_size:
+		return ResizeMode.BOTTOM_LEFT
+	elif in_bottom and in_right and local_pos.x >= size.x - resize_corner_size and local_pos.y >= size.y - resize_corner_size:
+		return ResizeMode.BOTTOM_RIGHT
+	
+	# Check edges
+	elif in_left:
+		return ResizeMode.LEFT
+	elif in_right:
+		return ResizeMode.RIGHT
+	elif in_top:
+		return ResizeMode.TOP
+	elif in_bottom:
+		return ResizeMode.BOTTOM
+	
+	return ResizeMode.NONE
+
+func _update_resize_cursor():
+	var mouse_pos = get_viewport().get_mouse_position()
+	var resize_area = _get_resize_area(mouse_pos)
+	
+	match resize_area:
+		ResizeMode.LEFT, ResizeMode.RIGHT:
+			Input.set_default_cursor_shape(Input.CURSOR_HSIZE)
+		ResizeMode.TOP, ResizeMode.BOTTOM:
+			Input.set_default_cursor_shape(Input.CURSOR_VSIZE)
+		ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_RIGHT:
+			Input.set_default_cursor_shape(Input.CURSOR_FDIAGSIZE)
+		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
+			Input.set_default_cursor_shape(Input.CURSOR_BDIAGSIZE)
+		ResizeMode.NONE:
+			if not is_dragging:
+				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+				
+func _create_resize_overlay():
+	# Create invisible overlay for resize detection
+	resize_overlay = Control.new()
+	resize_overlay.name = "ResizeOverlay"
+	resize_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	resize_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	resize_overlay.z_index = 200
+	main_container.add_child(resize_overlay)
+	
+	_create_resize_areas()
+
+func _create_resize_areas():
+	resize_areas.clear()
+	
+	# Left edge
+	var left_area = _create_resize_area("LeftResize", ResizeMode.LEFT)
+	left_area.anchor_left = 0.0
+	left_area.anchor_right = 0.0
+	left_area.anchor_top = 0.0
+	left_area.anchor_bottom = 1.0
+	left_area.offset_right = resize_border_width
+	
+	# Right edge
+	var right_area = _create_resize_area("RightResize", ResizeMode.RIGHT)
+	right_area.anchor_left = 1.0
+	right_area.anchor_right = 1.0
+	right_area.anchor_top = 0.0
+	right_area.anchor_bottom = 1.0
+	right_area.offset_left = -resize_border_width
+	
+	# Top edge
+	var top_area = _create_resize_area("TopResize", ResizeMode.TOP)
+	top_area.anchor_left = 0.0
+	top_area.anchor_right = 1.0
+	top_area.anchor_top = 0.0
+	top_area.anchor_bottom = 0.0
+	top_area.offset_bottom = resize_border_width
+	
+	# Bottom edge
+	var bottom_area = _create_resize_area("BottomResize", ResizeMode.BOTTOM)
+	bottom_area.anchor_left = 0.0
+	bottom_area.anchor_right = 1.0
+	bottom_area.anchor_top = 1.0
+	bottom_area.anchor_bottom = 1.0
+	bottom_area.offset_top = -resize_border_width
+	
+	# Corners
+	var corner_size = resize_border_width * 2
+	
+	# Top-left corner
+	var tl_corner = _create_resize_area("TopLeftCorner", ResizeMode.TOP_LEFT)
+	tl_corner.anchor_left = 0.0
+	tl_corner.anchor_right = 0.0
+	tl_corner.anchor_top = 0.0
+	tl_corner.anchor_bottom = 0.0
+	tl_corner.offset_right = corner_size
+	tl_corner.offset_bottom = corner_size
+	
+	# Top-right corner
+	var tr_corner = _create_resize_area("TopRightCorner", ResizeMode.TOP_RIGHT)
+	tr_corner.anchor_left = 1.0
+	tr_corner.anchor_right = 1.0
+	tr_corner.anchor_top = 0.0
+	tr_corner.anchor_bottom = 0.0
+	tr_corner.offset_left = -corner_size
+	tr_corner.offset_bottom = corner_size
+	
+	# Bottom-left corner
+	var bl_corner = _create_resize_area("BottomLeftCorner", ResizeMode.BOTTOM_LEFT)
+	bl_corner.anchor_left = 0.0
+	bl_corner.anchor_right = 0.0
+	bl_corner.anchor_top = 1.0
+	bl_corner.anchor_bottom = 1.0
+	bl_corner.offset_right = corner_size
+	bl_corner.offset_top = -corner_size
+	
+	# Bottom-right corner
+	var br_corner = _create_resize_area("BottomRightCorner", ResizeMode.BOTTOM_RIGHT)
+	br_corner.anchor_left = 1.0
+	br_corner.anchor_right = 1.0
+	br_corner.anchor_top = 1.0
+	br_corner.anchor_bottom = 1.0
+	br_corner.offset_left = -corner_size
+	br_corner.offset_top = -corner_size
+
+func _create_resize_area(area_name: String, mode: ResizeMode) -> Control:
+	var area = Control.new()
+	area.name = area_name
+	area.mouse_filter = Control.MOUSE_FILTER_PASS
+	
+	# Connect signals
+	area.gui_input.connect(_on_resize_area_input.bind(mode))
+	area.mouse_entered.connect(_on_resize_area_entered.bind(mode))
+	area.mouse_exited.connect(_on_resize_area_exited)
+	
+	resize_overlay.add_child(area)
+	resize_areas.append(area)
+	
+	return area
+
+func _on_resize_area_input(mode: ResizeMode, event: InputEvent):
+	if not can_resize or is_locked:
+		return
+	
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed:
+				_start_resize(mode, mouse_event.global_position)
+			else:
+				_end_resize()
+
+func _on_resize_area_entered(mode: ResizeMode):
+	if not can_resize or is_locked or is_dragging:
+		return
+	
+	match mode:
+		ResizeMode.LEFT, ResizeMode.RIGHT:
+			Input.set_default_cursor_shape(Input.CURSOR_HSIZE)
+		ResizeMode.TOP, ResizeMode.BOTTOM:
+			Input.set_default_cursor_shape(Input.CURSOR_VSIZE)
+		ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_RIGHT:
+			Input.set_default_cursor_shape(Input.CURSOR_FDIAGSIZE)
+		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
+			Input.set_default_cursor_shape(Input.CURSOR_BDIAGSIZE)
+
+func _on_resize_area_exited():
+	if not is_resizing and not is_dragging:
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+func _start_resize(mode: ResizeMode, mouse_pos: Vector2):
+	is_resizing = true
+	resize_mode = mode
+	resize_start_position = position
+	resize_start_size = size
+	resize_start_mouse = mouse_pos
+
+func _end_resize():
+	if is_resizing:
+		is_resizing = false
+		resize_mode = ResizeMode.NONE
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+# Public interface methods
+func set_resizing_enabled(enabled: bool):
+	can_resize = enabled
+	if resize_overlay:
+		resize_overlay.visible = enabled
+	if not enabled and is_resizing:
+		_end_resize()
+
+func get_resizing_enabled() -> bool:
+	return can_resize
 
 # Public interface methods
 func set_inventory_integration(integration):
