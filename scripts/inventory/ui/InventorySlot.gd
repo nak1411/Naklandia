@@ -225,10 +225,10 @@ func _update_visual_state():
 		style_box.bg_color = highlight_color.darkened(0.9)
 	elif is_occupied:
 		style_box.border_color = border_color.lightened(0.3)
-		style_box.bg_color = Color(0.3, 0.3, 0.3, 0.9)
+		style_box.bg_color = Color(0.2, 0.2, 0.2, 1.0)
 	else:
 		style_box.border_color = border_color
-		style_box.bg_color = Color(0.2, 0.2, 0.2, 0.8)
+		style_box.bg_color = Color(0.2, 0.2, 0.2, 1.0)
 	
 	background_panel.add_theme_stylebox_override("panel", style_box)
 
