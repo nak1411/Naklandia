@@ -270,10 +270,6 @@ func _on_gui_input(event: InputEvent):
 		var distance = event.global_position.distance_to(drag_start_position)
 		if distance > drag_threshold and has_item() and not drag_preview_created:
 			_start_drag()
-		
-		# Add volume feedback during drag - only if drag preview exists
-		if drag_preview_created:
-			_update_drag_volume_feedback(event.global_position)
 			
 func _update_drag_volume_feedback(mouse_position: Vector2):
 	"""Update volume feedback while dragging"""
@@ -363,7 +359,10 @@ func _add_partial_transfer_indicator(preview: Control):
 func _create_drag_preview() -> Control:
 	var preview = Control.new()
 	preview.name = "DragPreview"
-	preview.size = size
+	
+	# Make the preview smaller - adjust scale factor as needed
+	var scale_factor = 0.8  # 80% of original size
+	preview.size = size * scale_factor
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
 	# Copy visual elements
@@ -385,14 +384,15 @@ func _create_drag_preview() -> Control:
 	preview_quantity.text = str(item.quantity)
 	preview_quantity.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	preview_quantity.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	# Position relative to preview size, not copying original position
-	preview_quantity.position = Vector2(preview.size.x - 26, preview.size.y - 22)
-	preview_quantity.size = Vector2(24, 20)
+	# Scale position relative to the smaller preview size
+	preview_quantity.position = Vector2(preview.size.x - 28 * scale_factor, preview.size.y - 26 * scale_factor)
+	preview_quantity.size = Vector2(24 * scale_factor, 20 * scale_factor)
 	preview_quantity.add_theme_color_override("font_color", Color.WHITE)
 	preview_quantity.add_theme_color_override("font_shadow_color", Color.BLACK)
 	preview_quantity.add_theme_constant_override("shadow_offset_x", 1)
 	preview_quantity.add_theme_constant_override("shadow_offset_y", 1)
-	preview_quantity.add_theme_font_size_override("font_size", 16)
+	# Scale font size as well
+	preview_quantity.add_theme_font_size_override("font_size", int(18 * scale_factor))
 	preview.add_child(preview_quantity)
 	
 	return preview
