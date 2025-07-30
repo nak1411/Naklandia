@@ -4,14 +4,14 @@ extends Control
 
 # Grid properties
 @export var slot_size: Vector2 = Vector2(64, 64)
-@export var slot_spacing: int = 8
+@export var slot_spacing: int = 0
 @export var min_grid_width: int = 10  # Minimum grid width
 @export var min_grid_height: int = 10  # Minimum grid height
 @export var slots_per_row_expansion: int = 2  # How many columns to add when expanding
 
 # Visual properties
-@export var background_color: Color = Color(0.2, 0.2, 0.2, 1.0)
-@export var grid_line_color: Color = Color(0.2, 0.2, 0.2, 1.0)
+@export var background_color: Color = Color(0.1, 0.1, 0.1, 1.0)
+@export var grid_line_color: Color = Color(0.1, 0.1, 0.1, 1.0)
 @export var grid_line_width: float = 1.0
 
 # Container reference
@@ -64,8 +64,8 @@ func _setup_grid():
 	grid_container = GridContainer.new()
 	grid_container.name = "GridContainer"
 	grid_container.columns = current_grid_width
-	grid_container.add_theme_constant_override("h_separation", slot_spacing)
-	grid_container.add_theme_constant_override("v_separation", slot_spacing)
+	grid_container.add_theme_constant_override("h_separation", 0)
+	grid_container.add_theme_constant_override("v_separation", 0)
 	grid_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	background_panel.add_child(grid_container)
 	

@@ -43,7 +43,7 @@ var min_grid_size: Vector2i = Vector2i(8, 6)
 var title_bar_height: float = 32.0
 var border_width: float = 2.0
 var title_bar_color: Color = Color(0.15, 0.15, 0.15, 1.0)
-var border_color: Color = Color(0.2, 0.2, 0.2, 1.0)
+var border_color: Color = Color(0.4, 0.4, 0.4, 1.0)
 var background_color: Color = Color(0.2, 0.2, 0.2, 1.0)
 
 # Signals

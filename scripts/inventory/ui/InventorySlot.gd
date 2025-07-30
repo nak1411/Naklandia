@@ -60,12 +60,21 @@ func _setup_visual_components():
 	# Style the background
 	var style_box = StyleBoxFlat.new()
 	style_box.bg_color = Color(0.2, 0.2, 0.2, 1.0)
-	style_box.border_width_left = border_width
-	style_box.border_width_right = border_width
-	style_box.border_width_top = border_width
-	style_box.border_width_bottom = border_width
-	style_box.border_color = border_color
+	style_box.border_width_left = 0
+	style_box.border_width_right = 0
+	style_box.border_width_top = 0
+	style_box.border_width_bottom = 0
 	background_panel.add_theme_stylebox_override("panel", style_box)
+	
+	# Create a content container with margins for spacing
+	var content_container = Control.new()
+	content_container.name = "ContentContainer"
+	# Add margins to create visual spacing (adjust these values as needed)
+	content_container.set_offsets_preset(Control.PRESET_FULL_RECT)
+	content_container.position = Vector2(8, 8)  # Top-left margin
+	content_container.size = slot_size - Vector2(8, 8)  # Reduce size by margin amount
+	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(content_container)
 	
 	# Item icon
 	item_icon = TextureRect.new()
@@ -74,7 +83,7 @@ func _setup_visual_components():
 	item_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	item_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	item_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(item_icon)
+	content_container.add_child(item_icon)
 	
 	# Quantity background panel (black background square)
 	quantity_bg = Panel.new()
@@ -217,11 +226,14 @@ func _update_visual_state():
 	
 	var style_box = background_panel.get_theme_stylebox("panel").duplicate() as StyleBoxFlat
 	
+	style_box.border_width_left = 0
+	style_box.border_width_right = 0
+	style_box.border_width_top = 0
+	style_box.border_width_bottom = 0
+	
 	if is_selected:
-		style_box.border_color = selection_color
 		style_box.bg_color = selection_color.darkened(0.8)
 	elif is_highlighted:
-		style_box.border_color = highlight_color
 		style_box.bg_color = highlight_color.darkened(0.9)
 	elif is_occupied:
 		style_box.border_color = border_color.lightened(0.3)
