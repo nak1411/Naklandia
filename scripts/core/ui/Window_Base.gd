@@ -1,4 +1,4 @@
-# Window_Base.gd - Updated custom window implementation with debugging
+# Window_Base.gd - Updated custom window implementation
 class_name Window_Base
 extends Window
 
@@ -8,9 +8,6 @@ extends Window
 @export var can_close: bool = true
 @export var can_minimize: bool = true
 @export var can_maximize: bool = true
-@export var can_resize: bool = true
-@export var resize_border_width: float = 8.0
-@export var resize_corner_size: float = 16.0
 
 # Visual properties
 @export var title_bar_height: float = 32.0
@@ -38,7 +35,6 @@ var content_background: Panel
 
 # State
 var is_dragging: bool = false
-var is_resizing: bool = false
 var drag_start_position: Vector2i
 var drag_start_window_position: Vector2i
 var is_window_focused: bool = true
@@ -47,26 +43,6 @@ var restore_position: Vector2i
 var restore_size: Vector2i
 var window_locked: bool = false
 var window_transparency: float = 1.0
-var resize_mode: ResizeMode = ResizeMode.NONE
-var resize_start_position: Vector2i
-var resize_start_size: Vector2i
-var resize_start_mouse: Vector2i
-
-# Resize overlay controls
-var resize_overlay: Control
-var resize_areas: Array[Control] = []
-
-enum ResizeMode {
-	NONE,
-	LEFT,
-	RIGHT,
-	TOP,
-	BOTTOM,
-	TOP_LEFT,
-	TOP_RIGHT,
-	BOTTOM_LEFT,
-	BOTTOM_RIGHT
-}
 
 # Signals
 signal window_closed()
@@ -90,7 +66,6 @@ func _init():
 	# Connect window signals
 	focus_entered.connect(_on_window_focus_entered)
 	focus_exited.connect(_on_window_focus_exited)
-	
 
 func _ready():
 	_setup_custom_ui()
@@ -104,38 +79,8 @@ func _process(_delta):
 	if is_dragging and can_drag:
 		var current_mouse_pos = Vector2i(get_viewport().get_mouse_position())
 		position += current_mouse_pos - drag_start_position
-	
-	# Handle resizing
-	elif is_resizing and can_resize:
-		print("_process: handling resize")
-		_handle_resize()
-		
-func _input(event: InputEvent):
-	# Only handle if we're currently resizing
-	if is_resizing and event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
-			_handle_resize_end()
-			get_viewport().set_input_as_handled()
-		
-func _unhandled_input(event: InputEvent):
-	if not can_resize or window_locked or is_maximized:
-		return
-	
-	if event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			if mouse_event.pressed:
-				_handle_resize_start(mouse_event.global_position)
-			else:
-				_handle_resize_end()
-	elif event is InputEventMouseMotion:
-		# Handle cursor updates on mouse motion
-		if not is_resizing and not is_dragging:
-			_update_resize_cursor()
 
 func _setup_custom_ui():
-	print("_setup_custom_ui() called BASE WINDOW")
 	# Main container fills the entire window
 	main_container = Control.new()
 	main_container.name = "MainContainer"
@@ -165,17 +110,14 @@ func _setup_custom_ui():
 	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title_label.add_theme_color_override("font_color", Color.WHITE)
 	title_label.add_theme_font_size_override("font_size", 12)
-	title_label.position = Vector2(12, 0)
+	title_label.position = Vector2(8, 0)
 	title_label.size = Vector2(200, title_bar_height)
-	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Let title bar handle input
 	title_bar.add_child(title_label)
 	
 	# Window control buttons
-	_create_window_buttons()
+	_setup_window_buttons()
 	
-	# Content area (below title bar) - adjust position and size
-	content_area = Control.new()
-	content_area.name = "ContentArea"
+	# Content area - fills remaining space below title bar
 	content_area = Control.new()
 	content_area.name = "ContentArea"
 	content_area.anchor_left = 0.0
@@ -183,49 +125,41 @@ func _setup_custom_ui():
 	content_area.anchor_right = 1.0
 	content_area.anchor_bottom = 1.0
 	content_area.offset_top = title_bar_height
-	content_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content_area.z_index = 1  # Below title bar
+	content_area.mouse_filter = Control.MOUSE_FILTER_PASS
 	main_container.add_child(content_area)
 	
-	# Create a separate background panel that we can control transparency on
+	# Background for content area
 	content_background = Panel.new()
 	content_background.name = "ContentBackground"
 	content_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	
-	# Style the background panel
-	var bg_style = StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.1, 0.1, 0.1, 1.0)
-	content_background.add_theme_stylebox_override("panel", bg_style)
-	
 	content_area.add_child(content_background)
 	
-	if can_resize:
-		_create_resize_overlay()
-
-func add_content(content: Control):
+	# Style content background
+	var content_style = StyleBoxFlat.new()
+	content_style.bg_color = Color(0.2, 0.2, 0.2, 1.0)
+	content_style.border_width_left = int(border_width)
+	content_style.border_width_right = int(border_width)
+	content_style.border_width_bottom = int(border_width)
+	content_style.border_color = border_color
 	
-	if not content_area:
-		return
-		
-	if not content:
-		return
+	if corner_radius > 0:
+		content_style.corner_radius_bottom_left = int(corner_radius)
+		content_style.corner_radius_bottom_right = int(corner_radius)
 	
-	content_area.add_child(content)
+	content_background.add_theme_stylebox_override("panel", content_style)
 
-func _create_window_buttons():	
+func _setup_window_buttons():
 	var button_size = Vector2(title_bar_height - 4, title_bar_height - 4)
 	var button_y = 2
 	var button_spacing = button_size.x + 2
-	
-	# Calculate starting X position (from right edge)
 	var start_x = size.x - button_spacing
 	
-	# Close button (rightmost)
+	# Close button
 	if can_close:
 		close_button = Button.new()
 		close_button.name = "CloseButton"
-		close_button.text = "✕"
+		close_button.text = "×"
 		close_button.size = button_size
 		close_button.position = Vector2(start_x, button_y)
 		close_button.flat = true
@@ -308,15 +242,7 @@ func _on_title_bar_input(event: InputEvent):
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
-				# Check for resize area first
-				if can_resize:
-					var resize_area = _get_resize_area(mouse_event.global_position)
-					if resize_area != ResizeMode.NONE:
-						_handle_resize_start(mouse_event.global_position)
-						get_viewport().set_input_as_handled()
-						return
-				
-				# If not resizing and can drag, start dragging
+				# If can drag, start dragging
 				if can_drag:
 					is_dragging = true
 					drag_start_position = get_viewport().get_mouse_position()
@@ -324,10 +250,8 @@ func _on_title_bar_input(event: InputEvent):
 					Input.set_default_cursor_shape(Input.CURSOR_MOVE)
 					get_viewport().set_input_as_handled()
 			else:
-				# Handle mouse release for both dragging and resizing
-				if is_resizing:
-					_handle_resize_end()
-				elif is_dragging:
+				# Handle mouse release for dragging
+				if is_dragging:
 					is_dragging = false
 					Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 		elif mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.double_click:
@@ -338,10 +262,6 @@ func _on_title_bar_input(event: InputEvent):
 				else:
 					maximize_window()
 				get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion:
-		# Update cursor based on position
-		if not is_dragging and not is_resizing and can_resize:
-			_update_resize_cursor()
 
 # Window button handlers
 func _on_close_button_pressed():
@@ -458,6 +378,13 @@ func set_transparency(value: float):
 func get_content_area() -> Control:
 	return content_area
 
+func add_content(content_node: Control):
+	"""Add a control node to the window's content area"""
+	if content_area:
+		content_area.add_child(content_node)
+	else:
+		push_error("Window_Base: Content area not available for adding content")
+
 # Size change handling (for derived classes)
 func _on_size_changed():
 	# Update button positions when window is resized
@@ -483,317 +410,3 @@ func _update_button_positions():
 	
 	if minimize_button:
 		minimize_button.position.x = start_x
-		
-func _handle_resize_start(mouse_pos: Vector2):
-	var resize_area = _get_resize_area(mouse_pos)
-	if resize_area != ResizeMode.NONE:
-		is_resizing = true
-		resize_mode = resize_area
-		resize_start_position = position
-		resize_start_size = size
-		resize_start_mouse = Vector2i(mouse_pos)
-		get_viewport().set_input_as_handled()
-
-func _handle_resize_end():
-	if is_resizing:
-		is_resizing = false
-		resize_mode = ResizeMode.NONE
-		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-
-func _handle_resize():
-	if not is_resizing:
-		return
-		
-	var current_mouse = Vector2i(get_viewport().get_mouse_position())
-	var mouse_delta = current_mouse - resize_start_mouse
-	
-	print("Handling resize - mouse_delta: ", mouse_delta, " mode: ", resize_mode)
-	
-	var new_position = resize_start_position
-	var new_size = resize_start_size
-	
-	match resize_mode:
-		ResizeMode.LEFT:
-			new_position.x = resize_start_position.x + mouse_delta.x
-			new_size.x = resize_start_size.x - mouse_delta.x
-		ResizeMode.RIGHT:
-			new_size.x = resize_start_size.x + mouse_delta.x
-		ResizeMode.TOP:
-			new_position.y = resize_start_position.y + mouse_delta.y
-			new_size.y = resize_start_size.y - mouse_delta.y
-		ResizeMode.BOTTOM:
-			new_size.y = resize_start_size.y + mouse_delta.y
-		ResizeMode.TOP_LEFT:
-			new_position.x = resize_start_position.x + mouse_delta.x
-			new_position.y = resize_start_position.y + mouse_delta.y
-			new_size.x = resize_start_size.x - mouse_delta.x
-			new_size.y = resize_start_size.y - mouse_delta.y
-		ResizeMode.TOP_RIGHT:
-			new_position.y = resize_start_position.y + mouse_delta.y
-			new_size.x = resize_start_size.x + mouse_delta.x
-			new_size.y = resize_start_size.y - mouse_delta.y
-		ResizeMode.BOTTOM_LEFT:
-			new_position.x = resize_start_position.x + mouse_delta.x
-			new_size.x = resize_start_size.x - mouse_delta.x
-			new_size.y = resize_start_size.y + mouse_delta.y
-		ResizeMode.BOTTOM_RIGHT:
-			new_size.x = resize_start_size.x + mouse_delta.x
-			new_size.y = resize_start_size.y + mouse_delta.y
-	
-	# Apply minimum size constraints
-	new_size.x = maxi(new_size.x, min_size.x)
-	new_size.y = maxi(new_size.y, min_size.y)
-	
-	# Adjust position if we hit minimum size while resizing from top/left
-	if resize_mode in [ResizeMode.LEFT, ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_LEFT]:
-		if new_size.x == min_size.x:
-			new_position.x = resize_start_position.x + resize_start_size.x - min_size.x
-	
-	if resize_mode in [ResizeMode.TOP, ResizeMode.TOP_LEFT, ResizeMode.TOP_RIGHT]:
-		if new_size.y == min_size.y:
-			new_position.y = resize_start_position.y + resize_start_size.y - min_size.y
-	
-	print("Setting new position: ", new_position, " new size: ", new_size)
-	
-	# Apply new position and size
-	position = new_position
-	size = new_size
-
-func _get_resize_area(mouse_pos: Vector2) -> ResizeMode:
-	# Convert global mouse position to window-local coordinates
-	var window_rect = Rect2(Vector2(position), Vector2(size))
-	
-	# Check if mouse is within window bounds
-	if not window_rect.has_point(mouse_pos):
-		return ResizeMode.NONE
-	
-	# Get position relative to window
-	var local_pos = mouse_pos - Vector2(position)
-	var window_size = Vector2(size)
-	
-	# Make sure we're not in the title bar area (except for top resize)
-	if local_pos.y <= title_bar_height and local_pos.y > resize_border_width:
-		# In title bar, only allow top resize at the very edge
-		if local_pos.y > resize_border_width:
-			return ResizeMode.NONE
-	
-	# Check if mouse is within resize borders
-	var in_left = local_pos.x <= resize_border_width
-	var in_right = local_pos.x >= window_size.x - resize_border_width
-	var in_top = local_pos.y <= resize_border_width
-	var in_bottom = local_pos.y >= window_size.y - resize_border_width
-	
-	# Check corners first (they take priority)
-	if in_top and in_left and local_pos.x <= resize_corner_size and local_pos.y <= resize_corner_size:
-		return ResizeMode.TOP_LEFT
-	elif in_top and in_right and local_pos.x >= window_size.x - resize_corner_size and local_pos.y <= resize_corner_size:
-		return ResizeMode.TOP_RIGHT
-	elif in_bottom and in_left and local_pos.x <= resize_corner_size and local_pos.y >= window_size.y - resize_corner_size:
-		return ResizeMode.BOTTOM_LEFT
-	elif in_bottom and in_right and local_pos.x >= window_size.x - resize_corner_size and local_pos.y >= window_size.y - resize_corner_size:
-		return ResizeMode.BOTTOM_RIGHT
-	
-	# Check edges
-	elif in_left:
-		return ResizeMode.LEFT
-	elif in_right:
-		return ResizeMode.RIGHT
-	elif in_top:
-		return ResizeMode.TOP
-	elif in_bottom:
-		return ResizeMode.BOTTOM
-	
-	return ResizeMode.NONE
-
-func _update_resize_cursor():
-	var mouse_pos = get_viewport().get_mouse_position()
-	var resize_area = _get_resize_area(mouse_pos)
-	
-	match resize_area:
-		ResizeMode.LEFT, ResizeMode.RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_HSIZE)
-		ResizeMode.TOP, ResizeMode.BOTTOM:
-			Input.set_default_cursor_shape(Input.CURSOR_VSIZE)
-		ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_FDIAGSIZE)
-		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
-			Input.set_default_cursor_shape(Input.CURSOR_BDIAGSIZE)
-		ResizeMode.NONE:
-			Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-			
-func _create_resize_overlay():
-	# Create invisible overlay for resize detection
-	resize_overlay = Control.new()
-	resize_overlay.name = "ResizeOverlay"
-	resize_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	resize_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	resize_overlay.z_index = 200  # Above everything else
-	main_container.add_child(resize_overlay)
-	
-	# Create resize areas
-	_create_resize_areas()
-
-func _create_resize_areas():
-	resize_areas.clear()
-	
-	# Left edge
-	var left_area = _create_resize_area("LeftResize", ResizeMode.LEFT)
-	left_area.anchor_left = 0.0
-	left_area.anchor_right = 0.0
-	left_area.anchor_top = 0.0
-	left_area.anchor_bottom = 1.0
-	left_area.offset_right = resize_border_width
-	
-	# Right edge  
-	var right_area = _create_resize_area("RightResize", ResizeMode.RIGHT)
-	right_area.anchor_left = 1.0
-	right_area.anchor_right = 1.0
-	right_area.anchor_top = 0.0
-	right_area.anchor_bottom = 1.0
-	right_area.offset_left = -resize_border_width
-	
-	# Top edge
-	var top_area = _create_resize_area("TopResize", ResizeMode.TOP)
-	top_area.anchor_left = 0.0
-	top_area.anchor_right = 1.0
-	top_area.anchor_top = 0.0
-	top_area.anchor_bottom = 0.0
-	top_area.offset_bottom = resize_border_width
-	
-	# Bottom edge
-	var bottom_area = _create_resize_area("BottomResize", ResizeMode.BOTTOM)
-	bottom_area.anchor_left = 0.0
-	bottom_area.anchor_right = 1.0
-	bottom_area.anchor_top = 1.0
-	bottom_area.anchor_bottom = 1.0
-	bottom_area.offset_top = -resize_border_width
-	
-	# Corners (higher priority)
-	var corner_size = resize_border_width * 2
-	
-	# Top-left corner
-	var tl_corner = _create_resize_area("TopLeftCorner", ResizeMode.TOP_LEFT)
-	tl_corner.anchor_left = 0.0
-	tl_corner.anchor_right = 0.0
-	tl_corner.anchor_top = 0.0
-	tl_corner.anchor_bottom = 0.0
-	tl_corner.offset_right = corner_size
-	tl_corner.offset_bottom = corner_size
-	
-	# Top-right corner
-	var tr_corner = _create_resize_area("TopRightCorner", ResizeMode.TOP_RIGHT)
-	tr_corner.anchor_left = 1.0
-	tr_corner.anchor_right = 1.0
-	tr_corner.anchor_top = 0.0
-	tr_corner.anchor_bottom = 0.0
-	tr_corner.offset_left = -corner_size
-	tr_corner.offset_bottom = corner_size
-	
-	# Bottom-left corner
-	var bl_corner = _create_resize_area("BottomLeftCorner", ResizeMode.BOTTOM_LEFT)
-	bl_corner.anchor_left = 0.0
-	bl_corner.anchor_right = 0.0
-	bl_corner.anchor_top = 1.0
-	bl_corner.anchor_bottom = 1.0
-	bl_corner.offset_right = corner_size
-	bl_corner.offset_top = -corner_size
-	
-	# Bottom-right corner
-	var br_corner = _create_resize_area("BottomRightCorner", ResizeMode.BOTTOM_RIGHT)
-	br_corner.anchor_left = 1.0
-	br_corner.anchor_right = 1.0
-	br_corner.anchor_top = 1.0
-	br_corner.anchor_bottom = 1.0
-	br_corner.offset_left = -corner_size
-	br_corner.offset_top = -corner_size
-
-func _create_resize_area(area_name: String, mode: ResizeMode) -> Control:
-	var area = Control.new()
-	area.name = area_name
-	area.mouse_filter = Control.MOUSE_FILTER_PASS
-	area.set_meta("resize_mode", mode)
-	
-	# Debug: Make resize areas visible temporarily
-	var debug_style = StyleBoxFlat.new()
-	debug_style.bg_color = Color(1, 0, 0, 0.3)  # Semi-transparent red
-	var debug_panel = Panel.new()
-	debug_panel.add_theme_stylebox_override("panel", debug_style)
-	debug_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	debug_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	area.add_child(debug_panel)
-	
-	# Connect signals
-	area.gui_input.connect(_on_resize_area_input.bind(mode))
-	area.mouse_entered.connect(_on_resize_area_entered.bind(mode))
-	area.mouse_exited.connect(_on_resize_area_exited)
-	
-	resize_overlay.add_child(area)
-	resize_areas.append(area)
-	
-	print("Created resize area: ", area_name, " with mode: ", mode)
-	
-	return area
-
-
-func _on_resize_area_input(mode: ResizeMode, event: InputEvent):
-	print("Resize area input received: ", mode, " event: ", event)
-	
-	if not can_resize or window_locked or is_maximized:
-		print("Resize blocked - can_resize: ", can_resize, " locked: ", window_locked, " maximized: ", is_maximized)
-		return
-	
-	if event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			if mouse_event.pressed:
-				print("Starting resize with mode: ", mode)
-				_start_resize(mode, mouse_event.global_position)
-			else:
-				print("Ending resize")
-				_end_resize()
-
-func _on_resize_area_entered(mode: ResizeMode):
-	print("Mouse entered resize area: ", mode)
-	
-	if not can_resize or window_locked or is_maximized or is_dragging:
-		return
-	
-	match mode:
-		ResizeMode.LEFT, ResizeMode.RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_HSIZE)
-		ResizeMode.TOP, ResizeMode.BOTTOM:
-			Input.set_default_cursor_shape(Input.CURSOR_VSIZE)
-		ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_FDIAGSIZE)
-		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
-			Input.set_default_cursor_shape(Input.CURSOR_BDIAGSIZE)
-
-func _on_resize_area_exited():
-	if not is_resizing and not is_dragging:
-		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-
-func _start_resize(mode: ResizeMode, mouse_pos: Vector2):
-	print("_start_resize called with mode: ", mode, " at position: ", mouse_pos)
-	is_resizing = true
-	resize_mode = mode
-	resize_start_position = position
-	resize_start_size = size
-	resize_start_mouse = Vector2i(mouse_pos)
-
-func _end_resize():
-	if is_resizing:
-		is_resizing = false
-		resize_mode = ResizeMode.NONE
-		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-
-
-# Add public interface methods:
-func set_resizing_enabled(enabled: bool):
-	can_resize = enabled
-	if resize_overlay:
-		resize_overlay.visible = enabled
-	if not enabled and is_resizing:
-		_end_resize()
-
-func get_resizing_enabled() -> bool:
-	return can_resize
