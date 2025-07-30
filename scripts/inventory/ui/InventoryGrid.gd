@@ -10,7 +10,7 @@ extends Control
 @export var slots_per_row_expansion: int = 2  # How many columns to add when expanding
 
 # Visual properties
-@export var background_color: Color = Color(0.1, 0.1, 0.1, 0.9)
+@export var background_color: Color = Color(0.2, 0.2, 0.2, 1.0)
 @export var grid_line_color: Color = Color(0.3, 0.3, 0.3, 0.5)
 @export var grid_line_width: float = 1.0
 

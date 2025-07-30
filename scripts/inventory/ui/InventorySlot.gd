@@ -4,8 +4,8 @@ extends Control
 
 # Slot properties
 @export var slot_size: Vector2 = Vector2(64, 64)
-@export var border_color: Color = Color.GRAY
-@export var border_width: float = 2.0
+@export var border_color: Color = Color(0.2, 0.2, 0.2, 1.0)
+@export var border_width: float = 0.0
 @export var highlight_color: Color = Color.YELLOW
 @export var selection_color: Color = Color.CYAN
 
@@ -59,16 +59,12 @@ func _setup_visual_components():
 	
 	# Style the background
 	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color(0.2, 0.2, 0.2, 0.8)
+	style_box.bg_color = Color(0.2, 0.2, 0.2, 1.0)
 	style_box.border_width_left = border_width
 	style_box.border_width_right = border_width
 	style_box.border_width_top = border_width
 	style_box.border_width_bottom = border_width
 	style_box.border_color = border_color
-	style_box.corner_radius_top_left = 4
-	style_box.corner_radius_top_right = 4
-	style_box.corner_radius_bottom_left = 4
-	style_box.corner_radius_bottom_right = 4
 	background_panel.add_theme_stylebox_override("panel", style_box)
 	
 	# Item icon
