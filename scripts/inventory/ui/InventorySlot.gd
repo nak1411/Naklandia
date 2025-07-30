@@ -125,39 +125,6 @@ func set_item(new_item: InventoryItem_Base):
 	if visible:
 		queue_redraw()
 		
-func _can_accept_item_volume_check(incoming_item: InventoryItem_Base) -> bool:
-	"""Check if this slot can accept an item based on volume constraints"""
-	var inventory_manager = _get_inventory_manager()
-	if not inventory_manager:
-		return false
-	
-	var target_container = inventory_manager.get_container(container_id)
-	if not target_container:
-		return false
-	
-	# If slot is empty, check if container has volume for the item
-	if not has_item():
-		return target_container.has_volume_for_item(incoming_item)
-	
-	# If slot has item, check if they can stack
-	if item.can_stack_with(incoming_item):
-		var combined_quantity = item.quantity + incoming_item.quantity
-		if combined_quantity <= item.max_stack_size:
-			# For stacking, we don't need additional volume since we're combining items
-			# The incoming item's volume will be "absorbed" into the existing stack
-			return true
-	
-	# For swapping items, check if we have enough volume
-	# Remove current item volume, add incoming item volume
-	var volume_difference = incoming_item.get_total_volume() - item.get_total_volume()
-	
-	if volume_difference <= 0:
-		# Incoming item is smaller or same size, always fits
-		return true
-	else:
-		# Incoming item is larger, check if we have enough extra volume
-		return target_container.get_available_volume() >= volume_difference
-		
 func _show_volume_feedback(can_drop: bool):
 	"""Show visual feedback for volume constraints during drag"""
 	if can_drop:
@@ -185,49 +152,8 @@ func has_item() -> bool:
 	return item != null
 
 # Visual updates
-func _update_item_display():
-	if not item:
-		if item_icon:
-			item_icon.texture = null
-			item_icon.visible = false
-		if quantity_label:
-			quantity_label.text = ""
-			quantity_label.visible = false
-		if rarity_border:
-			rarity_border.visible = false
-		tooltip_text = ""
-		return
-	
-	# Set icon
-	var icon_texture = item.get_icon_texture()
-	if icon_texture:
-		item_icon.texture = icon_texture
-		item_icon.visible = true
-	else:
-		_create_fallback_icon()
-		item_icon.visible = true
-	
-	# Always show quantity for any amount > 1
-	if item.quantity > 1:
-		quantity_label.text = str(item.quantity)
-		quantity_label.visible = true
-	else:
-		quantity_label.text = "1"
-		quantity_label.visible = true
-	
-	# Set rarity border
-	if rarity_border:
-		if item.item_rarity != InventoryItem_Base.ItemRarity.COMMON:
-			_show_rarity_border()
-		else:
-			rarity_border.visible = false
-	
-	# Set tooltip
-	_update_tooltip()
-	
-	queue_redraw()
-
 func _create_fallback_icon():
+	"""Create a fallback icon when no icon texture is available"""
 	var image = Image.create(64, 64, false, Image.FORMAT_RGB8)
 	var type_color = item.get_type_color()
 	image.fill(type_color)
@@ -534,43 +460,151 @@ func _handle_drag_end(end_position: Vector2):
 	drag_preview_created = false
 	
 func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
+	print("=== CONTAINER LIST DROP DEBUG ===")
+	
 	var content = _find_inventory_content()
 	if not content:
+		print("ERROR: No inventory content found")
 		return false
 	
 	var container_list = content.container_list
 	if not container_list:
+		print("ERROR: No container list found")
 		return false
 	
 	var container_rect = Rect2(container_list.global_position, container_list.size)
 	
 	if not container_rect.has_point(end_position):
+		print("Drop position not in container list bounds")
 		return false
 	
 	var local_pos = end_position - container_list.global_position
 	var item_index = container_list.get_item_at_position(local_pos, true)
 	
 	if item_index == -1 or item_index >= content.open_containers.size():
+		print("ERROR: Invalid item index: ", item_index)
 		return false
 	
 	var target_container = content.open_containers[item_index]
 	
 	if target_container.container_id == container_id:
-		return false
-	
-	if not target_container.can_add_item(item):
+		print("Same container - skipping")
 		return false
 	
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
+		print("ERROR: No inventory manager")
 		return false
 	
-	if inventory_manager.transfer_item(item, container_id, target_container.container_id):
+	print("Target container: ", target_container.container_name)
+	print("Source item: ", item.item_name, " (qty: ", item.quantity, ")")
+	print("Item volume per unit: ", item.volume)
+	print("Total item volume: ", item.get_total_volume())
+	print("Target container current volume: ", target_container.get_current_volume())
+	print("Target container max volume: ", target_container.max_volume)
+	print("Target container available volume: ", target_container.get_available_volume())
+	
+	# Store original quantity for safety
+	var original_quantity = item.quantity
+	
+	# Check if we can add the entire stack
+	if target_container.can_add_item(item):
+		print("Can add entire stack - transferring all")
+		var success = inventory_manager.transfer_item(item, container_id, target_container.container_id)
+		if success:
+			if content.has_method("refresh_display"):
+				content.refresh_display()
+			print("Full transfer SUCCESS")
+			return true
+		else:
+			print("Full transfer FAILED")
+			# Make sure quantity is restored
+			item.quantity = original_quantity
+			return false
+	
+	# Can't add entire stack - try partial transfer
+	print("Cannot add entire stack - calculating partial transfer")
+	
+	var available_volume = target_container.get_available_volume()
+	var item_volume_per_unit = item.volume
+	
+	if item_volume_per_unit <= 0:
+		print("Item has zero volume - should allow full transfer but can_add_item failed")
+		return false
+	
+	var max_transferable = int(available_volume / item_volume_per_unit)
+	print("Max transferable by volume: ", max_transferable)
+	
+	if max_transferable <= 0:
+		print("No space for even 1 item")
+		_show_volume_error("Target container is full")
+		return false
+	
+	if max_transferable >= original_quantity:
+		print("ERROR: max_transferable >= original_quantity, but can_add_item failed - this shouldn't happen")
+		return false
+	
+	# Do the partial transfer using direct quantity management instead of relying on split_stack
+	print("Attempting SAFE partial transfer of ", max_transferable, " items")
+	
+	# Create a temporary item for transfer (don't modify the original yet)
+	var temp_transfer_item = InventoryItem_Base.new()
+	temp_transfer_item.item_id = item.item_id
+	temp_transfer_item.item_name = item.item_name
+	temp_transfer_item.description = item.description
+	temp_transfer_item.icon_path = item.icon_path
+	temp_transfer_item.volume = item.volume
+	temp_transfer_item.mass = item.mass
+	temp_transfer_item.quantity = max_transferable
+	temp_transfer_item.max_stack_size = item.max_stack_size
+	temp_transfer_item.item_type = item.item_type
+	temp_transfer_item.item_rarity = item.item_rarity
+	temp_transfer_item.is_contraband = item.is_contraband
+	temp_transfer_item.base_value = item.base_value
+	temp_transfer_item.can_be_destroyed = item.can_be_destroyed
+	temp_transfer_item.is_unique = item.is_unique
+	temp_transfer_item.is_container = item.is_container
+	temp_transfer_item.container_volume = item.container_volume
+	temp_transfer_item.container_type = item.container_type
+	
+	# Double-check that the target container can accept this specific amount
+	if not target_container.can_add_item(temp_transfer_item):
+		print("ERROR: Target container cannot accept the calculated transfer amount")
+		return false
+	
+	# Get source container
+	var source_container = inventory_manager.get_container(container_id)
+	if not source_container:
+		print("ERROR: Source container not found")
+		return false
+	
+	# Try to add the temporary item to target container first (safest approach)
+	var add_success = target_container.add_item(temp_transfer_item)
+	if add_success:
+		# Success! Now reduce the original item's quantity
+		item.quantity -= max_transferable
+		item.quantity_changed.emit(item.quantity)
+		
+		print("SAFE partial transfer SUCCESS! Transferred: ", max_transferable, ", Remaining: ", item.quantity)
+		
+		if item.quantity <= 0:
+			# This shouldn't happen with partial transfer, but handle it
+			print("WARNING: No items remaining after partial transfer")
+			source_container.remove_item(item)
+			clear_item()
+		else:
+			# Update display with remaining items
+			refresh_display()
+			_show_transfer_feedback(max_transferable, item.quantity)
+		
 		if content.has_method("refresh_display"):
 			content.refresh_display()
+		
 		return true
-	
-	return false
+	else:
+		print("SAFE partial transfer FAILED - target container couldn't accept the item")
+		# No need to restore anything since we didn't modify the original item
+		return false
 	
 func _cleanup_all_drag_previews():
 	"""Clean up any existing drag previews in the scene"""
@@ -653,24 +687,304 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	if not target_slot or not has_item():
 		return false
 	
-	# Check for shift+drop with stackable items - open split dialog
-	if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
-		_show_split_stack_dialog()
-		return true
-	
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
 		return false
 	
-	# Volume-based validation instead of position-based
-	if not target_slot._can_accept_item_volume_check(item):
+	# Same container - use existing logic
+	if target_slot.container_id == container_id:
+		return _handle_same_container_drop(target_slot)
+	
+	# Different containers - check volume-based partial transfer
+	var target_container = inventory_manager.get_container(target_slot.container_id)
+	if not target_container:
 		return false
 	
-	# Handle different drop scenarios
+	# Calculate how much can be transferred based on available volume
+	var available_volume = target_container.get_available_volume()
+	var item_volume_per_unit = item.volume
+	
+	if item_volume_per_unit <= 0:
+		# If item has no volume, transfer entire stack
+		if target_slot.has_item():
+			return _handle_occupied_slot_drop(target_slot)
+		else:
+			var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id)
+			if success:
+				clear_item()
+			return success
+	
+	# Calculate maximum transferable quantity based on volume
+	var max_transferable_by_volume = int(available_volume / item_volume_per_unit)
+	
+	if max_transferable_by_volume <= 0:
+		_show_volume_error("Target container is full")
+		return false
+	
+	# Check if target slot has an item for potential stacking
 	if target_slot.has_item():
-		return _handle_stack_or_swap(target_slot, inventory_manager)
+		var target_item = target_slot.get_item()
+		
+		# If items can stack, check stacking constraints
+		if item.can_stack_with(target_item):
+			var stack_space = target_item.max_stack_size - target_item.quantity
+			var transferable_quantity = min(max_transferable_by_volume, min(item.quantity, stack_space))
+			
+			if transferable_quantity <= 0:
+				_show_volume_error("Target stack is full")
+				return false
+			
+			# Perform the partial stack transfer
+			var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, target_slot.grid_position, transferable_quantity)
+			
+			if success:
+				if item.quantity <= 0:
+					clear_item()
+				else:
+					refresh_display()
+					_show_transfer_feedback(transferable_quantity, item.quantity)
+				
+				# Refresh target container display
+				var target_grid = target_slot._get_inventory_grid()
+				if target_grid:
+					target_grid.refresh_display()
+				
+				return true
+			
+			return false
+		else:
+			# Items can't stack - try to swap if both fit in each other's containers
+			var source_container = inventory_manager.get_container(container_id)
+			if source_container and source_container.has_volume_for_item(target_item):
+				return _handle_item_swap(target_slot, target_item, inventory_manager)
+			else:
+				_show_volume_error("Cannot swap - insufficient volume")
+				return false
 	else:
-		return _handle_move_to_empty(target_slot, inventory_manager)
+		# Target slot is empty
+		var transferable_quantity = min(max_transferable_by_volume, item.quantity)
+		
+		if transferable_quantity >= item.quantity:
+			# Can transfer entire stack
+			var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id)
+			if success:
+				clear_item()
+				# Refresh target container display
+				var target_grid = target_slot._get_inventory_grid()
+				if target_grid:
+					target_grid.refresh_display()
+			return success
+		else:
+			# Partial transfer needed
+			var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, target_slot.grid_position, transferable_quantity)
+			
+			if success:
+				refresh_display()
+				_show_transfer_feedback(transferable_quantity, item.quantity)
+				
+				# Refresh target container display
+				var target_grid = target_slot._get_inventory_grid()
+				if target_grid:
+					target_grid.refresh_display()
+				
+				return true
+			
+			return false
+
+func _handle_same_container_drop(target_slot: InventorySlot) -> bool:
+	"""Handle dropping on a slot within the same container"""
+	if target_slot.has_item():
+		return _handle_stack_or_swap(target_slot, _get_inventory_manager())
+	else:
+		return _handle_move_to_empty(target_slot, _get_inventory_manager())
+
+func _handle_occupied_slot_drop(target_slot: InventorySlot) -> bool:
+	"""Handle dropping on a slot that already has an item"""
+	var target_item = target_slot.get_item()
+	
+	# Try stacking if items are compatible
+	if item.can_stack_with(target_item):
+		return _handle_stack_merge(target_slot, target_item)
+	else:
+		# Different items - try to swap
+		var inventory_manager = _get_inventory_manager()
+		return _handle_item_swap(target_slot, target_item, inventory_manager)
+
+func refresh_display():
+	"""Refresh the visual display of this slot"""
+	_update_item_display()
+	
+	# Also refresh the parent grid if available
+	var grid = _get_inventory_grid()
+	if grid and grid.has_method("refresh_display"):
+		# Use call_deferred to prevent recursion issues
+		grid.call_deferred("refresh_display")
+
+func _update_item_display():
+	"""Update the visual representation of the item in this slot"""
+	if not item:
+		# Clear display
+		if item_icon:
+			item_icon.texture = null
+		if quantity_label:
+			quantity_label.text = ""
+			quantity_label.visible = false
+		if rarity_border:
+			rarity_border.visible = false
+		is_occupied = false
+		return
+	
+	# Update icon using the correct method
+	if item_icon:
+		var icon_texture = item.get_icon_texture()
+		if icon_texture:
+			item_icon.texture = icon_texture
+		else:
+			_create_fallback_icon()
+	
+	# Update quantity
+	if quantity_label:
+		if item.quantity > 1:
+			quantity_label.text = str(item.quantity)
+			quantity_label.visible = true
+		else:
+			quantity_label.text = ""
+			quantity_label.visible = false
+	
+	# Update rarity border if available
+	if rarity_border and item.item_rarity != InventoryItem_Base.ItemRarity.COMMON:
+		var rarity_color = item.get_rarity_color()
+		rarity_border.modulate = rarity_color
+		rarity_border.visible = true
+	elif rarity_border:
+		rarity_border.visible = false
+	
+	is_occupied = true
+	
+func _debug_volume_info(target_container: InventoryContainer_Base):
+	"""Debug method to print volume information"""
+	print("=== VOLUME DEBUG INFO ===")
+	print("Target container: ", target_container.container_name)
+	print("Current volume: ", target_container.get_current_volume())
+	print("Max volume: ", target_container.max_volume)
+	print("Available volume: ", target_container.get_available_volume())
+	print("Item volume per unit: ", item.volume)
+	print("Item quantity: ", item.quantity)
+	print("Total item volume: ", item.get_total_volume())
+	
+	var available_volume = target_container.get_available_volume()
+	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
+	print("Max transferable by volume: ", max_transferable)
+	print("=========================")
+
+# Also add this helper method for volume-based partial transfers
+func _calculate_transferable_quantity(target_container: InventoryContainer_Base) -> int:
+	"""Calculate how many items can be transferred based on volume"""
+	if not target_container or not item:
+		return 0
+	
+	# Debug the calculation
+	_debug_volume_info(target_container)
+	
+	var available_volume = target_container.get_available_volume()
+	var item_volume_per_unit = item.volume
+	
+	if item_volume_per_unit <= 0:
+		# If item has no volume, transfer entire stack
+		return item.quantity
+	
+	var max_by_volume = int(available_volume / item_volume_per_unit)
+	var result = min(item.quantity, max_by_volume)
+	
+	print("Final transferable quantity: ", result)
+	return result
+	
+func _show_transfer_feedback(transferred: int, remaining: int):
+	"""Show visual feedback for partial transfer"""
+	var feedback_label = Label.new()
+	feedback_label.text = "Moved %d\n%d left" % [transferred, remaining]
+	feedback_label.add_theme_font_size_override("font_size", 10)
+	feedback_label.add_theme_color_override("font_color", Color.GREEN)
+	feedback_label.position = Vector2(size.x + 5, 0)
+	add_child(feedback_label)
+	
+	# Create timer for delay
+	var timer = Timer.new()
+	timer.wait_time = 1.5
+	timer.one_shot = true
+	add_child(timer)
+	
+	timer.timeout.connect(func():
+		var tween = create_tween()
+		tween.tween_property(feedback_label, "modulate:a", 0.0, 0.5)
+		tween.tween_callback(func():
+			feedback_label.queue_free()
+			timer.queue_free()
+		)
+	)
+	
+	timer.start()
+
+func _show_volume_error(message: String):
+	"""Show error message for volume constraints"""
+	var error_label = Label.new()
+	error_label.text = message
+	error_label.add_theme_font_size_override("font_size", 10)
+	error_label.add_theme_color_override("font_color", Color.RED)
+	error_label.position = Vector2(size.x + 5, 0)
+	add_child(error_label)
+	
+	# Create timer for delay
+	var timer = Timer.new()
+	timer.wait_time = 1.5
+	timer.one_shot = true
+	add_child(timer)
+	
+	timer.timeout.connect(func():
+		var tween = create_tween()
+		tween.tween_property(error_label, "modulate:a", 0.0, 0.5)
+		tween.tween_callback(func():
+			error_label.queue_free()
+			timer.queue_free()
+		)
+	)
+	
+	timer.start()
+
+# Update _can_accept_item_volume_check method in InventorySlot.gd
+func _can_accept_item_volume_check(incoming_item: InventoryItem_Base) -> bool:
+	"""Check if this slot can accept an item based on volume constraints"""
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	var target_container = inventory_manager.get_container(container_id)
+	if not target_container:
+		return false
+	
+	# If slot is empty, check if container has volume
+	if not has_item():
+		return target_container.get_available_volume() >= incoming_item.volume
+	
+	# If slot has same item type, check if we can merge
+	if item.item_id == incoming_item.item_id:
+		var total_quantity = item.quantity + incoming_item.quantity
+		var required_volume = total_quantity * item.volume
+		var current_volume = target_container.get_current_volume()
+		var container_volume_without_this_item = current_volume - (item.quantity * item.volume)
+		
+		return (container_volume_without_this_item + required_volume) <= target_container.max_volume
+	
+	# Different item types - would need to swap, check if source container can accept current item
+	var source_container_id = incoming_item.get_meta("source_container_id", "")
+	if source_container_id.is_empty():
+		return false
+	
+	var source_container = inventory_manager.get_container(source_container_id)
+	if not source_container:
+		return false
+	
+	return source_container.get_available_volume() >= item.volume
 		
 func _handle_stack_or_swap(target_slot: InventorySlot, inventory_manager: InventoryManager) -> bool:
 	"""Handle stacking or swapping with target slot that has an item"""

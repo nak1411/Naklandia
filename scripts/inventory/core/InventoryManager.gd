@@ -703,6 +703,48 @@ func can_transfer_item_volume_based(item: InventoryItem_Base, from_container_id:
 	
 	# Check if target container has volume for the item
 	return to_container.has_volume_for_item(item)
+	
+func transfer_partial_stack(item: InventoryItem_Base, quantity_to_transfer: int, from_container_id: String, to_container_id: String) -> Dictionary:
+	"""Transfer a partial quantity from a stack between containers"""
+	var from_container = get_container(from_container_id)
+	var to_container = get_container(to_container_id)
+	
+	if not from_container or not to_container:
+		return {"success": false, "transferred": 0, "remaining": item.quantity}
+	
+	if not item in from_container.items:
+		return {"success": false, "transferred": 0, "remaining": item.quantity}
+	
+	# Calculate how much we can actually transfer based on volume
+	var available_volume = to_container.get_available_volume()
+	var item_volume_per_unit = item.volume
+	var max_transferable_by_volume = int(available_volume / item_volume_per_unit)
+	
+	# Take the minimum of what we want to transfer and what fits
+	var actual_transfer = min(quantity_to_transfer, max_transferable_by_volume)
+	actual_transfer = min(actual_transfer, item.quantity)
+	
+	if actual_transfer <= 0:
+		return {"success": false, "transferred": 0, "remaining": item.quantity}
+	
+	# If transferring entire stack, move the item directly
+	if actual_transfer >= item.quantity:
+		if to_container.add_item(item):
+			from_container.remove_item(item)
+			return {"success": true, "transferred": actual_transfer, "remaining": 0}
+		else:
+			return {"success": false, "transferred": 0, "remaining": item.quantity}
+	
+	# Partial transfer - create new item for destination
+	var transfer_item = item.duplicate()
+	transfer_item.quantity = actual_transfer
+	
+	if to_container.add_item(transfer_item):
+		# Reduce quantity in source
+		item.quantity -= actual_transfer
+		return {"success": true, "transferred": actual_transfer, "remaining": item.quantity}
+	else:
+		return {"success": false, "transferred": 0, "remaining": item.quantity}
 
 func get_container_capacity_info(container_id: String) -> Dictionary:
 	"""Get detailed capacity information for a container"""
