@@ -40,10 +40,6 @@ var resize_start_position: Vector2
 var resize_start_size: Vector2
 var resize_start_mouse: Vector2
 
-# Resize overlay
-var resize_overlay: Control
-var resize_areas: Array[Control] = []
-
 enum ResizeMode {
 	NONE,
 	LEFT,
@@ -206,10 +202,6 @@ func _setup_window_ui():
 	
 	# Create options dropdown
 	_setup_options_dropdown()
-	
-	if can_resize:
-		print("Creating resize overlay for InventoryWindow")
-		_create_resize_overlay()
 	
 func _setup_lock_indicator():
 	# Create lock indicator icon using a label with lock emoji
@@ -761,146 +753,6 @@ func _update_resize_cursor():
 		ResizeMode.NONE:
 			if not is_dragging:
 				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-				
-func _create_resize_overlay():
-	print("_create_resize_overlay() called")
-	
-	# Create invisible overlay for resize detection
-	resize_overlay = Control.new()
-	resize_overlay.name = "ResizeOverlay"
-	resize_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	resize_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	resize_overlay.z_index = 200  # Above everything else
-	main_container.add_child(resize_overlay)
-	
-	print("Created resize_overlay: ", resize_overlay)
-	
-	# Create resize areas
-	_create_resize_areas()
-
-func _create_resize_areas():
-	print("_create_resize_areas() called")
-	resize_areas.clear()
-	
-	# Test with just the right edge first
-	var right_area = _create_resize_area("RightResize", ResizeMode.RIGHT)
-	right_area.anchor_left = 1.0
-	right_area.anchor_right = 1.0
-	right_area.anchor_top = 0.0
-	right_area.anchor_bottom = 1.0
-	right_area.offset_left = -resize_border_width
-	
-	# Add other edges
-	var left_area = _create_resize_area("LeftResize", ResizeMode.LEFT)
-	left_area.anchor_left = 0.0
-	left_area.anchor_right = 0.0
-	left_area.anchor_top = 0.0
-	left_area.anchor_bottom = 1.0
-	left_area.offset_right = resize_border_width
-	
-	var top_area = _create_resize_area("TopResize", ResizeMode.TOP)
-	top_area.anchor_left = 0.0
-	top_area.anchor_right = 1.0
-	top_area.anchor_top = 0.0
-	top_area.anchor_bottom = 0.0
-	top_area.offset_bottom = resize_border_width
-	
-	var bottom_area = _create_resize_area("BottomResize", ResizeMode.BOTTOM)
-	bottom_area.anchor_left = 0.0
-	bottom_area.anchor_right = 1.0
-	bottom_area.anchor_top = 1.0
-	bottom_area.anchor_bottom = 1.0
-	bottom_area.offset_top = -resize_border_width
-	
-	# Bottom-right corner
-	var br_corner = _create_resize_area("BottomRightCorner", ResizeMode.BOTTOM_RIGHT)
-	br_corner.anchor_left = 1.0
-	br_corner.anchor_right = 1.0
-	br_corner.anchor_top = 1.0
-	br_corner.anchor_bottom = 1.0
-	br_corner.offset_left = -resize_border_width * 2
-	br_corner.offset_top = -resize_border_width * 2
-	
-	print("Created ", resize_areas.size(), " resize areas")
-
-func _create_resize_area(area_name: String, mode: ResizeMode) -> Control:
-	var area = Control.new()
-	area.name = area_name
-	area.mouse_filter = Control.MOUSE_FILTER_PASS
-	area.set_meta("resize_mode", mode)
-	
-	# Debug: Make resize areas visible temporarily
-	var debug_style = StyleBoxFlat.new()
-	debug_style.bg_color = Color(1, 0, 0, 0.3)  # Semi-transparent red
-	var debug_panel = Panel.new()
-	debug_panel.add_theme_stylebox_override("panel", debug_style)
-	debug_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	debug_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	area.add_child(debug_panel)
-	
-	# Connect signals
-	area.gui_input.connect(_on_resize_area_input.bind(mode))
-	area.mouse_entered.connect(_on_resize_area_entered.bind(mode))
-	area.mouse_exited.connect(_on_resize_area_exited)
-	
-	resize_overlay.add_child(area)
-	resize_areas.append(area)
-	
-	print("Created resize area: ", area_name, " with mode: ", mode)
-	
-	return area
-
-func _on_resize_area_input(mode: ResizeMode, event: InputEvent):
-	print("Resize area input received: ", mode, " event: ", event)
-	
-	if not can_resize or is_locked:
-		print("Resize blocked - can_resize: ", can_resize, " locked: ", is_locked)
-		return
-	
-	if event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			if mouse_event.pressed:
-				print("Starting resize with mode: ", mode)
-				_start_resize(mode, mouse_event.global_position)
-			else:
-				print("Ending resize")
-				_end_resize()
-
-func _on_resize_area_entered(mode: ResizeMode):
-	print("Mouse entered resize area: ", mode)
-	
-	if not can_resize or is_locked or is_dragging:
-		return
-	
-	match mode:
-		ResizeMode.LEFT, ResizeMode.RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_HSIZE)
-		ResizeMode.TOP, ResizeMode.BOTTOM:
-			Input.set_default_cursor_shape(Input.CURSOR_VSIZE)
-		ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_FDIAGSIZE)
-		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
-			Input.set_default_cursor_shape(Input.CURSOR_BDIAGSIZE)
-
-func _on_resize_area_exited():
-	if not is_resizing and not is_dragging:
-		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-
-func _start_resize(mode: ResizeMode, mouse_pos: Vector2):
-	print("_start_resize called with mode: ", mode, " at position: ", mouse_pos)
-	is_resizing = true
-	resize_mode = mode
-	resize_start_position = position
-	resize_start_size = size
-	resize_start_mouse = mouse_pos
-
-func _end_resize():
-	if is_resizing:
-		print("Ending resize")
-		is_resizing = false
-		resize_mode = ResizeMode.NONE
-		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
 # Public interface methods
 func set_resizing_enabled(enabled: bool):
