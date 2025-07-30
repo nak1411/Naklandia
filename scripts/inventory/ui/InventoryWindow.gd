@@ -35,10 +35,6 @@ var last_window_size: Vector2i
 var options_button: Button
 var options_dropdown: DropDownMenu_Base
 
-# Resizing properties
-var auto_resize_grid: bool = true
-var min_grid_size: Vector2i = Vector2i(8, 6)
-
 # Window styling
 var title_bar_height: float = 32.0
 var border_width: float = 2.0
@@ -241,9 +237,6 @@ func _setup_options_dropdown():
 	# Add dropdown menu items
 	options_dropdown.add_menu_item("transparency", "Window Transparency")
 	options_dropdown.add_menu_item("lock_window", "Lock Window Position")
-	options_dropdown.add_menu_item("auto_resize", "Auto Resize Grid")
-	options_dropdown.add_menu_item("resize_to_fit", "Resize Grid to Fit Content")
-	options_dropdown.add_menu_item("manual_resize", "Manual Grid Resize")
 	options_dropdown.add_menu_item("reset_position", "Reset Window Position")
 	options_dropdown.add_menu_item("reset_size", "Reset Window Size")
 	
@@ -352,12 +345,6 @@ func _on_options_dropdown_selected(item_id: String, _item_data: Dictionary):
 			_show_transparency_dialog()
 		"lock_window":
 			_toggle_window_lock()
-		"auto_resize":
-			_toggle_auto_resize()
-		"resize_to_fit":
-			resize_grid_to_fit_content()
-		"manual_resize":
-			_show_manual_resize_dialog()
 		"reset_position":
 			_reset_window_position()
 		"reset_size":
@@ -504,75 +491,6 @@ func _show_transparency_dialog():
 
 func _toggle_window_lock():
 	is_locked = !is_locked
-
-func _toggle_auto_resize():
-	auto_resize_grid = !auto_resize_grid
-
-func resize_grid_to_fit_content():
-	if not current_container:
-		return
-	
-	var items = _get_all_container_items()
-	if items.is_empty():
-		return
-	
-	var max_x = 0
-	var max_y = 0
-	
-	for item in items:
-		var pos = Vector2i(-1, -1)
-		if current_container.has_method("get_item_position"):
-			pos = current_container.get_item_position(item)
-		
-		if pos != Vector2i(-1, -1):
-			var item_size = Vector2i(1, 1)
-			if item.has_method("get_grid_size"):
-				item_size = item.get_grid_size()
-			
-			max_x = max(max_x, pos.x + item_size.x)
-			max_y = max(max_y, pos.y + item_size.y)
-	
-	max_x += 2
-	max_y += 2
-	max_x = max(max_x, min_grid_size.x)
-	max_y = max(max_y, min_grid_size.y)
-	
-	_resize_inventory_grid(Vector2i(max_x, max_y))
-
-func _show_manual_resize_dialog():
-	var dialog = AcceptDialog.new()
-	dialog.title = "Manual Grid Resize"
-	dialog.size = Vector2i(300, 200)
-	
-	var vbox = VBoxContainer.new()
-	var hbox = HBoxContainer.new()
-	
-	var width_spinbox = SpinBox.new()
-	width_spinbox.min_value = min_grid_size.x
-	width_spinbox.max_value = 50
-	width_spinbox.value = 10
-	
-	var height_spinbox = SpinBox.new()
-	height_spinbox.min_value = min_grid_size.y
-	height_spinbox.max_value = 50
-	height_spinbox.value = 8
-	
-	hbox.add_child(Label.new())
-	hbox.add_child(width_spinbox)
-	hbox.add_child(Label.new())
-	hbox.add_child(height_spinbox)
-	vbox.add_child(hbox)
-	
-	dialog.add_child(vbox)
-	
-	get_tree().current_scene.add_child(dialog)
-	dialog.popup_centered()
-	
-	dialog.confirmed.connect(func():
-		_resize_inventory_grid(Vector2i(width_spinbox.value, height_spinbox.value))
-		dialog.queue_free()
-	)
-	dialog.canceled.connect(func(): dialog.queue_free())
 
 func _reset_window_position():
 	center_on_screen()
