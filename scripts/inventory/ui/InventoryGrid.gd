@@ -16,6 +16,7 @@ extends Control
 
 # Container reference
 var container: InventoryContainer_Base
+var window = InventoryWindowContent
 var container_id: String
 
 # Dynamic grid properties
@@ -72,6 +73,7 @@ func _setup_grid():
 	# Initialize slots array and available slots
 	_initialize_slot_arrays()
 	_create_initial_slots()
+	
 
 func _initialize_slot_arrays():
 	slots.clear()
@@ -83,7 +85,7 @@ func _initialize_slot_arrays():
 		slots[y].resize(current_grid_width)
 		for x in current_grid_width:
 			available_slots.append(Vector2i(x, y))
-
+			
 func _create_initial_slots():
 	# Create slot UI elements
 	for y in current_grid_height:
