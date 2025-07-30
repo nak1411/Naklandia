@@ -83,11 +83,11 @@ func _setup_visual_components():
 	quantity_label = Label.new()
 	quantity_label.name = "QuantityLabel"
 	quantity_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	quantity_label.position = Vector2(-20, -16)
-	quantity_label.size = Vector2(18, 14)
+	quantity_label.position = Vector2(-26, -22)
+	quantity_label.size = Vector2(24, 20)
 	quantity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	quantity_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	quantity_label.add_theme_font_size_override("font_size", 10)
+	quantity_label.add_theme_font_size_override("font_size", 16)
 	quantity_label.add_theme_color_override("font_color", Color.WHITE)
 	quantity_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	quantity_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -842,14 +842,10 @@ func _update_item_display():
 		else:
 			_create_fallback_icon()
 	
-	# Update quantity
+	# Update quantity - ALWAYS show quantity, even for single items
 	if quantity_label:
-		if item.quantity > 1:
-			quantity_label.text = str(item.quantity)
-			quantity_label.visible = true
-		else:
-			quantity_label.text = ""
-			quantity_label.visible = false
+		quantity_label.text = str(item.quantity)
+		quantity_label.visible = true
 	
 	# Update rarity border if available
 	if rarity_border and item.item_rarity != InventoryItem_Base.ItemRarity.COMMON:
@@ -860,31 +856,12 @@ func _update_item_display():
 		rarity_border.visible = false
 	
 	is_occupied = true
-	
-func _debug_volume_info(target_container: InventoryContainer_Base):
-	"""Debug method to print volume information"""
-	print("=== VOLUME DEBUG INFO ===")
-	print("Target container: ", target_container.container_name)
-	print("Current volume: ", target_container.get_current_volume())
-	print("Max volume: ", target_container.max_volume)
-	print("Available volume: ", target_container.get_available_volume())
-	print("Item volume per unit: ", item.volume)
-	print("Item quantity: ", item.quantity)
-	print("Total item volume: ", item.get_total_volume())
-	
-	var available_volume = target_container.get_available_volume()
-	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
-	print("Max transferable by volume: ", max_transferable)
-	print("=========================")
 
 # Also add this helper method for volume-based partial transfers
 func _calculate_transferable_quantity(target_container: InventoryContainer_Base) -> int:
 	"""Calculate how many items can be transferred based on volume"""
 	if not target_container or not item:
 		return 0
-	
-	# Debug the calculation
-	_debug_volume_info(target_container)
 	
 	var available_volume = target_container.get_available_volume()
 	var item_volume_per_unit = item.volume
