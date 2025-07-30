@@ -9,7 +9,7 @@ extends Control
 @export var max_window_size: Vector2 = Vector2(1400, 1000)
 @export var can_resize: bool = true
 @export var resize_border_width: float = 8.0
-@export var resize_corner_size: float = 16.0
+@export var resize_corner_size: float = 30.0
 
 # UI Components
 var main_container: Control
@@ -708,7 +708,6 @@ func _handle_resize():
 	# Apply new position and size
 	position = new_position
 	size = new_size
-	
 	# Emit resize signal
 	window_resized.emit(Vector2i(size))
 
@@ -742,23 +741,6 @@ func _get_resize_area(mouse_pos: Vector2) -> ResizeMode:
 		return ResizeMode.BOTTOM
 	
 	return ResizeMode.NONE
-
-func _update_resize_cursor():
-	var mouse_pos = get_viewport().get_mouse_position()
-	var resize_area = _get_resize_area(mouse_pos)
-	
-	match resize_area:
-		ResizeMode.LEFT, ResizeMode.RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_HSIZE)
-		ResizeMode.TOP, ResizeMode.BOTTOM:
-			Input.set_default_cursor_shape(Input.CURSOR_VSIZE)
-		ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_FDIAGSIZE)
-		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
-			Input.set_default_cursor_shape(Input.CURSOR_BDIAGSIZE)
-		ResizeMode.NONE:
-			if not is_dragging:
-				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 				
 func _create_resize_overlay():
 	# Create invisible overlay for resize detection
@@ -886,12 +868,17 @@ func _on_resize_area_input(event: InputEvent):
 				_end_resize()
 
 func _on_resize_area_entered():
-	# Find which area the mouse entered by checking mouse position
+	# Don't interfere if we're already dragging or resizing
+	if is_dragging or is_resizing or is_locked or not can_resize:
+		return
+	
+	# Find which area the mouse entered
 	var mouse_pos = get_local_mouse_position()
 	for area in resize_areas:
-		if _is_mouse_over_area(area):
+		var area_rect = Rect2(area.position, area.size)
+		if area_rect.has_point(mouse_pos):
 			var mode = area.get_meta("resize_mode") as ResizeMode
-			_set_resize_cursor(mode)
+			_set_resize_cursor(area, mode)
 			break
 			
 # Helper function to check if mouse is over a specific area
@@ -901,23 +888,25 @@ func _is_mouse_over_area(area: Control) -> bool:
 	return area_rect.has_point(mouse_pos)
 
 # Extract cursor setting to separate function
-func _set_resize_cursor(mode: ResizeMode):
-	if not can_resize or is_locked or is_dragging:
-		return
-	
+func _set_resize_cursor(control: Control, mode: ResizeMode):
+	print(mode)
 	match mode:
 		ResizeMode.LEFT, ResizeMode.RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_HSIZE)
+			control.mouse_default_cursor_shape = Control.CURSOR_HSIZE
 		ResizeMode.TOP, ResizeMode.BOTTOM:
-			Input.set_default_cursor_shape(Input.CURSOR_VSIZE)
+			control.mouse_default_cursor_shape = Control.CURSOR_VSIZE
 		ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_RIGHT:
-			Input.set_default_cursor_shape(Input.CURSOR_FDIAGSIZE)
+			control.mouse_default_cursor_shape = Control.CURSOR_FDIAGSIZE
 		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
-			Input.set_default_cursor_shape(Input.CURSOR_BDIAGSIZE)
+			control.mouse_default_cursor_shape = Control.CURSOR_BDIAGSIZE
 
 func _on_resize_area_exited():
-	if not is_resizing and not is_dragging:
-		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	# Don't interfere if we're dragging or resizing
+	if is_dragging or is_resizing:
+		return
+	
+	# Reset cursor to default
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
 func _start_resize(mode: ResizeMode, mouse_pos: Vector2):
 	is_resizing = true
