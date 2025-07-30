@@ -89,6 +89,37 @@ func get_current_volume() -> float:
 			break
 	
 	return total_volume
+	
+func can_accept_any_quantity(item: InventoryItem_Base) -> bool:
+	"""Check if we can accept at least some quantity of an item (for UI highlighting)"""
+	if not item or not item.is_valid_item():
+		return false
+	
+	# Check type restrictions first
+	if not allowed_item_types.is_empty() and not item.item_type in allowed_item_types:
+		return false
+	
+	var available_volume = get_available_volume()
+	
+	# If no volume available at all
+	if available_volume <= 0.0:
+		return false
+	
+	# If item has no volume, we can accept it
+	if item.volume <= 0.0:
+		return true
+	
+	# Check if we can fit at least one unit
+	if available_volume >= item.volume:
+		return true
+	
+	# Check if we can stack with existing items
+	var existing_item = find_stackable_item(item)
+	if existing_item:
+		var stack_space = existing_item.max_stack_size - existing_item.quantity
+		return stack_space > 0
+	
+	return false
 
 func get_available_volume() -> float:
 	return max_volume - get_current_volume()
@@ -174,6 +205,37 @@ func get_item_position(item: InventoryItem_Base) -> Vector2i:
 	# Return invalid position - let UI manage positioning
 	return Vector2i(-1, -1)
 
+func can_accept_any_quantity_for_ui(item: InventoryItem_Base) -> bool:
+	"""Check if we can accept at least some quantity of an item (specifically for UI highlighting)"""
+	if not item or not item.is_valid_item():
+		return false
+	
+	# Check type restrictions first
+	if not allowed_item_types.is_empty() and not item.item_type in allowed_item_types:
+		print("UI Check: Item type not allowed - ", item.item_type, " not in ", allowed_item_types)
+		return false
+	
+	var available_volume = get_available_volume()
+	print("UI Check: Available volume = ", available_volume, " for item ", item.item_name)
+	
+	# If container is completely full
+	if available_volume <= 0.0:
+		print("UI Check: No volume available - SHOULD BE RED")
+		return false
+	
+	# If item has no volume, we can accept it
+	if item.volume <= 0.0:
+		print("UI Check: Item has no volume - can accept")
+		return true
+	
+	# Check if we can fit at least one unit by volume
+	if available_volume >= item.volume:
+		print("UI Check: Can fit at least one unit by volume")
+		return true
+	
+	print("UI Check: Cannot fit even one unit - SHOULD BE RED")
+	return false
+
 # Item management
 func can_add_item(item: InventoryItem_Base, exclude_item: InventoryItem_Base = null) -> bool:
 	if not item or not item.is_valid_item():
@@ -191,14 +253,7 @@ func can_add_item(item: InventoryItem_Base, exclude_item: InventoryItem_Base = n
 	if not allowed_item_types.is_empty() and not item.item_type in allowed_item_types:
 		return false
 	
-	# Check for stacking possibility (exclude the item being moved)
-	var existing_item = find_stackable_item(item)
-	if existing_item and existing_item != exclude_item:
-		var can_stack = existing_item.quantity + item.quantity <= existing_item.max_stack_size
-		return can_stack
-	
-	# Volume-based system: if we have volume, we can accept the item
-	# The grid will expand as needed
+	# Only volume and type matter now
 	return true
 
 # Replace the add_item method to work with dynamic positioning

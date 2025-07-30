@@ -378,34 +378,118 @@ func _process(_delta):
 	# Check for ongoing drags and highlight valid drop targets
 	if get_viewport().has_meta("current_drag_data"):
 		_update_container_drop_highlights()
+	else:
+		# No drag in progress - ensure highlights are cleared
+		_clear_all_container_highlights()
 
 func _update_container_drop_highlights():
 	var drag_data = get_viewport().get_meta("current_drag_data", null)
 	if not drag_data or not container_list:
+		_clear_all_container_highlights()
 		return
 	
 	var item = drag_data.get("item") as InventoryItem_Base
 	if not item:
+		_clear_all_container_highlights()
 		return
 	
 	var mouse_pos = get_global_mouse_position()
 	var container_rect = Rect2(container_list.global_position, container_list.size)
 	
+	print("Mouse over container list: ", container_rect.has_point(mouse_pos))
+	
 	if container_rect.has_point(mouse_pos):
-		# Mouse is over container list - highlight valid containers
+		print("Updating highlights for ", open_containers.size(), " containers")
+		# Mouse is over container list - highlight containers based on transfer capability
 		for i in range(open_containers.size()):
 			var container = open_containers[i]
-			if container != current_container and container.can_add_item(item):
-				container_list.set_item_custom_bg_color(i, Color.GREEN.darkened(0.5))
-			else:
+			
+			# Skip current container (same container transfers are handled differently)
+			if container == current_container:
 				container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
+				continue
+			
+			var highlight_color = _get_container_highlight_color(container, item)
+			print("Setting container ", container.container_name, " to color: ", highlight_color)
+			container_list.set_item_custom_bg_color(i, highlight_color)
 	else:
-		# Clear all highlights
-		for i in range(container_list.get_item_count()):
-			container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
+		# Mouse not over container list - clear all highlights
+		_clear_all_container_highlights()
+		
+func _debug_container_transfer_capability(container: InventoryContainer_Base, item: InventoryItem_Base) -> Dictionary:
+	"""Debug helper to understand why a container shows red/green"""
+	var result = {
+		"container_name": container.container_name,
+		"item_name": item.item_name,
+		"available_volume": container.get_available_volume(),
+		"item_volume_per_unit": item.volume,
+		"item_quantity": item.quantity,
+		"total_item_volume": item.get_total_volume(),
+		"can_add_full_stack": container.can_add_item(item),
+		"max_transferable": 0,
+		"has_stackable_item": false,
+		"type_allowed": true
+	}
+	
+	# Calculate max transferable by volume
+	if item.volume > 0:
+		result.max_transferable = int(container.get_available_volume() / item.volume)
+	else:
+		result.max_transferable = item.quantity if container.can_add_item(item) else 0
+	
+	# Check for stackable items
+	var stackable_item = container.find_stackable_item(item)
+	result.has_stackable_item = stackable_item != null
+	if stackable_item:
+		result.stack_space = stackable_item.max_stack_size - stackable_item.quantity
+	
+	# Check type restrictions
+	if not container.allowed_item_types.is_empty():
+		result.type_allowed = item.item_type in container.allowed_item_types
+	
+	return result
+		
+func _get_container_highlight_color(container: InventoryContainer_Base, item: InventoryItem_Base) -> Color:
+	"""Determine the highlight color for a container based on transfer capability"""
+	
+	# Check if item can be transferred at all
+	if not container or not item:
+		print("Highlight: No container or item - RED")
+		return Color.RED.darkened(0.3)
+	
+	print("Checking highlight for: ", container.container_name, " with item: ", item.item_name)
+	
+	# Use the new method that properly checks all rejection scenarios
+	var can_accept = false
+	if container.has_method("can_accept_any_quantity_for_ui"):
+		can_accept = container.can_accept_any_quantity_for_ui(item)
+	else:
+		print("ERROR: can_accept_any_quantity_for_ui method not found!")
+		# Fallback to basic checks
+		can_accept = container.get_available_volume() > 0.0 and container.get_available_volume() >= item.volume
+	
+	if can_accept:
+		print("Highlight: Can accept - GREEN")
+		return Color.GREEN.darkened(0.5)
+	else:
+		print("Highlight: Cannot accept - RED")
+		return Color.RED.darkened(0.3)
+
+func _clear_all_container_highlights():
+	"""Clear all container list highlights"""
+	if not container_list:
+		return
+	
+	for i in range(container_list.get_item_count()):
+		container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
 
 func _gui_input(event: InputEvent):
-	pass
+	if event is InputEventMouseMotion:
+		# If we have drag data but mouse exits container list, clear highlights
+		if get_viewport().has_meta("current_drag_data"):
+			var container_rect = Rect2(container_list.global_position, container_list.size)
+			if not container_rect.has_point(event.global_position):
+				_clear_all_container_highlights()
 
 func _on_container_list_input(_event: InputEvent):
 	# Handle specific container list input events

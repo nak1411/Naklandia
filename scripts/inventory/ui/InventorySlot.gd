@@ -275,7 +275,7 @@ func _update_drag_volume_feedback(mouse_position: Vector2):
 	# Clear previous feedback first
 	_clear_all_volume_feedback()
 	
-	# Find what slot is under the cursor
+	# Check if mouse is over a slot in the inventory grid
 	var target_slot = _find_slot_at_position(mouse_position)
 	
 	if target_slot and target_slot != self:
@@ -422,43 +422,15 @@ func _update_preview_position(preview: Control):
 	preview.global_position = mouse_pos - preview.size / 2
 
 func _handle_drag_end(end_position: Vector2):
-	if not has_item():
-		is_dragging = false
-		drag_preview_created = false
-		return
+	print("=== DRAG END ===")
+	_cleanup_all_drag_previews()
 	
-	# Clear all volume feedback
-	var grid = _get_inventory_grid()
-	if grid:
-		for y in range(grid.slots.size()):
-			for x in range(grid.slots[y].size()):
-				var slot = grid.slots[y][x]
-				if slot and slot != self:
-					slot._clear_volume_feedback()
-	
-	# Clean up drag preview and timer
-	if drag_preview_created:
-		var preview = get_viewport().get_node_or_null("DragPreview")
-		if not preview:
-			var drag_canvas = get_tree().root.get_node_or_null("DragCanvas")
-			if drag_canvas:
-				preview = drag_canvas.get_node_or_null("DragPreview")
-		
-		if preview and preview.get_meta("source_slot", null) == self:
-			var timer = preview.get_meta("position_timer", null)
-			if timer and is_instance_valid(timer):
-				timer.stop()
-				timer.queue_free()
-			
-			var drag_canvas = preview.get_meta("drag_canvas", null)
-			if drag_canvas and is_instance_valid(drag_canvas):
-				drag_canvas.queue_free()
-	
-	# Try to drop on a slot first
-	var target_slot = _find_slot_at_position(end_position)
 	var drop_successful = false
 	
-	if target_slot:
+	# Find target slot
+	var target_slot = _find_slot_at_position(end_position)
+	
+	if target_slot and target_slot != self:
 		drop_successful = _attempt_drop_on_slot(target_slot)
 	else:
 		drop_successful = _attempt_drop_on_container_list(end_position)
@@ -466,6 +438,11 @@ func _handle_drag_end(end_position: Vector2):
 	# Clear drag data from viewport
 	if get_viewport().has_meta("current_drag_data"):
 		get_viewport().remove_meta("current_drag_data")
+	
+	# Ensure container highlights are cleared
+	var content = _find_inventory_content()
+	if content:
+		content._clear_all_container_highlights()
 	
 	# Emit drag ended signal
 	item_drag_ended.emit(self, drop_successful)
@@ -519,107 +496,135 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 	print("Target container max volume: ", target_container.max_volume)
 	print("Target container available volume: ", target_container.get_available_volume())
 	
-	# Store original quantity for safety
-	var original_quantity = item.quantity
-	
-	# Check if we can add the entire stack
-	if target_container.can_add_item(item):
-		print("Can add entire stack - transferring all")
-		var success = inventory_manager.transfer_item(item, container_id, target_container.container_id)
-		if success:
-			if content.has_method("refresh_display"):
-				content.refresh_display()
-			print("Full transfer SUCCESS")
-			return true
-		else:
-			print("Full transfer FAILED")
-			# Make sure quantity is restored
-			item.quantity = original_quantity
-			return false
-	
-	# Can't add entire stack - try partial transfer
-	print("Cannot add entire stack - calculating partial transfer")
-	
-	var available_volume = target_container.get_available_volume()
-	var item_volume_per_unit = item.volume
-	
-	if item_volume_per_unit <= 0:
-		print("Item has zero volume - should allow full transfer but can_add_item failed")
-		return false
-	
-	var max_transferable = int(available_volume / item_volume_per_unit)
-	print("Max transferable by volume: ", max_transferable)
-	
-	if max_transferable <= 0:
-		print("No space for even 1 item")
-		_show_volume_error("Target container is full")
-		return false
-	
-	if max_transferable >= original_quantity:
-		print("ERROR: max_transferable >= original_quantity, but can_add_item failed - this shouldn't happen")
-		return false
-	
-	# Do the partial transfer using direct quantity management instead of relying on split_stack
-	print("Attempting SAFE partial transfer of ", max_transferable, " items")
-	
-	# Create a temporary item for transfer (don't modify the original yet)
-	var temp_transfer_item = InventoryItem_Base.new()
-	temp_transfer_item.item_id = item.item_id
-	temp_transfer_item.item_name = item.item_name
-	temp_transfer_item.description = item.description
-	temp_transfer_item.icon_path = item.icon_path
-	temp_transfer_item.volume = item.volume
-	temp_transfer_item.mass = item.mass
-	temp_transfer_item.quantity = max_transferable
-	temp_transfer_item.max_stack_size = item.max_stack_size
-	temp_transfer_item.item_type = item.item_type
-	temp_transfer_item.item_rarity = item.item_rarity
-	temp_transfer_item.is_contraband = item.is_contraband
-	temp_transfer_item.base_value = item.base_value
-	temp_transfer_item.can_be_destroyed = item.can_be_destroyed
-	temp_transfer_item.is_unique = item.is_unique
-	temp_transfer_item.is_container = item.is_container
-	temp_transfer_item.container_volume = item.container_volume
-	temp_transfer_item.container_type = item.container_type
-	
-	# Double-check that the target container can accept this specific amount
-	if not target_container.can_add_item(temp_transfer_item):
-		print("ERROR: Target container cannot accept the calculated transfer amount")
-		return false
-	
 	# Get source container
 	var source_container = inventory_manager.get_container(container_id)
 	if not source_container:
 		print("ERROR: Source container not found")
 		return false
 	
-	# Try to add the temporary item to target container first (safest approach)
-	var add_success = target_container.add_item(temp_transfer_item)
-	if add_success:
-		# Success! Now reduce the original item's quantity
-		item.quantity -= max_transferable
-		item.quantity_changed.emit(item.quantity)
+	# Check if there's an existing stackable item in the target container
+	var existing_item = target_container.find_stackable_item(item)
+	
+	if existing_item:
+		print("Found existing stackable item with quantity: ", existing_item.quantity)
 		
-		print("SAFE partial transfer SUCCESS! Transferred: ", max_transferable, ", Remaining: ", item.quantity)
+		# Since we removed stack size limits, we can add all items to the existing stack
+		# But we still need to check volume constraints
+		var volume_needed = item.get_total_volume()
+		var available_volume = target_container.get_available_volume()
 		
-		if item.quantity <= 0:
-			# This shouldn't happen with partial transfer, but handle it
-			print("WARNING: No items remaining after partial transfer")
+		if volume_needed <= available_volume:
+			# Can transfer all items to existing stack
+			print("Stacking all ", item.quantity, " items with existing stack")
+			
+			existing_item.quantity += item.quantity
+			existing_item.quantity_changed.emit(existing_item.quantity)
+			
+			# Remove source item completely
 			source_container.remove_item(item)
 			clear_item()
+			
+			if content.has_method("refresh_display"):
+				content.refresh_display()
+			
+			print("Full stacking SUCCESS")
+			return true
 		else:
-			# Update display with remaining items
-			refresh_display()
-			_show_transfer_feedback(max_transferable, item.quantity)
-		
-		if content.has_method("refresh_display"):
-			content.refresh_display()
-		
-		return true
+			# Can only transfer some items due to volume constraints
+			var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
+			
+			if max_transferable > 0:
+				print("Partial stacking: ", max_transferable, " items")
+				
+				existing_item.quantity += max_transferable
+				existing_item.quantity_changed.emit(existing_item.quantity)
+				
+				item.quantity -= max_transferable
+				item.quantity_changed.emit(item.quantity)
+				
+				refresh_display()
+				_show_transfer_feedback(max_transferable, item.quantity)
+				
+				if content.has_method("refresh_display"):
+					content.refresh_display()
+				
+				print("Partial stacking SUCCESS")
+				return true
+			else:
+				print("No volume available for stacking")
+				_show_volume_error("Container is full")
+				return false
 	else:
-		print("SAFE partial transfer FAILED - target container couldn't accept the item")
-		# No need to restore anything since we didn't modify the original item
-		return false
+		print("No existing stackable item found, creating new stack")
+		
+		# No existing stack, create new item as before
+		var available_volume = target_container.get_available_volume()
+		
+		if available_volume <= 0:
+			print("No volume available")
+			_show_volume_error("Container is full")
+			return false
+		
+		var max_transferable = item.quantity  # Default to all items
+		
+		if item.volume > 0:
+			max_transferable = int(available_volume / item.volume)
+			max_transferable = min(max_transferable, item.quantity)
+		
+		if max_transferable <= 0:
+			print("Cannot fit any items")
+			_show_volume_error("Container is full")
+			return false
+		
+		print("Creating new stack with ", max_transferable, " items")
+		
+		# Create transfer item with the calculated quantity
+		var transfer_item = InventoryItem_Base.new()
+		transfer_item.item_id = item.item_id
+		transfer_item.item_name = item.item_name
+		transfer_item.description = item.description
+		transfer_item.icon_path = item.icon_path
+		transfer_item.volume = item.volume
+		transfer_item.mass = item.mass
+		transfer_item.quantity = max_transferable
+		transfer_item.max_stack_size = 999999  # No stack limit
+		transfer_item.item_type = item.item_type
+		transfer_item.item_rarity = item.item_rarity
+		transfer_item.is_contraband = item.is_contraband
+		transfer_item.base_value = item.base_value
+		transfer_item.can_be_destroyed = item.can_be_destroyed
+		transfer_item.is_unique = item.is_unique
+		transfer_item.is_container = item.is_container
+		transfer_item.container_volume = item.container_volume
+		transfer_item.container_type = item.container_type
+		
+		print("Transfer item volume: ", transfer_item.get_total_volume())
+		print("Available volume before transfer: ", target_container.get_available_volume())
+		
+		# Add to target container
+		if target_container.add_item(transfer_item, Vector2i(-1, -1), false):
+			# Reduce source quantity
+			item.quantity -= max_transferable
+			
+			print("New stack transfer successful. Transferred: ", max_transferable)
+			print("Target container volume after: ", target_container.get_current_volume(), "/", target_container.max_volume)
+			
+			# Handle source item cleanup
+			if item.quantity <= 0:
+				source_container.remove_item(item)
+				clear_item()
+			else:
+				refresh_display()
+				_show_transfer_feedback(max_transferable, item.quantity)
+			
+			if content.has_method("refresh_display"):
+				content.refresh_display()
+			
+			return true
+		else:
+			print("Failed to add item to target container")
+			_show_volume_error("Transfer failed")
+			return false
 	
 func _cleanup_all_drag_previews():
 	"""Clean up any existing drag previews in the scene"""
@@ -912,19 +917,137 @@ func _show_transfer_feedback(transferred: int, remaining: int):
 	timer.one_shot = true
 	add_child(timer)
 	
+	# Store references for the callback
+	var label_ref = feedback_label
+	var timer_ref = timer
+	
 	timer.timeout.connect(func():
-		var tween = create_tween()
-		tween.tween_property(feedback_label, "modulate:a", 0.0, 0.5)
-		tween.tween_callback(func():
-			feedback_label.queue_free()
-			timer.queue_free()
-		)
+		if is_instance_valid(label_ref):
+			var tween = create_tween()
+			tween.tween_property(label_ref, "modulate:a", 0.0, 0.5)
+			tween.tween_callback(func():
+				if is_instance_valid(label_ref):
+					label_ref.queue_free()
+				if is_instance_valid(timer_ref):
+					timer_ref.queue_free()
+			)
+		else:
+			# If label is already freed, just free the timer
+			if is_instance_valid(timer_ref):
+				timer_ref.queue_free()
 	)
 	
 	timer.start()
 
 func _show_volume_error(message: String):
-	"""Show error message for volume constraints"""
+	"""Show error message for volume constraints above the inventory window"""
+	
+	# Find the inventory window content to position the error above it
+	var inventory_content = _find_inventory_content()
+	if not inventory_content:
+		# Fallback to showing next to slot if we can't find the window
+		_show_error_next_to_slot(message)
+		return
+	
+	# Create a high-priority CanvasLayer for the error message
+	var error_canvas = CanvasLayer.new()
+	error_canvas.name = "ErrorCanvas"
+	error_canvas.layer = 300  # Higher than inventory (50) and pause (100) and drag (200)
+	get_tree().root.add_child(error_canvas)
+	
+	# Create error panel
+	var error_panel = Panel.new()
+	error_panel.name = "VolumeErrorPanel"
+	
+	# Style the error panel
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.8, 0.2, 0.2, 0.9)  # Red background
+	panel_style.corner_radius_top_left = 8
+	panel_style.corner_radius_top_right = 8
+	panel_style.corner_radius_bottom_left = 8
+	panel_style.corner_radius_bottom_right = 8
+	panel_style.border_width_left = 2
+	panel_style.border_width_right = 2
+	panel_style.border_width_top = 2
+	panel_style.border_width_bottom = 2
+	panel_style.border_color = Color.RED
+	error_panel.add_theme_stylebox_override("panel", panel_style)
+	
+	# Create error label
+	var error_label = Label.new()
+	error_label.text = message
+	error_label.add_theme_font_size_override("font_size", 14)
+	error_label.add_theme_color_override("font_color", Color.WHITE)
+	error_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	error_label.add_theme_constant_override("shadow_offset_x", 1)
+	error_label.add_theme_constant_override("shadow_offset_y", 1)
+	error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	error_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	# Calculate size needed for the text
+	var text_size = error_label.get_theme_font("font").get_string_size(
+		message,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		14
+	)
+	
+	# Set panel and label sizes with padding
+	var padding = Vector2(20, 10)
+	var panel_size = text_size + padding * 2
+	error_panel.size = panel_size
+	error_label.size = panel_size
+	
+	error_panel.add_child(error_label)
+	error_canvas.add_child(error_panel)
+	
+	# Position above the inventory window
+	var inventory_rect = Rect2(inventory_content.global_position, inventory_content.size)
+	var error_pos = Vector2(
+		inventory_rect.position.x + (inventory_rect.size.x - panel_size.x) / 2,  # Center horizontally
+		inventory_rect.position.y - panel_size.y - 10  # Position above with 10px gap
+	)
+	
+	error_panel.position = error_pos  # Use position instead of global_position for CanvasLayer
+	
+	# Animate in
+	error_panel.modulate.a = 0.0
+	var fade_in_tween = create_tween()
+	fade_in_tween.tween_property(error_panel, "modulate:a", 1.0, 0.2)
+	
+	# Create timer for delay
+	var timer = Timer.new()
+	timer.wait_time = 2.0  # Show for 2 seconds
+	timer.one_shot = true
+	error_canvas.add_child(timer)
+	
+	# Store references for the callback
+	var canvas_ref = error_canvas
+	var panel_ref = error_panel
+	var timer_ref = timer
+	
+	timer.timeout.connect(func():
+		if is_instance_valid(panel_ref):
+			var fade_out_tween = create_tween()
+			fade_out_tween.tween_property(panel_ref, "modulate:a", 0.0, 0.5)
+			fade_out_tween.tween_callback(func():
+				if is_instance_valid(canvas_ref):
+					canvas_ref.queue_free()  # This will free the entire canvas and its children
+				elif is_instance_valid(timer_ref):
+					timer_ref.queue_free()
+			)
+		else:
+			# If panel is already freed, just free the canvas
+			if is_instance_valid(canvas_ref):
+				canvas_ref.queue_free()
+			elif is_instance_valid(timer_ref):
+				timer_ref.queue_free()
+	)
+	
+	timer.start()
+	
+func _show_error_next_to_slot(message: String):
+	"""Fallback method to show error next to slot if inventory window not found"""
 	var error_label = Label.new()
 	error_label.text = message
 	error_label.add_theme_font_size_override("font_size", 10)
@@ -938,13 +1061,24 @@ func _show_volume_error(message: String):
 	timer.one_shot = true
 	add_child(timer)
 	
+	# Store references for the callback
+	var label_ref = error_label
+	var timer_ref = timer
+	
 	timer.timeout.connect(func():
-		var tween = create_tween()
-		tween.tween_property(error_label, "modulate:a", 0.0, 0.5)
-		tween.tween_callback(func():
-			error_label.queue_free()
-			timer.queue_free()
-		)
+		if is_instance_valid(label_ref):
+			var tween = create_tween()
+			tween.tween_property(label_ref, "modulate:a", 0.0, 0.5)
+			tween.tween_callback(func():
+				if is_instance_valid(label_ref):
+					label_ref.queue_free()
+				if is_instance_valid(timer_ref):
+					timer_ref.queue_free()
+			)
+		else:
+			# If label is already freed, just free the timer
+			if is_instance_valid(timer_ref):
+				timer_ref.queue_free()
 	)
 	
 	timer.start()

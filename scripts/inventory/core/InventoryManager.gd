@@ -511,7 +511,7 @@ func create_sample_items():
 			"type": InventoryItem_Base.ItemType.RESOURCE,
 			"volume": 0.01,
 			"mass": 0.01,
-			"max_stack": 1000,
+			"max_stack": 999999,
 			"value": 5.0,
 			"rarity": InventoryItem_Base.ItemRarity.COMMON
 		},
@@ -521,7 +521,7 @@ func create_sample_items():
 			"type": InventoryItem_Base.ItemType.MODULE,
 			"volume": 5.0,
 			"mass": 2.0,
-			"max_stack": 10,  # Changed from 1 to 10
+			"max_stack": 999999,  # Changed from 1 to 10
 			"value": 15000.0,
 			"rarity": InventoryItem_Base.ItemRarity.RARE
 		},
@@ -531,7 +531,7 @@ func create_sample_items():
 			"type": InventoryItem_Base.ItemType.AMMUNITION,
 			"volume": 0.025,
 			"mass": 0.01,
-			"max_stack": 500,
+			"max_stack": 999999,
 			"value": 100.0,
 			"rarity": InventoryItem_Base.ItemRarity.COMMON
 		},
@@ -541,7 +541,7 @@ func create_sample_items():
 			"type": InventoryItem_Base.ItemType.BLUEPRINT,
 			"volume": 0.1,
 			"mass": 0.1,
-			"max_stack": 5,  # Changed from 1 to 5
+			"max_stack": 999999,  # Changed from 1 to 5
 			"value": 50000.0,
 			"rarity": InventoryItem_Base.ItemRarity.EPIC
 		}
