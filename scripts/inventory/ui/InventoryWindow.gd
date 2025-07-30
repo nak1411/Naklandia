@@ -214,7 +214,39 @@ func _setup_content():
 	if inventory_manager:
 		_initialize_inventory_content()
 	
+	_setup_item_actions()
+	
 	print("✓ Inventory content setup complete")
+	
+func _setup_item_actions():
+	"""Initialize the item actions handler for context menus"""
+	# Get the scene's main window
+	var scene_window = get_viewport()
+	if scene_window is Window:
+		item_actions = InventoryItemActions.new(scene_window)
+	else:
+		# Fallback - try to find a parent window
+		var parent_window = _find_parent_window()
+		if parent_window:
+			item_actions = InventoryItemActions.new(parent_window)
+		else:
+			push_error("Could not find parent window for InventoryItemActions")
+			return
+	
+	# Connect to inventory manager updates
+	if item_actions.has_signal("container_refreshed"):
+		item_actions.container_refreshed.connect(_on_container_refreshed)
+	
+	print("✓ Item actions handler initialized")
+	
+func _find_parent_window() -> Window:
+	"""Find the parent window in the scene tree"""
+	var current = get_parent()
+	while current:
+		if current is Window:
+			return current
+		current = current.get_parent()
+	return null
 
 func _setup_options_dropdown():
 	# Create options dropdown menu
@@ -295,6 +327,11 @@ func _initialize_inventory_content():
 	if content and content.has_method("refresh_display"):
 		content.refresh_display()
 		print("✓ Refreshed content display")
+		
+func _on_container_refreshed():
+	"""Handle container refresh from item actions"""
+	if content and content.has_method("refresh_display"):
+		content.refresh_display()
 
 func _on_title_bar_input(event: InputEvent):
 	if is_locked:
@@ -313,6 +350,9 @@ func _on_title_bar_input(event: InputEvent):
 		global_position = get_global_mouse_position() - drag_start_position
 
 func _on_close_pressed():
+	if item_actions:
+		item_actions.cleanup()
+		item_actions = null
 	visible = false
 
 func _on_options_pressed():
@@ -407,8 +447,15 @@ func _on_container_selected_from_content(container: InventoryContainer_Base):
 func _on_item_activated_from_content(item: InventoryItem_Base, _slot: InventorySlot):
 	print("Item activated: ", item.item_name)
 
-func _on_item_context_menu_from_content(item: InventoryItem_Base, _slot: InventorySlot, _position: Vector2):
+func _on_item_context_menu_from_content(item: InventoryItem_Base, slot: InventorySlot, _position: Vector2):
 	print("Item context menu for: ", item.item_name)
+	if item_actions:
+		# Update item actions with current state
+		item_actions.set_inventory_manager(inventory_manager)
+		item_actions.set_current_container(current_container)
+		
+		# Show the context menu
+		item_actions.show_item_context_menu(item, slot, position)
 
 # Container management
 func select_container(container: InventoryContainer_Base):

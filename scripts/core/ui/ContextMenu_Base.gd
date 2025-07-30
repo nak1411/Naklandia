@@ -71,16 +71,23 @@ func show_context_menu(show_position: Vector2, data: Dictionary = {}, parent_win
 	
 	var final_position: Vector2
 	
-	# If we have a parent window (like inventory window), use its positioning
-	if parent_window:
-		final_position = show_position + Vector2(parent_window.position)
-	else:
-		# Fallback to viewport positioning
-		final_position = show_position
+	# Use current mouse position instead of passed position for mouse-following behavior
+	var current_mouse_pos = get_global_mouse_position()
 	
-	# Add small offset to avoid cursor overlap
-	var popup_offset = Vector2i(15, 15)
-	final_position += Vector2(popup_offset)
+	# If we have a parent window, we still need to consider its position for coordinate conversion
+	if parent_window:
+		# Convert global mouse position to be relative to viewport
+		final_position = current_mouse_pos
+	else:
+		# Use current mouse position directly
+		final_position = current_mouse_pos
+	
+	# Add small offset to avoid cursor overlap (optional - you can remove this if you want it exactly at cursor)
+	var popup_offset = Vector2(5, 5)  # Reduced offset for closer following
+	final_position += popup_offset
+	
+	# Ensure menu stays within screen bounds
+	final_position = _calculate_screen_position(final_position)
 	
 	# Add the popup to the viewport
 	viewport.add_child(main_popup)
