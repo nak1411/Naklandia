@@ -409,11 +409,10 @@ func _handle_drag_end(end_position: Vector2):
 		drag_preview_created = false
 		return
 	
-	# Clean up drag preview and timer - only if this slot created it
+	# Clean up drag preview and timer
 	if drag_preview_created:
 		var preview = get_viewport().get_node_or_null("DragPreview")
 		if not preview:
-			# Try finding it in the drag canvas
 			var drag_canvas = get_tree().root.get_node_or_null("DragCanvas")
 			if drag_canvas:
 				preview = drag_canvas.get_node_or_null("DragPreview")
@@ -424,21 +423,22 @@ func _handle_drag_end(end_position: Vector2):
 				timer.stop()
 				timer.queue_free()
 			
-			# Clean up the drag canvas
 			var drag_canvas = preview.get_meta("drag_canvas", null)
 			if drag_canvas and is_instance_valid(drag_canvas):
 				drag_canvas.queue_free()
 	
-	# Clear drag data from viewport
-	if get_viewport().has_meta("current_drag_data"):
-		get_viewport().remove_meta("current_drag_data")
-	
-	# Try to drop on a slot
+	# Try to drop on a slot first
 	var target_slot = _find_slot_at_position(end_position)
 	var drop_successful = false
 	
 	if target_slot:
 		drop_successful = _attempt_drop_on_slot(target_slot)
+	else:
+		drop_successful = _attempt_drop_on_container_list(end_position)
+	
+	# Clear drag data from viewport
+	if get_viewport().has_meta("current_drag_data"):
+		get_viewport().remove_meta("current_drag_data")
 	
 	# Emit drag ended signal
 	item_drag_ended.emit(self, drop_successful)
@@ -446,6 +446,45 @@ func _handle_drag_end(end_position: Vector2):
 	# Reset dragging state
 	is_dragging = false
 	drag_preview_created = false
+	
+func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
+	var content = _find_inventory_content()
+	if not content:
+		return false
+	
+	var container_list = content.container_list
+	if not container_list:
+		return false
+	
+	var container_rect = Rect2(container_list.global_position, container_list.size)
+	
+	if not container_rect.has_point(end_position):
+		return false
+	
+	var local_pos = end_position - container_list.global_position
+	var item_index = container_list.get_item_at_position(local_pos, true)
+	
+	if item_index == -1 or item_index >= content.open_containers.size():
+		return false
+	
+	var target_container = content.open_containers[item_index]
+	
+	if target_container.container_id == container_id:
+		return false
+	
+	if not target_container.can_add_item(item):
+		return false
+	
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	if inventory_manager.transfer_item(item, container_id, target_container.container_id):
+		if content.has_method("refresh_display"):
+			content.refresh_display()
+		return true
+	
+	return false
 	
 func _cleanup_all_drag_previews():
 	"""Clean up any existing drag previews in the scene"""

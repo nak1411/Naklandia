@@ -87,6 +87,7 @@ func _setup_left_panel():
 	
 	container_list = ItemList.new()
 	container_list.name = "ContainerList"
+	container_list.mouse_filter = Control.MOUSE_FILTER_PASS
 	container_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	container_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container_list.custom_minimum_size = Vector2(160, 200)
@@ -367,37 +368,11 @@ func get_current_container() -> InventoryContainer_Base:
 func get_inventory_grid() -> InventoryGrid:
 	return inventory_grid
 
-# Debug method
-func debug_content_state():
-	print("\n=== INVENTORY CONTENT DEBUG ===")
-	print("inventory_manager: ", inventory_manager)
-	print("current_container: ", current_container)
-	print("open_containers count: ", open_containers.size())
-	print("inventory_grid: ", inventory_grid)
-	print("mass_info_bar: ", mass_info_bar)
-	print("mass_info_label: ", mass_info_label)
-	print("container_list: ", container_list)
-	print("using_external_container_list: ", using_external_container_list)
-	
-	if inventory_grid:
-		print("Grid container: ", inventory_grid.container)
-		print("Grid dimensions: ", inventory_grid.grid_width, "x", inventory_grid.grid_height)
-	
-	print("=== END CONTENT DEBUG ===\n")
-
 # Container drop handling methods
 func _setup_container_drop_handling():
 	"""Set up the container list to accept drops from inventory slots"""
 	if not container_list:
 		return
-		
-	# Create an invisible overlay on the container list to detect drops
-	var drop_detector = Control.new()
-	drop_detector.name = "ContainerDropDetector"
-	drop_detector.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	drop_detector.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	drop_detector.z_index = 10
-	container_list.add_child(drop_detector)
 
 func _process(_delta):
 	# Check for ongoing drags and highlight valid drop targets
@@ -429,8 +404,7 @@ func _update_container_drop_highlights():
 		for i in range(container_list.get_item_count()):
 			container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
 
-func _gui_input(_event: InputEvent):
-	# Handle container list input for drag and drop
+func _gui_input(event: InputEvent):
 	pass
 
 func _on_container_list_input(_event: InputEvent):
