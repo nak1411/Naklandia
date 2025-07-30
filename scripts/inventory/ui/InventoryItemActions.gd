@@ -657,16 +657,32 @@ func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_s
 	new_item.container_volume = item.container_volume
 	new_item.container_type = item.container_type
 	
+	# Check if container has volume for the new item BEFORE modifying anything
+	# We need to temporarily create the reduced item to check volume properly
+	var temp_original_quantity = item.quantity
+	item.quantity -= split_amount  # Temporarily reduce to check volume
+	
+	var can_add = current_container.has_volume_for_item(new_item)
+	
+	item.quantity = temp_original_quantity  # Restore original quantity
+	
+	if not can_add:
+		inventory_manager.auto_stack = original_auto_stack
+		print("Cannot split: insufficient volume for new item")
+		return
+	
 	# Find a free position for the new item
 	var free_position = current_container.find_free_position()
 	
 	if free_position == Vector2i(-1, -1):
-		# No free space - can't split
+		# No free space - can't split (though this shouldn't happen with volume-based system)
 		inventory_manager.auto_stack = original_auto_stack
 		return
 	
-	# Reduce the original item's quantity BEFORE adding the new item
+	# Now it's safe to actually perform the split
+	# Reduce the original item's quantity
 	item.quantity -= split_amount
+	item.quantity_changed.emit(item.quantity)
 	
 	# Add the new item to container with auto_stack explicitly disabled
 	var success = current_container.add_item(new_item, free_position, false)
@@ -675,6 +691,7 @@ func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_s
 		# Failed to add - restore original quantity
 		item.quantity += split_amount
 		item.quantity_changed.emit(item.quantity)
+		print("Failed to add split item to container")
 	
 	# Always restore auto-stack setting
 	inventory_manager.auto_stack = original_auto_stack
