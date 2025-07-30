@@ -46,8 +46,6 @@ func setup_canvas_layers():
 	pause_canvas.layer = 100
 	add_child(pause_canvas)
 	
-	print("UI Canvas Layers created with layers: 10, 20, 50, 100")
-
 func setup_ui_containers():
 	# Create HUD container for game UI elements
 	hud_container = Control.new()
@@ -63,22 +61,17 @@ func setup_ui_containers():
 	menu_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu_ui_canvas.add_child(menu_container)
 	
-	print("UI containers created")
-
 func setup_default_ui_elements():
 	# Create and add crosshair to HUD
 	crosshair_ui = CrosshairUI.new()
 	crosshair_ui.name = "Crosshair"
 	add_hud_element(crosshair_ui)
 	
-	print("Default UI elements created (crosshair)")
-
 # Add UI elements to appropriate canvas layers
 func add_hud_element(ui_element: Control):
 	"""Add HUD elements like health bars, ammo counters, crosshair, etc."""
 	if hud_container:
 		hud_container.add_child(ui_element)
-		print("Added HUD element: ", ui_element.name)
 
 func add_menu_element(ui_element: Control):
 	"""Add menu elements like settings panels, dialogs, etc."""

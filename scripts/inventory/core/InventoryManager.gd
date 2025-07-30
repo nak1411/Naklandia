@@ -32,53 +32,7 @@ func _ready():
 	_setup_autosave()
 
 func _input(event):
-	# Debug key to regenerate sample items
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_F10:
-			print("F10 pressed - regenerating sample items")
-			# Clear all containers completely
-			for container in containers.values():
-				container.clear()
-			
-			# Reinitialize containers to make sure they're empty
-			_initialize_default_containers()
-			
-			# Create fresh sample items
-			create_sample_items()
-			print("Sample items regenerated with correct stack sizes")
-		elif event.keycode == KEY_F11:
-			print("F11 pressed - debugging item properties")
-			var player_inv = get_player_inventory()
-			if player_inv:
-				for item in player_inv.items:
-					print("Item: %s, ID: %s, Qty: %d, Max: %d, Unique: %s" % [
-						item.item_name, item.item_id, item.quantity, item.max_stack_size, item.is_unique
-					])
-		elif event.keycode == KEY_F12:
-			print("F12 pressed - fixing existing item IDs")
-			var player_inv = get_player_inventory()
-			if player_inv:
-				for item in player_inv.items:
-					# Fix laser crystals
-					if item.item_name == "Laser Focusing Crystal":
-						item.item_id = "laser_crystal"
-						item.max_stack_size = 10
-						print("Fixed laser crystal: %s" % item.item_id)
-					# Fix blueprints
-					elif item.item_name == "Frigate Blueprint":
-						item.item_id = "blueprint_frigate"
-						item.max_stack_size = 5
-						print("Fixed blueprint: %s" % item.item_id)
-					# Fix tritanium
-					elif item.item_name == "Tritanium Ore":
-						item.item_id = "tritanium_ore"
-						item.max_stack_size = 1000
-						print("Fixed tritanium: %s" % item.item_id)
-					# Fix ammo
-					elif item.item_name == "Hybrid Charges":
-						item.item_id = "ammo_hybrid"
-						item.max_stack_size = 500
-						print("Fixed ammo: %s" % item.item_id)
+	pass
 
 func _initialize_default_containers():
 	# Create player inventory (limited space, always accessible)
@@ -812,7 +766,6 @@ func auto_organize_by_volume():
 		if not placed:
 			# If no container has space, put it back in the first available container
 			# This shouldn't happen in a properly managed system
-			print("Warning: Could not place item ", item.item_name, " - insufficient volume in all containers")
 			if containers.size() > 0:
 				var first_container = containers[containers.keys()[0]]
 				first_container.add_item(item, Vector2i(-1, -1), false)  # Force add without volume check

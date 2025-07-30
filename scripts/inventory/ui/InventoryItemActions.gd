@@ -215,7 +215,6 @@ func _handle_move_item_action(action_id: String, item: InventoryItem_Base):
 func _handle_move_container_items_action(action_id: String, container: InventoryContainer_Base):
 	"""Handle moving all items from a container"""
 	# Implementation for bulk container moves
-	print("Moving all items from container: ", container.container_name, " with action: ", action_id)
 
 # Dialog methods
 func show_item_details_dialog(item: InventoryItem_Base):
@@ -668,7 +667,6 @@ func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_s
 	
 	if not can_add:
 		inventory_manager.auto_stack = original_auto_stack
-		print("Cannot split: insufficient volume for new item")
 		return
 	
 	# Find a free position for the new item
@@ -691,15 +689,12 @@ func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_s
 		# Failed to add - restore original quantity
 		item.quantity += split_amount
 		item.quantity_changed.emit(item.quantity)
-		print("Failed to add split item to container")
 	
 	# Always restore auto-stack setting
 	inventory_manager.auto_stack = original_auto_stack
 
 func _show_transfer_failed_notification():
 	"""Show notification when item transfer fails"""
-	print("Item transfer failed - insufficient space or invalid container")
-	# TODO: Implement visual notification system
 
 func _safe_cleanup_dialog(dialog_window: Window):
 	"""Safely clean up a dialog window with proper validity checks"""

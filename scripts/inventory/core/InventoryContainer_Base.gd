@@ -63,7 +63,6 @@ func get_current_volume() -> float:
 		
 		# Skip if we've already processed this exact item instance
 		if processed_items.has(item_key):
-			print("Warning: Duplicate item found in container: ", item.item_name)
 			continue
 		
 		processed_items[item_key] = true
@@ -76,7 +75,6 @@ func get_current_volume() -> float:
 		# Prevent overflow with reasonable limits
 		if item_quantity > 0 and item_unit_volume > 0:
 			if item_quantity > 1000000 or item_unit_volume > 1000000:
-				print("Warning: Item has extreme values - ", item.item_name, " Qty:", item_quantity, " Vol:", item_unit_volume)
 				item_volume = min(item_quantity * item_unit_volume, 1000000.0)  # Cap at 1M
 			else:
 				item_volume = item_quantity * item_unit_volume
@@ -85,7 +83,6 @@ func get_current_volume() -> float:
 		
 		# Safety check for runaway volume calculation
 		if total_volume > 1000000.0:  # 1 million m³ is unreasonably large
-			print("Error: Total volume exceeded reasonable limits. Stopping calculation.")
 			break
 	
 	return total_volume
@@ -212,28 +209,22 @@ func can_accept_any_quantity_for_ui(item: InventoryItem_Base) -> bool:
 	
 	# Check type restrictions first
 	if not allowed_item_types.is_empty() and not item.item_type in allowed_item_types:
-		print("UI Check: Item type not allowed - ", item.item_type, " not in ", allowed_item_types)
 		return false
 	
 	var available_volume = get_available_volume()
-	print("UI Check: Available volume = ", available_volume, " for item ", item.item_name)
 	
 	# If container is completely full
 	if available_volume <= 0.0:
-		print("UI Check: No volume available - SHOULD BE RED")
 		return false
 	
 	# If item has no volume, we can accept it
 	if item.volume <= 0.0:
-		print("UI Check: Item has no volume - can accept")
 		return true
 	
 	# Check if we can fit at least one unit by volume
 	if available_volume >= item.volume:
-		print("UI Check: Can fit at least one unit by volume")
 		return true
 	
-	print("UI Check: Cannot fit even one unit - SHOULD BE RED")
 	return false
 
 # Item management

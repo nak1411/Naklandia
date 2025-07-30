@@ -54,9 +54,7 @@ signal window_focus_changed(focused: bool)
 signal window_locked_changed(locked: bool)
 signal transparency_changed(value: float)
 
-func _init():
-	print("Window_Base _init() called for: ", window_title)
-	
+func _init():	
 	# Make window borderless so we can draw our own
 	set_flag(Window.FLAG_BORDERLESS, true)
 	# Enable transparency for the window
@@ -70,13 +68,10 @@ func _init():
 	focus_entered.connect(_on_window_focus_entered)
 	focus_exited.connect(_on_window_focus_exited)
 	
-	print("Window_Base _init() completed")
 
 func _ready():
-	print("Window_Base _ready() called for: ", window_title)
 	_setup_custom_ui()
 	_connect_signals()
-	print("Window_Base _ready() completed")
 
 func _process(_delta):
 	# Handle smooth dragging
@@ -85,7 +80,6 @@ func _process(_delta):
 		position += current_mouse_pos - drag_start_position
 
 func _setup_custom_ui():
-	print("Setting up custom UI for Window_Base...")
 	
 	# Main container fills the entire window
 	main_container = Control.new()
@@ -93,7 +87,6 @@ func _setup_custom_ui():
 	main_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	main_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(main_container)
-	print("Created main container")
 	
 	# Title bar - make sure it's at the top and receives input
 	title_bar = Panel.new()
@@ -106,7 +99,6 @@ func _setup_custom_ui():
 	title_bar.mouse_filter = Control.MOUSE_FILTER_PASS
 	title_bar.z_index = 100  # Ensure title bar is on top
 	main_container.add_child(title_bar)
-	print("Created title bar")
 	
 	# Style title bar
 	_update_title_bar_style()
@@ -122,7 +114,6 @@ func _setup_custom_ui():
 	title_label.size = Vector2(200, title_bar_height)
 	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Let title bar handle input
 	title_bar.add_child(title_label)
-	print("Created title label: ", window_title)
 	
 	# Window control buttons
 	_create_window_buttons()
@@ -140,7 +131,6 @@ func _setup_custom_ui():
 	content_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content_area.z_index = 1  # Below title bar
 	main_container.add_child(content_area)
-	print("Created content area")
 	
 	# Create a separate background panel that we can control transparency on
 	content_background = Panel.new()
@@ -154,26 +144,18 @@ func _setup_custom_ui():
 	content_background.add_theme_stylebox_override("panel", bg_style)
 	
 	content_area.add_child(content_background)
-	print("Created content background")
-	
-	print("Window_Base UI setup completed")
 
 func add_content(content: Control):
 	
 	if not content_area:
-		print("ERROR: No content area available!")
 		return
 		
 	if not content:
-		print("ERROR: Cannot add null content!")
 		return
 	
 	content_area.add_child(content)
-	print("Content added successfully")
 
-func _create_window_buttons():
-	print("Creating window buttons...")
-	
+func _create_window_buttons():	
 	var button_size = Vector2(title_bar_height - 4, title_bar_height - 4)
 	var button_y = 2
 	var button_spacing = button_size.x + 2
@@ -191,7 +173,6 @@ func _create_window_buttons():
 		close_button.flat = true
 		title_bar.add_child(close_button)
 		start_x -= button_spacing
-		print("Created close button")
 	
 	# Maximize button
 	if can_maximize:
@@ -203,7 +184,6 @@ func _create_window_buttons():
 		maximize_button.flat = true
 		title_bar.add_child(maximize_button)
 		start_x -= button_spacing
-		print("Created maximize button")
 	
 	# Minimize button
 	if can_minimize:
@@ -215,34 +195,27 @@ func _create_window_buttons():
 		minimize_button.flat = true
 		title_bar.add_child(minimize_button)
 		start_x -= button_spacing
-		print("Created minimize button")
 
-func _connect_signals():
-	print("Connecting Window_Base signals...")
-	
+func _connect_signals():	
 	# Title bar dragging
 	if title_bar:
 		title_bar.gui_input.connect(_on_title_bar_input)
-		print("Connected title bar input")
 	
 	# Window buttons
 	if close_button:
 		close_button.pressed.connect(_on_close_button_pressed)
 		close_button.mouse_entered.connect(_on_button_hover.bind(close_button, true))
 		close_button.mouse_exited.connect(_on_button_hover.bind(close_button, false))
-		print("Connected close button")
 	
 	if minimize_button:
 		minimize_button.pressed.connect(_on_minimize_button_pressed)
 		minimize_button.mouse_entered.connect(_on_button_hover.bind(minimize_button, true))
 		minimize_button.mouse_exited.connect(_on_button_hover.bind(minimize_button, false))
-		print("Connected minimize button")
 	
 	if maximize_button:
 		maximize_button.pressed.connect(_on_maximize_button_pressed)
 		maximize_button.mouse_entered.connect(_on_button_hover.bind(maximize_button, true))
 		maximize_button.mouse_exited.connect(_on_button_hover.bind(maximize_button, false))
-		print("Connected maximize button")
 
 func _update_title_bar_style():
 	if not title_bar:
@@ -282,14 +255,12 @@ func _on_title_bar_input(event: InputEvent):
 				drag_start_position = get_viewport().get_mouse_position()
 				drag_start_window_position = position
 				Input.set_default_cursor_shape(Input.CURSOR_MOVE)
-				print("Started dragging window")
 				# Important: consume the event so it doesn't propagate
 				get_viewport().set_input_as_handled()
 			else:
 				# Stop dragging
 				is_dragging = false
 				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-				print("Stopped dragging window")
 		elif mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.double_click:
 			# Double-click to maximize/restore
 			if can_maximize:
@@ -301,22 +272,18 @@ func _on_title_bar_input(event: InputEvent):
 
 # Window button handlers
 func _on_close_button_pressed():
-	print("Close button pressed")
 	close_window()
 
 func _on_minimize_button_pressed():
-	print("Minimize button pressed")
 	minimize_window()
 
 func _on_maximize_button_pressed():
-	print("Maximize button pressed")
 	if is_maximized:
 		restore_window()
 	else:
 		maximize_window()
 
 func close_window():
-	print("Closing window: ", window_title)
 	window_closed.emit()
 	visible = false
 
@@ -336,17 +303,13 @@ func _create_hover_style(color: Color) -> StyleBoxFlat:
 
 # Window state management
 func minimize_window():
-	print("Minimizing window: ", window_title)
 	visible = false
 	window_minimized.emit()
 
 func maximize_window():
 	if is_maximized:
-		print("Window already maximized")
 		return
-	
-	print("Maximizing window: ", window_title)
-	
+		
 	# Store current position and size for restoration
 	restore_position = position
 	restore_size = size
@@ -363,11 +326,8 @@ func maximize_window():
 
 func restore_window():
 	if not is_maximized:
-		print("Window not maximized")
 		return
-	
-	print("Restoring window: ", window_title)
-	
+		
 	# Restore previous position and size
 	position = restore_position
 	size = restore_size
@@ -379,27 +339,23 @@ func restore_window():
 
 # Focus handling
 func _on_window_focus_entered():
-	print("Window focused: ", window_title)
 	is_window_focused = true
 	_update_title_bar_style()
 	window_focus_changed.emit(true)
 
 func _on_window_focus_exited():
-	print("Window unfocused: ", window_title)
 	is_window_focused = false
 	_update_title_bar_style()
 	window_focus_changed.emit(false)
 
 # Public interface
 func set_window_title(new_title: String):
-	print("Setting window title to: ", new_title)
 	window_title = new_title
 	title = new_title
 	if title_label:
 		title_label.text = new_title
 
 func set_dragging_enabled(enabled: bool):
-	print("Setting dragging enabled: ", enabled)
 	can_drag = enabled
 	# Reset any drag state when disabling
 	if not enabled and is_dragging:
@@ -410,7 +366,6 @@ func get_window_locked() -> bool:
 	return window_locked
 
 func set_window_locked(locked: bool):
-	print("Setting window locked: ", locked)
 	window_locked = locked
 	set_dragging_enabled(not locked)
 	window_locked_changed.emit(locked)
@@ -419,7 +374,6 @@ func get_transparency() -> float:
 	return window_transparency
 
 func set_transparency(value: float):
-	print("Setting transparency to: ", value)
 	window_transparency = value
 	
 	# Simply modulate the entire content area (everything except title bar)
@@ -430,32 +384,6 @@ func set_transparency(value: float):
 
 func get_content_area() -> Control:
 	return content_area
-
-# Debug method
-func debug_window_state():
-	print("\n=== WINDOW_BASE DEBUG ===")
-	print("Window title: ", window_title)
-	print("Window visible: ", visible)
-	print("Window size: ", size)
-	print("Window position: ", position)
-	print("main_container: ", main_container)
-	print("title_bar: ", title_bar)
-	print("title_label: ", title_label)
-	print("content_area: ", content_area)
-	print("content_background: ", content_background)
-	print("is_dragging: ", is_dragging)
-	print("is_window_focused: ", is_window_focused)
-	print("is_maximized: ", is_maximized)
-	print("window_locked: ", window_locked)
-	print("window_transparency: ", window_transparency)
-	
-	if content_area:
-		print("Content area children: ", content_area.get_child_count())
-		for i in range(content_area.get_child_count()):
-			var child = content_area.get_child(i)
-			print("  [", i, "] ", child.name, " (", child.get_class(), ")")
-	
-	print("=== END WINDOW_BASE DEBUG ===\n")
 
 # Size change handling (for derived classes)
 func _on_size_changed():

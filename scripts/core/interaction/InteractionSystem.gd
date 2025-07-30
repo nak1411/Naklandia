@@ -49,16 +49,11 @@ func _find_crosshair_reference():
 		var ui_manager = ui_managers[0]
 		if ui_manager.has_method("get_crosshair"):
 			crosshair_ref = ui_manager.get_crosshair()
-			print("InteractionSystem: Found crosshair via UIManager")
 			return
 	
 	# Fallback: search recursively
 	var scene_root = get_tree().current_scene
 	crosshair_ref = _find_crosshair_recursive(scene_root)
-	if crosshair_ref:
-		print("InteractionSystem: Found crosshair recursively")
-	else:
-		print("InteractionSystem: Warning - Crosshair not found")
 
 func _process(_delta):
 	# Update raycaster

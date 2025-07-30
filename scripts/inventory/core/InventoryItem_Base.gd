@@ -83,12 +83,10 @@ func _generate_unique_id() -> String:
 func get_total_volume() -> float:
 	# Safety checks to prevent infinite recursion
 	if volume < 0 or quantity < 0:
-		print("Warning: Invalid volume or quantity for item: ", item_name)
 		return 0.0
 	
 	# Prevent overflow
 	if volume > 1000000.0 or quantity > 1000000:
-		print("Warning: Extreme values detected for item: ", item_name, " Volume:", volume, " Quantity:", quantity)
 		return min(volume * quantity, 1000000.0)  # Cap at 1M
 	
 	return volume * quantity

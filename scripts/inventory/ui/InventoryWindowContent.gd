@@ -23,7 +23,6 @@ signal item_activated(item: InventoryItem_Base, slot: InventorySlot)
 signal item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2)
 
 func _ready():
-	print("InventoryWindowContent _ready() starting...")
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	split_offset = 200
@@ -32,7 +31,6 @@ func _ready():
 	
 	# Connect gui_input for drop handling
 	gui_input.connect(_gui_input)
-	print("InventoryWindowContent _ready() completed")
 
 func _remove_split_container_outline():
 	# Remove the default HSplitContainer theme that creates outlines
@@ -66,7 +64,6 @@ func set_external_container_list(external_list: ItemList):
 
 # Modified _setup_content method
 func _setup_content():
-	print("Setting up InventoryWindowContent...")
 	if using_external_container_list:
 		# Only setup right panel since left panel is handled externally
 		_setup_right_panel_only()
@@ -74,10 +71,8 @@ func _setup_content():
 		# Setup both panels
 		_setup_left_panel()
 		_setup_right_panel()
-	print("InventoryWindowContent setup completed")
 
 func _setup_left_panel():
-	print("Setting up left panel...")
 	var left_panel = VBoxContainer.new()
 	left_panel.name = "LeftPanel"
 	left_panel.custom_minimum_size.x = 180
@@ -124,10 +119,8 @@ func _setup_left_panel():
 	
 	# Set up drop area handling
 	_setup_container_drop_handling()
-	print("Left panel setup completed")
 
 func _setup_right_panel_only():
-	print("Setting up right panel only...")
 	# Create the right panel content directly (no HSplitContainer needed)
 	var inventory_area = VBoxContainer.new()
 	inventory_area.name = "InventoryArea"
@@ -155,10 +148,8 @@ func _setup_right_panel_only():
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
-	print("Right panel only setup completed")
 
 func _setup_right_panel():
-	print("Setting up right panel...")
 	var inventory_area = VBoxContainer.new()
 	inventory_area.name = "InventoryArea"
 	inventory_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -185,10 +176,8 @@ func _setup_right_panel():
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
-	print("Right panel setup completed")
 
 func _setup_mass_info_bar(parent: Control):
-	print("Setting up mass info bar...")
 	mass_info_bar = Panel.new()
 	mass_info_bar.name = "MassInfoBar"
 	mass_info_bar.custom_minimum_size.y = 35
@@ -233,37 +222,29 @@ func _setup_mass_info_bar(parent: Control):
 	mass_info_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	
 	margin_container.add_child(mass_info_label)
-	print("Mass info bar setup completed")
 
 func _on_container_list_selected(index: int):
-	print("Container list item selected: ", index)
 	if index >= 0 and index < open_containers.size():
 		var selected_container = open_containers[index]
-		print("Emitting container_selected for: ", selected_container.container_name)
 		container_selected.emit(selected_container)
 
 func _on_item_activated(item: InventoryItem_Base, slot: InventorySlot):
-	print("Item activated: ", item.item_name)
 	item_activated.emit(item, slot)
 
 func _on_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
-	print("Item context menu requested for: ", item.item_name)
 	item_context_menu.emit(item, slot, position)
 
 # Public interface with debug output
 func set_inventory_manager(manager: InventoryManager):
-	print("Setting inventory manager on content: ", manager)
 	inventory_manager = manager
 
 func update_containers(containers: Array[InventoryContainer_Base]):
-	print("Updating containers list. Count: ", containers.size())
 	open_containers = containers
 	
 	# Use external container list if available, otherwise use internal one
 	var list_to_update = external_container_list if using_external_container_list else container_list
 	
 	if not list_to_update:
-		print("ERROR: No container list to update!")
 		return
 	
 	list_to_update.clear()
@@ -274,60 +255,43 @@ func update_containers(containers: Array[InventoryContainer_Base]):
 		var unique_items = container.get_item_count()
 		
 		var container_text = container.container_name
-		print("Adding container to list: ", container_text, " (", unique_items, " items)")
 		
 		list_to_update.add_item(container_text)
 		var item_index = list_to_update.get_item_count() - 1
 		list_to_update.set_item_tooltip(item_index, container_text)
 
 func select_container(container: InventoryContainer_Base):
-	print("Selecting container: ", container.container_name if container else "NULL")
 	current_container = container
 	
 	if not inventory_grid:
-		print("ERROR: No inventory grid to set container on!")
 		return
 	
 	if container:
-		print("Container items count: ", container.get_item_count())
-		print("Container grid size: ", container.grid_width, "x", container.grid_height)
-		
 		# Only compact if auto_stack is enabled in inventory manager
 		if container.get_item_count() > 0 and inventory_manager and inventory_manager.auto_stack:
-			print("Compacting container items...")
 			container.compact_items()
 		
-		print("Setting container on inventory grid...")
 		inventory_grid.set_container(container)
 		await get_tree().process_frame
-		print("Refreshing display...")
 		refresh_display()
 	else:
-		print("Clearing inventory grid (null container)")
 		inventory_grid.set_container(null)
 	
 	update_mass_info()
 
 func select_container_index(index: int):
-	print("Selecting container by index: ", index)
 	if index >= 0 and index < open_containers.size():
 		var list_to_use = external_container_list if using_external_container_list else container_list
 		if list_to_use:
 			list_to_use.select(index)
 
 func refresh_display():
-	print("InventoryWindowContent.refresh_display() called")
 	
 	if not inventory_grid:
-		print("ERROR: No inventory grid to refresh!")
 		return
 	
 	if not current_container:
-		print("WARNING: No current container to display")
 		return
-	
-	print("Refreshing display for container: ", current_container.container_name)
-	print("Container has ", current_container.get_item_count(), " items")
 	
 	# Make sure the grid has the container set
 	inventory_grid.set_container(current_container)
@@ -395,11 +359,8 @@ func _update_container_drop_highlights():
 	
 	var mouse_pos = get_global_mouse_position()
 	var container_rect = Rect2(container_list.global_position, container_list.size)
-	
-	print("Mouse over container list: ", container_rect.has_point(mouse_pos))
-	
+		
 	if container_rect.has_point(mouse_pos):
-		print("Updating highlights for ", open_containers.size(), " containers")
 		# Mouse is over container list - highlight containers based on transfer capability
 		for i in range(open_containers.size()):
 			var container = open_containers[i]
@@ -410,7 +371,6 @@ func _update_container_drop_highlights():
 				continue
 			
 			var highlight_color = _get_container_highlight_color(container, item)
-			print("Setting container ", container.container_name, " to color: ", highlight_color)
 			container_list.set_item_custom_bg_color(i, highlight_color)
 	else:
 		# Mouse not over container list - clear all highlights
@@ -454,25 +414,19 @@ func _get_container_highlight_color(container: InventoryContainer_Base, item: In
 	
 	# Check if item can be transferred at all
 	if not container or not item:
-		print("Highlight: No container or item - RED")
 		return Color.RED.darkened(0.3)
-	
-	print("Checking highlight for: ", container.container_name, " with item: ", item.item_name)
-	
+		
 	# Use the new method that properly checks all rejection scenarios
 	var can_accept = false
 	if container.has_method("can_accept_any_quantity_for_ui"):
 		can_accept = container.can_accept_any_quantity_for_ui(item)
 	else:
-		print("ERROR: can_accept_any_quantity_for_ui method not found!")
 		# Fallback to basic checks
 		can_accept = container.get_available_volume() > 0.0 and container.get_available_volume() >= item.volume
 	
 	if can_accept:
-		print("Highlight: Can accept - GREEN")
 		return Color.GREEN.darkened(0.5)
 	else:
-		print("Highlight: Cannot accept - RED")
 		return Color.RED.darkened(0.3)
 
 func _clear_all_container_highlights():

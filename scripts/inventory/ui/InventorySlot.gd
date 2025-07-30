@@ -430,7 +430,6 @@ func _update_preview_position(preview: Control):
 	preview.global_position = mouse_pos - preview.size / 2
 
 func _handle_drag_end(end_position: Vector2):
-	print("=== DRAG END ===")
 	_cleanup_all_drag_previews()
 	
 	var drop_successful = false
@@ -460,61 +459,44 @@ func _handle_drag_end(end_position: Vector2):
 	drag_preview_created = false
 	
 func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
-	print("=== CONTAINER LIST DROP DEBUG ===")
 	
 	var content = _find_inventory_content()
 	if not content:
-		print("ERROR: No inventory content found")
 		return false
 	
 	var container_list = content.container_list
 	if not container_list:
-		print("ERROR: No container list found")
 		return false
 	
 	var container_rect = Rect2(container_list.global_position, container_list.size)
 	
 	if not container_rect.has_point(end_position):
-		print("Drop position not in container list bounds")
 		return false
 	
 	var local_pos = end_position - container_list.global_position
 	var item_index = container_list.get_item_at_position(local_pos, true)
 	
 	if item_index == -1 or item_index >= content.open_containers.size():
-		print("ERROR: Invalid item index: ", item_index)
 		return false
 	
 	var target_container = content.open_containers[item_index]
 	
 	if target_container.container_id == container_id:
-		print("Same container - skipping")
 		return false
 	
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
-		print("ERROR: No inventory manager")
 		return false
-	
-	print("Target container: ", target_container.container_name)
-	print("Source item: ", item.item_name, " (qty: ", item.quantity, ")")
-	print("Item volume per unit: ", item.volume)
-	print("Total item volume: ", item.get_total_volume())
-	print("Target container current volume: ", target_container.get_current_volume())
-	print("Target container max volume: ", target_container.max_volume)
-	print("Target container available volume: ", target_container.get_available_volume())
 	
 	# Get source container
 	var source_container = inventory_manager.get_container(container_id)
 	if not source_container:
-		print("ERROR: Source container not found")
 		return false
 	
 	# Check if there's an existing stackable item in the target container
 	var existing_item = target_container.find_stackable_item(item)
 	
 	if existing_item:
-		print("Found existing stackable item with quantity: ", existing_item.quantity)
 		
 		# Since we removed stack size limits, we can add all items to the existing stack
 		# But we still need to check volume constraints
@@ -523,7 +505,6 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 		
 		if volume_needed <= available_volume:
 			# Can transfer all items to existing stack
-			print("Stacking all ", item.quantity, " items with existing stack")
 			
 			existing_item.quantity += item.quantity
 			existing_item.quantity_changed.emit(existing_item.quantity)
@@ -535,14 +516,12 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 			if content.has_method("refresh_display"):
 				content.refresh_display()
 			
-			print("Full stacking SUCCESS")
 			return true
 		else:
 			# Can only transfer some items due to volume constraints
 			var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
 			
 			if max_transferable > 0:
-				print("Partial stacking: ", max_transferable, " items")
 				
 				existing_item.quantity += max_transferable
 				existing_item.quantity_changed.emit(existing_item.quantity)
@@ -556,20 +535,16 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 				if content.has_method("refresh_display"):
 					content.refresh_display()
 				
-				print("Partial stacking SUCCESS")
 				return true
 			else:
-				print("No volume available for stacking")
 				_show_volume_error("Container is full")
 				return false
 	else:
-		print("No existing stackable item found, creating new stack")
 		
 		# No existing stack, create new item as before
 		var available_volume = target_container.get_available_volume()
 		
 		if available_volume <= 0:
-			print("No volume available")
 			_show_volume_error("Container is full")
 			return false
 		
@@ -580,11 +555,9 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 			max_transferable = min(max_transferable, item.quantity)
 		
 		if max_transferable <= 0:
-			print("Cannot fit any items")
 			_show_volume_error("Container is full")
 			return false
 		
-		print("Creating new stack with ", max_transferable, " items")
 		
 		# Create transfer item with the calculated quantity
 		var transfer_item = InventoryItem_Base.new()
@@ -606,16 +579,10 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 		transfer_item.container_volume = item.container_volume
 		transfer_item.container_type = item.container_type
 		
-		print("Transfer item volume: ", transfer_item.get_total_volume())
-		print("Available volume before transfer: ", target_container.get_available_volume())
-		
 		# Add to target container
 		if target_container.add_item(transfer_item, Vector2i(-1, -1), false):
 			# Reduce source quantity
 			item.quantity -= max_transferable
-			
-			print("New stack transfer successful. Transferred: ", max_transferable)
-			print("Target container volume after: ", target_container.get_current_volume(), "/", target_container.max_volume)
 			
 			# Handle source item cleanup
 			if item.quantity <= 0:
@@ -630,7 +597,6 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 			
 			return true
 		else:
-			print("Failed to add item to target container")
 			_show_volume_error("Transfer failed")
 			return false
 	
@@ -907,7 +873,6 @@ func _calculate_transferable_quantity(target_container: InventoryContainer_Base)
 	var max_by_volume = int(available_volume / item_volume_per_unit)
 	var result = min(item.quantity, max_by_volume)
 	
-	print("Final transferable quantity: ", result)
 	return result
 	
 func _show_transfer_feedback(transferred: int, remaining: int):

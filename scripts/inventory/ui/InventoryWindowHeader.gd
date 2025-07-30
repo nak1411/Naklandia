@@ -38,7 +38,6 @@ var sort_items = [
 var current_sort_index = 0
 
 func _ready():
-	print("InventoryWindowHeader _ready() starting...")
 	custom_minimum_size.y = 35  # Reduced height to not overlap title bar
 	_setup_controls()
 	_connect_signals()
@@ -46,11 +45,8 @@ func _ready():
 	_apply_custom_theme()
 	# Force styling after everything is set up
 	call_deferred("_force_button_styling")
-	print("InventoryWindowHeader _ready() completed")
 
-func _setup_controls():
-	print("Setting up header controls...")
-	
+func _setup_controls():	
 	# Create filter button (regular Button)
 	filter_options = Button.new()
 	filter_options.name = "FilterButton"
@@ -90,12 +86,8 @@ func _setup_controls():
 	
 	# Create dropdown menus (don't add as children initially)
 	_create_dropdown_menus()
-	
-	print("Header controls setup completed")
 
-func _create_dropdown_menus():
-	print("Creating dropdown menus...")
-	
+func _create_dropdown_menus():	
 	# Create filter dropdown
 	filter_dropdown = DropDownMenu_Base.new()
 	filter_dropdown.name = "FilterDropdown"
@@ -106,16 +98,11 @@ func _create_dropdown_menus():
 	sort_dropdown.name = "SortDropdown"
 	_setup_sort_dropdown()
 	
-	print("Dropdown menus created")
-
-func _setup_filter_dropdown():
-	print("Setting up filter dropdown with ", filter_items.size(), " items")
-	
+func _setup_filter_dropdown():	
 	# Add all filter items to dropdown
 	for i in range(filter_items.size()):
 		var item_id = "filter_" + str(i)
 		filter_dropdown.add_menu_item(item_id, filter_items[i])
-		print("Added filter item: ", item_id, " -> ", filter_items[i])
 	
 	# Connect selection signal
 	if filter_dropdown.has_signal("item_selected"):
@@ -125,14 +112,11 @@ func _setup_filter_dropdown():
 	if filter_dropdown.has_signal("tree_exiting"):
 		filter_dropdown.tree_exiting.connect(_on_filter_dropdown_closed)
 
-func _setup_sort_dropdown():
-	print("Setting up sort dropdown with ", sort_items.size(), " items")
-	
+func _setup_sort_dropdown():	
 	# Add all sort items to dropdown
 	for i in range(sort_items.size()):
 		var item_id = "sort_" + str(i)
 		sort_dropdown.add_menu_item(item_id, sort_items[i])
-		print("Added sort item: ", item_id, " -> ", sort_items[i])
 	
 	# Connect selection signal
 	if sort_dropdown.has_signal("item_selected"):
@@ -142,9 +126,7 @@ func _setup_sort_dropdown():
 	if sort_dropdown.has_signal("tree_exiting"):
 		sort_dropdown.tree_exiting.connect(_on_sort_dropdown_closed)
 
-func _style_custom_filter_button():
-	print("Styling filter button...")
-	
+func _style_custom_filter_button():	
 	# Make the button NOT flat so it can show styling
 	filter_options.flat = false
 	
@@ -181,9 +163,7 @@ func _style_custom_filter_button():
 	filter_options.add_theme_stylebox_override("focus", style_normal)
 	filter_options.add_theme_color_override("font_color", Color.WHITE)
 
-func _style_custom_sort_button():
-	print("Styling sort button...")
-	
+func _style_custom_sort_button():	
 	# Make the button NOT flat so it can show styling
 	sort_button.flat = false
 	
@@ -220,24 +200,17 @@ func _style_custom_sort_button():
 	sort_button.add_theme_stylebox_override("focus", style_normal)
 	sort_button.add_theme_color_override("font_color", Color.WHITE)
 
-func _connect_signals():
-	print("Connecting header signals...")
-	
+func _connect_signals():	
 	if search_field:
 		search_field.text_changed.connect(_on_search_text_changed)
-		print("Connected search field signal")
 	
 	if filter_options:
 		filter_options.pressed.connect(_on_filter_button_pressed)
-		print("Connected filter button signal")
 	
 	if sort_button:
 		sort_button.pressed.connect(_on_sort_button_pressed)
-		print("Connected sort button signal")
 
-func _remove_default_outlines():
-	print("Removing default outlines...")
-	
+func _remove_default_outlines():	
 	# Remove any default focus outlines and borders from all controls
 	var controls = [search_field, filter_options, sort_button]
 	
@@ -265,18 +238,14 @@ func _remove_default_outlines():
 				control.add_theme_stylebox_override("normal", style_normal)
 				control.add_theme_stylebox_override("focus", style_normal)
 
-func _apply_custom_theme():
-	print("Applying custom theme...")
-	
+func _apply_custom_theme():	
 	# Create a theme for the entire header
 	var header_theme = Theme.new()
 	
 	# Apply theme to the header container
 	set_theme(header_theme)
 
-func _force_button_styling():
-	print("Forcing button styling...")
-	
+func _force_button_styling():	
 	# Make sure buttons are visible
 	if filter_options:
 		filter_options.modulate = Color(1.0, 1.0, 1.0, 1.0)
@@ -288,34 +257,24 @@ func _force_button_styling():
 
 # Signal handlers
 func _on_search_text_changed(new_text: String):
-	print("Search text changed: ", new_text)
 	search_changed.emit(new_text)
 
-func _on_filter_button_pressed():
-	print("Filter button pressed")
-	
+func _on_filter_button_pressed():	
 	if not filter_dropdown:
-		print("ERROR: No filter dropdown!")
 		return
 		
 	# Show dropdown at button position
 	var button_pos = filter_options.get_screen_position()
 	var dropdown_pos = Vector2(button_pos.x, button_pos.y + filter_options.size.y)
-	
-	print("Showing filter dropdown at position: ", dropdown_pos)
-	
+		
 	# Add dropdown to scene so it can access viewport
 	get_viewport().add_child(filter_dropdown)
 	
 	# Show the menu
 	if filter_dropdown.has_method("show_menu"):
 		filter_dropdown.show_menu(dropdown_pos)
-	else:
-		print("ERROR: Filter dropdown doesn't have show_menu method!")
 
-func _on_filter_dropdown_selected(item_id: String, _item_data: Dictionary):
-	print("Filter dropdown selected: ", item_id)
-	
+func _on_filter_dropdown_selected(item_id: String, _item_data: Dictionary):	
 	# Extract index from item_id (format: "filter_0", "filter_1", etc.)
 	var index_str = item_id.replace("filter_", "")
 	var index = int(index_str)
@@ -323,36 +282,24 @@ func _on_filter_dropdown_selected(item_id: String, _item_data: Dictionary):
 	if index >= 0 and index < filter_items.size():
 		current_filter_index = index
 		filter_options.text = filter_items[index] + " ▼"
-		print("Filter changed to: ", filter_items[index])
 		filter_changed.emit(index)
-	else:
-		print("ERROR: Invalid filter index: ", index)
 
-func _on_sort_button_pressed():
-	print("Sort button pressed")
-	
+func _on_sort_button_pressed():	
 	if not sort_dropdown:
-		print("ERROR: No sort dropdown!")
 		return
 		
 	# Show dropdown at button position
 	var button_pos = sort_button.get_screen_position()
 	var dropdown_pos = Vector2(button_pos.x, button_pos.y + sort_button.size.y)
-	
-	print("Showing sort dropdown at position: ", dropdown_pos)
-	
+		
 	# Add dropdown to scene so it can access viewport
 	get_viewport().add_child(sort_dropdown)
 	
 	# Show the menu
 	if sort_dropdown.has_method("show_menu"):
 		sort_dropdown.show_menu(dropdown_pos)
-	else:
-		print("ERROR: Sort dropdown doesn't have show_menu method!")
 
-func _on_sort_dropdown_selected(item_id: String, _item_data: Dictionary):
-	print("Sort dropdown selected: ", item_id)
-	
+func _on_sort_dropdown_selected(item_id: String, _item_data: Dictionary):	
 	# Extract index from item_id (format: "sort_0", "sort_1", etc.)
 	var index_str = item_id.replace("sort_", "")
 	var index = int(index_str)
@@ -360,33 +307,26 @@ func _on_sort_dropdown_selected(item_id: String, _item_data: Dictionary):
 	if index >= 0 and index < sort_items.size():
 		current_sort_index = index
 		sort_button.text = sort_items[index] + " ▼"
-		print("Sort changed to: ", sort_items[index])
 		
 		# Convert to InventoryManager.SortType
 		var sort_type = index as InventoryManager.SortType
 		sort_requested.emit(sort_type)
-	else:
-		print("ERROR: Invalid sort index: ", index)
 
 func _on_filter_dropdown_closed():
-	print("Filter dropdown closed")
 	# Remove filter dropdown from scene when it closes
 	if filter_dropdown and filter_dropdown.get_parent():
 		filter_dropdown.get_parent().remove_child(filter_dropdown)
 
 func _on_sort_dropdown_closed():
-	print("Sort dropdown closed")
 	# Remove sort dropdown from scene when it closes
 	if sort_dropdown and sort_dropdown.get_parent():
 		sort_dropdown.get_parent().remove_child(sort_dropdown)
 
 # Public interface
 func set_inventory_manager(manager: InventoryManager):
-	print("Setting inventory manager on header: ", manager)
 	inventory_manager = manager
 
 func set_inventory_window(window: Window):
-	print("Setting inventory window on header: ", window)
 	inventory_window = window
 
 func get_search_text() -> String:
@@ -400,32 +340,6 @@ func get_filter_index() -> int:
 func clear_search():
 	if search_field:
 		search_field.text = ""
-		print("Search field cleared")
-
-# Debug method
-func debug_header_state():
-	print("\n=== INVENTORY HEADER DEBUG ===")
-	print("search_field: ", search_field)
-	print("filter_options: ", filter_options)
-	print("sort_button: ", sort_button)
-	print("filter_dropdown: ", filter_dropdown)
-	print("sort_dropdown: ", sort_dropdown)
-	print("inventory_manager: ", inventory_manager)
-	print("inventory_window: ", inventory_window)
-	print("current_filter_index: ", current_filter_index)
-	print("current_sort_index: ", current_sort_index)
-	
-	if filter_options:
-		print("Filter button text: ", filter_options.text)
-		print("Filter button visible: ", filter_options.visible)
-		print("Filter button size: ", filter_options.size)
-	
-	if sort_button:
-		print("Sort button text: ", sort_button.text)
-		print("Sort button visible: ", sort_button.visible)
-		print("Sort button size: ", sort_button.size)
-	
-	print("=== END HEADER DEBUG ===\n")
 
 # Transparency handling
 func set_transparency(transparency: float):
@@ -442,9 +356,7 @@ func set_transparency(transparency: float):
 	# Apply transparency to buttons using stored originals
 	_apply_transparency_from_originals(transparency)
 
-func _store_original_header_styles():
-	print("Storing original header styles...")
-	
+func _store_original_header_styles():	
 	if filter_options:
 		var style = filter_options.get_theme_stylebox("normal")
 		if style and style is StyleBoxFlat:

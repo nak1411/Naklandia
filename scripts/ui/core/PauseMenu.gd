@@ -19,9 +19,7 @@ func _ready():
 	layer = 100  # Very high layer to ensure it's above inventory
 	visible = false
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	
-	print("PauseMenu: Starting setup...")
-	
+		
 	# Find and setup inventory integration
 	_find_and_setup_inventory_integration()
 	
@@ -33,34 +31,24 @@ func _ready():
 	settings_button.pressed.connect(_on_settings_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
 	
-	print("PauseMenu: Setup complete!")
-
 func _find_and_setup_inventory_integration():
 	# Look for InventoryIntegration in the scene
 	var scene_root = get_tree().current_scene
-	print("PauseMenu: Looking for InventoryIntegration in scene...")
 	
 	for child in scene_root.get_children():
-		print("PauseMenu: Found child: ", child.name, " (", child.get_class(), ")")
 		if child is InventoryIntegration:
 			inventory_integration = child
-			print("PauseMenu: Found InventoryIntegration!")
 			break
 	
 	if not inventory_integration:
 		# Try to find it by name
-		print("PauseMenu: Searching recursively...")
 		var found_node = _find_node_by_name_recursive(scene_root, "InventoryIntegration")
 		if found_node and found_node is InventoryIntegration:
 			inventory_integration = found_node
-			print("PauseMenu: Found InventoryIntegration recursively!")
 	
 	# Add a reference to the pause menu in the inventory integration
 	if inventory_integration:
 		inventory_integration.set("pause_menu", self)
-		print("PauseMenu: Connected to InventoryIntegration")
-	else:
-		print("PauseMenu: WARNING - InventoryIntegration not found!")
 
 func _find_node_by_name_recursive(node: Node, target_name: String) -> Node:
 	if node.name == target_name:
@@ -86,7 +74,6 @@ func handle_inventory_escape() -> bool:
 		# First press: unfocus but keep open
 		inventory_window.release_focus()
 		inventory_unfocused_once = true
-		print("Inventory unfocused - press escape again for pause menu")
 		return true  # We handled it
 	
 	# Second press or inventory not focused: open pause menu
@@ -182,24 +169,19 @@ func _setup_menu_ui():
 func _unhandled_input(event):
 	# Handle escape when no inventory is consuming it
 	if event.is_action_pressed("ui_cancel") and not event.is_echo():
-		print("PauseMenu: Escape key pressed!")
 		
 		# Check inventory status first
 		if inventory_integration:
 			var inv_open = inventory_integration.is_inventory_window_open()
 			var inv_window = inventory_integration.get_inventory_window()
 			var inv_has_focus = inv_window.has_focus() if inv_window else false
-			
-			print("PauseMenu: Inventory open: ", inv_open, ", has focus: ", inv_has_focus)
-			
+						
 			# If inventory is open and has focus, let it handle the first escape
 			if inv_open and inv_has_focus:
-				print("PauseMenu: Letting inventory handle escape first")
 				return
 			
 			# If inventory is open but unfocused, open pause menu
 			if inv_open and not inv_has_focus:
-				print("PauseMenu: Inventory unfocused, opening pause menu")
 				toggle_pause()
 				get_viewport().set_input_as_handled()
 				return
