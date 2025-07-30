@@ -19,6 +19,7 @@ var background_panel: Panel
 var item_icon: TextureRect
 var quantity_label: Label
 var rarity_border: NinePatchRect
+var quantity_bg: Panel
 
 # State
 var is_highlighted: bool = false
@@ -79,11 +80,26 @@ func _setup_visual_components():
 	item_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(item_icon)
 	
+	# Quantity background panel (black background square)
+	quantity_bg = Panel.new()
+	quantity_bg.name = "QuantityBackground"
+	quantity_bg.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	quantity_bg.position = Vector2(-22, -20)
+	quantity_bg.size = Vector2(22, 22)
+	quantity_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	quantity_bg.visible = false  # Initially hidden
+
+	# Style the quantity background
+	var quantity_bg_style = StyleBoxFlat.new()
+	quantity_bg_style.bg_color = Color(0.0, 0.0, 0.0, 0.8)
+	quantity_bg.add_theme_stylebox_override("panel", quantity_bg_style)
+	add_child(quantity_bg)
+	
 	# Quantity label
 	quantity_label = Label.new()
 	quantity_label.name = "QuantityLabel"
 	quantity_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	quantity_label.position = Vector2(-26, -22)
+	quantity_label.position = Vector2(-28, -22)
 	quantity_label.size = Vector2(24, 20)
 	quantity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	quantity_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
@@ -357,20 +373,19 @@ func _create_drag_preview() -> Control:
 	preview_icon.modulate.a = 0.9
 	preview.add_child(preview_icon)
 	
-	if item.quantity > 1:
-		var preview_quantity = Label.new()
-		preview_quantity.text = str(item.quantity)
-		preview_quantity.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		preview_quantity.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-		# Position relative to preview size, not copying original position
-		preview_quantity.position = Vector2(preview.size.x - 20, preview.size.y - 16)
-		preview_quantity.size = Vector2(18, 14)
-		preview_quantity.add_theme_color_override("font_color", Color.WHITE)
-		preview_quantity.add_theme_color_override("font_shadow_color", Color.BLACK)
-		preview_quantity.add_theme_constant_override("shadow_offset_x", 1)
-		preview_quantity.add_theme_constant_override("shadow_offset_y", 1)
-		preview_quantity.add_theme_font_size_override("font_size", 10)
-		preview.add_child(preview_quantity)
+	var preview_quantity = Label.new()
+	preview_quantity.text = str(item.quantity)
+	preview_quantity.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	preview_quantity.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	# Position relative to preview size, not copying original position
+	preview_quantity.position = Vector2(preview.size.x - 26, preview.size.y - 22)
+	preview_quantity.size = Vector2(24, 20)
+	preview_quantity.add_theme_color_override("font_color", Color.WHITE)
+	preview_quantity.add_theme_color_override("font_shadow_color", Color.BLACK)
+	preview_quantity.add_theme_constant_override("shadow_offset_x", 1)
+	preview_quantity.add_theme_constant_override("shadow_offset_y", 1)
+	preview_quantity.add_theme_font_size_override("font_size", 16)
+	preview.add_child(preview_quantity)
 	
 	return preview
 
@@ -829,6 +844,8 @@ func _update_item_display():
 		if quantity_label:
 			quantity_label.text = ""
 			quantity_label.visible = false
+		if quantity_bg:
+			quantity_bg.visible = false
 		if rarity_border:
 			rarity_border.visible = false
 		is_occupied = false
@@ -846,6 +863,10 @@ func _update_item_display():
 	if quantity_label:
 		quantity_label.text = str(item.quantity)
 		quantity_label.visible = true
+	
+	# Show quantity background when item is present
+	if quantity_bg:
+		quantity_bg.visible = true
 	
 	# Update rarity border if available
 	if rarity_border and item.item_rarity != InventoryItem_Base.ItemRarity.COMMON:
