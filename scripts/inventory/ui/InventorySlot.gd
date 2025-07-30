@@ -1090,6 +1090,27 @@ func _can_accept_item_volume_check(incoming_item: InventoryItem_Base) -> bool:
 	if not target_container:
 		return false
 	
+	# Get the source container of the incoming item
+	var drag_data = get_viewport().get_meta("current_drag_data", null)
+	var source_container_id = ""
+	if drag_data:
+		source_container_id = drag_data.get("container_id", "")
+	
+	# If this is a same-container operation, volume constraints don't apply
+	# since we're just moving items around, not adding new volume
+	if container_id == source_container_id:
+		# If slot is empty, we can always accept
+		if not has_item():
+			return true
+		
+		# If slot has same item type, we can merge
+		if item.item_id == incoming_item.item_id:
+			return true
+		
+		# Different item types - we can swap within same container
+		return true
+	
+	# Different containers - check volume constraints
 	# If slot is empty, check if container has volume
 	if not has_item():
 		return target_container.get_available_volume() >= incoming_item.volume
@@ -1104,7 +1125,6 @@ func _can_accept_item_volume_check(incoming_item: InventoryItem_Base) -> bool:
 		return (container_volume_without_this_item + required_volume) <= target_container.max_volume
 	
 	# Different item types - would need to swap, check if source container can accept current item
-	var source_container_id = incoming_item.get_meta("source_container_id", "")
 	if source_container_id.is_empty():
 		return false
 	
@@ -1264,24 +1284,23 @@ func _handle_move_to_empty(target_slot: InventorySlot, inventory_manager: Invent
 	if not source_container or not target_container:
 		return false
 	
-	# Volume-based check instead of position check
-	if not target_container.has_volume_for_item(item):
-		return false
-	
 	# Store the item reference before removing it
 	var temp_item = item
 	
 	# For same container moves, just update the visual position
 	if source_container == target_container:
-		# Clear the source slot visually
+		# No volume check needed for same container - just move the item visually
 		clear_item()
-		# Set the target slot visually
 		target_slot.set_item(temp_item)
 		# Emit move signal for any listeners
 		source_container.item_moved.emit(temp_item, grid_position, target_slot.grid_position)
 		return true
 	
-	# For different containers, remove from source and add to target
+	# For different containers, check volume constraints
+	if not target_container.has_volume_for_item(item):
+		return false
+	
+	# Remove from source and add to target
 	var source_success = source_container.remove_item(temp_item)
 	if not source_success:
 		return false
