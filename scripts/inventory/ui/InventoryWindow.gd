@@ -15,6 +15,7 @@ var title_label: Label
 var close_button: Button
 var content_area: Control
 var background_panel: Panel
+var lock_indicator: Label
 
 # Inventory components
 var inventory_manager: InventoryManager
@@ -151,6 +152,9 @@ func _setup_window_ui():
 	content_area.offset_bottom = -border_width
 	main_container.add_child(content_area)
 	
+	# IMPORTANT: Setup lock indicator AFTER content_area is created
+	_setup_lock_indicator()
+	
 	# Connect signals
 	title_bar.gui_input.connect(_on_title_bar_input)
 	close_button.pressed.connect(_on_close_pressed)
@@ -158,6 +162,37 @@ func _setup_window_ui():
 	
 	# Create options dropdown
 	_setup_options_dropdown()
+	
+func _setup_lock_indicator():
+	# Create lock indicator icon using a label with lock emoji
+	lock_indicator = Label.new()
+	lock_indicator.name = "LockIndicator"
+	lock_indicator.text = "🔒"
+	lock_indicator.add_theme_font_size_override("font_size", 16)
+	lock_indicator.add_theme_color_override("font_color", Color.YELLOW)
+	lock_indicator.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lock_indicator.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lock_indicator.size = Vector2(24, 24)
+	lock_indicator.visible = false
+	title_bar.add_child(lock_indicator)
+
+func _update_lock_visual():
+	if not lock_indicator:
+		return
+	
+	if is_locked:
+		# Show lock indicator next to options button
+		lock_indicator.visible = true
+		# Position it to the left of the options button
+		var options_x = options_button.position.x
+		lock_indicator.position = Vector2(options_x - 28, (title_bar_height - 24) / 2)
+	else:
+		# Hide indicator
+		lock_indicator.visible = false
+	
+	# Remove title bar color changes - keep it normal
+	if title_bar:
+		title_bar.modulate = Color.WHITE
 
 func _setup_content():	
 	# Create main inventory container
@@ -234,11 +269,8 @@ func _setup_options_dropdown():
 	options_dropdown = DropDownMenu_Base.new()
 	options_dropdown.name = "OptionsDropdown"
 	
-	# Add dropdown menu items
-	options_dropdown.add_menu_item("transparency", "Window Transparency")
-	options_dropdown.add_menu_item("lock_window", "Lock Window Position")
-	options_dropdown.add_menu_item("reset_position", "Reset Window Position")
-	options_dropdown.add_menu_item("reset_size", "Reset Window Size")
+	# Use the dynamic update function to set initial items
+	_update_options_dropdown_text()
 	
 	# Connect dropdown signals
 	options_dropdown.item_selected.connect(_on_options_dropdown_selected)
@@ -371,12 +403,19 @@ func _update_button_positions():
 	var button_spacing = button_size.x + 2
 	var start_x = size.x - button_spacing
 	
+	# Account for lock indicator space when positioning buttons
+	var lock_offset = 28 if (is_locked and lock_indicator and lock_indicator.visible) else 0
+	
 	if close_button:
 		close_button.position = Vector2(start_x, button_y)
 		start_x -= button_spacing
 	
 	if options_button:
-		options_button.position = Vector2(start_x, button_y)
+		options_button.position = Vector2(start_x - lock_offset, button_y)
+		
+		# Update lock indicator position relative to options button
+		if is_locked and lock_indicator:
+			lock_indicator.position = Vector2(start_x - lock_offset - 28, (title_bar_height - 24) / 2)
 
 # Header signal handlers
 func _on_search_changed(text: String):
@@ -491,6 +530,27 @@ func _show_transparency_dialog():
 
 func _toggle_window_lock():
 	is_locked = !is_locked
+	_update_lock_visual()  # Add this line
+	
+	# Recreate the options dropdown to reflect the new lock state
+	_update_options_dropdown_text()
+	
+func _update_options_dropdown_text():
+	if not options_dropdown:
+		return
+	
+	# Clear existing items and recreate with updated text
+	options_dropdown.clear_items()
+	
+	# Add items with current state
+	options_dropdown.add_menu_item("transparency", "Window Transparency")
+	
+	# Dynamic lock text based on current state
+	var lock_text = "Unlock Window Position" if is_locked else "Lock Window Position"
+	options_dropdown.add_menu_item("lock_window", lock_text)
+	
+	options_dropdown.add_menu_item("reset_position", "Reset Window Position")
+	options_dropdown.add_menu_item("reset_size", "Reset Window Size")
 
 func _reset_window_position():
 	center_on_screen()
