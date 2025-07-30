@@ -849,10 +849,11 @@ func _create_resize_area(area_name: String, mode: ResizeMode) -> Control:
 	var area = Control.new()
 	area.name = area_name
 	area.mouse_filter = Control.MOUSE_FILTER_PASS
+	area.set_meta("resize_mode", mode)
 	
-	# Connect signals
-	area.gui_input.connect(_on_resize_area_input.bind(mode))
-	area.mouse_entered.connect(_on_resize_area_entered.bind(mode))
+	# Connect signals directly without any binding
+	area.gui_input.connect(_on_resize_area_input)
+	area.mouse_entered.connect(_on_resize_area_entered)
 	area.mouse_exited.connect(_on_resize_area_exited)
 	
 	resize_overlay.add_child(area)
@@ -860,7 +861,19 @@ func _create_resize_area(area_name: String, mode: ResizeMode) -> Control:
 	
 	return area
 
-func _on_resize_area_input(mode: ResizeMode, event: InputEvent):
+func _on_resize_area_input(event: InputEvent):
+	# Find which resize area triggered this event
+	var source_area: Control = null
+	for area in resize_areas:
+		if area.has_focus() or _is_mouse_over_area(area):
+			source_area = area
+			break
+	
+	if not source_area:
+		return
+		
+	var mode = source_area.get_meta("resize_mode") as ResizeMode
+	
 	if not can_resize or is_locked:
 		return
 	
@@ -872,7 +885,23 @@ func _on_resize_area_input(mode: ResizeMode, event: InputEvent):
 			else:
 				_end_resize()
 
-func _on_resize_area_entered(mode: ResizeMode):
+func _on_resize_area_entered():
+	# Find which area the mouse entered by checking mouse position
+	var mouse_pos = get_local_mouse_position()
+	for area in resize_areas:
+		if _is_mouse_over_area(area):
+			var mode = area.get_meta("resize_mode") as ResizeMode
+			_set_resize_cursor(mode)
+			break
+			
+# Helper function to check if mouse is over a specific area
+func _is_mouse_over_area(area: Control) -> bool:
+	var mouse_pos = get_local_mouse_position()
+	var area_rect = Rect2(area.global_position - global_position, area.size)
+	return area_rect.has_point(mouse_pos)
+
+# Extract cursor setting to separate function
+func _set_resize_cursor(mode: ResizeMode):
 	if not can_resize or is_locked or is_dragging:
 		return
 	
