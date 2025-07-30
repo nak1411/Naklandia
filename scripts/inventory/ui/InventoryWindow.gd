@@ -9,7 +9,7 @@ extends Control
 @export var max_window_size: Vector2 = Vector2(1400, 1000)
 @export var can_resize: bool = true
 @export var resize_border_width: float = 8.0
-@export var resize_corner_size: float = 30.0
+@export var resize_corner_size: float = 8.0
 
 # UI Components
 var main_container: Control
@@ -19,6 +19,8 @@ var close_button: Button
 var content_area: Control
 var background_panel: Panel
 var lock_indicator: Label
+var resize_border_visual: Control
+var border_lines: Array[ColorRect] = []
 
 # Inventory components
 var inventory_manager: InventoryManager
@@ -98,6 +100,25 @@ func _process(_delta):
 	# Handle resizing
 	if is_resizing and can_resize:
 		_handle_resize()
+	
+	if not is_resizing and not is_dragging and can_resize and not is_locked:
+		_update_resize_cursor()
+		
+func _update_resize_cursor():
+	var mouse_pos = get_global_mouse_position()
+	var resize_area = _get_resize_area(mouse_pos)
+	
+	match resize_area:
+		ResizeMode.LEFT, ResizeMode.RIGHT:
+			mouse_default_cursor_shape = Control.CURSOR_HSIZE
+		ResizeMode.TOP, ResizeMode.BOTTOM:
+			mouse_default_cursor_shape = Control.CURSOR_VSIZE
+		ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_RIGHT:
+			mouse_default_cursor_shape = Control.CURSOR_FDIAGSIZE
+		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
+			mouse_default_cursor_shape = Control.CURSOR_BDIAGSIZE
+		ResizeMode.NONE:
+			mouse_default_cursor_shape = Control.CURSOR_ARROW
 		
 func _gui_input(event: InputEvent):
 	if not can_resize or is_locked:
@@ -720,7 +741,7 @@ func _get_resize_area(mouse_pos: Vector2) -> ResizeMode:
 	var in_top = local_pos.y <= resize_border_width
 	var in_bottom = local_pos.y >= size.y - resize_border_width
 	
-	# Check corners first (they take priority)
+	# Check corners first (they take priority) - with proper bounds checking
 	if in_top and in_left and local_pos.x <= resize_corner_size and local_pos.y <= resize_corner_size:
 		return ResizeMode.TOP_LEFT
 	elif in_top and in_right and local_pos.x >= size.x - resize_corner_size and local_pos.y <= resize_corner_size:
@@ -730,14 +751,14 @@ func _get_resize_area(mouse_pos: Vector2) -> ResizeMode:
 	elif in_bottom and in_right and local_pos.x >= size.x - resize_corner_size and local_pos.y >= size.y - resize_corner_size:
 		return ResizeMode.BOTTOM_RIGHT
 	
-	# Check edges
-	elif in_left:
+	# Check edges - but exclude corner areas
+	elif in_left and not (local_pos.y <= resize_corner_size or local_pos.y >= size.y - resize_corner_size):
 		return ResizeMode.LEFT
-	elif in_right:
+	elif in_right and not (local_pos.y <= resize_corner_size or local_pos.y >= size.y - resize_corner_size):
 		return ResizeMode.RIGHT
-	elif in_top:
+	elif in_top and not (local_pos.x <= resize_corner_size or local_pos.x >= size.x - resize_corner_size):
 		return ResizeMode.TOP
-	elif in_bottom:
+	elif in_bottom and not (local_pos.x <= resize_corner_size or local_pos.x >= size.x - resize_corner_size):
 		return ResizeMode.BOTTOM
 	
 	return ResizeMode.NONE
@@ -752,10 +773,125 @@ func _create_resize_overlay():
 	main_container.add_child(resize_overlay)
 	
 	_create_resize_areas()
+	_create_resize_border_visuals()
+	
+func _create_resize_border_visuals():
+	border_lines.clear()
+	
+	# Create visual container
+	resize_border_visual = Control.new()
+	resize_border_visual.name = "ResizeBorderVisual"
+	resize_border_visual.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	resize_border_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Important!
+	resize_border_visual.z_index = 199  # Below the resize areas
+	main_container.add_child(resize_border_visual)
+	
+	# Left border - matches resize_border_width
+	var left_line = ColorRect.new()
+	left_line.color = Color(0.5, 0.8, 1.0, 0.3)
+	left_line.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Add this line
+	left_line.anchor_top = 0.0
+	left_line.anchor_bottom = 1.0
+	left_line.anchor_left = 0.0
+	left_line.anchor_right = 0.0
+	left_line.offset_right = resize_border_width
+	resize_border_visual.add_child(left_line)
+	border_lines.append(left_line)
+	
+	# Right border - matches resize_border_width
+	var right_line = ColorRect.new()
+	right_line.color = Color(0.5, 0.8, 1.0, 0.3)
+	right_line.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Add this line
+	right_line.anchor_top = 0.0
+	right_line.anchor_bottom = 1.0
+	right_line.anchor_left = 1.0
+	right_line.anchor_right = 1.0
+	right_line.offset_left = -resize_border_width
+	resize_border_visual.add_child(right_line)
+	border_lines.append(right_line)
+	
+	# Top border - matches resize_border_width
+	var top_line = ColorRect.new()
+	top_line.color = Color(0.5, 0.8, 1.0, 0.3)
+	top_line.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Add this line
+	top_line.anchor_left = 0.0
+	top_line.anchor_right = 1.0
+	top_line.anchor_top = 0.0
+	top_line.anchor_bottom = 0.0
+	top_line.offset_bottom = resize_border_width
+	resize_border_visual.add_child(top_line)
+	border_lines.append(top_line)
+	
+	# Bottom border - matches resize_border_width
+	var bottom_line = ColorRect.new()
+	bottom_line.color = Color(0.5, 0.8, 1.0, 0.3)
+	bottom_line.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Add this line
+	bottom_line.anchor_left = 0.0
+	bottom_line.anchor_right = 1.0
+	bottom_line.anchor_top = 1.0
+	bottom_line.anchor_bottom = 1.0
+	bottom_line.offset_top = -resize_border_width
+	resize_border_visual.add_child(bottom_line)
+	border_lines.append(bottom_line)
+	
+	# Corner indicators using resize_corner_size
+	_create_corner_indicators()
+
+func _create_corner_indicators():
+	var corner_color = Color(0.8, 0.9, 1.0, 0.6)
+	
+	# Top-left corner - matches resize_corner_size
+	var tl_corner = ColorRect.new()
+	tl_corner.color = corner_color
+	tl_corner.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Add this line
+	tl_corner.anchor_left = 0.0
+	tl_corner.anchor_right = 0.0
+	tl_corner.anchor_top = 0.0
+	tl_corner.anchor_bottom = 0.0
+	tl_corner.offset_right = resize_corner_size
+	tl_corner.offset_bottom = resize_corner_size
+	resize_border_visual.add_child(tl_corner)
+	
+	# Top-right corner - matches resize_corner_size
+	var tr_corner = ColorRect.new()
+	tr_corner.color = corner_color
+	tr_corner.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Add this line
+	tr_corner.anchor_left = 1.0
+	tr_corner.anchor_right = 1.0
+	tr_corner.anchor_top = 0.0
+	tr_corner.anchor_bottom = 0.0
+	tr_corner.offset_left = -resize_corner_size
+	tr_corner.offset_bottom = resize_corner_size
+	resize_border_visual.add_child(tr_corner)
+	
+	# Bottom-left corner - matches resize_corner_size
+	var bl_corner = ColorRect.new()
+	bl_corner.color = corner_color
+	bl_corner.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Add this line
+	bl_corner.anchor_left = 0.0
+	bl_corner.anchor_right = 0.0
+	bl_corner.anchor_top = 1.0
+	bl_corner.anchor_bottom = 1.0
+	bl_corner.offset_right = resize_corner_size
+	bl_corner.offset_top = -resize_corner_size
+	resize_border_visual.add_child(bl_corner)
+	
+	# Bottom-right corner - matches resize_corner_size
+	var br_corner = ColorRect.new()
+	br_corner.color = corner_color
+	br_corner.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Add this line
+	br_corner.anchor_left = 1.0
+	br_corner.anchor_right = 1.0
+	br_corner.anchor_top = 1.0
+	br_corner.anchor_bottom = 1.0
+	br_corner.offset_left = -resize_corner_size
+	br_corner.offset_top = -resize_corner_size
+	resize_border_visual.add_child(br_corner)
 
 func _create_resize_areas():
 	resize_areas.clear()
 	
+	# Create EDGES first
 	# Left edge
 	var left_area = _create_resize_area("LeftResize", ResizeMode.LEFT)
 	left_area.anchor_left = 0.0
@@ -788,8 +924,7 @@ func _create_resize_areas():
 	bottom_area.anchor_bottom = 1.0
 	bottom_area.offset_top = -resize_border_width
 	
-	# Corners
-	var corner_size = resize_border_width * 2
+	# Create CORNERS last (so they have higher priority in mouse detection)
 	
 	# Top-left corner
 	var tl_corner = _create_resize_area("TopLeftCorner", ResizeMode.TOP_LEFT)
@@ -797,8 +932,8 @@ func _create_resize_areas():
 	tl_corner.anchor_right = 0.0
 	tl_corner.anchor_top = 0.0
 	tl_corner.anchor_bottom = 0.0
-	tl_corner.offset_right = corner_size
-	tl_corner.offset_bottom = corner_size
+	tl_corner.offset_right = resize_corner_size
+	tl_corner.offset_bottom = resize_corner_size
 	
 	# Top-right corner
 	var tr_corner = _create_resize_area("TopRightCorner", ResizeMode.TOP_RIGHT)
@@ -806,8 +941,8 @@ func _create_resize_areas():
 	tr_corner.anchor_right = 1.0
 	tr_corner.anchor_top = 0.0
 	tr_corner.anchor_bottom = 0.0
-	tr_corner.offset_left = -corner_size
-	tr_corner.offset_bottom = corner_size
+	tr_corner.offset_left = -resize_corner_size
+	tr_corner.offset_bottom = resize_corner_size
 	
 	# Bottom-left corner
 	var bl_corner = _create_resize_area("BottomLeftCorner", ResizeMode.BOTTOM_LEFT)
@@ -815,8 +950,8 @@ func _create_resize_areas():
 	bl_corner.anchor_right = 0.0
 	bl_corner.anchor_top = 1.0
 	bl_corner.anchor_bottom = 1.0
-	bl_corner.offset_right = corner_size
-	bl_corner.offset_top = -corner_size
+	bl_corner.offset_right = resize_corner_size
+	bl_corner.offset_top = -resize_corner_size
 	
 	# Bottom-right corner
 	var br_corner = _create_resize_area("BottomRightCorner", ResizeMode.BOTTOM_RIGHT)
@@ -824,8 +959,8 @@ func _create_resize_areas():
 	br_corner.anchor_right = 1.0
 	br_corner.anchor_top = 1.0
 	br_corner.anchor_bottom = 1.0
-	br_corner.offset_left = -corner_size
-	br_corner.offset_top = -corner_size
+	br_corner.offset_left = -resize_corner_size
+	br_corner.offset_top = -resize_corner_size
 
 func _create_resize_area(area_name: String, mode: ResizeMode) -> Control:
 	var area = Control.new()
@@ -868,18 +1003,7 @@ func _on_resize_area_input(event: InputEvent):
 				_end_resize()
 
 func _on_resize_area_entered():
-	# Don't interfere if we're already dragging or resizing
-	if is_dragging or is_resizing or is_locked or not can_resize:
-		return
-	
-	# Find which area the mouse entered
-	var mouse_pos = get_local_mouse_position()
-	for area in resize_areas:
-		var area_rect = Rect2(area.position, area.size)
-		if area_rect.has_point(mouse_pos):
-			var mode = area.get_meta("resize_mode") as ResizeMode
-			_set_resize_cursor(area, mode)
-			break
+	pass
 			
 # Helper function to check if mouse is over a specific area
 func _is_mouse_over_area(area: Control) -> bool:
@@ -887,26 +1011,8 @@ func _is_mouse_over_area(area: Control) -> bool:
 	var area_rect = Rect2(area.global_position - global_position, area.size)
 	return area_rect.has_point(mouse_pos)
 
-# Extract cursor setting to separate function
-func _set_resize_cursor(control: Control, mode: ResizeMode):
-	print(mode)
-	match mode:
-		ResizeMode.LEFT, ResizeMode.RIGHT:
-			control.mouse_default_cursor_shape = Control.CURSOR_HSIZE
-		ResizeMode.TOP, ResizeMode.BOTTOM:
-			control.mouse_default_cursor_shape = Control.CURSOR_VSIZE
-		ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_RIGHT:
-			control.mouse_default_cursor_shape = Control.CURSOR_FDIAGSIZE
-		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
-			control.mouse_default_cursor_shape = Control.CURSOR_BDIAGSIZE
-
 func _on_resize_area_exited():
-	# Don't interfere if we're dragging or resizing
-	if is_dragging or is_resizing:
-		return
-	
-	# Reset cursor to default
-	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	pass
 
 func _start_resize(mode: ResizeMode, mouse_pos: Vector2):
 	is_resizing = true
