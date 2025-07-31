@@ -11,6 +11,16 @@ extends Control
 @export var resize_border_width: float = 8.0
 @export var resize_corner_size: float = 8.0
 
+var maximize_button: Button
+var is_maximized: bool = false
+var restore_position: Vector2
+var restore_size: Vector2
+var drag_threshold: float = 5.0  # Minimum distance to start drag
+var click_start_position: Vector2
+var drag_initiated: bool = false
+var mouse_pressed: bool = false  # Track if mouse is currently pressed
+
+
 # UI Components
 var main_container: Control
 var title_bar: Panel
@@ -100,7 +110,7 @@ func _process(_delta):
 		_on_size_changed()
 	
 	# Handle resizing
-	if is_resizing and can_resize:
+	if is_resizing and can_resize and not is_maximized:
 		_was_resizing = true
 		_handle_resize()
 	elif _was_resizing and not is_resizing:
@@ -108,7 +118,7 @@ func _process(_delta):
 		_was_resizing = false
 		_on_resize_complete()
 	
-	if can_resize and not is_locked:
+	if can_resize and not is_locked and not is_maximized:
 		_update_resize_cursor()
 		
 func _on_resize_complete():
@@ -135,6 +145,12 @@ func _input(event: InputEvent):
 		return
 		
 func _update_resize_cursor():
+	# Don't show resize cursors when maximized
+	if is_maximized:
+		if Input.get_current_cursor_shape() != Input.CURSOR_ARROW:
+			Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+		return
+		
 	var mouse_pos = get_global_mouse_position()
 	var resize_area = _get_resize_area(mouse_pos)
 	
@@ -188,7 +204,7 @@ func _update_border_visuals(resize_area: ResizeMode):
 				_animate_border_visibility(corner_indicators[3], true)  # Bottom-right corner
 		
 func _gui_input(event: InputEvent):
-	if not can_resize or is_locked:
+	if not can_resize or is_locked or is_maximized:
 		return
 	
 	if event is InputEventMouseButton:
@@ -251,21 +267,8 @@ func _setup_window_ui():
 	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title_bar.add_child(title_label)
 	
-	# Options button in title bar
-	options_button = Button.new()
-	options_button.name = "OptionsButton"
-	options_button.text = "⋯"
-	options_button.size = Vector2(title_bar_height - 4, title_bar_height - 4)
-	options_button.position = Vector2(size.x - title_bar_height - 30, 2)
-	title_bar.add_child(options_button)
-	
-	# Close button
-	close_button = Button.new()
-	close_button.name = "CloseButton"
-	close_button.text = "×"
-	close_button.size = Vector2(title_bar_height - 4, title_bar_height - 4)
-	close_button.position = Vector2(size.x - title_bar_height, 2)
-	title_bar.add_child(close_button)
+	# Create buttons with proper positioning
+	_setup_title_bar_buttons()
 	
 	# Content area
 	content_area = Control.new()
@@ -285,14 +288,78 @@ func _setup_window_ui():
 	
 	# Connect signals
 	title_bar.gui_input.connect(_on_title_bar_input)
-	close_button.pressed.connect(_on_close_pressed)
-	options_button.pressed.connect(_on_options_pressed)
 	
 	# Create options dropdown
 	_setup_options_dropdown()
 	
 	if can_resize:
 		_create_resize_overlay()
+
+func _setup_title_bar_buttons():
+	var button_size = Vector2(title_bar_height - 4, title_bar_height - 4)
+	var button_y = 2
+	var button_spacing = button_size.x + 2
+	var start_x = size.x - button_spacing
+	
+	# Close button (rightmost)
+	close_button = Button.new()
+	close_button.name = "CloseButton"
+	close_button.text = "×"
+	close_button.size = button_size
+	close_button.position = Vector2(start_x, button_y)
+	close_button.flat = true
+	title_bar.add_child(close_button)
+	close_button.pressed.connect(_on_close_pressed)
+	start_x -= button_spacing
+	
+	# Maximize button (middle)
+	maximize_button = Button.new()
+	maximize_button.name = "MaximizeButton"  
+	maximize_button.text = "□"
+	maximize_button.size = button_size
+	maximize_button.position = Vector2(start_x, button_y)
+	maximize_button.flat = true
+	title_bar.add_child(maximize_button)
+	maximize_button.pressed.connect(_on_maximize_pressed)
+	start_x -= button_spacing
+	
+	# Options button (leftmost)
+	options_button = Button.new()
+	options_button.name = "OptionsButton"
+	options_button.text = "⋯"
+	options_button.size = button_size
+	options_button.position = Vector2(start_x, button_y)
+	options_button.flat = true
+	title_bar.add_child(options_button)
+	options_button.pressed.connect(_on_options_pressed)
+
+func _update_button_positions():
+	if not title_bar:
+		return
+		
+	var button_size = Vector2(title_bar_height - 4, title_bar_height - 4)
+	var button_y = 2
+	var button_spacing = button_size.x + 2
+	var start_x = size.x - button_spacing
+	
+	# Account for lock indicator space when positioning buttons
+	var lock_offset = 28 if (is_locked and lock_indicator and lock_indicator.visible) else 0
+	
+	# Position buttons from right to left: Close → Maximize → Options
+	if close_button:
+		close_button.position = Vector2(start_x, button_y)
+		start_x -= button_spacing
+	
+	if maximize_button:
+		maximize_button.position = Vector2(start_x, button_y)
+		start_x -= button_spacing
+	
+	if options_button:
+		options_button.position = Vector2(start_x - lock_offset, button_y)
+		
+		# Update lock indicator position relative to options button
+		if is_locked and lock_indicator:
+			lock_indicator.position = Vector2(start_x - lock_offset - 28, (title_bar_height - 24) / 2)
 	
 func _setup_lock_indicator():
 	# Create lock indicator icon using a label with lock emoji
@@ -476,18 +543,78 @@ func _on_container_refreshed():
 func _on_title_bar_input(event: InputEvent):
 	if is_locked:
 		return
-		
+	
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			if mouse_event.pressed:
-				is_dragging = true
-				drag_start_position = get_global_mouse_position() - global_position
-			else:
+			# Handle double-click first, before any other logic
+			if mouse_event.double_click:
+				# Double-click to maximize/restore
+				if is_maximized:
+					restore_window()
+				else:
+					maximize_window()
+				
+				# Reset all drag states when double-clicking
+				mouse_pressed = false
 				is_dragging = false
-	
-	elif event is InputEventMouseMotion and is_dragging:
-		global_position = get_global_mouse_position() - drag_start_position
+				drag_initiated = false
+				get_viewport().set_input_as_handled()
+				return  # Exit early to prevent other logic
+			
+			if mouse_event.pressed:
+				# Store initial click position and state
+				mouse_pressed = true
+				is_dragging = false
+				drag_initiated = false
+				click_start_position = get_viewport().get_mouse_position()
+				drag_start_position = click_start_position
+				get_viewport().set_input_as_handled()
+			else:
+				# Handle mouse release - reset all drag states
+				mouse_pressed = false
+				if is_dragging:
+					is_dragging = false
+					Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+				drag_initiated = false
+	elif event is InputEventMouseMotion and mouse_pressed and not drag_initiated and not is_locked:
+		# Check if we should start dragging
+		var current_mouse_pos = get_viewport().get_mouse_position()
+		var distance = click_start_position.distance_to(current_mouse_pos)
+		
+		if distance > drag_threshold:
+			# Start actual dragging
+			drag_initiated = true
+			is_dragging = true
+			
+			# If window is maximized, restore it and adjust position
+			if is_maximized:
+				# Calculate relative position within the maximized window
+				var mouse_relative_x = click_start_position.x / size.x
+				
+				# Restore the window first
+				restore_window()
+				
+				# Position the restored window so the mouse stays over the title bar
+				var new_x = click_start_position.x - (restore_size.x * mouse_relative_x)
+				var new_y = click_start_position.y - (title_bar_height / 2)
+				
+				# Clamp to screen bounds
+				var viewport_size = get_viewport().get_visible_rect().size
+				new_x = clampf(new_x, 0, viewport_size.x - restore_size.x)
+				new_y = clampf(new_y, 0, viewport_size.y - restore_size.y)
+				
+				position = Vector2(new_x, new_y)
+				
+				# Update drag start position for smooth continued dragging
+				drag_start_position = get_viewport().get_mouse_position()
+	elif event is InputEventMouseMotion and is_dragging and drag_initiated and not is_locked:
+		# Handle actual dragging (only if not maximized)
+		if not is_maximized:
+			var current_mouse_pos = get_viewport().get_mouse_position()
+			var delta = current_mouse_pos - drag_start_position
+			position += delta
+			drag_start_position = current_mouse_pos
 
 func _on_close_pressed():
 	if item_actions:
@@ -507,6 +634,54 @@ func _on_close_pressed():
 	else:
 		# Fallback - try to re-enable player input directly
 		_reenable_player_input_fallback()
+		
+func _on_maximize_pressed():
+	if is_maximized:
+		restore_window()
+	else:
+		maximize_window()
+
+func maximize_window():
+	if is_maximized:
+		return
+		
+	# Store current position and size for restoration
+	restore_position = position
+	restore_size = size
+	
+	# Get the viewport size
+	var viewport = get_viewport()
+	if viewport:
+		var viewport_size = viewport.get_visible_rect().size
+		position = Vector2.ZERO
+		size = viewport_size
+	
+	is_maximized = true
+	if maximize_button:
+		maximize_button.text = "❐"  # Restore icon
+	
+	# Reset cursor since we can't resize when maximized
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	
+	if content and content.inventory_grid:
+		print("Triggering grid maximized handling...")
+		content.inventory_grid.handle_resize_complete()
+
+func restore_window():
+	if not is_maximized:
+		return
+		
+	# Restore previous position and size
+	position = restore_position
+	size = restore_size
+	
+	is_maximized = false
+	if maximize_button:
+		maximize_button.text = "□"  # Maximize icon
+		
+	if content and content.inventory_grid:
+		print("Triggering grid restored handling...")
+		content.inventory_grid.handle_resize_complete()
 
 # Add this helper method to InventoryWindow.gd
 func _find_inventory_integration(node: Node) -> InventoryIntegration:
@@ -584,29 +759,6 @@ func _on_size_changed():
 		_update_button_positions()
 	
 	window_resized.emit(Vector2i(size))
-
-func _update_button_positions():
-	if not title_bar:
-		return
-		
-	var button_size = Vector2(title_bar_height - 4, title_bar_height - 4)
-	var button_y = 2
-	var button_spacing = button_size.x + 2
-	var start_x = size.x - button_spacing
-	
-	# Account for lock indicator space when positioning buttons
-	var lock_offset = 28 if (is_locked and lock_indicator and lock_indicator.visible) else 0
-	
-	if close_button:
-		close_button.position = Vector2(start_x, button_y)
-		start_x -= button_spacing
-	
-	if options_button:
-		options_button.position = Vector2(start_x - lock_offset, button_y)
-		
-		# Update lock indicator position relative to options button
-		if is_locked and lock_indicator:
-			lock_indicator.position = Vector2(start_x - lock_offset - 28, (title_bar_height - 24) / 2)
 
 # Header signal handlers
 func _on_search_changed(text: String):
@@ -809,6 +961,9 @@ func _find_node_recursive(node: Node, target_name: String) -> Node:
 	return null
 	
 func _handle_resize_start(mouse_pos: Vector2):
+	if is_maximized:
+		return
+		
 	var resize_area = _get_resize_area(mouse_pos)
 	if resize_area != ResizeMode.NONE:
 		is_resizing = true
