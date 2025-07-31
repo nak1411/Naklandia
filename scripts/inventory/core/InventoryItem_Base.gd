@@ -108,6 +108,38 @@ func can_stack_with(other_item: InventoryItem_Base) -> bool:
 			not is_unique and not other_item.is_unique)
 	
 	return can_stack
+	
+func split_stack(split_quantity: int) -> InventoryItem_Base:
+	"""Split a quantity from this stack into a new item"""
+	if split_quantity <= 0 or split_quantity >= quantity:
+		return null
+	
+	# Create a new item with the split quantity
+	var new_item = InventoryItem_Base.new()
+	new_item.item_id = item_id
+	new_item.item_name = item_name
+	new_item.description = description
+	new_item.icon_path = icon_path
+	new_item.volume = volume
+	new_item.mass = mass
+	new_item.quantity = split_quantity
+	new_item.max_stack_size = max_stack_size
+	new_item.item_type = item_type
+	new_item.item_rarity = item_rarity
+	new_item.is_contraband = is_contraband
+	new_item.base_value = base_value
+	new_item.can_be_destroyed = can_be_destroyed
+	new_item.is_unique = is_unique
+	new_item.is_container = is_container
+	new_item.container_volume = container_volume
+	new_item.container_type = container_type
+	
+	# Reduce this item's quantity
+	quantity -= split_quantity
+	quantity_changed.emit(quantity)
+	item_modified.emit()
+	
+	return new_item
 
 func add_to_stack(amount: int) -> int:
 	var space_available = max_stack_size - quantity
