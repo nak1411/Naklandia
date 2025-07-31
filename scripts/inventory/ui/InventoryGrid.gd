@@ -51,6 +51,8 @@ func _ready():
 	set_focus_mode(Control.FOCUS_ALL)
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	
+	set_grid_size(25, 20)
+	
 	# Create timer for resize complete handling
 	_resize_complete_timer = Timer.new()
 	_resize_complete_timer.wait_time = 0.1
@@ -101,6 +103,25 @@ func _update_container_positions_from_visual():
 					# Update position in container if it supports it
 					if container.has_method("set_item_position"):
 						container.set_item_position(item, position)
+						
+func set_dynamic_grid_size(max_width: int = 20, initial_height: int = 5):
+	"""Set up a dynamic grid that expands as needed"""
+	min_grid_width = max_width
+	min_grid_height = initial_height
+	current_grid_width = max_width
+	current_grid_height = initial_height
+	_rebuild_grid()
+	
+func ensure_slots_for_items(item_count: int):
+	"""Ensure we have enough slots for the given number of items"""
+	var slots_needed = item_count + 10  # Add some buffer slots
+	var current_slots = current_grid_width * current_grid_height
+	
+	if slots_needed > current_slots:
+		var new_height = (slots_needed + current_grid_width - 1) / current_grid_width
+		if new_height > current_grid_height:
+			current_grid_height = new_height
+			_rebuild_grid()
 
 func _ensure_adequate_slots():
 	"""Ensure we have enough slots for the current dimensions"""

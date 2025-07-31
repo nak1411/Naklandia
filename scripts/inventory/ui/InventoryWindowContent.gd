@@ -178,6 +178,8 @@ func _setup_right_panel_only():
 	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid_scroll.add_child(inventory_grid)
 	
+	inventory_grid.set_grid_size(20, 10)
+	
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
@@ -205,6 +207,8 @@ func _setup_right_panel():
 	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid_scroll.add_child(inventory_grid)
+	
+	inventory_grid.set_grid_size(20, 10)
 	
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)

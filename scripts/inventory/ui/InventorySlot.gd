@@ -3,7 +3,7 @@ class_name InventorySlot
 extends Control
 
 # Slot properties
-@export var slot_size: Vector2 = Vector2(64, 64)
+@export var slot_size: Vector2 = Vector2(96, 96)
 @export var border_color: Color = Color(0.2, 0.2, 0.2, 1.0)
 @export var border_width: float = 0.0
 @export var highlight_color: Color = Color.YELLOW
@@ -169,7 +169,7 @@ func _setup_visual_components():
 	background_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background_panel)
 	
-	# Style the background
+	# Style the background - MATCH GRID BACKGROUND
 	var style_box = StyleBoxFlat.new()
 	style_box.bg_color = Color(0.1, 0.1, 0.1, 1.0)
 	style_box.border_width_left = 0
@@ -178,19 +178,23 @@ func _setup_visual_components():
 	style_box.border_width_bottom = 0
 	background_panel.add_theme_stylebox_override("panel", style_box)
 	
-	# Create a content container with margins for spacing
-	var content_container = Control.new()
+	# Create a content container with MarginContainer for proper padding
+	var content_container = MarginContainer.new()
 	content_container.name = "ContentContainer"
-	content_container.set_offsets_preset(Control.PRESET_FULL_RECT)
-	content_container.position = Vector2(slot_padding, slot_padding)
-	content_container.size = slot_size - Vector2(slot_padding, slot_padding)
+	content_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	# Set margins proportionally
+	var padding = max(4, int(slot_size.x * 0.08))  # 8% of slot size, minimum 4
+	content_container.add_theme_constant_override("margin_left", padding)
+	content_container.add_theme_constant_override("margin_right", padding)
+	content_container.add_theme_constant_override("margin_top", padding)
+	content_container.add_theme_constant_override("margin_bottom", padding)
 	add_child(content_container)
 	
 	# Item icon
 	item_icon = TextureRect.new()
 	item_icon.name = "ItemIcon"
-	item_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	item_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	item_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	item_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -287,9 +291,12 @@ func _show_hover_glow():
 	var slot_global_rect = get_global_rect()
 	var border_width = 2
 	
-	# Account for slot padding - the content is inset by slot_padding pixels
-	var content_position = slot_global_rect.position + Vector2(slot_padding, slot_padding)
-	var content_size = slot_global_rect.size - Vector2(slot_padding * 2, slot_padding * 2)
+	# Calculate padding based on the proportional system we're now using
+	var padding = max(4, int(slot_size.x * 0.08))  # Same calculation as in _setup_visual_components
+	
+	# Account for the margin container padding - the content is inset by padding pixels
+	var content_position = slot_global_rect.position + Vector2(padding, padding)
+	var content_size = slot_global_rect.size - Vector2(padding * 2, padding * 2)
 	
 	# Position the container around the content area (not the full slot)
 	hover_glow.global_position = content_position - Vector2(border_width, border_width)
@@ -303,19 +310,19 @@ func _show_hover_glow():
 	
 	# Top line
 	top_line.position = Vector2(0, 0)
-	top_line.size = Vector2(hover_glow.size.x + 8, border_width)
+	top_line.size = Vector2(hover_glow.size.x, border_width)
 	
 	# Bottom line
-	bottom_line.position = Vector2(0, (hover_glow.size.y + 8) - border_width)
-	bottom_line.size = Vector2(hover_glow.size.x + 8, border_width)
+	bottom_line.position = Vector2(0, hover_glow.size.y - border_width)
+	bottom_line.size = Vector2(hover_glow.size.x, border_width)
 	
 	# Left line
 	left_line.position = Vector2(0, 0)
-	left_line.size = Vector2(border_width, hover_glow.size.y + 8)
+	left_line.size = Vector2(border_width, hover_glow.size.y)
 	
 	# Right line
-	right_line.position = Vector2((hover_glow.size.x + 8) - border_width, 0)
-	right_line.size = Vector2(border_width, hover_glow.size.y + 8)
+	right_line.position = Vector2(hover_glow.size.x - border_width, 0)
+	right_line.size = Vector2(border_width, hover_glow.size.y)
 	
 	hover_glow.visible = true
 	
