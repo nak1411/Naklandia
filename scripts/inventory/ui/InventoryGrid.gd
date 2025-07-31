@@ -421,6 +421,7 @@ func _focus_inventory_window():
 	var parent = get_parent()
 	while parent:
 		if parent.has_method("grab_focus"):
+			parent.set_focus_mode(Control.FOCUS_ALL)
 			parent.grab_focus()
 			break
 		parent = parent.get_parent()
