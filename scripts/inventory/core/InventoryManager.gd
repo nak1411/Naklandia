@@ -185,31 +185,52 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 	# Check if we can stack with existing items in target container (for different containers)
 	if from_container != to_container:
 		var stackable_item = to_container.find_stackable_item(item)
-		if stackable_item and transfer_quantity <= (stackable_item.max_stack_size - stackable_item.quantity):
-			# We can stack completely - handle the stacking
-			if transfer_quantity < item.quantity:
-				# Partial transfer - reduce source quantity
-				item.quantity -= transfer_quantity
-				stackable_item.quantity += transfer_quantity
-			else:
-				# Complete transfer - remove from source and add to target stack
-				from_container.remove_item(item)
-				stackable_item.quantity += transfer_quantity
+		if stackable_item:
+			# Calculate available stack space
+			var stack_space = stackable_item.max_stack_size - stackable_item.quantity
 			
-			# Record transaction
+			# Calculate volume constraint - how many items can fit by volume
+			var available_volume = to_container.get_available_volume()
+			var volume_limited_quantity = int(available_volume / item.volume) if item.volume > 0 else transfer_quantity
+			
+			# Use the minimum of stack space, volume constraints, and requested quantity
+			var max_stackable = min(stack_space, min(volume_limited_quantity, transfer_quantity))
+			
+			if max_stackable > 0:
+				# We can stack at least some quantity
+				if max_stackable < item.quantity:
+					# Partial transfer - reduce source quantity
+					item.quantity -= max_stackable
+					stackable_item.quantity += max_stackable
+				else:
+					# Complete transfer - remove from source and add to target stack
+					from_container.remove_item(item)
+					stackable_item.quantity += max_stackable
+				
+				# Record transaction
 				transaction = {
-				"item_name": item.item_name,
-				"quantity": transfer_quantity,
-				"from_container": from_container_id,
-				"to_container": to_container_id,
-				"timestamp": Time.get_unix_time_from_system(),
-				"stacked": true
-			}
-			transaction_history.append(transaction)
-			
-			item_transferred.emit(transfer_item, from_container_id, to_container_id)
-			transaction_completed.emit(transaction)
-			return true
+					"item_name": item.item_name,
+					"quantity": max_stackable,
+					"from_container": from_container_id,
+					"to_container": to_container_id,
+					"timestamp": Time.get_unix_time_from_system(),
+					"stacked": true
+				}
+				transaction_history.append(transaction)
+				
+				item_transferred.emit(item, from_container_id, to_container_id)
+				transaction_completed.emit(transaction)
+				return true
+	
+	# Calculate maximum transferable quantity based on volume for new items
+	var available_volume = to_container.get_available_volume()
+	var max_transferable_by_volume = int(available_volume / item.volume) if item.volume > 0 else transfer_quantity
+	
+	# Limit transfer quantity to what can actually fit
+	transfer_quantity = min(transfer_quantity, max_transferable_by_volume)
+	
+	if transfer_quantity <= 0:
+		return false  # Nothing can be transferred
 	
 	# Can't stack or only partial stack possible - handle as separate item
 	if transfer_quantity < item.quantity:

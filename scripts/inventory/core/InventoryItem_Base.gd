@@ -132,22 +132,6 @@ func remove_from_stack(amount: int) -> int:
 	
 	return amount_to_remove
 
-func split_stack(split_amount: int) -> InventoryItem_Base:
-	if split_amount >= quantity or split_amount <= 0:
-		return null
-	
-	# Create new item with split amount
-	var new_item = duplicate()
-	new_item.quantity = split_amount
-	# Keep the same ID so items can still stack together
-	
-	# Reduce current stack
-	quantity -= split_amount
-	quantity_changed.emit(quantity)
-	item_modified.emit()
-	
-	return new_item
-
 # Rarity color coding (EVE-like)
 func get_rarity_color() -> Color:
 	match item_rarity:

@@ -1034,7 +1034,7 @@ func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
 	if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
 		call_deferred("_trigger_compact_refresh")
 
-func _on_container_item_removed(item: InventoryItem_Base):
+func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
 	# Compact remaining items when items are removed
 	if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
 		call_deferred("_trigger_compact_refresh")

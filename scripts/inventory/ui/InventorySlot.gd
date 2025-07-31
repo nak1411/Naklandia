@@ -723,6 +723,11 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 	
 	if success:
 		clear_item()
+		# Refresh source container display
+		var source_grid = _get_inventory_grid()
+		if source_grid:
+			source_grid.refresh_display()
+			source_grid.trigger_compact_refresh()
 		return true
 	
 	return false
@@ -869,6 +874,10 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 				var target_grid = target_slot._get_inventory_grid()
 				if target_grid:
 					target_grid.refresh_display()
+					
+				var source_grid = _get_inventory_grid()
+				if source_grid:
+					source_grid.refresh_display()
 				
 				return true
 			
@@ -1287,6 +1296,16 @@ func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_
 				clear_item()
 			else:
 				_update_item_display()
+				
+			# Refresh target container display
+			var target_grid = target_slot._get_inventory_grid()
+			if target_grid:
+				target_grid.refresh_display()
+	
+			# ADD THIS: Refresh source container display
+			var source_grid = _get_inventory_grid()
+			if source_grid:
+				source_grid.refresh_display()
 			
 			return true
 		
