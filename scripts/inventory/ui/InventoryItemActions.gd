@@ -308,6 +308,8 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	# Create dialog using the base class
 	var dialog_window = DialogWindow_Base.new("Split Stack", Vector2(300, 180))
 	dialog_window.center_on_parent = true
+	dialog_window.title_bar_active_color = Color(0.1, 0.1, 0.1, 1.0)
+	dialog_window.border_active_color = Color(0.1, 0.1, 0.1, 1.0)
 	
 	# Track this dialog window
 	open_dialog_windows.append(dialog_window)

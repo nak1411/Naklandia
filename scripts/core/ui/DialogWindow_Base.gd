@@ -247,8 +247,8 @@ func _input(event: InputEvent):
 func apply_dialog_theme():
 	"""Apply dialog-specific styling"""
 	# Dialogs typically have a slightly different appearance
-	title_bar_color = Color(0.12, 0.12, 0.15, 1.0)
-	title_bar_active_color = Color(0.15, 0.15, 0.2, 1.0)
+	title_bar_color = Color(0.15, 0.15, 0.15, 1.0)
+	title_bar_active_color = Color(0.9, 0.15, 0.15, 1.0)
 	border_color = Color(0.5, 0.5, 0.6, 1.0)
 	border_active_color = Color(0.7, 0.7, 0.9, 1.0)
 	

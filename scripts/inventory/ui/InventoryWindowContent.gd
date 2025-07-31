@@ -311,8 +311,7 @@ func update_mass_info():
 	
 	var info = current_container.get_container_info()
 	
-	var text = "%s  |  " % current_container.container_name
-	text += "Items: %d (%d types)  |  " % [info.total_quantity, info.item_count]
+	var text = "Items: %d (%d types)  |  " % [info.total_quantity, info.item_count]
 	text += "Volume: %.1f/%.1f m³ (%.1f%%)  |  " % [info.volume_used, info.volume_max, info.volume_percentage]
 	text += "Mass: %.1f kg  |  " % info.total_mass
 	text += "Value: %.0f ISK" % info.total_value
