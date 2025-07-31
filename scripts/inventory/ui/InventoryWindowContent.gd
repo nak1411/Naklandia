@@ -300,7 +300,15 @@ func update_containers(containers: Array[InventoryContainer_Base]):
 		container_list.set_item_tooltip_enabled(item_index, false)
 
 func select_container(container: InventoryContainer_Base):
+	# Disconnect from previous container if exists
+	if current_container:
+		_disconnect_container_signals()
+	
 	current_container = container
+	
+	# Connect to new container signals
+	if container:
+		_connect_container_signals()
 	
 	if not inventory_grid:
 		return
@@ -315,6 +323,60 @@ func select_container(container: InventoryContainer_Base):
 	else:
 		inventory_grid.set_container(null)
 	
+	update_mass_info()
+	
+func _connect_container_signals():
+	"""Connect to container signals for real-time updates"""
+	if current_container:
+		if not current_container.item_added.is_connected(_on_container_item_added):
+			current_container.item_added.connect(_on_container_item_added)
+		if not current_container.item_removed.is_connected(_on_container_item_removed):
+			current_container.item_removed.connect(_on_container_item_removed)
+		if not current_container.item_moved.is_connected(_on_container_item_moved):
+			current_container.item_moved.connect(_on_container_item_moved)
+		
+		# Also connect to individual item quantity changes for real-time updates
+		for item in current_container.items:
+			if not item.quantity_changed.is_connected(_on_item_quantity_changed):
+				item.quantity_changed.connect(_on_item_quantity_changed)
+
+func _disconnect_container_signals():
+	"""Disconnect from container signals"""
+	if current_container:
+		if current_container.item_added.is_connected(_on_container_item_added):
+			current_container.item_added.disconnect(_on_container_item_added)
+		if current_container.item_removed.is_connected(_on_container_item_removed):
+			current_container.item_removed.disconnect(_on_container_item_removed)
+		if current_container.item_moved.is_connected(_on_container_item_moved):
+			current_container.item_moved.disconnect(_on_container_item_moved)
+		
+		# Disconnect from item quantity changes
+		for item in current_container.items:
+			if item.quantity_changed.is_connected(_on_item_quantity_changed):
+				item.quantity_changed.disconnect(_on_item_quantity_changed)
+			
+func _on_item_quantity_changed(new_quantity: int):
+	"""Handle item quantity changes - update mass info"""
+	update_mass_info()
+			
+func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
+	"""Handle item added to current container - update mass info and connect to item signals"""
+	# Connect to the new item's quantity change signal
+	if not item.quantity_changed.is_connected(_on_item_quantity_changed):
+		item.quantity_changed.connect(_on_item_quantity_changed)
+	
+	update_mass_info()
+
+func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
+	"""Handle item removed from current container - update mass info and disconnect from item signals"""
+	# Disconnect from the removed item's quantity change signal
+	if item.quantity_changed.is_connected(_on_item_quantity_changed):
+		item.quantity_changed.disconnect(_on_item_quantity_changed)
+	
+	update_mass_info()
+
+func _on_container_item_moved(item: InventoryItem_Base, old_position: Vector2i, new_position: Vector2i):
+	"""Handle item moved within current container - usually no mass change, but update for consistency"""
 	update_mass_info()
 
 func select_container_index(index: int):
