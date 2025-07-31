@@ -186,11 +186,17 @@ func _on_scroll_resized():
 		inventory_grid.handle_window_resize()
 
 func _setup_mass_info_bar(parent: Control):
+	var mass_bar_container = MarginContainer.new()
+	parent.add_child(mass_bar_container)
+	
+	mass_bar_container.add_theme_constant_override("margin_right", 8)
+	
 	mass_info_bar = Panel.new()
 	mass_info_bar.name = "MassInfoBar"
 	mass_info_bar.custom_minimum_size.y = 35
 	mass_info_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(mass_info_bar)
+	
+	mass_bar_container.add_child(mass_info_bar)
 	
 	var style_box = StyleBoxFlat.new()
 	style_box.bg_color = Color(0.1, 0.1, 0.15, 0.9)

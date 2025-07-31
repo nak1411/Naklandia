@@ -48,23 +48,39 @@ func _ready():
 	call_deferred("_force_button_styling")
 
 func _setup_controls():	
+	var filter_container = MarginContainer.new()
+	add_child(filter_container)
+	
+	filter_container.add_theme_constant_override("margin_left", 4)
+	filter_container.add_theme_constant_override("margin_top", 4)
+	filter_container.add_theme_constant_override("margin_right", 2)
+	filter_container.add_theme_constant_override("margin_bottom", 2)
+	
 	# Create filter button (regular Button)
 	filter_options = Button.new()
 	filter_options.name = "FilterButton"
 	filter_options.text = "All Items ▼"
 	filter_options.custom_minimum_size.x = 120
-	filter_options.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	filter_options.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_style_custom_filter_button()
-	add_child(filter_options)
+	filter_container.add_child(filter_options)
+	
+	var sort_container = MarginContainer.new()
+	add_child(sort_container)
+	
+	sort_container.add_theme_constant_override("margin_left", 4)
+	sort_container.add_theme_constant_override("margin_top", 4)
+	sort_container.add_theme_constant_override("margin_right", 2)
+	sort_container.add_theme_constant_override("margin_bottom", 2)
 	
 	# Sort button (regular Button)
 	sort_button = Button.new()
 	sort_button.name = "SortButton"
 	sort_button.text = "Sort ▼"
 	sort_button.custom_minimum_size.x = 80
-	sort_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	sort_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_style_custom_sort_button()
-	add_child(sort_button)
+	sort_container.add_child(sort_button)
 	
 	# Spacer to push search field to the right
 	var spacer = Control.new()
@@ -73,17 +89,25 @@ func _setup_controls():
 	add_child(spacer)
 	
 	# Search field - now on the right side
+	
+	var search_container = MarginContainer.new()
+	add_child(search_container)
+	
+	search_container.add_theme_constant_override("margin_left", 4)
+	search_container.add_theme_constant_override("margin_top", 4)
+	search_container.add_theme_constant_override("margin_bottom", 2)
+	
 	search_field = LineEdit.new()
 	search_field.name = "SearchField"
 	search_field.placeholder_text = "Search items..."
 	search_field.custom_minimum_size.x = 150
 	search_field.focus_mode = Control.FOCUS_ALL  # Ensure it can receive focus
-	add_child(search_field)
+	search_container.add_child(search_field)
 	
 	# Right margin spacer
 	var right_margin = Control.new()
 	right_margin.name = "RightMargin"
-	right_margin.custom_minimum_size.x = 8
+	right_margin.custom_minimum_size.x = 4
 	add_child(right_margin)
 	
 	# Create dropdown menus (don't add as children initially)
@@ -134,12 +158,12 @@ func _style_custom_filter_button():
 	
 	# Create normal style
 	var style_normal = StyleBoxFlat.new()
-	style_normal.bg_color = Color(0.4, 0.4, 0.4, 1.0)
-	style_normal.border_width_left = 1
-	style_normal.border_width_right = 1
-	style_normal.border_width_top = 1
-	style_normal.border_width_bottom = 1
-	style_normal.border_color = Color(0.6, 0.6, 0.6, 1.0)
+	style_normal.bg_color = Color(0.9, 0.4, 0.4, 1.0)
+	style_normal.border_width_left = 2
+	style_normal.border_width_right = 2
+	style_normal.border_width_top = 2
+	style_normal.border_width_bottom = 2
+	style_normal.border_color = Color(0.9, 0.6, 0.6, 1.0)
 	style_normal.content_margin_left = 12
 	style_normal.content_margin_right = 12
 	style_normal.content_margin_top = 6
