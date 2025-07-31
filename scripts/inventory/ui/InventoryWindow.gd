@@ -42,6 +42,7 @@ var resize_mode: ResizeMode = ResizeMode.NONE
 var resize_start_position: Vector2
 var resize_start_size: Vector2
 var resize_start_mouse: Vector2
+var _was_resizing: bool = false
 
 # Resize overlay
 var resize_overlay: Control
@@ -100,10 +101,21 @@ func _process(_delta):
 	
 	# Handle resizing
 	if is_resizing and can_resize:
+		_was_resizing = true
 		_handle_resize()
+	elif _was_resizing and not is_resizing:
+		# Resize just ended - now trigger grid reflow
+		_was_resizing = false
+		_on_resize_complete()
 	
 	if can_resize and not is_locked:
 		_update_resize_cursor()
+		
+func _on_resize_complete():
+	"""Called when resize operation is complete (mouse released)"""
+	print("Resize operation complete")
+	if content and content.inventory_grid and content.inventory_grid.has_method("handle_resize_complete"):
+		content.inventory_grid.handle_resize_complete()
 		
 func _input(event: InputEvent):
 	# Check if search field has focus
@@ -341,6 +353,9 @@ func _setup_content():
 		content.container_selected.connect(_on_container_selected_from_content)
 		content.item_activated.connect(_on_item_activated_from_content)
 		content.item_context_menu.connect(_on_item_context_menu_from_content)
+		
+		# Connect window resize to trigger grid reflow
+		window_resized.connect(_on_window_resized_for_grid)
 	
 	# Debug content state
 	if content.has_method("debug_content_state"):
@@ -351,7 +366,13 @@ func _setup_content():
 		_initialize_inventory_content()
 	
 	_setup_item_actions()
-		
+	
+func _on_window_resized_for_grid(_new_size: Vector2i):
+	"""Handle window resize"""
+	print("Window resized to: ", _new_size)  # Debug
+	if content and content.inventory_grid and content.inventory_grid.has_method("handle_window_resize"):
+		content.inventory_grid.handle_window_resize()
+	
 func _setup_item_actions():
 	"""Initialize the item actions handler for context menus"""
 	# Get the scene's main window

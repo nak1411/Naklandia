@@ -121,7 +121,6 @@ func _setup_left_panel():
 	_setup_container_drop_handling()
 
 func _setup_right_panel_only():
-	# Create the right panel content directly (no HSplitContainer needed)
 	var inventory_area = VBoxContainer.new()
 	inventory_area.name = "InventoryArea"
 	inventory_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -135,15 +134,18 @@ func _setup_right_panel_only():
 	grid_scroll.name = "GridScrollContainer"
 	grid_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	grid_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	grid_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	inventory_area.add_child(grid_scroll)
 	
 	inventory_grid = InventoryGrid.new()
 	inventory_grid.name = "InventoryGrid"
 	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	grid_scroll.add_child(inventory_grid)
+	
+	# Connect scroll container resize to grid
+	grid_scroll.resized.connect(_on_scroll_resized)
 	
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
@@ -163,19 +165,25 @@ func _setup_right_panel():
 	grid_scroll.name = "GridScrollContainer"
 	grid_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	grid_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	grid_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	inventory_area.add_child(grid_scroll)
 	
 	inventory_grid = InventoryGrid.new()
 	inventory_grid.name = "InventoryGrid"
 	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	grid_scroll.add_child(inventory_grid)
 	
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
+	
+func _on_scroll_resized():
+	"""Called when scroll container is resized"""
+	print("Scroll container resized to: ", get_node("InventoryArea/GridScrollContainer").size)  # Debug
+	if inventory_grid and inventory_grid.has_method("handle_window_resize"):
+		inventory_grid.handle_window_resize()
 
 func _setup_mass_info_bar(parent: Control):
 	mass_info_bar = Panel.new()
