@@ -80,7 +80,7 @@ func _setup_tooltip():
 	
 	# Style the tooltip panel
 	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color(0.1, 0.1, 0.1, 0.95)
+	style_box.bg_color = Color(0.1, 0.1, 0.1, 0.75)
 	style_box.border_width_left = 1
 	style_box.border_width_right = 1
 	style_box.border_width_top = 1
