@@ -134,8 +134,7 @@ func remove_item_from_container(item: InventoryItem_Base, container_id: String) 
 		return false
 	return container.remove_item(item)
 
-func transfer_item(item: InventoryItem_Base, from_container_id: String, to_container_id: String, 
-				  position: Vector2i = Vector2i(-1, -1), quantity: int = -1) -> bool:
+func transfer_item(item: InventoryItem_Base, from_container_id: String, to_container_id: String, position: Vector2i = Vector2i(-1, -1), quantity: int = 0) -> bool:
 	var from_container = get_container(from_container_id)
 	var to_container = get_container(to_container_id)
 	
@@ -167,7 +166,7 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 				if item.quantity <= 0:
 					from_container.remove_item(item)
 				
-				# Record transaction (reuse the declared variable)
+				# Record transaction
 				transaction = {
 					"item_name": item.item_name,
 					"quantity": amount_to_stack,
@@ -232,36 +231,40 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 	if transfer_quantity <= 0:
 		return false  # Nothing can be transferred
 	
-	# Can't stack or only partial stack possible - handle as separate item
-	if transfer_quantity < item.quantity:
+	# Handle partial vs full transfer
+	if transfer_quantity >= item.quantity:
+		# Full transfer - move entire item
+		transfer_item = item
+		
+		# Check if target container can accept the item
+		if not to_container.can_add_item(transfer_item):
+			return false
+		
+		# Remove from source and add to target
+		if not from_container.remove_item(transfer_item):
+			return false
+		
+		if not to_container.add_item(transfer_item, position):
+			# Failed to add - restore to source
+			from_container.add_item(transfer_item)
+			return false
+	else:
+		# Partial transfer - use split_stack which handles quantity reduction
 		transfer_item = item.split_stack(transfer_quantity)
 		if not transfer_item:
 			return false
-	
-	# Check if target container can accept the item
-	if not to_container.can_add_item(transfer_item):
-		# If we split the stack, restore it
-		if transfer_quantity < item.quantity and transfer_item:
+		
+		# Check if target container can accept the split item
+		if not to_container.can_add_item(transfer_item):
+			# Restore the split by adding back to original item
 			item.add_to_stack(transfer_item.quantity)
-		return false
-	
-	# Remove from source container
-	var remove_success = from_container.remove_item(transfer_item if transfer_quantity < item.quantity else item)
-	if not remove_success:
-		# If we split the stack, restore it
-		if transfer_quantity < item.quantity and transfer_item:
+			return false
+		
+		# Add split item to target container
+		if not to_container.add_item(transfer_item, position):
+			# Failed to add - restore the split
 			item.add_to_stack(transfer_item.quantity)
-		return false
-	
-	# Add to target container
-	var add_success = to_container.add_item(transfer_item, position)
-	if not add_success:
-		# Restore to source container
-		from_container.add_item(transfer_item if transfer_quantity < item.quantity else item)
-		# Restore split if we made one
-		if transfer_quantity < item.quantity and transfer_item:
-			item.add_to_stack(transfer_item.quantity)
-		return false
+			return false
 	
 	# Record transaction
 	transaction = {
@@ -277,7 +280,7 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 	item_transferred.emit(transfer_item, from_container_id, to_container_id)
 	transaction_completed.emit(transaction)
 	return true
-
+	
 func _get_item_at_position(container: InventoryContainer_Base, position: Vector2i) -> InventoryItem_Base:
 	if position.y >= 0 and position.y < container.grid_slots.size():
 		if position.x >= 0 and position.x < container.grid_slots[position.y].size():
