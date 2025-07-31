@@ -1238,6 +1238,7 @@ func _show_volume_error(message: String):
 	timer.wait_time = 2.0  # Show for 2 seconds
 	timer.one_shot = true
 	error_canvas.add_child(timer)
+	timer.start()
 	
 	# Store references for the callback
 	var canvas_ref = error_canvas
@@ -1251,18 +1252,14 @@ func _show_volume_error(message: String):
 			fade_out_tween.tween_callback(func():
 				if is_instance_valid(canvas_ref):
 					canvas_ref.queue_free()  # This will free the entire canvas and its children
-				elif is_instance_valid(timer_ref):
-					timer_ref.queue_free()
 			)
 		else:
-			# If panel is already freed, just free the canvas
+			# If panel is already freed, just free the canvas and timer
 			if is_instance_valid(canvas_ref):
 				canvas_ref.queue_free()
-			elif is_instance_valid(timer_ref):
+			if is_instance_valid(timer_ref):
 				timer_ref.queue_free()
 	)
-	
-	timer.start()
 	
 func _show_error_next_to_slot(message: String):
 	"""Fallback method to show error next to slot if inventory window not found"""
