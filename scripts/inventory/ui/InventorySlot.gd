@@ -21,6 +21,10 @@ var item_icon: TextureRect
 var quantity_label: Label
 var rarity_border: NinePatchRect
 var quantity_bg: Panel
+var hover_glow: Control
+var glow_canvas_layer: CanvasLayer
+var is_hovered: bool = false
+var glow_tween: Tween
 
 # State
 var is_highlighted: bool = false
@@ -177,10 +181,9 @@ func _setup_visual_components():
 	# Create a content container with margins for spacing
 	var content_container = Control.new()
 	content_container.name = "ContentContainer"
-	# Add margins to create visual spacing (adjust these values as needed)
 	content_container.set_offsets_preset(Control.PRESET_FULL_RECT)
-	content_container.position = Vector2(slot_padding, slot_padding)  # Top-left margin
-	content_container.size = slot_size - Vector2(slot_padding, slot_padding)  # Reduce size by margin amount
+	content_container.position = Vector2(slot_padding, slot_padding)
+	content_container.size = slot_size - Vector2(slot_padding, slot_padding)
 	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(content_container)
 	
@@ -200,9 +203,8 @@ func _setup_visual_components():
 	quantity_bg.position = Vector2(-22, -22)
 	quantity_bg.size = Vector2(22, 22)
 	quantity_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	quantity_bg.visible = false  # Initially hidden
+	quantity_bg.visible = false
 
-	# Style the quantity background
 	var quantity_bg_style = StyleBoxFlat.new()
 	quantity_bg_style.bg_color = Color(0.0, 0.0, 0.0, 0.8)
 	quantity_bg.add_theme_stylebox_override("panel", quantity_bg_style)
@@ -233,6 +235,119 @@ func _setup_visual_components():
 	add_child(rarity_border)
 	
 	_update_visual_state()
+	
+	call_deferred("_setup_external_glow")
+	
+func _setup_external_glow():
+	print("Setting up 4-line border glow...")
+	
+	# Create a dedicated CanvasLayer
+	glow_canvas_layer = CanvasLayer.new()
+	glow_canvas_layer.name = "GlowLayer"
+	glow_canvas_layer.layer = 100
+	get_tree().current_scene.add_child(glow_canvas_layer)
+	
+	# Create container for the 4 border lines
+	hover_glow = Control.new()
+	hover_glow.name = "SlotGlow_Lines"
+	hover_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hover_glow.visible = false
+	
+	# Create 4 ColorRect lines for top, bottom, left, right
+	var top_line = ColorRect.new()
+	top_line.name = "TopLine"
+	top_line.color = Color(0.5, 0.8, 1.0, 0.0)
+	top_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	var bottom_line = ColorRect.new()
+	bottom_line.name = "BottomLine"
+	bottom_line.color = Color(0.5, 0.8, 1.0, 0.0)
+	bottom_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	var left_line = ColorRect.new()
+	left_line.name = "LeftLine"
+	left_line.color = Color(0.5, 0.8, 1.0, 0.0)
+	left_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	var right_line = ColorRect.new()
+	right_line.name = "RightLine"
+	right_line.color = Color(0.5, 0.8, 1.0, 0.0)
+	right_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	hover_glow.add_child(top_line)
+	hover_glow.add_child(bottom_line)
+	hover_glow.add_child(left_line)
+	hover_glow.add_child(right_line)
+	
+	glow_canvas_layer.add_child(hover_glow)
+	print("4-line border glow created")
+
+func _show_hover_glow():
+	if not hover_glow or not item:
+		return
+	
+	var slot_global_rect = get_global_rect()
+	var border_width = 2
+	
+	# Account for slot padding - the content is inset by slot_padding pixels
+	var content_position = slot_global_rect.position + Vector2(slot_padding, slot_padding)
+	var content_size = slot_global_rect.size - Vector2(slot_padding * 2, slot_padding * 2)
+	
+	# Position the container around the content area (not the full slot)
+	hover_glow.global_position = content_position - Vector2(border_width, border_width)
+	hover_glow.size = content_size + Vector2(border_width * 2, border_width * 2)
+	
+	# Position the 4 border lines
+	var top_line = hover_glow.get_node("TopLine")
+	var bottom_line = hover_glow.get_node("BottomLine")
+	var left_line = hover_glow.get_node("LeftLine")
+	var right_line = hover_glow.get_node("RightLine")
+	
+	# Top line
+	top_line.position = Vector2(0, 0)
+	top_line.size = Vector2(hover_glow.size.x + 8, border_width)
+	
+	# Bottom line
+	bottom_line.position = Vector2(0, (hover_glow.size.y + 8) - border_width)
+	bottom_line.size = Vector2(hover_glow.size.x + 8, border_width)
+	
+	# Left line
+	left_line.position = Vector2(0, 0)
+	left_line.size = Vector2(border_width, hover_glow.size.y + 8)
+	
+	# Right line
+	right_line.position = Vector2((hover_glow.size.x + 8) - border_width, 0)
+	right_line.size = Vector2(border_width, hover_glow.size.y + 8)
+	
+	hover_glow.visible = true
+	
+	# Smooth fade in
+	if glow_tween:
+		glow_tween.kill()
+	glow_tween = create_tween()
+	glow_tween.tween_method(_update_glow_opacity, 0.0, 0.8, 0.15)
+
+func _hide_hover_glow():
+	if not hover_glow:
+		return
+	
+	# Smooth fade out
+	if glow_tween:
+		glow_tween.kill()
+	glow_tween = create_tween()
+	glow_tween.tween_method(_update_glow_opacity, 0.8, 0.0, 0.1)
+	glow_tween.tween_callback(func(): 
+		if hover_glow: 
+			hover_glow.visible = false
+	)
+
+func _update_glow_opacity(opacity: float):
+	if hover_glow:
+		var blue_color = Color(0.5, 0.8, 1.0, opacity)
+		
+		for child in hover_glow.get_children():
+			if child is ColorRect:
+				child.color = blue_color
 
 func _setup_signals():
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -243,10 +358,14 @@ func _setup_signals():
 	mouse_exited.connect(_on_mouse_exited)
 	
 func _on_mouse_entered():
+	is_hovered = true
+	_show_hover_glow()
 	if item:
 		tooltip_timer = tooltip_delay
 
 func _on_mouse_exited():
+	is_hovered = false
+	_hide_hover_glow()
 	tooltip_timer = 0.0
 	_hide_tooltip()
 
