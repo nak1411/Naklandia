@@ -113,9 +113,12 @@ func _process(_delta):
 		
 func _on_resize_complete():
 	"""Called when resize operation is complete (mouse released)"""
-	print("Resize operation complete")
-	if content and content.inventory_grid and content.inventory_grid.has_method("handle_resize_complete"):
+	print("\n=== WINDOW RESIZE COMPLETE ===")
+	print("New window size: ", size)
+	if content and content.inventory_grid:
+		print("Triggering grid resize handling...")
 		content.inventory_grid.handle_resize_complete()
+	print("=== RESIZE HANDLING COMPLETE ===\n")
 		
 func _input(event: InputEvent):
 	# Check if search field has focus

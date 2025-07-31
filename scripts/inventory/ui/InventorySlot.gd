@@ -239,7 +239,6 @@ func _setup_visual_components():
 	call_deferred("_setup_external_glow")
 	
 func _setup_external_glow():
-	print("Setting up 4-line border glow...")
 	
 	# Create a dedicated CanvasLayer
 	glow_canvas_layer = CanvasLayer.new()
@@ -280,8 +279,7 @@ func _setup_external_glow():
 	hover_glow.add_child(right_line)
 	
 	glow_canvas_layer.add_child(hover_glow)
-	print("4-line border glow created")
-
+	
 func _show_hover_glow():
 	if not hover_glow or not item:
 		return
@@ -371,25 +369,10 @@ func _on_mouse_exited():
 
 # Item management
 func set_item(new_item: InventoryItem_Base):
-	if item and item.quantity_changed.is_connected(_on_item_quantity_changed):
-		item.quantity_changed.disconnect(_on_item_quantity_changed)
-		
-	# Hide any existing tooltip when item changes
-	_hide_tooltip()
-
+	"""Set the item for this slot"""
 	item = new_item
-	is_occupied = item != null
-	
-	# Clear built-in tooltip since we're using custom
-	tooltip_text = ""
-	
-	if item:
-		item.quantity_changed.connect(_on_item_quantity_changed)
-	
+	is_occupied = (item != null)
 	_update_item_display()
-	
-	if visible:
-		queue_redraw()
 		
 func _show_volume_feedback(can_drop: bool):
 	"""Show visual feedback for volume constraints during drag"""
@@ -409,7 +392,10 @@ func force_visual_refresh():
 	_update_visual_state()
 
 func clear_item():
-	set_item(null)
+	"""Clear the item from this slot"""
+	item = null
+	is_occupied = false
+	_update_item_display()
 
 func get_item() -> InventoryItem_Base:
 	return item
@@ -774,7 +760,7 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 				item.quantity -= max_transferable
 				item.quantity_changed.emit(item.quantity)
 				
-				refresh_display()
+				_update_item_display()
 				_show_transfer_feedback(max_transferable, item.quantity)
 				
 				if content.has_method("refresh_display"):
@@ -834,7 +820,7 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 				source_container.remove_item(item)
 				clear_item()
 			else:
-				refresh_display()
+				_update_item_display()
 				_show_transfer_feedback(max_transferable, item.quantity)
 			
 			if content.has_method("refresh_display"):
@@ -980,7 +966,7 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 				if item.quantity <= 0:
 					clear_item()
 				else:
-					refresh_display()
+					_update_item_display()
 					_show_transfer_feedback(transferable_quantity, item.quantity)
 				
 				# Refresh target container display
@@ -1018,7 +1004,7 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 			var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, target_slot.grid_position, transferable_quantity)
 			
 			if success:
-				refresh_display()
+				_update_item_display()
 				_show_transfer_feedback(transferable_quantity, item.quantity)
 				
 				# Refresh target container display
@@ -1048,16 +1034,6 @@ func _handle_occupied_slot_drop(target_slot: InventorySlot) -> bool:
 		# Different items - try to swap
 		var inventory_manager = _get_inventory_manager()
 		return _handle_item_swap(target_slot, target_item, inventory_manager)
-
-func refresh_display():
-	"""Refresh the visual display of this slot"""
-	_update_item_display()
-	
-	# Also refresh the parent grid if available
-	var grid = _get_inventory_grid()
-	if grid and grid.has_method("refresh_display"):
-		# Use call_deferred to prevent recursion issues
-		grid.call_deferred("refresh_display")
 
 func _update_item_display():
 	"""Update the visual representation of the item in this slot"""
@@ -1380,7 +1356,6 @@ func _find_item_actions():
 	return null
 
 func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_Base) -> bool:
-	
 	var space_available = target_item.max_stack_size - target_item.quantity
 	var amount_to_transfer = min(item.quantity, space_available)
 	
@@ -1393,8 +1368,7 @@ func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_
 		target_item.quantity += amount_to_transfer
 		item.quantity -= amount_to_transfer
 		
-		
-		# Update displays
+		# Update displays - ONLY the affected slots, no grid refresh
 		target_slot._update_item_display()
 		
 		if item.quantity <= 0:
@@ -1417,14 +1391,14 @@ func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_
 		var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, target_slot.grid_position, amount_to_transfer)
 		
 		if success:
-			# Update displays - the transfer system handles the logic
+			# Update displays - ONLY the affected slots, no grid refresh
 			if item.quantity <= 0:
 				# Source item fully consumed
 				clear_item()
 			else:
 				_update_item_display()
 			
-			# Update target display
+			# Update target display - ONLY the slot, no grid refresh
 			target_slot._update_item_display()
 			
 			return true

@@ -8,7 +8,8 @@ extends Control
 @export var min_grid_width: int = 10  # Minimum grid width
 @export var min_grid_height: int = 10  # Minimum grid height
 @export var slots_per_row_expansion: int = 2  # How many columns to add when expanding
-
+var original_grid_styles: Dictionary = {}
+var grid_transparency_init: bool = false
 
 # Visual properties
 @export var background_color: Color = Color(0.1, 0.1, 0.1, 1.0)
@@ -29,10 +30,7 @@ var _is_shrinking_grid: bool = false
 var _is_refreshing_display: bool = false
 var item_positions: Dictionary = {}  # Dictionary[InventoryItem_Base, Vector2i]
 var _is_adapting_width: bool = false
-var _resize_timer: Timer = null
 var _resize_complete_timer: Timer
-var _pending_width_refresh: bool = false
-var _last_known_width: int = 0
 var _needs_reflow: bool = false
 
 # UI components
@@ -40,8 +38,6 @@ var background_panel: Panel
 var grid_container: GridContainer
 var slots: Array = []  # 2D array of InventorySlotUI
 var selected_slots: Array[InventorySlot] = []
-var original_grid_styles: Dictionary = {}
-var grid_transparency_init: bool = false
 var current_filter_type: int = 0  # 0 = All Items
 var current_search_text: String = ""
 
@@ -64,63 +60,28 @@ func _ready():
 	
 func handle_resize_complete():
 	"""Called when window resize is complete"""
-	print("Grid handling resize complete")
 	_resize_complete_timer.start()
-
-func _perform_compact_reflow():
-	"""Perform a compact reflow of all items"""
+	
+func _update_container_positions_from_visual():
+	"""Update container item positions to match current visual placement"""
 	if not container:
 		return
 	
-	print("Performing compact reflow")
-	
-	# Temporarily disable all refresh operations
-	_is_refreshing_display = true
-	
-	# Calculate new grid width based on current size
-	var available_width = size.x - 16
-	if available_width <= slot_size.x:
-		_is_refreshing_display = false
-		return
-	
-	var slots_per_row = max(1, int(available_width / (slot_size.x + slot_spacing)))
-	var new_width = max(1, min(slots_per_row, 20))
-	
-	# Get all visible items
-	var items_to_place: Array[InventoryItem_Base] = []
-	for item in container.items:
-		if _should_show_item(item):
-			items_to_place.append(item)
-	
-	print("Reflowing ", items_to_place.size(), " items into ", new_width, " columns")
-	
-	# Calculate required height
-	var required_rows = (items_to_place.size() + new_width - 1) / new_width if items_to_place.size() > 0 else min_grid_height
-	var new_height = max(min_grid_height, required_rows + 1)
-	
-	# Update dimensions
-	current_grid_width = new_width
-	current_grid_height = new_height
-	
-	# Ensure we have enough slots
-	_ensure_adequate_slots()
-	
-	# Clear ALL slots completely
-	_clear_all_slots_completely()
-	
-	# Place items in compact order
-	_place_items_compactly(items_to_place)
-	
-	# Update grid container
-	if grid_container:
-		grid_container.columns = current_grid_width
-	
-	_update_grid_size()
-	force_all_slots_refresh()
-	
-	_is_refreshing_display = false
-	
-	print("Reflow complete: ", current_grid_width, "x", current_grid_height)
+	# Go through all slots and update container positions
+	for y in current_grid_height:
+		for x in current_grid_width:
+			if y < slots.size() and x < slots[y].size():
+				var slot = slots[y][x]
+				if slot and slot.has_item():
+					var item = slot.get_item()
+					var position = Vector2i(x, y)
+					
+					# Update position tracking
+					item_positions[item] = position
+					
+					# Update position in container if it supports it
+					if container.has_method("set_item_position"):
+						container.set_item_position(item, position)
 
 func _ensure_adequate_slots():
 	"""Ensure we have enough slots for the current dimensions"""
@@ -131,25 +92,31 @@ func _ensure_adequate_slots():
 		if row:
 			current_total += row.size()
 	
-	if current_total >= needed_total and slots.size() == current_grid_height:
-		return # We have enough
+	# Rebuild if dimensions changed or wrong number of children
+	var should_rebuild = false
 	
-	print("Rebuilding slots: need ", needed_total, ", have ", current_total)
-	_rebuild_slots_completely()
+	if slots.size() != current_grid_height:
+		should_rebuild = true
+	elif slots.size() > 0 and slots[0].size() != current_grid_width:
+		should_rebuild = true
+	elif grid_container and grid_container.get_child_count() != needed_total:
+		should_rebuild = true
+	
+	if should_rebuild:
+		_rebuild_slots_completely()
 
 func _rebuild_slots_completely():
 	"""Completely rebuild the slots structure"""
-	# Disconnect container signals temporarily
 	_disconnect_container_signals()
 	
-	# Clear existing
+	# Clear existing slots
 	for row in slots:
 		if row:
 			for slot in row:
 				if slot:
 					slot.queue_free()
 	
-	# Clear the grid container
+	# Clear grid container
 	if grid_container:
 		for child in grid_container.get_children():
 			child.queue_free()
@@ -160,8 +127,9 @@ func _rebuild_slots_completely():
 	# Wait for cleanup
 	await get_tree().process_frame
 	
-	# Rebuild
+	# Rebuild with exact dimensions
 	slots.resize(current_grid_height)
+	
 	for y in current_grid_height:
 		slots[y] = []
 		slots[y].resize(current_grid_width)
@@ -183,14 +151,15 @@ func _rebuild_slots_completely():
 			grid_container.add_child(slot)
 			available_slots.append(Vector2i(x, y))
 	
-	# Reconnect container signals
 	_connect_container_signals()
 
 func _clear_all_slots_completely():
 	"""Clear all slots of items"""
-	for row in slots:
+	for row_idx in range(slots.size()):
+		var row = slots[row_idx]
 		if row:
-			for slot in row:
+			for col_idx in range(row.size()):
+				var slot = row[col_idx]
 				if slot:
 					slot.clear_item()
 	
@@ -199,44 +168,78 @@ func _clear_all_slots_completely():
 	for y in current_grid_height:
 		for x in current_grid_width:
 			available_slots.append(Vector2i(x, y))
+	
+	item_positions.clear()
 
 func _place_items_compactly(items: Array[InventoryItem_Base]):
 	"""Place items in compact left-to-right, top-to-bottom order"""
-	var item_index = 0
+	var placed_items = 0
 	
 	for y in current_grid_height:
-		for x in current_grid_width:
-			if item_index >= items.size():
-				return
+		if placed_items >= items.size():
+			break
 			
-			if y < slots.size() and x < slots[y].size():
-				var slot = slots[y][x]
-				if slot:
-					var item = items[item_index]
-					slot.set_item(item)
-					available_slots.erase(Vector2i(x, y))
-					item_index += 1
-	
+		if y >= slots.size():
+			break
+		
+		if not slots[y] or slots[y].size() < current_grid_width:
+			continue
+			
+		for x in current_grid_width:
+			if placed_items >= items.size():
+				break
+				
+			var slot = slots[y][x]
+			if not slot:
+				continue
+			
+			slot.clear_item()
+			
+			var item = items[placed_items]
+			var new_pos = Vector2i(x, y)
+			
+			slot.set_item(item)
+			item_positions[item] = new_pos
+			available_slots.erase(new_pos)
+			placed_items += 1
+		
 func _handle_resize_complete():
-	"""Called after resize is complete - just adjust the minimum grid width"""
-	if not container or size.x <= 0:
-		return
+	"""Called after resize is complete - DISABLED to prevent conflicts"""
+	# This method is intentionally disabled to prevent conflicts with _perform_compact_reflow
+	# The timer-based approach in handle_resize_complete() is the single source of truth
+	pass
 	
+	print("Handling resize complete, forcing reflow")
+	
+	# Calculate new width based on available space
 	var available_width = size.x - 16
 	if available_width <= slot_size.x:
 		return
 	
-	var slot_width_with_spacing = slot_size.x + slot_spacing
-	var max_columns = max(1, int(available_width / slot_width_with_spacing))
-	var ideal_width = max(1, max_columns)
+	var slots_per_row = max(1, int(available_width / (slot_size.x + slot_spacing)))
+	var new_width = max(1, min(slots_per_row, 20))
 	
-	# Only change min_grid_width, don't touch current_grid_width
-	if ideal_width != min_grid_width:
-		min_grid_width = ideal_width
+	# If width changed, force immediate reflow
+	if new_width != current_grid_width:
+		print("Width changed from ", current_grid_width, " to ", new_width, " - forcing reflow")
 		
-		# Let the existing system handle everything
-		if container:
-			call_deferred("refresh_display")
+		# Update dimensions
+		current_grid_width = new_width
+		
+		# Calculate new height for current items
+		var visible_items = 0
+		for item in container.items:
+			if _should_show_item(item):
+				visible_items += 1
+		
+		if visible_items > 0:
+			var required_rows = (visible_items + new_width - 1) / new_width
+			current_grid_height = max(min_grid_height, required_rows + 1)
+		
+		# Force immediate refresh
+		_is_refreshing_display = false
+		_needs_reflow = false
+		refresh_display()
 
 func _setup_background():
 	background_panel = Panel.new()
@@ -301,67 +304,126 @@ func _create_initial_slots():
 	# Update grid container size
 	_update_grid_size()
 
-func _perform_reflow():
-	"""Reflow items into new grid layout"""
-	if not container or not _needs_reflow:
+func _perform_compact_reflow():
+	"""Perform a compact reflow of all items"""
+	if not container:
 		return
 	
+	# Block all other refresh operations during compacting
+	_is_refreshing_display = true
 	_needs_reflow = false
+	_is_adapting_width = false
+	_is_expanding_grid = false
+	_is_shrinking_grid = false
 	
-	# Calculate new grid width based on available space
-	var available_width = size.x - 16
+	# Calculate new grid width based on current size
+	var available_width = _get_actual_available_width()
 	if available_width <= slot_size.x:
+		_is_refreshing_display = false
 		return
 	
 	var slots_per_row = max(1, int(available_width / (slot_size.x + slot_spacing)))
-	var new_width = max(1, min(slots_per_row, 20))  # Cap at reasonable maximum
+	var new_width = max(1, min(slots_per_row, 20))
 	
+	# Only proceed if width actually changed
 	if new_width == current_grid_width:
-		return  # No change needed
+		_is_refreshing_display = false
+		return
 	
-	# Collect all items that should be visible
+	# Get all visible items
 	var items_to_place: Array[InventoryItem_Base] = []
 	for item in container.items:
 		if _should_show_item(item):
 			items_to_place.append(item)
 	
-	if items_to_place.is_empty():
-		return
-	
 	# Calculate required height
-	var required_rows = (items_to_place.size() + new_width - 1) / new_width
+	var required_rows = (items_to_place.size() + new_width - 1) / new_width if items_to_place.size() > 0 else min_grid_height
 	var new_height = max(min_grid_height, required_rows + 1)
 	
 	# Update dimensions
 	current_grid_width = new_width
 	current_grid_height = new_height
 	
-	# Rebuild grid structure if needed
-	_ensure_grid_size()
-	
-	# Clear all slots
-	_clear_all_slots()
-	
-	# Place items in simple left-to-right, top-to-bottom order
-	var item_index = 0
-	for row in range(current_grid_height):
-		for col in range(current_grid_width):
-			if item_index < items_to_place.size():
-				var item = items_to_place[item_index]
-				var position = Vector2i(col, row)
-				_place_item_at_position(item, position)
-				item_index += 1
-			else:
-				break
-		if item_index >= items_to_place.size():
-			break
-	
-	# Update grid container
+	# Update GridContainer columns immediately
 	if grid_container:
 		grid_container.columns = current_grid_width
+		grid_container.queue_redraw()
+		grid_container.notification(NOTIFICATION_RESIZED)
+	
+	# Ensure we have enough slots
+	_ensure_adequate_slots()
+	
+	# Wait a frame for the grid container to update
+	await get_tree().process_frame
+	
+	# Clear and place items
+	_clear_all_slots_completely()
+	_place_items_compactly(items_to_place)
+	
+	# Force layout update after placement
+	if grid_container:
+		grid_container.queue_redraw()
+		await get_tree().process_frame
 	
 	_update_grid_size()
 	force_all_slots_refresh()
+	
+	_is_refreshing_display = false
+	
+func _get_actual_available_width() -> float:
+	"""Get the actual available width by walking up the parent chain"""
+	var split_container = _find_split_container()
+	if split_container:
+		var total_width = split_container.size.x
+		var split_offset = split_container.split_offset
+		var right_side_width = total_width - split_offset
+		
+		# Account for overhead
+		var mass_bar_overhead = 36
+		var container_margins = 12
+		var scrollbar_width = 18
+		
+		var available = right_side_width - mass_bar_overhead - container_margins - scrollbar_width
+		return max(available, slot_size.x)
+	
+	# Fallback to scroll container method
+	var scroll_container = _find_scroll_container()
+	if scroll_container:
+		var scroll_width = scroll_container.size.x
+		var scrollbar_width = 20
+		var available = scroll_width - scrollbar_width - 16
+		return available
+	
+	# Last resort
+	return size.x - 16
+
+	
+func _find_scroll_container() -> ScrollContainer:
+	"""Find the parent scroll container"""
+	var current = get_parent()
+	while current:
+		if current is ScrollContainer:
+			return current
+		current = current.get_parent()
+	return null
+
+func _find_window_content() -> Control:
+	"""Find the InventoryWindowContent"""
+	var current = get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowContent":
+			return current
+		current = current.get_parent()
+	return null
+
+func _find_split_container() -> HSplitContainer:
+	"""Find the parent HSplitContainer"""
+	var current = get_parent()
+	while current:
+		if current is HSplitContainer:
+			return current
+		current = current.get_parent()
+	return null
 
 func _ensure_grid_size():
 	"""Ensure we have enough slots for current dimensions"""
@@ -496,8 +558,8 @@ func _expand_grid_if_needed():
 
 func _shrink_grid_if_possible():
 	"""Shrink the grid if we have too many empty rows - PREVENT RECURSION"""
-	# Prevent recursive calls during shrinking
-	if _is_shrinking_grid or not container:
+	# Prevent recursive calls during shrinking OR if resize timer is active
+	if _is_shrinking_grid or not container or _resize_complete_timer.time_left > 0.0:
 		return
 	
 	_is_shrinking_grid = true
@@ -630,7 +692,8 @@ func _rebuild_grid():
 
 # Display management
 func refresh_display():
-	if not container or _is_refreshing_display or _needs_reflow:
+	# Block refresh during resize timer operations
+	if not container or _is_refreshing_display or _needs_reflow or _resize_complete_timer.time_left > 0.0:
 		if not container:
 			_clear_all_slots()
 		return
@@ -740,56 +803,6 @@ func _show_container_context_menu(position: Vector2):
 	# This will be implemented by the UI system
 	pass
 		
-func _single_refresh_after_resize():
-	"""Single refresh after resize is complete"""
-	if not _is_refreshing_display and not _is_adapting_width:
-		refresh_display()
-		
-func _get_items_in_visual_order() -> Array[InventoryItem_Base]:
-	"""Get items in their current visual order (top-to-bottom, left-to-right)"""
-	var ordered_items: Array[InventoryItem_Base] = []
-	
-	# Go through slots in reading order and collect items
-	for y in current_grid_height:
-		if y >= slots.size():
-			continue
-		if slots[y] == null:  # Check if the row exists
-			continue
-		for x in current_grid_width:
-			if x >= slots[y].size():
-				continue
-			var slot = slots[y][x]
-			if slot == null:  # Check if the slot exists
-				continue
-			if slot.has_item():
-				var item = slot.get_item()
-				if item and _should_show_item(item):
-					ordered_items.append(item)
-	
-	# If we didn't get all items from slots (shouldn't happen), add any missing ones
-	for item in container.items:
-		if _should_show_item(item) and item not in ordered_items:
-			ordered_items.append(item)
-	
-	return ordered_items
-
-func _place_items_in_reading_order(items: Array[InventoryItem_Base]):
-	"""Place items in reading order (left-to-right, top-to-bottom)"""
-	var item_index = 0
-	
-	for y in current_grid_height:
-		for x in current_grid_width:
-			if item_index >= items.size():
-				return  # No more items to place
-			
-			if y < slots.size() and x < slots[y].size():
-				var slot = slots[y][x]
-				if slot:
-					var item = items[item_index]
-					slot.set_item(item)
-					available_slots.erase(Vector2i(x, y))
-					item_index += 1
-
 func _clear_all_container_positions():
 	"""Clear all item positions in the container to avoid conflicts"""
 	if not container:
@@ -807,93 +820,6 @@ func _clear_all_container_positions():
 	
 	# Reconnect signals
 	_connect_container_signals()
-
-func _refresh_after_width_change():
-	"""Safely refresh display after width change"""
-	if not container:
-		return
-	
-	_is_refreshing_display = true
-	
-	# Clear all visual slots first
-	_clear_all_slots()
-	
-	# Update available slots list for new dimensions
-	_update_available_slots()
-	
-	# Reposition all items without regard to their old positions
-	for item in container.items:
-		if not _should_show_item(item):
-			continue
-		
-		# Find the next available position and place the item there
-		var free_pos = _find_first_free_position()
-		if free_pos != Vector2i(-1, -1):
-			# Set the new position in the container
-			if container.has_method("set_item_position"):
-				container.set_item_position(item, free_pos)
-			elif container.has_method("move_item"):
-				container.move_item(item, free_pos)
-			
-			# Place visually in the grid
-			_place_item_in_grid(item, free_pos)
-	
-	# Force visual refresh on all slots
-	force_all_slots_refresh()
-	
-	_is_refreshing_display = false
-
-func _redistribute_items_for_new_width():
-	"""Redistribute items when grid width changes"""
-	if not container:
-		return
-	
-	# Calculate if we need more rows for the same number of items
-	var total_items = container.items.size()
-	if total_items == 0:
-		return
-	
-	var required_rows = (total_items + current_grid_width - 1) / current_grid_width  # Ceiling division
-	var new_height = max(min_grid_height, required_rows + 2)  # Add buffer
-	
-	if new_height != current_grid_height:
-		var old_height = current_grid_height
-		current_grid_height = new_height
-		
-		# Rebuild the grid if height changed significantly
-		if new_height > old_height:
-			_expand_grid_to_new_height(new_height)
-		
-		_update_grid_size()
-		
-func _expand_grid_to_new_height(new_height: int):
-	"""Expand grid to accommodate new height"""
-	# Resize slots array
-	slots.resize(new_height)
-	
-	# Create new rows if needed
-	for y in range(current_grid_height, new_height):
-		slots[y] = []
-		slots[y].resize(current_grid_width)
-		
-		for x in current_grid_width:
-			var slot = InventorySlot.new()
-			slot.slot_size = slot_size
-			slot.set_grid_position(Vector2i(x, y))
-			slot.set_container_id(container_id)
-			
-			# Connect drag and drop signals
-			slot.slot_clicked.connect(_on_slot_clicked)
-			slot.slot_right_clicked.connect(_on_slot_right_clicked)
-			slot.item_drag_started.connect(_on_item_drag_started)
-			slot.item_drag_ended.connect(_on_item_drag_ended)
-			slot.item_dropped_on_slot.connect(_on_item_dropped_on_slot)
-			
-			slots[y][x] = slot
-			grid_container.add_child(slot)
-			
-			# Add to available slots
-			available_slots.append(Vector2i(x, y))
 
 # Drag and drop event handlers
 func _on_slot_clicked(slot: InventorySlot, event: InputEvent):
@@ -916,13 +842,10 @@ func _on_item_drag_started(slot: InventorySlot, item: InventoryItem_Base):
 
 func _on_item_drag_ended(slot: InventorySlot, success: bool):
 	if success:
-		# Update available slots after successful drag
 		_update_available_slots()
-		# Try to shrink grid if possible
 		call_deferred("_shrink_grid_if_possible")
 
 func _on_item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot):
-	# Update available slots after drop
 	_update_available_slots()
 
 func _toggle_slot_selection(slot: InventorySlot):
@@ -975,17 +898,17 @@ func get_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlot:
 	return null
 
 # Container event handlers - DISABLE these during drag operations
-func _on_container_item_added(_item: InventoryItem_Base, _position: Vector2i):
-	if not _is_any_slot_dragging() and not _is_refreshing_display:
+func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
+	if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
 		call_deferred("refresh_display")
 
-func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i):
-	if not _is_any_slot_dragging() and not _is_refreshing_display:
+func _on_container_item_removed(item: InventoryItem_Base):
+	if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
 		call_deferred("refresh_display")
 
-func _on_container_item_moved(_item: InventoryItem_Base, _from_pos: Vector2i, _to_pos: Vector2i):
-	if not _is_any_slot_dragging() and not _is_refreshing_display:
-		call_deferred("refresh_display")
+func _on_container_item_moved(item: InventoryItem_Base, old_position: Vector2i, new_position: Vector2i):
+	if not _is_refreshing_display:
+		item_positions[item] = new_position
 
 func _is_any_slot_dragging() -> bool:
 	for y in current_grid_height:
@@ -1163,33 +1086,6 @@ func should_show_volume_warning() -> bool:
 	
 	return container.get_volume_percentage() > 85.0
 
-# Add method to get capacity statistics
-func get_capacity_statistics() -> Dictionary:
-	if not container:
-		return {}
-	
-	var stats = {
-		"volume_used": container.get_current_volume(),
-		"volume_max": container.max_volume,
-		"volume_available": container.get_available_volume(),
-		"volume_percentage": container.get_volume_percentage(),
-		"slots_used": 0,
-		"slots_available": available_slots.size(),
-		"slots_total": current_grid_width * current_grid_height,
-		"items_count": container.items.size(),
-		"unique_items": container.items.size()  # Each stack counts as one unique item
-	}
-	
-	# Count used slots
-	for y in current_grid_height:
-		for x in current_grid_width:
-			if y < slots.size() and x < slots[y].size():
-				var slot = slots[y][x]
-				if slot and slot.has_item():
-					stats.slots_used += 1
-	
-	return stats
-	
 func apply_filter(filter_type: int):
 	current_filter_type = filter_type
 	refresh_display()

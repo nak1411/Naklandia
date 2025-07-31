@@ -25,12 +25,46 @@ signal item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position
 func _ready():
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split_offset = 200
+	
+	# Set dynamic split offset based on window size
+	_update_split_offset()
+	
 	_remove_split_container_outline()
 	_setup_content()
 	
 	# Connect gui_input for drop handling
 	gui_input.connect(_gui_input)
+	
+	# Connect to size changes to update split offset
+	resized.connect(_on_content_resized)
+	
+func _update_split_offset():
+	"""Update split offset based on available space"""
+	await get_tree().process_frame
+	
+	var available_width = size.x
+	if available_width <= 0:
+		split_offset = 180
+		return
+	
+	# More aggressive space optimization for small windows
+	var min_left_width = 140
+	var max_left_width = 200
+	var max_left_percentage = 0.35
+	
+	# For very small windows, use even smaller left panel
+	if available_width <= 450:
+		max_left_percentage = 0.3
+		min_left_width = 120
+	
+	var calculated_left = min(max_left_width, available_width * max_left_percentage)
+	var new_split_offset = max(min_left_width, calculated_left)
+	
+	split_offset = new_split_offset
+
+func _on_content_resized():
+	"""Called when the content area is resized"""
+	_update_split_offset()
 
 func _remove_split_container_outline():
 	# Remove the default HSplitContainer theme that creates outlines
@@ -144,9 +178,6 @@ func _setup_right_panel_only():
 	inventory_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	grid_scroll.add_child(inventory_grid)
 	
-	# Connect scroll container resize to grid
-	grid_scroll.resized.connect(_on_scroll_resized)
-	
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
@@ -178,12 +209,6 @@ func _setup_right_panel():
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
-	
-func _on_scroll_resized():
-	"""Called when scroll container is resized"""
-	print("Scroll container resized to: ", get_node("InventoryArea/GridScrollContainer").size)  # Debug
-	if inventory_grid and inventory_grid.has_method("handle_window_resize"):
-		inventory_grid.handle_window_resize()
 
 func _setup_mass_info_bar(parent: Control):
 	var mass_bar_container = MarginContainer.new()
