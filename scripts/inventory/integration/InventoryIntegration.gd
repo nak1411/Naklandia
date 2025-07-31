@@ -123,6 +123,10 @@ func _input(event):
 		return
 	
 	if event is InputEventKey and event.pressed and event.keycode == KEY_I:
+		# Check if search field has focus - if so, don't toggle inventory
+		if inventory_window and inventory_window.header and inventory_window.header.is_search_focused:
+			return  # Let the search field handle the 'I' key
+		
 		toggle_inventory()
 		get_viewport().set_input_as_handled()
 
@@ -142,6 +146,9 @@ func toggle_inventory():
 		
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		
+		# PAUSE PLAYER MOVEMENT - Add this line
+		_set_player_input_enabled(false)
+		
 	else:
 		# Save position before closing
 		_save_window_position()
@@ -151,8 +158,32 @@ func toggle_inventory():
 		# Hide mouse cursor for FPS gameplay (unless pause menu is open)
 		if not _is_pause_menu_open():
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		
+		# RESUME PLAYER MOVEMENT - Add this line
+		_set_player_input_enabled(true)
 	
 	inventory_toggled.emit(is_inventory_open)
+	
+func _set_player_input_enabled(enabled: bool):
+	"""Enable or disable player input processing"""
+	# Find the player node
+	var scene_root = get_tree().current_scene
+	var player_node = _find_node_by_name_recursive(scene_root, "Player")
+	
+	if player_node:
+		# Set the player's process mode to disable input when inventory is open
+		if enabled:
+			player_node.process_mode = Node.PROCESS_MODE_INHERIT
+		else:
+			player_node.process_mode = Node.PROCESS_MODE_DISABLED
+	
+	# Also disable input managers if they exist
+	var input_managers = get_tree().get_nodes_in_group("input_managers")
+	for input_manager in input_managers:
+		if enabled:
+			input_manager.process_mode = Node.PROCESS_MODE_INHERIT
+		else:
+			input_manager.process_mode = Node.PROCESS_MODE_DISABLED
 
 func _is_pause_menu_open() -> bool:
 	# Check if pause menu exists and is visible

@@ -10,6 +10,7 @@ var filter_dropdown: DropDownMenu_Base
 var sort_dropdown: DropDownMenu_Base
 var original_header_styles: Dictionary = {}
 var header_transparency_init: bool = false
+var is_search_focused: bool = false
 
 # References
 var inventory_manager: InventoryManager
@@ -76,6 +77,7 @@ func _setup_controls():
 	search_field.name = "SearchField"
 	search_field.placeholder_text = "Search items..."
 	search_field.custom_minimum_size.x = 150
+	search_field.focus_mode = Control.FOCUS_ALL  # Ensure it can receive focus
 	add_child(search_field)
 	
 	# Right margin spacer
@@ -203,12 +205,46 @@ func _style_custom_sort_button():
 func _connect_signals():	
 	if search_field:
 		search_field.text_changed.connect(_on_search_text_changed)
+		search_field.focus_entered.connect(_on_search_focus_entered)
+		search_field.focus_exited.connect(_on_search_focus_exited)
 	
 	if filter_options:
 		filter_options.pressed.connect(_on_filter_button_pressed)
 	
 	if sort_button:
 		sort_button.pressed.connect(_on_sort_button_pressed)
+		
+func _on_search_focus_entered():
+	is_search_focused = true
+
+func _on_search_focus_exited():
+	is_search_focused = false
+	
+func clear_search_focus():
+	if search_field and search_field.has_focus():
+		search_field.release_focus()
+		# Also clear the search text if desired
+		#search_field.text = ""
+		#search_changed.emit("")
+
+func _on_search_field_input(event: InputEvent):
+	if event is InputEventKey and event.pressed:
+		# Consume all key input when search field is focused
+		get_viewport().set_input_as_handled()
+		
+		# Handle special keys
+		if event.keycode == KEY_ESCAPE:
+			# Clear search and lose focus
+			search_field.text = ""
+			search_field.release_focus()
+			search_changed.emit("")
+			
+func _input(event: InputEvent):
+	if not is_search_focused:
+		return
+		
+	if event is InputEventKey and event.pressed:
+		pass
 
 func _remove_default_outlines():	
 	# Remove any default focus outlines and borders from all controls

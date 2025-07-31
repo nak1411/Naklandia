@@ -166,18 +166,28 @@ func _setup_menu_ui():
 	exit_button.custom_minimum_size.y = 50
 	button_container.add_child(exit_button)
 
-func _unhandled_input(event):
-	# Handle escape when no inventory is consuming it
+func _input(event):
 	if event.is_action_pressed("ui_cancel") and not event.is_echo():
 		
 		# Check inventory status first
 		if inventory_integration:
 			var inv_open = inventory_integration.is_inventory_window_open()
 			var inv_window = inventory_integration.get_inventory_window()
+			
+			# NEW: Check if search field is focused and clear it first, then open pause menu
+			if inv_open and inv_window and inv_window.header and inv_window.header.is_search_focused:
+				# Clear search focus and open pause menu immediately
+				inv_window.header.clear_search_focus()
+				toggle_pause()
+				get_viewport().set_input_as_handled()
+				return
+			
 			var inv_has_focus = inv_window.has_focus() if inv_window else false
-						
-			# If inventory is open and has focus, let it handle the first escape
+			
+			# If inventory is open and has focus, open pause menu
 			if inv_open and inv_has_focus:
+				toggle_pause()
+				get_viewport().set_input_as_handled()
 				return
 			
 			# If inventory is open but unfocused, open pause menu

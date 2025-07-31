@@ -105,6 +105,20 @@ func _process(_delta):
 	if can_resize and not is_locked:
 		_update_resize_cursor()
 		
+func _input(event: InputEvent):
+	# Check if search field has focus
+	if header and header.is_search_focused:
+		# Check for clicks outside the inventory window
+		if event is InputEventMouseButton and event.pressed:
+			var mouse_pos = get_global_mouse_position()
+			var window_rect = Rect2(global_position, size)
+			
+			# If click is outside the inventory window, clear search focus
+			if not window_rect.has_point(mouse_pos):
+				header.clear_search_focus()
+				get_viewport().set_input_as_handled()
+		return
+		
 func _update_resize_cursor():
 	var mouse_pos = get_global_mouse_position()
 	var resize_area = _get_resize_area(mouse_pos)
@@ -455,7 +469,58 @@ func _on_close_pressed():
 	if item_actions:
 		item_actions.cleanup()
 		item_actions = null
+	
+	# Hide the window
 	visible = false
+	
+	# IMPORTANT: Re-enable player input when closing via close button
+	# Find the inventory integration and call its close method properly
+	var scene_root = get_tree().current_scene
+	var inventory_integration = _find_inventory_integration(scene_root)
+	if inventory_integration:
+		# Use the proper close method that handles input re-enabling
+		inventory_integration.close_inventory()
+	else:
+		# Fallback - try to re-enable player input directly
+		_reenable_player_input_fallback()
+
+# Add this helper method to InventoryWindow.gd
+func _find_inventory_integration(node: Node) -> InventoryIntegration:
+	if node is InventoryIntegration:
+		return node
+	
+	for child in node.get_children():
+		var result = _find_inventory_integration(child)
+		if result:
+			return result
+	return null
+
+# Add this fallback method to InventoryWindow.gd
+func _reenable_player_input_fallback():
+	"""Fallback method to re-enable player input if InventoryIntegration isn't found"""
+	var scene_root = get_tree().current_scene
+	var player_node = _find_node_by_name_recursive(scene_root, "Player")
+	
+	if player_node:
+		player_node.process_mode = Node.PROCESS_MODE_INHERIT
+	
+	# Also re-enable input managers
+	var input_managers = get_tree().get_nodes_in_group("input_managers")
+	for input_manager in input_managers:
+		input_manager.process_mode = Node.PROCESS_MODE_INHERIT
+	
+	# Restore mouse capture for FPS gameplay
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	
+func _find_node_by_name_recursive(node: Node, target_name: String) -> Node:
+	if node.name == target_name:
+		return node
+	
+	for child in node.get_children():
+		var result = _find_node_by_name_recursive(child, target_name)
+		if result:
+			return result
+	return null
 
 func _on_options_pressed():
 	if not options_dropdown:
