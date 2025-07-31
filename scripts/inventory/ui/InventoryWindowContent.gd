@@ -175,7 +175,7 @@ func _setup_right_panel_only():
 	inventory_grid = InventoryGrid.new()
 	inventory_grid.name = "InventoryGrid"
 	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inventory_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid_scroll.add_child(inventory_grid)
 	
 	# Connect grid signals properly
@@ -203,7 +203,7 @@ func _setup_right_panel():
 	inventory_grid = InventoryGrid.new()
 	inventory_grid.name = "InventoryGrid"
 	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inventory_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid_scroll.add_child(inventory_grid)
 	
 	# Connect grid signals properly

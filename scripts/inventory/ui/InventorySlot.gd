@@ -171,7 +171,7 @@ func _setup_visual_components():
 	
 	# Style the background
 	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color(0.2, 0.2, 0.2, 1.0)
+	style_box.bg_color = Color(0.1, 0.1, 0.1, 1.0)
 	style_box.border_width_left = 0
 	style_box.border_width_right = 0
 	style_box.border_width_top = 0
@@ -468,10 +468,10 @@ func _update_visual_state():
 		style_box.bg_color = highlight_color.darkened(0.9)
 	elif is_occupied:
 		style_box.border_color = border_color.lightened(0.3)
-		style_box.bg_color = Color(0.2, 0.2, 0.2, 1.0)
+		style_box.bg_color = Color(0.1, 0.1, 0.1, 1.0)
 	else:
 		style_box.border_color = border_color
-		style_box.bg_color = Color(0.2, 0.2, 0.2, 1.0)
+		style_box.bg_color = Color(0.1, 0.1, 0.1, 1.0)
 	
 	background_panel.add_theme_stylebox_override("panel", style_box)
 
