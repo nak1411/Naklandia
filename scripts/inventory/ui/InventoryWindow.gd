@@ -521,16 +521,29 @@ func _update_button_positions():
 
 # Header signal handlers
 func _on_search_changed(text: String):
-	# TODO: Implement search filtering
-	pass
+	if not content:
+		return
+	
+	# Get the inventory grid to apply the search
+	var grid = get_inventory_grid()
+	if grid and grid.has_method("apply_search"):
+		grid.apply_search(text)
 
 func _on_filter_changed(filter_type: int):
-	# TODO: Implement filtering
-	pass
+	if not content:
+		return
+	
+	# Get the inventory grid to apply the filter
+	var grid = get_inventory_grid()
+	if grid and grid.has_method("apply_filter"):
+		grid.apply_filter(filter_type)
 
 func _on_sort_requested(sort_type):
-	# TODO: Implement sorting
-	pass
+	if not inventory_manager or not current_container:
+		return
+	
+	# Call the sort function on the inventory manager
+	inventory_manager.sort_container(current_container.container_id, sort_type)
 	
 
 

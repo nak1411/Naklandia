@@ -34,6 +34,8 @@ var slots: Array = []  # 2D array of InventorySlotUI
 var selected_slots: Array[InventorySlot] = []
 var original_grid_styles: Dictionary = {}
 var grid_transparency_init: bool = false
+var current_filter_type: int = 0  # 0 = All Items
+var current_search_text: String = ""
 
 # Signals
 signal item_selected(item: InventoryItem_Base, slot: InventorySlot)
@@ -331,6 +333,10 @@ func refresh_display():
 	
 	# Place items in their grid positions or find new positions
 	for item in container.items:
+		# Apply filtering - skip items that don't match current filter
+		if not _should_show_item(item):
+			continue
+		
 		var position = container.get_item_position(item)
 		if position != Vector2i(-1, -1) and _is_valid_position(position):
 			_place_item_in_grid(item, position)
@@ -340,7 +346,7 @@ func refresh_display():
 			if free_pos != Vector2i(-1, -1):
 				container.move_item(item, free_pos)
 				_place_item_in_grid(item, free_pos)
-	
+		
 	# Force visual refresh on all slots
 	force_all_slots_refresh()
 	
@@ -709,3 +715,40 @@ func get_capacity_statistics() -> Dictionary:
 					stats.slots_used += 1
 	
 	return stats
+	
+func apply_filter(filter_type: int):
+	current_filter_type = filter_type
+	refresh_display()
+
+func apply_search(search_text: String):
+	current_search_text = search_text.to_lower()
+	refresh_display()
+
+func _should_show_item(item: InventoryItem_Base) -> bool:
+	# Apply search filter first
+	if not current_search_text.is_empty():
+		if not item.item_name.to_lower().contains(current_search_text):
+			return false
+	
+	# Apply type filter
+	if current_filter_type == 0:  # All Items
+		return true
+	
+	# Map filter indices to ItemType enum values
+	var item_type_filter = _get_item_type_from_filter(current_filter_type)
+	return item.item_type == item_type_filter
+
+func _get_item_type_from_filter(filter_index: int) -> InventoryItem_Base.ItemType:
+	match filter_index:
+		1: return InventoryItem_Base.ItemType.WEAPON
+		2: return InventoryItem_Base.ItemType.ARMOR
+		3: return InventoryItem_Base.ItemType.CONSUMABLE
+		4: return InventoryItem_Base.ItemType.RESOURCE
+		5: return InventoryItem_Base.ItemType.BLUEPRINT
+		6: return InventoryItem_Base.ItemType.MODULE
+		7: return InventoryItem_Base.ItemType.SHIP
+		8: return InventoryItem_Base.ItemType.CONTAINER
+		9: return InventoryItem_Base.ItemType.AMMUNITION
+		10: return InventoryItem_Base.ItemType.IMPLANT
+		11: return InventoryItem_Base.ItemType.SKILL_BOOK
+		_: return InventoryItem_Base.ItemType.MISCELLANEOUS
