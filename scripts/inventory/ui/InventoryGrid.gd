@@ -58,6 +58,25 @@ func _ready():
 	_resize_complete_timer.timeout.connect(_perform_compact_reflow)
 	add_child(_resize_complete_timer)
 	
+	# Connect to visibility changes to fix initial layout
+	visibility_changed.connect(_on_visibility_changed)
+	
+func _on_visibility_changed():
+	"""Handle visibility changes to fix initial layout"""
+	if visible and container and container.items.size() > 0:
+		# When becoming visible, ensure proper layout
+		call_deferred("_check_and_fix_initial_layout")
+
+func _check_and_fix_initial_layout():
+	"""Check if we have a bad initial layout and fix it"""
+	# Check if we have a suspiciously narrow grid with items
+	if current_grid_width <= 2 and container and container.items.size() > 2:
+		# Wait a bit more for layout to settle
+		await get_tree().create_timer(0.2).timeout
+		
+		# Force a proper recalculation
+		_initialize_with_proper_size()
+	
 func handle_resize_complete():
 	"""Called when window resize is complete"""
 	_resize_complete_timer.start()
@@ -634,7 +653,7 @@ func set_container(new_container: InventoryContainer_Base):
 	
 	# If it's the same container, don't rebuild - just refresh display
 	if container == new_container and new_container != null:
-		refresh_display()
+		_trigger_compact_refresh()
 		return
 	
 	if container:
@@ -648,11 +667,9 @@ func set_container(new_container: InventoryContainer_Base):
 		await _rebuild_grid()
 		
 		_connect_container_signals()
-		# Only compact if auto_stack is enabled in inventory manager
-		var inventory_manager = _get_inventory_manager()
-		if inventory_manager and inventory_manager.auto_stack:
-			container.compact_items()
-		refresh_display()
+		
+		# Wait for proper layout initialization before compacting
+		call_deferred("_initialize_with_proper_size")
 	else:
 		# No container - clear everything
 		current_grid_width = min_grid_width
@@ -662,6 +679,120 @@ func set_container(new_container: InventoryContainer_Base):
 			grid_container = null
 		slots.clear()
 		available_slots.clear()
+		
+func _initialize_with_proper_size():
+	"""Initialize the grid with proper size after layout is complete"""
+	if not container:
+		return
+	
+	# Wait additional frames to ensure parent containers have proper sizes
+	await get_tree().process_frame
+	await get_tree().process_frame
+	
+	# Check if we have reasonable size information
+	var available_width = _get_actual_available_width()
+	
+	# If we still don't have good size info, try again later
+	if available_width < 100:  # Minimum reasonable width
+		await get_tree().create_timer(0.1).timeout
+		available_width = _get_actual_available_width()
+	
+	# Only proceed if we have reasonable width
+	if available_width >= 100:
+		_trigger_compact_refresh()
+	else:
+		# Fallback: use a reasonable default width and compact
+		_trigger_compact_refresh_with_fallback()
+		
+func _trigger_compact_refresh_with_fallback():
+	"""Trigger compact refresh with fallback width calculation"""
+	if not container:
+		return
+	
+	_is_refreshing_display = true
+	
+	# Get all visible items
+	var items_to_place: Array[InventoryItem_Base] = []
+	for item in container.items:
+		if _should_show_item(item):
+			items_to_place.append(item)
+	
+	if items_to_place.is_empty():
+		_is_refreshing_display = false
+		return
+	
+	# Use fallback width calculation - assume at least 400px available
+	var fallback_width = 400
+	var slots_per_row = max(1, int(fallback_width / (slot_size.x + slot_spacing)))
+	var optimal_width = max(3, min(slots_per_row, 20))  # At least 3 columns
+	
+	var required_rows = (items_to_place.size() + optimal_width - 1) / optimal_width
+	var optimal_height = max(min_grid_height, required_rows + 1)
+	
+	# Update dimensions
+	current_grid_width = optimal_width
+	current_grid_height = optimal_height
+	
+	if grid_container:
+		grid_container.columns = current_grid_width
+	
+	_ensure_adequate_slots()
+	await get_tree().process_frame
+	
+	# Clear and compact
+	_clear_all_slots_completely()
+	_place_items_compactly(items_to_place)
+	
+	force_all_slots_refresh()
+	_is_refreshing_display = false
+
+func trigger_compact_refresh():
+	"""Public method to trigger a compact refresh"""
+	_trigger_compact_refresh()
+
+func _trigger_compact_refresh():
+	"""Trigger a compact refresh without full reflow"""
+	if not container:
+		return
+	
+	# Block normal refresh and force compact placement
+	_is_refreshing_display = true
+	
+	# Get all visible items
+	var items_to_place: Array[InventoryItem_Base] = []
+	for item in container.items:
+		if _should_show_item(item):
+			items_to_place.append(item)
+	
+	if items_to_place.is_empty():
+		_is_refreshing_display = false
+		return
+	
+	# Calculate optimal dimensions for current items
+	var available_width = _get_actual_available_width()
+	var slots_per_row = max(1, int(available_width / (slot_size.x + slot_spacing)))
+	var optimal_width = max(1, min(slots_per_row, 20))
+	
+	var required_rows = (items_to_place.size() + optimal_width - 1) / optimal_width
+	var optimal_height = max(min_grid_height, required_rows + 1)
+	
+	# Update dimensions if needed
+	if optimal_width != current_grid_width or optimal_height != current_grid_height:
+		current_grid_width = optimal_width
+		current_grid_height = optimal_height
+		
+		if grid_container:
+			grid_container.columns = current_grid_width
+		
+		_ensure_adequate_slots()
+		await get_tree().process_frame
+	
+	# Clear and compact
+	_clear_all_slots_completely()
+	_place_items_compactly(items_to_place)
+	
+	force_all_slots_refresh()
+	_is_refreshing_display = false
 
 func _connect_container_signals():
 	if container:
@@ -899,12 +1030,14 @@ func get_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlot:
 
 # Container event handlers - DISABLE these during drag operations
 func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
+	# Always compact when items are added from transfers
 	if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
-		call_deferred("refresh_display")
+		call_deferred("_trigger_compact_refresh")
 
 func _on_container_item_removed(item: InventoryItem_Base):
+	# Compact remaining items when items are removed
 	if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
-		call_deferred("refresh_display")
+		call_deferred("_trigger_compact_refresh")
 
 func _on_container_item_moved(item: InventoryItem_Base, old_position: Vector2i, new_position: Vector2i):
 	if not _is_refreshing_display:

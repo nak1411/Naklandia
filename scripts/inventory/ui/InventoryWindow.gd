@@ -686,10 +686,19 @@ func update_mass_info():
 	if content and content.has_method("update_mass_info"):
 		content.update_mass_info()
 
+func _fix_initial_grid_layout():
+	"""Fix the initial grid layout after window is shown"""
+	await get_tree().process_frame
+	
+	if content and content.inventory_grid and content.current_container:
+		# Force the grid to recalculate with proper sizes
+		content.inventory_grid._initialize_with_proper_size()
+
 # Window management methods
 func show_window():
 	visible = true
 	move_to_front()
+	_fix_initial_grid_layout()
 
 func hide_window():
 	visible = false

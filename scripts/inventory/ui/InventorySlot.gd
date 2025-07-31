@@ -690,7 +690,6 @@ func _handle_drag_end(end_position: Vector2):
 	drag_preview_created = false
 	
 func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
-	
 	var content = _find_inventory_content()
 	if not content:
 		return false
@@ -719,117 +718,14 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 	if not inventory_manager:
 		return false
 	
-	# Get source container
-	var source_container = inventory_manager.get_container(container_id)
-	if not source_container:
-		return false
+	# Use transfer without specific position - let target container compact
+	var success = inventory_manager.transfer_item(item, container_id, target_container.container_id)
 	
-	# Check if there's an existing stackable item in the target container
-	var existing_item = target_container.find_stackable_item(item)
+	if success:
+		clear_item()
+		return true
 	
-	if existing_item:
-		
-		# Since we removed stack size limits, we can add all items to the existing stack
-		# But we still need to check volume constraints
-		var volume_needed = item.get_total_volume()
-		var available_volume = target_container.get_available_volume()
-		
-		if volume_needed <= available_volume:
-			# Can transfer all items to existing stack
-			
-			existing_item.quantity += item.quantity
-			existing_item.quantity_changed.emit(existing_item.quantity)
-			
-			# Remove source item completely
-			source_container.remove_item(item)
-			clear_item()
-			
-			if content.has_method("refresh_display"):
-				content.refresh_display()
-			
-			return true
-		else:
-			# Can only transfer some items due to volume constraints
-			var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
-			
-			if max_transferable > 0:
-				
-				existing_item.quantity += max_transferable
-				existing_item.quantity_changed.emit(existing_item.quantity)
-				
-				item.quantity -= max_transferable
-				item.quantity_changed.emit(item.quantity)
-				
-				_update_item_display()
-				_show_transfer_feedback(max_transferable, item.quantity)
-				
-				if content.has_method("refresh_display"):
-					content.refresh_display()
-				
-				return true
-			else:
-				_show_volume_error("Container is full")
-				return false
-	else:
-		
-		# No existing stack, create new item as before
-		var available_volume = target_container.get_available_volume()
-		
-		if available_volume <= 0:
-			_show_volume_error("Container is full")
-			return false
-		
-		var max_transferable = item.quantity  # Default to all items
-		
-		if item.volume > 0:
-			max_transferable = int(available_volume / item.volume)
-			max_transferable = min(max_transferable, item.quantity)
-		
-		if max_transferable <= 0:
-			_show_volume_error("Container is full")
-			return false
-		
-		
-		# Create transfer item with the calculated quantity
-		var transfer_item = InventoryItem_Base.new()
-		transfer_item.item_id = item.item_id
-		transfer_item.item_name = item.item_name
-		transfer_item.description = item.description
-		transfer_item.icon_path = item.icon_path
-		transfer_item.volume = item.volume
-		transfer_item.mass = item.mass
-		transfer_item.quantity = max_transferable
-		transfer_item.max_stack_size = 999999  # No stack limit
-		transfer_item.item_type = item.item_type
-		transfer_item.item_rarity = item.item_rarity
-		transfer_item.is_contraband = item.is_contraband
-		transfer_item.base_value = item.base_value
-		transfer_item.can_be_destroyed = item.can_be_destroyed
-		transfer_item.is_unique = item.is_unique
-		transfer_item.is_container = item.is_container
-		transfer_item.container_volume = item.container_volume
-		transfer_item.container_type = item.container_type
-		
-		# Add to target container
-		if target_container.add_item(transfer_item, Vector2i(-1, -1), false):
-			# Reduce source quantity
-			item.quantity -= max_transferable
-			
-			# Handle source item cleanup
-			if item.quantity <= 0:
-				source_container.remove_item(item)
-				clear_item()
-			else:
-				_update_item_display()
-				_show_transfer_feedback(max_transferable, item.quantity)
-			
-			if content.has_method("refresh_display"):
-				content.refresh_display()
-			
-			return true
-		else:
-			_show_volume_error("Transfer failed")
-			return false
+	return false
 	
 func _cleanup_all_drag_previews():
 	"""Clean up any existing drag previews in the scene"""
@@ -1362,17 +1258,14 @@ func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_
 	if amount_to_transfer <= 0:
 		return false
 	
-	# Direct stacking without using transfer system for same container
+	# Direct stacking for same container
 	if container_id == target_slot.container_id:
-		# Update quantities directly
 		target_item.quantity += amount_to_transfer
 		item.quantity -= amount_to_transfer
 		
-		# Update displays - ONLY the affected slots, no grid refresh
 		target_slot._update_item_display()
 		
 		if item.quantity <= 0:
-			# Source item fully consumed
 			var source_container = _get_inventory_manager().get_container(container_id)
 			if source_container:
 				source_container.remove_item(item)
@@ -1382,24 +1275,18 @@ func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_
 		
 		return true
 	else:
-		# Different container stacking - use transfer system
+		# Cross-container stacking - use transfer system without position
 		var inventory_manager = _get_inventory_manager()
 		if not inventory_manager:
 			return false
 		
-		# Use the inventory manager's transfer system for different containers
-		var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, target_slot.grid_position, amount_to_transfer)
+		var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, Vector2i(-1, -1), amount_to_transfer)
 		
 		if success:
-			# Update displays - ONLY the affected slots, no grid refresh
 			if item.quantity <= 0:
-				# Source item fully consumed
 				clear_item()
 			else:
 				_update_item_display()
-			
-			# Update target display - ONLY the slot, no grid refresh
-			target_slot._update_item_display()
 			
 			return true
 		
@@ -1477,42 +1364,27 @@ func _handle_move_to_empty(target_slot: InventorySlot, inventory_manager: Invent
 	if not source_container or not target_container:
 		return false
 	
-	# Store the item reference before removing it
 	var temp_item = item
 	
-	# For same container moves, just update the visual position
+	# Same container - just move visually
 	if source_container == target_container:
-		# No volume check needed for same container - just move the item visually
 		clear_item()
 		target_slot.set_item(temp_item)
-		# Emit move signal for any listeners
 		source_container.item_moved.emit(temp_item, grid_position, target_slot.grid_position)
 		return true
 	
-	# For different containers, check volume constraints
+	# Different containers - use transfer system without specific position
 	if not target_container.has_volume_for_item(item):
 		return false
 	
-	# Remove from source and add to target
-	var source_success = source_container.remove_item(temp_item)
-	if not source_success:
-		return false
+	# Let the transfer system and target container handle positioning
+	var success = inventory_manager.transfer_item(temp_item, container_id, target_slot.container_id)
 	
-	# Clear the source slot visually
-	clear_item()
+	if success:
+		clear_item()
+		return true
 	
-	# Add to target container - let it handle volume validation
-	var target_success = target_container.add_item(temp_item, target_slot.grid_position, false)
-	if not target_success:
-		# Restore to source if target add failed
-		source_container.add_item(temp_item, grid_position, false)
-		set_item(temp_item)
-		return false
-	
-	# Set the target slot visually
-	target_slot.set_item(temp_item)
-	
-	return true
+	return false
 
 # Helper methods
 func _get_inventory_grid() -> InventoryGrid:

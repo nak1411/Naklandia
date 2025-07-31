@@ -306,13 +306,12 @@ func select_container(container: InventoryContainer_Base):
 		return
 	
 	if container:
-		# Only compact if auto_stack is enabled in inventory manager
-		if container.get_item_count() > 0 and inventory_manager and inventory_manager.auto_stack:
-			container.compact_items()
-		
+		# Set the container on the grid first
 		inventory_grid.set_container(container)
 		await get_tree().process_frame
-		refresh_display()
+		
+		# Force compact layout
+		inventory_grid.trigger_compact_refresh()
 	else:
 		inventory_grid.set_container(null)
 	
@@ -325,7 +324,6 @@ func select_container_index(index: int):
 			list_to_use.select(index)
 
 func refresh_display():
-	
 	if not inventory_grid:
 		return
 	
@@ -336,8 +334,8 @@ func refresh_display():
 	inventory_grid.set_container(current_container)
 	await get_tree().process_frame
 	
-	# Force refresh the grid display
-	inventory_grid.refresh_display()
+	# Force compact refresh
+	inventory_grid.trigger_compact_refresh()
 	
 	# Update mass info
 	update_mass_info()
