@@ -240,9 +240,15 @@ func _setup_visual_components():
 	
 	_update_visual_state()
 	
-	call_deferred("_setup_external_glow")
-	
 func _setup_external_glow():
+	# Check if we have a valid tree first - but don't defer in a loop!
+	if not get_tree() or not get_tree().current_scene:
+		# Don't defer - just return and let it be called later naturally
+		return
+	
+	# Only create glow if we don't already have it
+	if glow_canvas_layer:
+		return
 	
 	# Create a dedicated CanvasLayer
 	glow_canvas_layer = CanvasLayer.new()
@@ -285,6 +291,10 @@ func _setup_external_glow():
 	glow_canvas_layer.add_child(hover_glow)
 	
 func _show_hover_glow():
+	# Only setup glow when we actually need it and can safely do so
+	if not hover_glow and get_tree() and get_tree().current_scene:
+		_setup_external_glow()
+	
 	if not hover_glow or not item:
 		return
 	

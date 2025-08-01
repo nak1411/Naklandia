@@ -210,11 +210,12 @@ func add_test_items_for_virtual_scroll():
 
 func _render_virtual_items():
 	"""Render a dynamic grid that fills the available window space, like EVE Online"""
+	if not virtual_content:
+		print("ERROR: virtual_content is null")
+		return
+		
 	
-	# Clear existing rendered slots
-	for slot in virtual_rendered_slots:
-		slot.queue_free()
-	virtual_rendered_slots.clear()
+	_cleanup_virtual_rendered_slots()
 	
 	# Calculate grid dimensions based on available space
 	var available_width = virtual_scroll_container.size.x - 20  # Account for scrollbar
@@ -287,6 +288,38 @@ func _render_virtual_items():
 	var content_width = virtual_items_per_row * slot_size.x
 	virtual_content.custom_minimum_size = Vector2(content_width, virtual_total_height)
 	virtual_content.size = Vector2(content_width, virtual_total_height)
+	
+func _cleanup_virtual_rendered_slots():
+	"""Properly clean up existing virtual rendered slots"""
+	print("Cleaning up ", virtual_rendered_slots.size(), " virtual rendered slots")
+	
+	# Disconnect signals and free slots
+	for slot in virtual_rendered_slots:
+		if slot and is_instance_valid(slot):
+			# Disconnect all signals to prevent memory leaks
+			if slot.slot_clicked.is_connected(_on_slot_clicked):
+				slot.slot_clicked.disconnect(_on_slot_clicked)
+			if slot.slot_right_clicked.is_connected(_on_slot_right_clicked):
+				slot.slot_right_clicked.disconnect(_on_slot_right_clicked)
+			if slot.item_drag_started.is_connected(_on_item_drag_started):
+				slot.item_drag_started.disconnect(_on_item_drag_started)
+			if slot.item_drag_ended.is_connected(_on_item_drag_ended):
+				slot.item_drag_ended.disconnect(_on_item_drag_ended)
+			if slot.item_dropped_on_slot.is_connected(_on_item_dropped_on_slot):
+				slot.item_dropped_on_slot.disconnect(_on_item_dropped_on_slot)
+			
+			# Remove from scene tree and free
+			if slot.get_parent():
+				slot.get_parent().remove_child(slot)
+			slot.queue_free()
+	
+	# Clear the array
+	virtual_rendered_slots.clear()
+	
+	# Also clear all children from virtual_content to be safe
+	if virtual_content:
+		for child in virtual_content.get_children():
+			child.queue_free()
 		
 func _on_visibility_changed():
 	"""Handle visibility changes to fix initial layout"""
