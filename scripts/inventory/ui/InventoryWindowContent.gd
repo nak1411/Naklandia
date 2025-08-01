@@ -329,8 +329,8 @@ func select_container(container: InventoryContainer_Base):
 		inventory_grid.set_container(container)
 		await get_tree().process_frame
 		
-		# Force compact layout
-		inventory_grid.trigger_compact_refresh()
+		# Use the original refresh_display instead of trigger_compact_refresh
+		inventory_grid.refresh_display()
 	else:
 		inventory_grid.set_container(null)
 	

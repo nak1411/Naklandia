@@ -887,11 +887,6 @@ func set_container(new_container: InventoryContainer_Base):
 	# Clear position tracking when changing containers
 	item_positions.clear()
 	
-	# If it's the same container, don't rebuild - just refresh display
-	if container == new_container and new_container != null:
-		_trigger_compact_refresh()
-		return
-	
 	if container:
 		_disconnect_container_signals()
 	
@@ -899,13 +894,10 @@ func set_container(new_container: InventoryContainer_Base):
 	container_id = container.container_id if container else ""
 	
 	if container:
-		# Override container grid size - we manage our own now
-		await _rebuild_grid()
-		
 		_connect_container_signals()
 		
-		# Wait for proper layout initialization before compacting
-		call_deferred("_initialize_with_proper_size")
+		# Use the original refresh system that was working before virtual scrolling
+		call_deferred("refresh_display")
 	else:
 		# No container - clear everything
 		current_grid_width = min_grid_width
@@ -925,20 +917,9 @@ func _initialize_with_proper_size():
 	await get_tree().process_frame
 	await get_tree().process_frame
 	
-	# Check if we have reasonable size information
-	var available_width = _get_actual_available_width()
-	
-	# If we still don't have good size info, try again later
-	if available_width < 100:  # Minimum reasonable width
-		await get_tree().create_timer(0.1).timeout
-		available_width = _get_actual_available_width()
-	
-	# Only proceed if we have reasonable width
-	if available_width >= 100:
-		_trigger_compact_refresh()
-	else:
-		# Fallback: use a reasonable default width and compact
-		_trigger_compact_refresh_with_fallback()
+	# Force trigger the compact refresh regardless of size
+	# The fallback method handles insufficient width properly
+	_trigger_compact_refresh_with_fallback()
 		
 func _trigger_compact_refresh_with_fallback():
 	"""Trigger compact refresh with fallback width calculation"""
@@ -957,9 +938,12 @@ func _trigger_compact_refresh_with_fallback():
 		_is_refreshing_display = false
 		return
 	
-	# Use fallback width calculation - assume at least 400px available
-	var fallback_width = 400
-	var slots_per_row = max(1, int(fallback_width / (slot_size.x + slot_spacing)))
+	# Get actual available width first, with fallback
+	var available_width = _get_actual_available_width()
+	if available_width < 100:  # If still no good width info
+		available_width = max(400, size.x - 32)  # Use our own size or reasonable default
+	
+	var slots_per_row = max(1, int(available_width / (slot_size.x + slot_spacing)))
 	var optimal_width = max(3, min(slots_per_row, 20))  # At least 3 columns
 	
 	var required_rows = (items_to_place.size() + optimal_width - 1) / optimal_width

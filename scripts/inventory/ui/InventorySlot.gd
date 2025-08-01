@@ -396,6 +396,7 @@ func _clear_volume_feedback():
 	
 func force_visual_refresh():
 	queue_redraw()
+	_update_item_display()
 	_update_visual_state()
 
 func clear_item():
