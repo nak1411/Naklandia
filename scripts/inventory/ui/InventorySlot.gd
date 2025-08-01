@@ -484,39 +484,30 @@ func _update_visual_state():
 	background_panel.add_theme_stylebox_override("panel", style_box)
 
 # New drag and drop input handling
-func _on_gui_input(event: InputEvent):
-	print("InventorySlot._on_gui_input called with event: ", event.get_class())
-	
+func _on_gui_input(event: InputEvent):	
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
-		print("Mouse button event: button=", mouse_event.button_index, " pressed=", mouse_event.pressed)
 		
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
-				print("Left mouse pressed on slot with item: ", item.item_name if item else "no item")
 				if has_item():
 					is_dragging = true
 					drag_preview_created = false
 					drag_start_position = mouse_event.global_position
-					print("Started dragging setup")
 				slot_clicked.emit(self, mouse_event)
 			else:
 				# Mouse button released
 				if is_dragging:
-					print("Handling drag end")
 					_handle_drag_end(mouse_event.global_position)
 					is_dragging = false
 					drag_preview_created = false
 		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
-			print("Right mouse clicked")
 			slot_right_clicked.emit(self, mouse_event)
 			get_viewport().set_input_as_handled()
 	
 	elif event is InputEventMouseMotion and is_dragging:
-		print("Mouse motion during drag")
 		var distance = event.global_position.distance_to(drag_start_position)
 		if distance > drag_threshold and has_item() and not drag_preview_created:
-			print("Starting drag preview")
 			_start_drag()
 			
 func _update_drag_volume_feedback(mouse_position: Vector2):
@@ -690,36 +681,39 @@ func _update_preview_position(preview: Control):
 	preview.global_position = mouse_pos - preview.size / 2
 
 func _handle_drag_end(end_position: Vector2):
-	print("_handle_drag_end called at position: ", end_position)
 	
 	_cleanup_all_drag_previews()
 	
 	var drop_successful = false
 	
-	# Find target slot
+	# Find target slot first
 	var target_slot = _find_slot_at_position(end_position)
-	print("Found target slot: ", target_slot)
 	
 	if target_slot and target_slot != self:
-		print("Attempting drop on slot with item: ", target_slot.get_item().item_name if target_slot.has_item() else "empty")
 		drop_successful = _attempt_drop_on_slot(target_slot)
-		print("Drop successful: ", drop_successful)
-	else:
-		print("Attempting drop on container list")
-		drop_successful = _attempt_drop_on_container_list(end_position)
+		
+		# Check if we're dropping on virtual content area
+		var grid = _get_inventory_grid()
+		if grid and grid.enable_virtual_scrolling and grid.virtual_content:
+			# Check if the drop position is within the virtual content bounds
+			var content_rect = Rect2(grid.virtual_content.global_position, grid.virtual_content.size)
+			
+			if content_rect.has_point(end_position):
+				drop_successful = grid._handle_drop_on_empty_area(self, end_position)
+		
+		# Fallback to container list drop if virtual drop didn't work
+		if not drop_successful:
+			drop_successful = _attempt_drop_on_container_list(end_position)
 	
-	# Clear drag data from viewport
+	# Rest of the method stays the same...
 	if get_viewport().has_meta("current_drag_data"):
 		get_viewport().remove_meta("current_drag_data")
 	
-	# Ensure container highlights are cleared
 	var content = _find_inventory_content()
 	if content:
 		content._clear_all_container_highlights()
 	
-	# Emit drag ended signal
 	item_drag_ended.emit(self, drop_successful)
-	print("Drag ended, success: ", drop_successful)
 	
 func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 	var content = _find_inventory_content()
@@ -869,110 +863,47 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	if target_slot.container_id == container_id:
 		return _handle_same_container_drop(target_slot)
 	
-	# Different containers - check volume-based partial transfer
+	# Different containers - existing cross-container logic continues...
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	if not target_container:
 		return false
 	
-	# Calculate how much can be transferred based on available volume
 	var available_volume = target_container.get_available_volume()
-	var item_volume_per_unit = item.volume
+	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
 	
-	if item_volume_per_unit <= 0:
-		# If item has no volume, transfer entire stack
-		if target_slot.has_item():
-			return _handle_occupied_slot_drop(target_slot)
-		else:
-			var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id)
-			if success:
-				clear_item()
-			return success
-	
-	# Calculate maximum transferable quantity based on volume
-	var max_transferable_by_volume = int(available_volume / item_volume_per_unit)
-	
-	if max_transferable_by_volume <= 0:
-		_show_volume_error("Target container is full")
+	if max_transferable <= 0:
 		return false
 	
-	# Check if target slot has an item for potential stacking
+	var transfer_amount = min(item.quantity, max_transferable)
+	
 	if target_slot.has_item():
 		var target_item = target_slot.get_item()
-		
-		# If items can stack, check stacking constraints
 		if item.can_stack_with(target_item):
 			var stack_space = target_item.max_stack_size - target_item.quantity
-			var transferable_quantity = min(max_transferable_by_volume, min(item.quantity, stack_space))
-			
-			if transferable_quantity <= 0:
-				_show_volume_error("Target stack is full")
-				return false
-			
-			# Perform the partial stack transfer
-			var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, target_slot.grid_position, transferable_quantity)
-			
-			if success:
-				if item.quantity <= 0:
-					clear_item()
-				else:
-					_update_item_display()
-					_show_transfer_feedback(transferable_quantity, item.quantity)
-				
-				# Refresh target container display
-				var target_grid = target_slot._get_inventory_grid()
-				if target_grid:
-					target_grid.refresh_display()
-					
-				var source_grid = _get_inventory_grid()
-				if source_grid:
-					source_grid.refresh_display()
-				
-				return true
-			
-			return false
-		else:
-			# Items can't stack - try to swap if both fit in each other's containers
-			var source_container = inventory_manager.get_container(container_id)
-			if source_container and source_container.has_volume_for_item(target_item):
-				return _handle_item_swap(target_slot, target_item, inventory_manager)
-			else:
-				_show_volume_error("Cannot swap - insufficient volume")
-				return false
-	else:
-		# Target slot is empty
-		var transferable_quantity = min(max_transferable_by_volume, item.quantity)
+			transfer_amount = min(transfer_amount, stack_space)
 		
-		if transferable_quantity >= item.quantity:
-			# Can transfer entire stack
-			var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id)
-			if success:
-				clear_item()
-				# Refresh target container display
-				var target_grid = target_slot._get_inventory_grid()
-				if target_grid:
-					target_grid.refresh_display()
-			return success
-		else:
-			# Partial transfer needed
-			var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, target_slot.grid_position, transferable_quantity)
-			
-			if success:
-				_update_item_display()
-				_show_transfer_feedback(transferable_quantity, item.quantity)
-				
-				# Refresh target container display
-				var target_grid = target_slot._get_inventory_grid()
-				if target_grid:
-					target_grid.refresh_display()
-				
-				return true
-			
+		if transfer_amount <= 0:
 			return false
+	
+	var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, Vector2i(-1, -1), transfer_amount)
+	
+	if success:
+		if item.quantity <= 0:
+			clear_item()
+		else:
+			_update_item_display()
+		
+		# Only refresh target grid if NOT in virtual mode
+		var target_grid = target_slot._get_inventory_grid()
+		if target_grid and not target_grid.enable_virtual_scrolling:
+			target_grid.refresh_display()
+	
+	return success
 
 func _handle_same_container_drop(target_slot: InventorySlot) -> bool:
 	"""Handle dropping on a slot within the same container"""
 	if target_slot.has_item():
-		return _handle_stack_or_swap(target_slot, _get_inventory_manager())
+		return _handle_occupied_slot_drop(target_slot)
 	else:
 		return _handle_move_to_empty(target_slot, _get_inventory_manager())
 
@@ -1315,24 +1246,49 @@ func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_
 	if amount_to_transfer <= 0:
 		return false
 	
+	var grid = _get_inventory_grid()
+	
 	# Direct stacking for same container
 	if container_id == target_slot.container_id:
-		target_item.quantity += amount_to_transfer
-		item.quantity -= amount_to_transfer
-		
-		target_slot._update_item_display()
-		
-		if item.quantity <= 0:
-			var source_container = _get_inventory_manager().get_container(container_id)
-			if source_container:
-				source_container.remove_item(item)
-			clear_item()
+		# For virtual mode, work directly with the item quantities
+		if grid and grid.enable_virtual_scrolling:
+			# Update quantities directly
+			target_item.quantity += amount_to_transfer
+			item.quantity -= amount_to_transfer
+			
+			# Update displays
+			target_slot._update_item_display()
+			
+			if item.quantity <= 0:
+				# Remove from container's items array
+				var source_container = _get_inventory_manager().get_container(container_id)
+				if source_container:
+					var item_index = source_container.items.find(item)
+					if item_index != -1:
+						source_container.items.remove_at(item_index)
+				clear_item()
+			else:
+				_update_item_display()
+			
+			return true
 		else:
-			_update_item_display()
-		
-		return true
+			# Traditional mode
+			target_item.quantity += amount_to_transfer
+			item.quantity -= amount_to_transfer
+			
+			target_slot._update_item_display()
+			
+			if item.quantity <= 0:
+				var source_container = _get_inventory_manager().get_container(container_id)
+				if source_container:
+					source_container.remove_item(item)
+				clear_item()
+			else:
+				_update_item_display()
+			
+			return true
 	else:
-		# Cross-container stacking - use transfer system without position
+		# Cross-container stacking - use transfer system
 		var inventory_manager = _get_inventory_manager()
 		if not inventory_manager:
 			return false
@@ -1344,16 +1300,6 @@ func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_
 				clear_item()
 			else:
 				_update_item_display()
-				
-			# Refresh target container display
-			var target_grid = target_slot._get_inventory_grid()
-			if target_grid:
-				target_grid.refresh_display()
-	
-			# ADD THIS: Refresh source container display
-			var source_grid = _get_inventory_grid()
-			if source_grid:
-				source_grid.refresh_display()
 			
 			return true
 		
@@ -1363,64 +1309,54 @@ func _handle_item_swap(target_slot: InventorySlot, target_item: InventoryItem_Ba
 	var source_container = inventory_manager.get_container(container_id)
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	
-	# Store items and positions temporarily
 	var temp_source_item = item
 	var temp_target_item = target_item
-	var source_pos = grid_position
-	var target_pos = target_slot.grid_position
 	
-	# For same container swaps, use move_item which is more reliable
+	# Same container swaps
 	if source_container == target_container:
-		# Clear the grid positions manually first
-		source_container.clear_grid_area(source_pos)
-		source_container.clear_grid_area(target_pos)
+		var grid = _get_inventory_grid()
 		
-		# Place items at swapped positions
-		source_container.occupy_grid_area(target_pos, temp_source_item)
-		source_container.occupy_grid_area(source_pos, temp_target_item)
-		
-		# Update visual slots immediately
-		clear_item()
-		target_slot.clear_item()
-		target_slot.set_item(temp_source_item)
-		set_item(temp_target_item)
-		
-		# Emit move signals instead of add/remove to avoid refresh_display
-		source_container.item_moved.emit(temp_source_item, source_pos, target_pos)
-		source_container.item_moved.emit(temp_target_item, target_pos, source_pos)
-		
-		return true
+		if grid and grid.enable_virtual_scrolling:
+			# For virtual mode, just swap the visual slots
+			# The items stay in the same container
+			clear_item()
+			target_slot.clear_item()
+			target_slot.set_item(temp_source_item)
+			set_item(temp_target_item)
+			return true
+		else:
+			# Traditional mode with grid position tracking
+			source_container.clear_grid_area(grid_position)
+			source_container.clear_grid_area(target_slot.grid_position)
+			
+			source_container.occupy_grid_area(target_slot.grid_position, temp_source_item)
+			source_container.occupy_grid_area(grid_position, temp_target_item)
+			
+			clear_item()
+			target_slot.clear_item()
+			target_slot.set_item(temp_source_item)
+			set_item(temp_target_item)
+			
+			source_container.item_moved.emit(temp_source_item, grid_position, target_slot.grid_position)
+			source_container.item_moved.emit(temp_target_item, target_slot.grid_position, grid_position)
+			
+			return true
 	else:
-		# Different containers - use the existing logic but without signals
+		# Cross-container swap - existing logic
 		var source_success = source_container.remove_item(temp_source_item)
 		var target_success = target_container.remove_item(temp_target_item)
 		
 		if not source_success or not target_success:
 			return false
 		
-		# Clear visual slots
 		clear_item()
 		target_slot.clear_item()
 		
-		# Add to new containers at specific positions
-		target_container.occupy_grid_area(target_pos, temp_source_item)
-		source_container.occupy_grid_area(source_pos, temp_target_item)
-		target_container.items.append(temp_source_item)
-		source_container.items.append(temp_target_item)
+		target_container.add_item(temp_source_item)
+		source_container.add_item(temp_target_item)
 		
-		# Reconnect signals
-		temp_source_item.quantity_changed.connect(target_container._on_item_quantity_changed)
-		temp_source_item.item_modified.connect(target_container._on_item_modified)
-		temp_target_item.quantity_changed.connect(source_container._on_item_quantity_changed)
-		temp_target_item.item_modified.connect(source_container._on_item_modified)
-		
-		# Update visual slots
 		target_slot.set_item(temp_source_item)
 		set_item(temp_target_item)
-		
-		# Only emit item_added signals for cross-container moves
-		target_container.item_added.emit(temp_source_item, target_pos)
-		source_container.item_added.emit(temp_target_item, source_pos)
 		
 		return true
 
@@ -1433,20 +1369,25 @@ func _handle_move_to_empty(target_slot: InventorySlot, inventory_manager: Invent
 	
 	var temp_item = item
 	
-	# Same container - just move visually
+	# Same container - for virtual mode, we need to trigger proper container signals
 	if source_container == target_container:
-		clear_item()
-		target_slot.set_item(temp_item)
-		source_container.item_moved.emit(temp_item, grid_position, target_slot.grid_position)
-		return true
+		var grid = _get_inventory_grid()
+		
+		if grid and grid.enable_virtual_scrolling:
+			# For virtual mode, just move the item visually
+			# The virtual display will handle the rest
+			clear_item()
+			target_slot.set_item(temp_item)
+			return true
+		else:
+			# Traditional mode
+			clear_item()
+			target_slot.set_item(temp_item)
+			source_container.item_moved.emit(temp_item, grid_position, target_slot.grid_position)
+			return true
 	
-	# Different containers - use transfer system without specific position
-	if not target_container.has_volume_for_item(item):
-		return false
-	
-	# Let the transfer system and target container handle positioning
+	# Different containers - use transfer system
 	var success = inventory_manager.transfer_item(temp_item, container_id, target_slot.container_id)
-	
 	if success:
 		clear_item()
 		return true
@@ -1476,6 +1417,49 @@ func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
 			return result
 	
 	return null
+	
+func _can_drop_data(position: Vector2, data: Variant) -> bool:
+	# Only accept drops if we can accept the item
+	if not data or not data.has("item"):
+		return false
+	
+	var item_to_drop = data.get("item")
+	if not item_to_drop:
+		return false
+	
+	# Check if we can accept this item (volume, compatibility, etc.)
+	return _can_accept_item_volume_check(item_to_drop)
+
+func _drop_data(position: Vector2, data: Variant):
+	if not data or not data.has("source_slot"):
+		return
+	
+	var source_slot = data.get("source_slot")
+	if not source_slot or source_slot == self:
+		return
+	
+	# Emit the drop signal to let the grid handle it
+	item_dropped_on_slot.emit(source_slot, self)
+
+func get_drag_data(position: Vector2) -> Variant:
+	if not has_item():
+		return null
+	
+	# Set up the drag state properly
+	if not is_dragging:
+		is_dragging = true
+		drag_preview_created = false
+		drag_start_position = get_global_mouse_position()
+		
+		# Emit our custom drag started signal
+		item_drag_started.emit(self, item)
+	
+	# Return data for Godot's drag system
+	return {
+		"source_slot": self,
+		"item": item,
+		"container_id": container_id
+	}
 
 # Signal handlers
 func _on_item_quantity_changed(new_quantity: int):

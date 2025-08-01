@@ -123,12 +123,8 @@ func _process(_delta):
 		
 func _on_resize_complete():
 	"""Called when resize operation is complete (mouse released)"""
-	print("\n=== WINDOW RESIZE COMPLETE ===")
-	print("New window size: ", size)
 	if content and content.inventory_grid:
-		print("Triggering grid resize handling...")
 		content.inventory_grid.handle_resize_complete()
-	print("=== RESIZE HANDLING COMPLETE ===\n")
 		
 func _input(event: InputEvent):
 	# Check if search field has focus
@@ -439,7 +435,6 @@ func _setup_content():
 	
 func _on_window_resized_for_grid(_new_size: Vector2i):
 	"""Handle window resize"""
-	print("Window resized to: ", _new_size)  # Debug
 	if content and content.inventory_grid and content.inventory_grid.has_method("handle_window_resize"):
 		content.inventory_grid.handle_window_resize()
 	
@@ -664,7 +659,6 @@ func maximize_window():
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 	
 	if content and content.inventory_grid:
-		print("Triggering grid maximized handling...")
 		content.inventory_grid.handle_resize_complete()
 
 func restore_window():
@@ -680,7 +674,6 @@ func restore_window():
 		maximize_button.text = "□"  # Maximize icon
 		
 	if content and content.inventory_grid:
-		print("Triggering grid restored handling...")
 		content.inventory_grid.handle_resize_complete()
 
 # Add this helper method to InventoryWindow.gd

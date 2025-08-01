@@ -168,18 +168,15 @@ func _setup_right_panel_only():
 	inventory_grid.name = "InventoryGrid"
 	
 	# SET PROPERTIES BEFORE ADDING TO SCENE
-	print("Setting virtual scrolling properties...")
 	inventory_grid.enable_virtual_scrolling = true
 	inventory_grid.slot_size = Vector2(96, 96)
 	inventory_grid.virtual_item_height = 96
-	print("Properties set: enable_virtual_scrolling = ", inventory_grid.enable_virtual_scrolling)
 	
 	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
 	# ADD TO SCENE (this triggers _ready())
 	inventory_area.add_child(inventory_grid)
-	print("Added inventory_grid to scene")
 	
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)

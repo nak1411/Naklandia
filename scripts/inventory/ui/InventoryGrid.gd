@@ -84,102 +84,120 @@ func _ready():
 	visibility_changed.connect(_on_visibility_changed)
 	
 func _setup_virtual_scrolling():
-	"""Setup virtual scrolling container"""
-	print("_setup_virtual_scrolling() called")
-	
+	"""Setup virtual scrolling container"""	
 	# Create scroll container
 	virtual_scroll_container = ScrollContainer.new()
 	virtual_scroll_container.name = "VirtualScrollContainer"
 	virtual_scroll_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	virtual_scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	virtual_scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	
-	# CRITICAL: Use IGNORE so it doesn't consume mouse button events
-	virtual_scroll_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	virtual_scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	
 	add_child(virtual_scroll_container)
 	
 	# Create content container
 	virtual_content = Control.new()
 	virtual_content.name = "VirtualContent"
-	virtual_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	virtual_content.mouse_filter = Control.MOUSE_FILTER_STOP
 	virtual_scroll_container.add_child(virtual_content)
 	
-	# For scrolling, we'll handle it manually with mouse wheel events
 	# Connect scroll events
 	virtual_scroll_container.get_v_scroll_bar().value_changed.connect(_on_virtual_scroll)
 	virtual_scroll_container.resized.connect(_on_virtual_container_resized)
 	
-	# Set background color to match existing
+	# Set background color
 	var style_box = StyleBoxFlat.new()
 	style_box.bg_color = background_color
 	virtual_scroll_container.add_theme_stylebox_override("panel", style_box)
+		
+func _on_virtual_content_input(event: InputEvent):
+	"""Handle drops on empty virtual content area"""
+	if not enable_virtual_scrolling:
+		return
 	
-	print("Virtual scrolling setup complete")
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
+			# Check if we have drag data (mouse released after drag)
+			if get_viewport().has_meta("current_drag_data"):
+				var drag_data = get_viewport().get_meta("current_drag_data")
+				var source_slot = drag_data.get("source_slot")
+				
+				if source_slot and source_slot.has_item():
+					# Drop on empty area - add item to container
+					_handle_drop_on_empty_area(source_slot, mouse_event.global_position)
+					
+func _handle_drop_on_empty_area(source_slot: InventorySlot, drop_position: Vector2) -> bool:
+	"""Handle dropping an item at a specific position in the virtual grid"""	
+	if not source_slot or not source_slot.has_item():
+		return false
+	
+	var source_item = source_slot.get_item()
+	
+	# Calculate which grid position was dropped on
+	var local_pos = drop_position - virtual_content.global_position
+	var grid_col = int(local_pos.x / slot_size.x)
+	var grid_row = int(local_pos.y / virtual_item_height)
+	var target_grid_pos = Vector2i(grid_col, grid_row)
+		
+	# Same container - move item to specific position
+	if source_slot.container_id == container_id:
+		
+		# Clear the source slot visually
+		source_slot.clear_item()
+		
+		# Store the item's new position (we'll need to implement position persistence)
+		# For now, just refresh and the item will appear in the dropped area
+		call_deferred("_refresh_virtual_display")
+		return true
+	else:
+		# Cross-container transfer to specific position
+		var inventory_manager = _get_inventory_manager()
+		if not inventory_manager:
+			return false
+		
+		var success = inventory_manager.transfer_item(source_item, source_slot.container_id, container_id)
+		if success:
+			call_deferred("_refresh_virtual_display")
+			return true
+	
+	return false
 	
 func _on_virtual_container_resized():
-	"""Handle virtual scroll container resize"""
-	print("Virtual container resized to: ", virtual_scroll_container.size)
-	# Recalculate layout when container is resized
+	"""Handle virtual scroll container resize - recalculate grid to fill new space"""	
+	# Immediately recalculate the grid layout for the new size
 	call_deferred("_update_virtual_viewport")
 	
 func _on_virtual_scroll(value: float):
 	"""Handle virtual scroll position changes"""
-	print("Virtual scroll changed to: ", value)
 	if not enable_virtual_scrolling or virtual_items.is_empty():
 		return
 	
 	_update_virtual_viewport()
 
 func _update_virtual_viewport():
-	"""Update which virtual items are visible"""
-	print("_update_virtual_viewport() called")
-	
+	"""Update the virtual viewport when scrolling or resizing"""
 	if not virtual_scroll_container:
-		print("ERROR: virtual_scroll_container is null!")
 		return
 	
-	if virtual_items.is_empty():
-		print("No virtual items to display")
-		return
+	# Recalculate grid when container size changes
+	virtual_items_per_row = max(1, int((virtual_scroll_container.size.x - 20) / slot_size.x))
 	
-	# Recalculate items per row in case container was resized
-	var available_width = virtual_scroll_container.size.x - 20
-	virtual_items_per_row = max(1, int(available_width / slot_size.x))
-	
-	var scroll_pos = virtual_scroll_container.scroll_vertical
-	var viewport_height = virtual_scroll_container.size.y
-	
-	print("Scroll position: ", scroll_pos)
-	print("Viewport height: ", viewport_height)
-	print("Available width: ", available_width)
-	print("Items per row: ", virtual_items_per_row)
-	print("Virtual items count: ", virtual_items.size())
-	
-	# Calculate which items should be visible
-	var first_row = max(0, (scroll_pos / virtual_item_height) - virtual_buffer_items)
-	var last_row = min(
-		(virtual_items.size() + virtual_items_per_row - 1) / virtual_items_per_row,
-		((scroll_pos + viewport_height) / virtual_item_height) + virtual_buffer_items + 1
-	)
-	
-	var new_first = int(first_row * virtual_items_per_row)
-	var new_last = min(virtual_items.size(), int(last_row * virtual_items_per_row))
-	
-	print("Calculated range: ", new_first, " to ", new_last)
-	
-	virtual_first_visible = new_first
-	virtual_last_visible = new_last
-	print("Calling _render_virtual_items()")
+	# Always render items to fill the available space
 	_render_virtual_items()
+		
+func _clear_virtual_slots():
+	"""Clear all virtual rendered slots"""
+	for slot in virtual_rendered_slots:
+		if is_instance_valid(slot):
+			slot.queue_free()
+	virtual_rendered_slots.clear()
 	
 func add_test_items_for_virtual_scroll():
 	"""Add many test items to verify virtual scrolling"""
 	if not container:
-		print("No container set - cannot add test items")
 		return
 	
-	print("Adding test items...")
 	for i in range(100):  # Add 100 test items
 		var test_item = InventoryItem_Base.new()
 		test_item.item_name = "Test Item " + str(i + 1)
@@ -188,66 +206,88 @@ func add_test_items_for_virtual_scroll():
 		test_item.mass = 1.0
 		container.items.append(test_item)
 	
-	print("Added ", container.items.size(), " total items")
 	refresh_display()
 
 func _render_virtual_items():
-	"""Render only the visible virtual items"""
+	"""Render a dynamic grid that fills the available window space, like EVE Online"""
 	
 	# Clear existing rendered slots
 	for slot in virtual_rendered_slots:
 		slot.queue_free()
 	virtual_rendered_slots.clear()
 	
-	# Calculate items per row based on available width
+	# Calculate grid dimensions based on available space
 	var available_width = virtual_scroll_container.size.x - 20  # Account for scrollbar
-	virtual_items_per_row = max(1, int(available_width / slot_size.x))
+	var available_height = virtual_scroll_container.size.y
 	
-	# Render visible items
-	var rendered_count = 0
-	for i in range(virtual_first_visible, virtual_last_visible):
-		if i >= virtual_items.size():
-			break
+	virtual_items_per_row = max(1, int(available_width / slot_size.x))
+	var max_visible_rows = max(1, int(available_height / slot_size.y))
+	
+	# Calculate total grid size - much more reasonable like EVE
+	var items_rows = (virtual_items.size() + virtual_items_per_row - 1) / virtual_items_per_row if virtual_items.size() > 0 else 0
+	var total_rows = max(max_visible_rows, items_rows + 3)  # Just 3 extra rows below items
 		
-		var item = virtual_items[i]
+	# Create item position mapping
+	var item_positions = {}
+	
+	# Place items compactly for now
+	for i in range(virtual_items.size()):
 		var row = i / virtual_items_per_row
 		var col = i % virtual_items_per_row
-		
-		var slot = InventorySlot.new()
-		slot.slot_size = slot_size
-		slot.position = Vector2(
-			col * slot_size.x,
-			row * virtual_item_height
-		)
-		
-		slot.mouse_filter = Control.MOUSE_FILTER_PASS
-		
-		# Set grid position for virtual slot
-		slot.set_grid_position(Vector2i(col, row))
-		slot.set_container_id(container_id)
-		
-		# Connect signals
-		slot.slot_clicked.connect(_on_slot_clicked)
-		slot.slot_right_clicked.connect(_on_slot_right_clicked)
-		slot.item_drag_started.connect(_on_item_drag_started)
-		slot.item_drag_ended.connect(_on_item_drag_ended)
-		slot.item_dropped_on_slot.connect(_on_item_dropped_on_slot)
-		
-		# Add to scene first, then set item
-		virtual_content.add_child(slot)
-		slot.set_item(item)
-		
-		# Force visual refresh
-		slot.call_deferred("_update_item_display")
-		
-		virtual_rendered_slots.append(slot)
-		rendered_count += 1
+		item_positions[virtual_items[i]] = Vector2i(col, row)
 	
-	# Update content height for proper scrollbar
-	var total_rows = (virtual_items.size() + virtual_items_per_row - 1) / virtual_items_per_row
-	virtual_total_height = total_rows * virtual_item_height
-	virtual_content.custom_minimum_size = Vector2(0, virtual_total_height)
-	
+	# Calculate which slots are currently visible
+	var scroll_offset = virtual_scroll_container.scroll_vertical
+	var first_visible_row = max(0, int(scroll_offset / slot_size.y) - 1)  # Small buffer above
+	var last_visible_row = min(total_rows, int((scroll_offset + available_height) / slot_size.y) + 2)  # Small buffer below
+		
+	# Render visible grid slots
+	var rendered_count = 0
+	for row in range(first_visible_row, last_visible_row):
+		for col in range(virtual_items_per_row):
+			var grid_pos = Vector2i(col, row)
+			
+			# Create the slot
+			var slot = InventorySlot.new()
+			slot.slot_size = slot_size
+			slot.position = Vector2(col * slot_size.x, row * slot_size.y)
+			slot.mouse_filter = Control.MOUSE_FILTER_PASS
+			
+			# Set grid position
+			slot.set_grid_position(grid_pos)
+			slot.set_container_id(container_id)
+			
+			# Connect signals
+			slot.slot_clicked.connect(_on_slot_clicked)
+			slot.slot_right_clicked.connect(_on_slot_right_clicked)
+			slot.item_drag_started.connect(_on_item_drag_started)
+			slot.item_drag_ended.connect(_on_item_drag_ended)
+			slot.item_dropped_on_slot.connect(_on_item_dropped_on_slot)
+			
+			# Add to scene
+			virtual_content.add_child(slot)
+			
+			# Check if any item should be in this position
+			var item_for_this_slot = null
+			for item in item_positions:
+				if item_positions[item] == grid_pos:
+					item_for_this_slot = item
+					break
+			
+			# Set item if one belongs here
+			if item_for_this_slot:
+				slot.set_item(item_for_this_slot)
+				slot.call_deferred("_update_item_display")
+			
+			virtual_rendered_slots.append(slot)
+			rendered_count += 1
+		
+	# Update content size - much smaller now
+	virtual_total_height = total_rows * slot_size.y
+	var content_width = virtual_items_per_row * slot_size.x
+	virtual_content.custom_minimum_size = Vector2(content_width, virtual_total_height)
+	virtual_content.size = Vector2(content_width, virtual_total_height)
+		
 func _on_visibility_changed():
 	"""Handle visibility changes to fix initial layout"""
 	if visible and container and container.items.size() > 0:
@@ -311,7 +351,6 @@ func ensure_slots_for_items(item_count: int):
 func _ensure_adequate_slots():
 	"""Ensure we have enough slots for the current dimensions"""
 	if enable_virtual_scrolling:
-		print("Skipping _ensure_adequate_slots - virtual scrolling mode")
 		return
 	var needed_total = current_grid_width * current_grid_height
 	var current_total = 0
@@ -336,7 +375,6 @@ func _ensure_adequate_slots():
 func _rebuild_slots_completely():
 	"""Completely rebuild the slots structure"""
 	if enable_virtual_scrolling:
-		print("Skipping _rebuild_slots_completely - virtual scrolling mode")
 		return
 	_disconnect_container_signals()
 	
@@ -387,7 +425,6 @@ func _rebuild_slots_completely():
 func _clear_all_slots_completely():
 	"""Clear all slots of items"""
 	if enable_virtual_scrolling:
-		print("Skipping _clear_all_slots_completely - virtual scrolling mode")
 		return
 		
 	for row_idx in range(slots.size()):
@@ -409,7 +446,6 @@ func _clear_all_slots_completely():
 func _place_items_compactly(items: Array[InventoryItem_Base]):
 	"""Place items in compact left-to-right, top-to-bottom order"""
 	if enable_virtual_scrolling:
-		print("Skipping _place_items_compactly - virtual scrolling mode")
 		return
 		
 	var placed_items = 0
@@ -447,9 +483,7 @@ func _handle_resize_complete():
 	# This method is intentionally disabled to prevent conflicts with _perform_compact_reflow
 	# The timer-based approach in handle_resize_complete() is the single source of truth
 	pass
-	
-	print("Handling resize complete, forcing reflow")
-	
+		
 	# Calculate new width based on available space
 	var available_width = size.x - 16
 	if available_width <= slot_size.x:
@@ -460,7 +494,6 @@ func _handle_resize_complete():
 	
 	# If width changed, force immediate reflow
 	if new_width != current_grid_width:
-		print("Width changed from ", current_grid_width, " to ", new_width, " - forcing reflow")
 		
 		# Update dimensions
 		current_grid_width = new_width
@@ -493,7 +526,6 @@ func _setup_background():
 
 func _setup_grid():
 	if enable_virtual_scrolling:
-		print("Skipping traditional grid setup - virtual scrolling enabled")
 		return
 	# Start with minimum grid size
 	current_grid_width = min_grid_width
@@ -524,9 +556,35 @@ func _initialize_slot_arrays():
 		for x in current_grid_width:
 			available_slots.append(Vector2i(x, y))
 			
+func _create_virtual_slot(item: InventoryItem_Base, virtual_index: int) -> InventorySlot:
+	var slot = InventorySlot.new()
+	slot.slot_size = slot_size
+	slot.set_container_id(container_id)
+	slot.set_item(item)
+	
+	# CRITICAL: Set grid position based on virtual layout
+	var row = virtual_index / virtual_items_per_row
+	var col = virtual_index % virtual_items_per_row
+	slot.set_grid_position(Vector2i(col, row))
+	
+	# Connect all necessary signals
+	slot.slot_clicked.connect(_on_slot_clicked)
+	slot.slot_right_clicked.connect(_on_slot_right_clicked)
+	slot.item_drag_started.connect(_on_item_drag_started)
+	slot.item_drag_ended.connect(_on_item_drag_ended)
+	slot.item_dropped_on_slot.connect(_on_item_dropped_on_slot)
+	
+	# CRITICAL: Calculate and set the position manually for virtual slots
+	# FIX: use slot_size.x and slot_size.y
+	var x_pos = col * slot_size.x
+	var y_pos = row * slot_size.y
+	slot.position = Vector2(x_pos, y_pos)
+	slot.size = slot_size  # This is fine since slot.size expects Vector2
+	
+	return slot
+			
 func _create_initial_slots():
 	if enable_virtual_scrolling:
-		print("Skipping _create_initial_slots - virtual scrolling mode")
 		return
 	# Create slot UI elements
 	for y in current_grid_height:
@@ -552,7 +610,6 @@ func _create_initial_slots():
 func _perform_compact_reflow():
 	"""Perform a compact reflow of all items"""
 	if enable_virtual_scrolling:
-		print("Skipping compact reflow - virtual scrolling handles this")
 		return
 	if not container:
 		return
@@ -752,7 +809,6 @@ func _calculate_required_slots() -> int:
 func _expand_grid_if_needed():
 	"""Expand the grid if we need more slots - PREVENT RECURSION"""
 	if enable_virtual_scrolling:
-		print("Skipping _expand_grid_if_needed - virtual scrolling mode")
 		return
 	# Prevent recursive calls during expansion
 	if _is_expanding_grid:
@@ -874,7 +930,6 @@ func _can_add_item_volume_check(item: InventoryItem_Base) -> bool:
 
 func _update_grid_size():
 	if enable_virtual_scrolling:
-		print("Skipping _update_grid_size - virtual scrolling mode")
 		return
 		
 	if grid_container:
@@ -1031,7 +1086,6 @@ func _disconnect_container_signals():
 
 func _rebuild_grid():
 	if enable_virtual_scrolling:
-		print("Skipping grid rebuild - virtual scrolling mode")
 		return
 	if grid_container:
 		grid_container.queue_free()
@@ -1054,7 +1108,6 @@ func refresh_display():
 
 func _refresh_traditional_display():
 	if enable_virtual_scrolling:
-		print("ERROR: _refresh_traditional_display called in virtual mode!")
 		return
 	# Block refresh during resize timer operations
 	if not container or _is_refreshing_display or _needs_reflow or _resize_complete_timer.time_left > 0.0:
@@ -1090,36 +1143,23 @@ func _refresh_traditional_display():
 	_is_refreshing_display = false
 	
 func _refresh_virtual_display():
-	"""Refresh display using virtual scrolling"""
-	print("_refresh_virtual_display() called")
+	"""Optimized refresh - avoid unnecessary work"""
 	
 	if not container or _is_refreshing_display:
-		print("Early return: container=", container, " _is_refreshing_display=", _is_refreshing_display)
 		return
 	
 	_is_refreshing_display = true
-	print("Processing container with ", container.items.size(), " items")
 	
-	# Collect all visible items
+	# Collect visible items (this is fast)
 	virtual_items.clear()
 	for item in container.items:
 		if _should_show_item(item):
 			virtual_items.append(item)
 	
-	print("Total virtual items collected: ", virtual_items.size())
-	
-	# Wait for container to be properly sized
-	await get_tree().process_frame
-	
-	# Update viewport
-	if virtual_items.size() > 0:
-		print("Container size after frame: ", virtual_scroll_container.size)
-		_update_virtual_viewport()
-	else:
-		print("No items to display")
+	# Update existing slots instead of recreating everything
+	_render_virtual_items()
 	
 	_is_refreshing_display = false
-	print("_refresh_virtual_display() complete")
 	
 func set_virtual_scrolling_enabled(enabled: bool):
 	"""Switch between virtual and traditional modes"""
@@ -1280,7 +1320,9 @@ func _on_slot_clicked(slot: InventorySlot, event: InputEvent):
 				if Input.is_key_pressed(KEY_CTRL):
 					_toggle_slot_selection(slot)
 				else:
-					clear_selection()
+					# Only clear selection if we're not already selecting this specific slot
+					if not (selected_slots.size() == 1 and selected_slots[0] == slot):
+						clear_selection()
 					item_selected.emit(slot.get_item(), slot)
 
 func _on_slot_right_clicked(slot: InventorySlot, event: InputEvent):
@@ -1288,14 +1330,10 @@ func _on_slot_right_clicked(slot: InventorySlot, event: InputEvent):
 		item_context_menu.emit(slot.get_item(), slot, event.global_position)
 
 func _on_item_drag_started(slot: InventorySlot, item: InventoryItem_Base):
-	print("Drag started in virtual mode: ", item.item_name)
-	print("Source slot container_id: ", slot.container_id)
-	print("Virtual scrolling enabled: ", enable_virtual_scrolling)
 	
 	if enable_virtual_scrolling:
 		# Store the item being dragged and find its index in virtual_items
 		var item_index = virtual_items.find(item)
-		print("Item index in virtual_items: ", item_index)
 		
 		# Store comprehensive drag data
 		get_viewport().set_meta("virtual_drag_data", {
@@ -1304,7 +1342,6 @@ func _on_item_drag_started(slot: InventorySlot, item: InventoryItem_Base):
 			"source_slot": slot,
 			"source_container_id": container_id
 		})
-		print("Stored virtual drag data")
 
 func _on_item_drag_ended(slot: InventorySlot, success: bool):
 	if success:
@@ -1317,35 +1354,236 @@ func _on_item_drag_ended(slot: InventorySlot, success: bool):
 			call_deferred("_shrink_grid_if_possible")
 
 func _on_item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot):
-	print("Drop attempted - Virtual mode: ", enable_virtual_scrolling)
-	print("Source slot: ", source_slot)
-	print("Target slot: ", target_slot)
 	
 	if enable_virtual_scrolling:
-		# Get the drag data
-		var drag_data = get_viewport().get_meta("virtual_drag_data", {})
-		if drag_data.is_empty():
-			print("ERROR: No virtual drag data found")
-			return
+		# For virtual scrolling, use the existing slot logic but prevent refresh_display
+		_is_refreshing_display = true  # Block refresh during operation
 		
-		var dragged_item = drag_data.get("item")
-		var target_item = target_slot.get_item() if target_slot.has_item() else null
-		
-		print("Dragged item: ", dragged_item.item_name if dragged_item else "null")
-		print("Target item: ", target_item.item_name if target_item else "empty slot")
-		
-		# Use the existing container/inventory manager logic
 		var result = source_slot._attempt_drop_on_slot(target_slot)
-		print("Drop result: ", result)
 		
-		# Clear drag data
-		get_viewport().remove_meta("virtual_drag_data")
+		_is_refreshing_display = false  # Re-enable refresh
 		
-		# Always refresh virtual display after any drop attempt
-		call_deferred("refresh_display")
+		# Only refresh if successful
+		if result:
+			call_deferred("_refresh_virtual_display")
 	else:
 		# Traditional drop handling
-		_update_available_slots()
+		var result = source_slot._attempt_drop_on_slot(target_slot)
+		if result:
+			_update_available_slots()
+			
+func _handle_virtual_slot_drop(source_slot: InventorySlot, target_slot: InventorySlot) -> bool:
+	"""Handle dropping in virtual scrolling mode without triggering refresh_display"""
+	if not source_slot.has_item() or not target_slot:
+		return false
+	
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	var source_item = source_slot.get_item()
+	var target_item = target_slot.get_item() if target_slot.has_item() else null
+		
+	# Same container operations
+	if source_slot.container_id == target_slot.container_id:
+		if target_item:
+			# Try to stack or swap
+			if source_item.can_stack_with(target_item):
+				return _handle_virtual_stack_merge(source_slot, target_slot, source_item, target_item)
+			else:
+				return _handle_virtual_item_swap(source_slot, target_slot, source_item, target_item, inventory_manager)
+		else:
+			# Move to empty slot - just update the virtual_items array
+			return _handle_virtual_move_to_empty(source_slot, target_slot, source_item)
+	else:
+		# Cross-container transfer
+		return _handle_virtual_cross_container_transfer(source_slot, target_slot, source_item, target_item, inventory_manager)
+		
+func _handle_virtual_stack_merge(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base, target_item: InventoryItem_Base) -> bool:
+	"""Handle stacking items in virtual mode"""
+	var space_available = target_item.max_stack_size - target_item.quantity
+	var amount_to_transfer = min(source_item.quantity, space_available)
+	
+	if amount_to_transfer <= 0:
+		return false
+	
+	# Update the items directly
+	target_item.quantity += amount_to_transfer
+	source_item.quantity -= amount_to_transfer
+	
+	# Update slot displays immediately
+	target_slot._update_item_display()
+	
+	if source_item.quantity <= 0:
+		# Remove source item from container and virtual_items
+		var source_index = virtual_items.find(source_item)
+		if source_index != -1:
+			virtual_items.remove_at(source_index)
+		
+		var source_container = container
+		if source_container:
+			source_container.remove_item(source_item)
+		source_slot.clear_item()
+	else:
+		source_slot._update_item_display()
+	
+	return true
+	
+func _handle_virtual_item_swap(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base, target_item: InventoryItem_Base, inventory_manager: InventoryManager) -> bool:
+	"""Handle swapping items in virtual mode"""
+	# For same container, just swap the visual slots
+	source_slot.clear_item()
+	target_slot.clear_item()
+	source_slot.set_item(target_item)
+	target_slot.set_item(source_item)
+	
+	return true
+
+func _handle_virtual_move_to_empty(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base) -> bool:
+	"""Handle moving item to empty slot in virtual mode"""
+	# Same container - just move the visual representation
+	source_slot.clear_item()
+	target_slot.set_item(source_item)
+	return true
+	
+func _handle_same_container_virtual_drop(source_item: InventoryItem_Base, target_item: InventoryItem_Base, source_slot: InventorySlot, target_slot: InventorySlot) -> bool:
+	"""Handle drops within the same container"""
+	if not container:
+		return false
+	
+	if target_item:
+		# Target slot has an item - try to stack or swap
+		if source_item.can_stack_with(target_item):
+			# Stack the items
+			var space_available = target_item.max_stack_size - target_item.quantity
+			var amount_to_transfer = min(source_item.quantity, space_available)
+			
+			if amount_to_transfer > 0:
+				# Update quantities directly
+				target_item.quantity += amount_to_transfer
+				source_item.quantity -= amount_to_transfer
+				
+				# If source item is empty, remove it from container
+				if source_item.quantity <= 0:
+					var source_index = container.items.find(source_item)
+					if source_index != -1:
+						container.items.remove_at(source_index)
+				
+				return true
+		else:
+			# Can't stack - items are swapped automatically by their positions in virtual_items
+			return true
+	else:
+		# Target slot is empty - this is just a visual move within same container
+		return true
+	
+	return false
+	
+func _handle_cross_container_virtual_drop(source_item: InventoryItem_Base, target_item: InventoryItem_Base, source_slot: InventorySlot, target_slot: InventorySlot) -> bool:
+	"""Handle drops between different containers"""
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	var target_container = inventory_manager.get_container(target_slot.container_id)
+	if not target_container:
+		return false
+	
+	# Check volume constraints
+	var available_volume = target_container.get_available_volume()
+	var item_volume = source_item.volume
+	var max_transferable = int(available_volume / item_volume) if item_volume > 0 else source_item.quantity
+	
+	if max_transferable <= 0:
+		return false
+	
+	var transfer_amount = min(source_item.quantity, max_transferable)
+	
+	# If target slot has an item that can stack
+	if target_item and source_item.can_stack_with(target_item):
+		var stack_space = target_item.max_stack_size - target_item.quantity
+		transfer_amount = min(transfer_amount, stack_space)
+		
+		if transfer_amount <= 0:
+			return false
+	
+	# Perform the transfer using inventory manager
+	var success = inventory_manager.transfer_item(
+		source_item, 
+		source_slot.container_id, 
+		target_slot.container_id, 
+		Vector2i(-1, -1),  # Let container decide position
+		transfer_amount
+	)
+	
+	return success
+	
+func _handle_virtual_drop_operation(source_slot: InventorySlot, target_slot: InventorySlot) -> bool:
+	"""Handle drop operations in virtual mode by working with container items directly"""
+	if not source_slot.has_item() or not target_slot:
+		return false
+	
+	var source_item = source_slot.get_item()
+	var target_item = target_slot.get_item() if target_slot.has_item() else null
+	
+	
+	# Same container operations
+	if source_slot.container_id == target_slot.container_id:
+		return _handle_same_container_virtual_drop(source_item, target_item, source_slot, target_slot)
+	else:
+		# Different containers - use inventory manager
+		return _handle_cross_container_virtual_drop(source_item, target_item, source_slot, target_slot)
+
+func _handle_virtual_cross_container_transfer(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base, target_item: InventoryItem_Base, inventory_manager: InventoryManager) -> bool:
+	"""Handle transfer between different containers in virtual mode"""
+	var target_container = inventory_manager.get_container(target_slot.container_id)
+	if not target_container:
+		return false
+	
+	# Calculate transferable amount based on volume
+	var available_volume = target_container.get_available_volume()
+	var max_transferable = int(available_volume / source_item.volume) if source_item.volume > 0 else source_item.quantity
+	
+	if max_transferable <= 0:
+		return false
+	
+	var transfer_amount = min(source_item.quantity, max_transferable)
+	
+	if target_item and source_item.can_stack_with(target_item):
+		# Stack with existing item
+		var stack_space = target_item.max_stack_size - target_item.quantity
+		transfer_amount = min(transfer_amount, stack_space)
+	
+	if transfer_amount <= 0:
+		return false
+	
+	# Use inventory manager for actual transfer
+	var success = inventory_manager.transfer_item(source_item, source_slot.container_id, target_slot.container_id, Vector2i(-1, -1), transfer_amount)
+	
+	if success:
+		# Update the source item
+		if source_item.quantity <= 0:
+			# Remove from virtual_items and clear slot
+			var source_index = virtual_items.find(source_item)
+			if source_index != -1:
+				virtual_items.remove_at(source_index)
+			source_slot.clear_item()
+		else:
+			source_slot._update_item_display()
+		
+		return true
+	
+	return false
+	
+func _refresh_virtual_display_after_drop():
+	"""Refresh virtual display after a drop operation, preserving scroll position"""
+	if not enable_virtual_scrolling or not virtual_scroll_container:
+		return
+	
+	var current_scroll = virtual_scroll_container.scroll_vertical
+	_refresh_virtual_display()
+	await get_tree().process_frame
+	virtual_scroll_container.scroll_vertical = current_scroll
 
 func _toggle_slot_selection(slot: InventorySlot):
 	if enable_virtual_scrolling:
@@ -1488,10 +1726,6 @@ func clear_selection():
 		if is_instance_valid(slot):
 			slot.set_selected(false)
 	selected_slots.clear()
-	
-	# In virtual mode, we might need to refresh to clear visual selection
-	if enable_virtual_scrolling:
-		call_deferred("refresh_display")
 
 # Keyboard shortcuts
 func _unhandled_key_input(event: InputEvent):
@@ -1540,14 +1774,30 @@ func _delete_selected_items():
 	
 	clear_selection()
 
-func _get_inventory_manager() -> InventoryManager:
-	var scene_root = get_tree().current_scene
-	return _find_inventory_manager_recursive(scene_root)
-
-func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
-	if node is InventoryManager:
-		return node
+func _get_inventory_manager():
+	"""Find the inventory manager"""	
+	# First try the parent chain
+	var current = get_parent()
+	while current:
+		if current.has_method("get_inventory_manager"):
+			var manager = current.get_inventory_manager()
+			return manager
+		current = current.get_parent()
 	
+	# Try to find it in the scene tree
+	var scene_root = get_tree().current_scene
+	var result = _find_inventory_manager_recursive(scene_root)
+	return result
+
+func _find_inventory_manager_recursive(node: Node):
+	"""Recursively search for inventory manager"""
+	# Check if this node is an inventory manager
+	if node.get_script():
+		var script_path = str(node.get_script().resource_path)
+		if "InventoryManager" in script_path or node.has_method("transfer_item"):
+			return node
+	
+	# Check children
 	for child in node.get_children():
 		var result = _find_inventory_manager_recursive(child)
 		if result:
