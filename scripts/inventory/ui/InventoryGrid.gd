@@ -8,13 +8,17 @@ extends Control
 @export var min_grid_width: int = 10  # Minimum grid width
 @export var min_grid_height: int = 10  # Minimum grid height
 @export var slots_per_row_expansion: int = 2  # How many columns to add when expanding
-var original_grid_styles: Dictionary = {}
-var grid_transparency_init: bool = false
+@export var enable_virtual_scrolling: bool = false
+@export var virtual_item_height: int = 96  # Match your slot_size.y
+@export var virtual_buffer_items: int = 3  # Extra items to render outside viewport
 
 # Visual properties
 @export var background_color: Color = Color(0.1, 0.1, 0.1, 1.0)
 @export var grid_line_color: Color = Color(0.1, 0.1, 0.1, 1.0)
 @export var grid_line_width: float = 1.0
+
+var original_grid_styles: Dictionary = {}
+var grid_transparency_init: bool = false
 
 # Container reference
 var container: InventoryContainer_Base
@@ -33,6 +37,17 @@ var _is_adapting_width: bool = false
 var _resize_complete_timer: Timer
 var _needs_reflow: bool = false
 
+# Virtual scrolling state
+var virtual_items: Array[InventoryItem_Base] = []
+var virtual_scroll_container: ScrollContainer
+var virtual_content: Control
+var virtual_rendered_slots: Array[InventorySlot] = []
+var virtual_first_visible: int = 0
+var virtual_last_visible: int = 0
+var virtual_viewport_height: int = 0
+var virtual_items_per_row: int = 1
+var virtual_total_height: int = 0
+
 # UI components
 var background_panel: Panel
 var grid_container: GridContainer
@@ -47,7 +62,12 @@ signal item_activated(item: InventoryItem_Base, slot: InventorySlot)
 signal item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2)
 
 func _ready():
-	_setup_background()
+	if enable_virtual_scrolling:
+		_setup_virtual_scrolling()
+	else:
+		_setup_background()
+		_setup_grid()
+	
 	set_focus_mode(Control.FOCUS_ALL)
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	
@@ -62,6 +82,171 @@ func _ready():
 	
 	# Connect to visibility changes to fix initial layout
 	visibility_changed.connect(_on_visibility_changed)
+	
+func _setup_virtual_scrolling():
+	"""Setup virtual scrolling container"""
+	print("_setup_virtual_scrolling() called")
+	
+	# Create scroll container
+	virtual_scroll_container = ScrollContainer.new()
+	virtual_scroll_container.name = "VirtualScrollContainer"
+	virtual_scroll_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	virtual_scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	virtual_scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	
+	# CRITICAL: Use IGNORE so it doesn't consume mouse button events
+	virtual_scroll_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	add_child(virtual_scroll_container)
+	
+	# Create content container
+	virtual_content = Control.new()
+	virtual_content.name = "VirtualContent"
+	virtual_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	virtual_scroll_container.add_child(virtual_content)
+	
+	# For scrolling, we'll handle it manually with mouse wheel events
+	# Connect scroll events
+	virtual_scroll_container.get_v_scroll_bar().value_changed.connect(_on_virtual_scroll)
+	virtual_scroll_container.resized.connect(_on_virtual_container_resized)
+	
+	# Set background color to match existing
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = background_color
+	virtual_scroll_container.add_theme_stylebox_override("panel", style_box)
+	
+	print("Virtual scrolling setup complete")
+	
+func _on_virtual_container_resized():
+	"""Handle virtual scroll container resize"""
+	print("Virtual container resized to: ", virtual_scroll_container.size)
+	# Recalculate layout when container is resized
+	call_deferred("_update_virtual_viewport")
+	
+func _on_virtual_scroll(value: float):
+	"""Handle virtual scroll position changes"""
+	print("Virtual scroll changed to: ", value)
+	if not enable_virtual_scrolling or virtual_items.is_empty():
+		return
+	
+	_update_virtual_viewport()
+
+func _update_virtual_viewport():
+	"""Update which virtual items are visible"""
+	print("_update_virtual_viewport() called")
+	
+	if not virtual_scroll_container:
+		print("ERROR: virtual_scroll_container is null!")
+		return
+	
+	if virtual_items.is_empty():
+		print("No virtual items to display")
+		return
+	
+	# Recalculate items per row in case container was resized
+	var available_width = virtual_scroll_container.size.x - 20
+	virtual_items_per_row = max(1, int(available_width / slot_size.x))
+	
+	var scroll_pos = virtual_scroll_container.scroll_vertical
+	var viewport_height = virtual_scroll_container.size.y
+	
+	print("Scroll position: ", scroll_pos)
+	print("Viewport height: ", viewport_height)
+	print("Available width: ", available_width)
+	print("Items per row: ", virtual_items_per_row)
+	print("Virtual items count: ", virtual_items.size())
+	
+	# Calculate which items should be visible
+	var first_row = max(0, (scroll_pos / virtual_item_height) - virtual_buffer_items)
+	var last_row = min(
+		(virtual_items.size() + virtual_items_per_row - 1) / virtual_items_per_row,
+		((scroll_pos + viewport_height) / virtual_item_height) + virtual_buffer_items + 1
+	)
+	
+	var new_first = int(first_row * virtual_items_per_row)
+	var new_last = min(virtual_items.size(), int(last_row * virtual_items_per_row))
+	
+	print("Calculated range: ", new_first, " to ", new_last)
+	
+	virtual_first_visible = new_first
+	virtual_last_visible = new_last
+	print("Calling _render_virtual_items()")
+	_render_virtual_items()
+	
+func add_test_items_for_virtual_scroll():
+	"""Add many test items to verify virtual scrolling"""
+	if not container:
+		print("No container set - cannot add test items")
+		return
+	
+	print("Adding test items...")
+	for i in range(100):  # Add 100 test items
+		var test_item = InventoryItem_Base.new()
+		test_item.item_name = "Test Item " + str(i + 1)
+		test_item.quantity = 1
+		test_item.volume = 1.0
+		test_item.mass = 1.0
+		container.items.append(test_item)
+	
+	print("Added ", container.items.size(), " total items")
+	refresh_display()
+
+func _render_virtual_items():
+	"""Render only the visible virtual items"""
+	
+	# Clear existing rendered slots
+	for slot in virtual_rendered_slots:
+		slot.queue_free()
+	virtual_rendered_slots.clear()
+	
+	# Calculate items per row based on available width
+	var available_width = virtual_scroll_container.size.x - 20  # Account for scrollbar
+	virtual_items_per_row = max(1, int(available_width / slot_size.x))
+	
+	# Render visible items
+	var rendered_count = 0
+	for i in range(virtual_first_visible, virtual_last_visible):
+		if i >= virtual_items.size():
+			break
+		
+		var item = virtual_items[i]
+		var row = i / virtual_items_per_row
+		var col = i % virtual_items_per_row
+		
+		var slot = InventorySlot.new()
+		slot.slot_size = slot_size
+		slot.position = Vector2(
+			col * slot_size.x,
+			row * virtual_item_height
+		)
+		
+		slot.mouse_filter = Control.MOUSE_FILTER_PASS
+		
+		# Set grid position for virtual slot
+		slot.set_grid_position(Vector2i(col, row))
+		slot.set_container_id(container_id)
+		
+		# Connect signals
+		slot.slot_clicked.connect(_on_slot_clicked)
+		slot.slot_right_clicked.connect(_on_slot_right_clicked)
+		slot.item_drag_started.connect(_on_item_drag_started)
+		slot.item_drag_ended.connect(_on_item_drag_ended)
+		slot.item_dropped_on_slot.connect(_on_item_dropped_on_slot)
+		
+		# Add to scene first, then set item
+		virtual_content.add_child(slot)
+		slot.set_item(item)
+		
+		# Force visual refresh
+		slot.call_deferred("_update_item_display")
+		
+		virtual_rendered_slots.append(slot)
+		rendered_count += 1
+	
+	# Update content height for proper scrollbar
+	var total_rows = (virtual_items.size() + virtual_items_per_row - 1) / virtual_items_per_row
+	virtual_total_height = total_rows * virtual_item_height
+	virtual_content.custom_minimum_size = Vector2(0, virtual_total_height)
 	
 func _on_visibility_changed():
 	"""Handle visibility changes to fix initial layout"""
@@ -125,6 +310,9 @@ func ensure_slots_for_items(item_count: int):
 
 func _ensure_adequate_slots():
 	"""Ensure we have enough slots for the current dimensions"""
+	if enable_virtual_scrolling:
+		print("Skipping _ensure_adequate_slots - virtual scrolling mode")
+		return
 	var needed_total = current_grid_width * current_grid_height
 	var current_total = 0
 	
@@ -147,6 +335,9 @@ func _ensure_adequate_slots():
 
 func _rebuild_slots_completely():
 	"""Completely rebuild the slots structure"""
+	if enable_virtual_scrolling:
+		print("Skipping _rebuild_slots_completely - virtual scrolling mode")
+		return
 	_disconnect_container_signals()
 	
 	# Clear existing slots
@@ -195,6 +386,10 @@ func _rebuild_slots_completely():
 
 func _clear_all_slots_completely():
 	"""Clear all slots of items"""
+	if enable_virtual_scrolling:
+		print("Skipping _clear_all_slots_completely - virtual scrolling mode")
+		return
+		
 	for row_idx in range(slots.size()):
 		var row = slots[row_idx]
 		if row:
@@ -213,6 +408,10 @@ func _clear_all_slots_completely():
 
 func _place_items_compactly(items: Array[InventoryItem_Base]):
 	"""Place items in compact left-to-right, top-to-bottom order"""
+	if enable_virtual_scrolling:
+		print("Skipping _place_items_compactly - virtual scrolling mode")
+		return
+		
 	var placed_items = 0
 	
 	for y in current_grid_height:
@@ -293,6 +492,9 @@ func _setup_background():
 	background_panel.add_theme_stylebox_override("panel", style_box)
 
 func _setup_grid():
+	if enable_virtual_scrolling:
+		print("Skipping traditional grid setup - virtual scrolling enabled")
+		return
 	# Start with minimum grid size
 	current_grid_width = min_grid_width
 	current_grid_height = min_grid_height
@@ -323,6 +525,9 @@ func _initialize_slot_arrays():
 			available_slots.append(Vector2i(x, y))
 			
 func _create_initial_slots():
+	if enable_virtual_scrolling:
+		print("Skipping _create_initial_slots - virtual scrolling mode")
+		return
 	# Create slot UI elements
 	for y in current_grid_height:
 		for x in current_grid_width:
@@ -346,6 +551,9 @@ func _create_initial_slots():
 
 func _perform_compact_reflow():
 	"""Perform a compact reflow of all items"""
+	if enable_virtual_scrolling:
+		print("Skipping compact reflow - virtual scrolling handles this")
+		return
 	if not container:
 		return
 	
@@ -543,6 +751,9 @@ func _calculate_required_slots() -> int:
 
 func _expand_grid_if_needed():
 	"""Expand the grid if we need more slots - PREVENT RECURSION"""
+	if enable_virtual_scrolling:
+		print("Skipping _expand_grid_if_needed - virtual scrolling mode")
+		return
 	# Prevent recursive calls during expansion
 	if _is_expanding_grid:
 		return
@@ -662,6 +873,10 @@ func _can_add_item_volume_check(item: InventoryItem_Base) -> bool:
 	return container.has_volume_for_item(item)
 
 func _update_grid_size():
+	if enable_virtual_scrolling:
+		print("Skipping _update_grid_size - virtual scrolling mode")
+		return
+		
 	if grid_container:
 		var total_height = current_grid_height * slot_size.y + (current_grid_height - 1) * slot_spacing
 		grid_container.custom_minimum_size = Vector2(0, total_height)
@@ -831,6 +1046,9 @@ func _disconnect_container_signals():
 			container.item_moved.disconnect(_on_container_item_moved)
 
 func _rebuild_grid():
+	if enable_virtual_scrolling:
+		print("Skipping grid rebuild - virtual scrolling mode")
+		return
 	if grid_container:
 		grid_container.queue_free()
 	
@@ -843,7 +1061,17 @@ func _rebuild_grid():
 				slots[y][x].set_container_id(container_id)
 
 # Display management
+
 func refresh_display():
+	if enable_virtual_scrolling:
+		_refresh_virtual_display()
+	else:
+		_refresh_traditional_display()
+
+func _refresh_traditional_display():
+	if enable_virtual_scrolling:
+		print("ERROR: _refresh_traditional_display called in virtual mode!")
+		return
 	# Block refresh during resize timer operations
 	if not container or _is_refreshing_display or _needs_reflow or _resize_complete_timer.time_left > 0.0:
 		if not container:
@@ -876,6 +1104,66 @@ func refresh_display():
 	
 	force_all_slots_refresh()
 	_is_refreshing_display = false
+	
+func _refresh_virtual_display():
+	"""Refresh display using virtual scrolling"""
+	print("_refresh_virtual_display() called")
+	
+	if not container or _is_refreshing_display:
+		print("Early return: container=", container, " _is_refreshing_display=", _is_refreshing_display)
+		return
+	
+	_is_refreshing_display = true
+	print("Processing container with ", container.items.size(), " items")
+	
+	# Collect all visible items
+	virtual_items.clear()
+	for item in container.items:
+		if _should_show_item(item):
+			virtual_items.append(item)
+	
+	print("Total virtual items collected: ", virtual_items.size())
+	
+	# Wait for container to be properly sized
+	await get_tree().process_frame
+	
+	# Update viewport
+	if virtual_items.size() > 0:
+		print("Container size after frame: ", virtual_scroll_container.size)
+		_update_virtual_viewport()
+	else:
+		print("No items to display")
+	
+	_is_refreshing_display = false
+	print("_refresh_virtual_display() complete")
+	
+func set_virtual_scrolling_enabled(enabled: bool):
+	"""Switch between virtual and traditional modes"""
+	if enabled == enable_virtual_scrolling:
+		return
+	
+	enable_virtual_scrolling = enabled
+	
+	if enabled:
+		# Switch to virtual mode
+		if background_panel:
+			background_panel.queue_free()
+		if grid_container:
+			grid_container.queue_free()
+		_setup_virtual_scrolling()
+	else:
+		# Switch to traditional mode
+		if virtual_scroll_container:
+			virtual_scroll_container.queue_free()
+		_setup_background()
+		_setup_grid()
+	
+	# Refresh display with new mode
+	refresh_display()
+
+func get_virtual_item_count() -> int:
+	"""Get total number of virtual items"""
+	return virtual_items.size() if enable_virtual_scrolling else 0
 
 func _find_first_free_position() -> Vector2i:
 	# Return the first available slot from our tracked list
@@ -919,26 +1207,52 @@ func _place_item_in_grid(item: InventoryItem_Base, position: Vector2i):
 		available_slots.erase(position)
 
 func force_all_slots_refresh():
-	for y in range(slots.size()):
-		for x in range(slots[y].size()):
-			var slot = slots[y][x]
-			if slot and slot.has_method("force_visual_refresh"):
+	if enable_virtual_scrolling:
+		# For virtual scrolling, refresh the virtual rendered slots
+		for slot in virtual_rendered_slots:
+			if slot and is_instance_valid(slot) and slot.has_method("force_visual_refresh"):
 				slot.force_visual_refresh()
+	else:
+		# Traditional grid refresh
+		if not slots or slots.size() == 0:
+			return
+			
+		for y in range(slots.size()):
+			if not slots[y]:
+				continue
+			for x in range(slots[y].size()):
+				var slot = slots[y][x]
+				if slot and slot.has_method("force_visual_refresh"):
+					slot.force_visual_refresh()
 
 # Input handling for focus management
 func _gui_input(event: InputEvent):
-	if event is InputEventMouseButton:
+	if enable_virtual_scrolling and event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
-		if mouse_event.pressed:
-			# Focus the inventory window when clicking anywhere in the grid
-			_focus_inventory_window()
-			
-			if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
-				# Handle right-click on empty area
-				var clicked_slot = get_slot_at_position(mouse_event.global_position)
-				if not clicked_slot or not clicked_slot.has_item():
-					# Right-clicked on empty area - show container menu
-					_show_container_context_menu(mouse_event.global_position)
+		
+		# Handle scroll wheel for virtual scrolling
+		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			if virtual_scroll_container:
+				virtual_scroll_container.scroll_vertical -= 50
+			get_viewport().set_input_as_handled()
+		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			if virtual_scroll_container:
+				virtual_scroll_container.scroll_vertical += 50
+			get_viewport().set_input_as_handled()
+		else:
+			# Let other mouse events pass through to slots
+			pass
+	elif not enable_virtual_scrolling:
+		# Traditional mode handling (your existing code)
+		if event is InputEventMouseButton:
+			var mouse_event = event as InputEventMouseButton
+			if mouse_event.pressed:
+				_focus_inventory_window()
+				
+				if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+					var clicked_slot = get_slot_at_position(mouse_event.global_position)
+					if not clicked_slot or not clicked_slot.has_item():
+						_show_container_context_menu(mouse_event.global_position)
 
 func _focus_inventory_window():
 	"""Focus the inventory window for keyboard input"""
@@ -990,33 +1304,103 @@ func _on_slot_right_clicked(slot: InventorySlot, event: InputEvent):
 		item_context_menu.emit(slot.get_item(), slot, event.global_position)
 
 func _on_item_drag_started(slot: InventorySlot, item: InventoryItem_Base):
-	pass  # Handled by slot
+	print("Drag started in virtual mode: ", item.item_name)
+	print("Source slot container_id: ", slot.container_id)
+	print("Virtual scrolling enabled: ", enable_virtual_scrolling)
+	
+	if enable_virtual_scrolling:
+		# Store the item being dragged and find its index in virtual_items
+		var item_index = virtual_items.find(item)
+		print("Item index in virtual_items: ", item_index)
+		
+		# Store comprehensive drag data
+		get_viewport().set_meta("virtual_drag_data", {
+			"item": item,
+			"source_item_index": item_index,
+			"source_slot": slot,
+			"source_container_id": container_id
+		})
+		print("Stored virtual drag data")
 
 func _on_item_drag_ended(slot: InventorySlot, success: bool):
 	if success:
-		_update_available_slots()
-		call_deferred("_shrink_grid_if_possible")
+		if enable_virtual_scrolling:
+			# Refresh virtual display after successful drag
+			call_deferred("_shrink_grid_if_possible")
+		else:
+			# Traditional handling
+			_update_available_slots()
+			call_deferred("_shrink_grid_if_possible")
 
 func _on_item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot):
-	_update_available_slots()
+	print("Drop attempted - Virtual mode: ", enable_virtual_scrolling)
+	print("Source slot: ", source_slot)
+	print("Target slot: ", target_slot)
+	
+	if enable_virtual_scrolling:
+		# Get the drag data
+		var drag_data = get_viewport().get_meta("virtual_drag_data", {})
+		if drag_data.is_empty():
+			print("ERROR: No virtual drag data found")
+			return
+		
+		var dragged_item = drag_data.get("item")
+		var target_item = target_slot.get_item() if target_slot.has_item() else null
+		
+		print("Dragged item: ", dragged_item.item_name if dragged_item else "null")
+		print("Target item: ", target_item.item_name if target_item else "empty slot")
+		
+		# Use the existing container/inventory manager logic
+		var result = source_slot._attempt_drop_on_slot(target_slot)
+		print("Drop result: ", result)
+		
+		# Clear drag data
+		get_viewport().remove_meta("virtual_drag_data")
+		
+		# Always refresh virtual display after any drop attempt
+		call_deferred("refresh_display")
+	else:
+		# Traditional drop handling
+		_update_available_slots()
 
 func _toggle_slot_selection(slot: InventorySlot):
-	if slot in selected_slots:
-		slot.set_selected(false)
-		selected_slots.erase(slot)
+	if enable_virtual_scrolling:
+		# For virtual scrolling, we need to track selection differently
+		if slot in selected_slots:
+			slot.set_selected(false)
+			selected_slots.erase(slot)
+		else:
+			slot.set_selected(true)
+			selected_slots.append(slot)
 	else:
-		slot.set_selected(true)
-		selected_slots.append(slot)
+		# Traditional selection logic
+		if slot in selected_slots:
+			slot.set_selected(false)
+			selected_slots.erase(slot)
+		else:
+			slot.set_selected(true)
+			selected_slots.append(slot)
 
 func clear_all_highlighting():
 	"""Clear all highlighting from all slots"""
-	for y in current_grid_height:
-		for x in current_grid_width:
-			if y < slots.size() and x < slots[y].size():
-				var slot = slots[y][x]
-				if slot:
-					slot.set_highlighted(false)
-					slot.set_selected(false)
+	if enable_virtual_scrolling:
+		# For virtual scrolling, clear highlighting from virtual rendered slots
+		for slot in virtual_rendered_slots:
+			if slot and is_instance_valid(slot):
+				slot.set_highlighted(false)
+				slot.set_selected(false)
+	else:
+		# Traditional grid
+		if not slots or slots.size() == 0:
+			return
+			
+		for y in current_grid_height:
+			for x in current_grid_width:
+				if y < slots.size() and x < slots[y].size():
+					var slot = slots[y][x]
+					if slot:
+						slot.set_highlighted(false)
+						slot.set_selected(false)
 
 # Utility functions
 func get_item_position(item: InventoryItem_Base) -> Vector2i:
@@ -1032,17 +1416,27 @@ func _is_valid_position(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < current_grid_width and pos.y >= 0 and pos.y < current_grid_height
 
 func get_slot_at_position(global_pos: Vector2) -> InventorySlot:
-	for y in current_grid_height:
-		for x in current_grid_width:
-			if y < slots.size() and x < slots[y].size():
-				var slot = slots[y][x]
-				if not slot:
-					continue
-				
+	if enable_virtual_scrolling:
+		# Check virtual rendered slots
+		for slot in virtual_rendered_slots:
+			if slot and is_instance_valid(slot):
 				var slot_rect = Rect2(slot.global_position, slot.size)
 				if slot_rect.has_point(global_pos):
 					return slot
-	return null
+		return null
+	else:
+		# Traditional grid lookup
+		for y in current_grid_height:
+			for x in current_grid_width:
+				if y < slots.size() and x < slots[y].size():
+					var slot = slots[y][x]
+					if not slot:
+						continue
+					
+					var slot_rect = Rect2(slot.global_position, slot.size)
+					if slot_rect.has_point(global_pos):
+						return slot
+		return null
 
 func get_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlot:
 	if _is_valid_position(grid_pos):
@@ -1051,27 +1445,51 @@ func get_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlot:
 
 # Container event handlers - DISABLE these during drag operations
 func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
-	# Always compact when items are added from transfers
-	if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
-		call_deferred("_trigger_compact_refresh")
+	if enable_virtual_scrolling:
+		# Just refresh virtual display
+		call_deferred("refresh_display")
+	else:
+		# Traditional handling - always compact when items are added from transfers
+		if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
+			call_deferred("_trigger_compact_refresh")
 
 func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
-	# Compact remaining items when items are removed
-	if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
-		call_deferred("_trigger_compact_refresh")
+	if enable_virtual_scrolling:
+		# Just refresh virtual display
+		call_deferred("refresh_display")
+	else:
+		# Traditional handling - compact remaining items when items are removed
+		if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
+			call_deferred("_trigger_compact_refresh")
 
 func _on_container_item_moved(item: InventoryItem_Base, old_position: Vector2i, new_position: Vector2i):
-	if not _is_refreshing_display:
-		item_positions[item] = new_position
+	if enable_virtual_scrolling:
+		# In virtual mode, we don't track positions manually
+		call_deferred("refresh_display")
+	else:
+		# Traditional handling
+		if not _is_refreshing_display:
+			item_positions[item] = new_position
 
 func _is_any_slot_dragging() -> bool:
-	for y in current_grid_height:
-		for x in current_grid_width:
-			if y < slots.size() and x < slots[y].size():
-				var slot = slots[y][x]
-				if slot and slot.is_dragging:
-					return true
-	return false
+	if enable_virtual_scrolling:
+		# For virtual scrolling, check virtual rendered slots
+		for slot in virtual_rendered_slots:
+			if slot and is_instance_valid(slot) and slot.is_dragging:
+				return true
+		return false
+	else:
+		# Traditional grid
+		if not slots or slots.size() == 0:
+			return false
+			
+		for y in current_grid_height:
+			for x in current_grid_width:
+				if y < slots.size() and x < slots[y].size():
+					var slot = slots[y][x]
+					if slot and slot.is_dragging:
+						return true
+		return false
 
 # Selection management
 func get_selected_items() -> Array[InventoryItem_Base]:
@@ -1086,6 +1504,10 @@ func clear_selection():
 		if is_instance_valid(slot):
 			slot.set_selected(false)
 	selected_slots.clear()
+	
+	# In virtual mode, we might need to refresh to clear visual selection
+	if enable_virtual_scrolling:
+		call_deferred("refresh_display")
 
 # Keyboard shortcuts
 func _unhandled_key_input(event: InputEvent):
@@ -1103,14 +1525,23 @@ func _unhandled_key_input(event: InputEvent):
 				clear_selection()
 
 func _select_all_items():
-	clear_selection()
-	for y in current_grid_height:
-		for x in current_grid_width:
-			if y < slots.size() and x < slots[y].size():
-				var slot = slots[y][x]
-				if slot and slot.has_item():
-					slot.set_selected(true)
-					selected_slots.append(slot)
+	if enable_virtual_scrolling:
+		# For virtual scrolling, select all virtual rendered slots with items
+		clear_selection()
+		for slot in virtual_rendered_slots:
+			if slot and is_instance_valid(slot) and slot.has_item():
+				slot.set_selected(true)
+				selected_slots.append(slot)
+	else:
+		# Traditional grid
+		clear_selection()
+		for y in current_grid_height:
+			for x in current_grid_width:
+				if y < slots.size() and x < slots[y].size():
+					var slot = slots[y][x]
+					if slot and slot.has_item():
+						slot.set_selected(true)
+						selected_slots.append(slot)
 
 func _delete_selected_items():
 	var inventory_manager = _get_inventory_manager()

@@ -164,21 +164,22 @@ func _setup_right_panel_only():
 	
 	_setup_mass_info_bar(inventory_area)
 	
-	var grid_scroll = ScrollContainer.new()
-	grid_scroll.name = "GridScrollContainer"
-	grid_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	grid_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	inventory_area.add_child(grid_scroll)
-	
 	inventory_grid = InventoryGrid.new()
 	inventory_grid.name = "InventoryGrid"
+	
+	# SET PROPERTIES BEFORE ADDING TO SCENE
+	print("Setting virtual scrolling properties...")
+	inventory_grid.enable_virtual_scrolling = true
+	inventory_grid.slot_size = Vector2(96, 96)
+	inventory_grid.virtual_item_height = 96
+	print("Properties set: enable_virtual_scrolling = ", inventory_grid.enable_virtual_scrolling)
+	
 	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid_scroll.add_child(inventory_grid)
 	
-	inventory_grid.set_grid_size(20, 10)
+	# ADD TO SCENE (this triggers _ready())
+	inventory_area.add_child(inventory_grid)
+	print("Added inventory_grid to scene")
 	
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
@@ -192,27 +193,33 @@ func _setup_right_panel():
 	inventory_area.add_theme_constant_override("separation", 4)
 	add_child(inventory_area)
 	
-	_setup_mass_info_bar(inventory_area)
+	# ADD TEST BUTTON
+	var test_button = Button.new()
+	test_button.text = "Add 100 Test Items (Virtual Scroll Test)"
+	test_button.pressed.connect(_on_test_button_pressed)
+	inventory_area.add_child(test_button)
 	
-	var grid_scroll = ScrollContainer.new()
-	grid_scroll.name = "GridScrollContainer"
-	grid_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	grid_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	inventory_area.add_child(grid_scroll)
+	_setup_mass_info_bar(inventory_area)
 	
 	inventory_grid = InventoryGrid.new()
 	inventory_grid.name = "InventoryGrid"
 	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid_scroll.add_child(inventory_grid)
 	
-	inventory_grid.set_grid_size(20, 10)
+	# Enable virtual scrolling
+	inventory_grid.enable_virtual_scrolling = true
+	inventory_grid.slot_size = Vector2(96, 96)
+	inventory_grid.virtual_item_height = 96
+	
+	inventory_area.add_child(inventory_grid)
 	
 	# Connect grid signals properly
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
+
+func _on_test_button_pressed():
+	if inventory_grid:
+		inventory_grid.add_test_items_for_virtual_scroll()
 
 func _setup_mass_info_bar(parent: Control):
 	var mass_bar_container = MarginContainer.new()

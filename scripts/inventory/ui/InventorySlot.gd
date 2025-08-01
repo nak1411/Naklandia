@@ -484,29 +484,38 @@ func _update_visual_state():
 
 # New drag and drop input handling
 func _on_gui_input(event: InputEvent):
+	print("InventorySlot._on_gui_input called with event: ", event.get_class())
+	
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
+		print("Mouse button event: button=", mouse_event.button_index, " pressed=", mouse_event.pressed)
 		
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
+				print("Left mouse pressed on slot with item: ", item.item_name if item else "no item")
 				if has_item():
 					is_dragging = true
-					drag_preview_created = false  # Reset the flag
+					drag_preview_created = false
 					drag_start_position = mouse_event.global_position
+					print("Started dragging setup")
 				slot_clicked.emit(self, mouse_event)
 			else:
 				# Mouse button released
 				if is_dragging:
+					print("Handling drag end")
 					_handle_drag_end(mouse_event.global_position)
 					is_dragging = false
-					drag_preview_created = false  # Reset the flag
+					drag_preview_created = false
 		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			print("Right mouse clicked")
 			slot_right_clicked.emit(self, mouse_event)
 			get_viewport().set_input_as_handled()
 	
 	elif event is InputEventMouseMotion and is_dragging:
+		print("Mouse motion during drag")
 		var distance = event.global_position.distance_to(drag_start_position)
 		if distance > drag_threshold and has_item() and not drag_preview_created:
+			print("Starting drag preview")
 			_start_drag()
 			
 func _update_drag_volume_feedback(mouse_position: Vector2):
@@ -530,11 +539,23 @@ func _clear_all_volume_feedback():
 	if not grid:
 		return
 	
-	for y in range(grid.slots.size()):
-		for x in range(grid.slots[y].size()):
-			var slot = grid.slots[y][x]
-			if slot and slot != self:
+	if grid.enable_virtual_scrolling:
+		# For virtual scrolling, clear feedback from virtual rendered slots
+		for slot in grid.virtual_rendered_slots:
+			if slot and is_instance_valid(slot):
 				slot._clear_volume_feedback()
+	else:
+		# Traditional grid
+		if not grid.slots or grid.slots.size() == 0:
+			return
+			
+		for y in range(grid.slots.size()):
+			if not grid.slots[y]:
+				continue
+			for x in range(grid.slots[y].size()):
+				var slot = grid.slots[y][x]
+				if slot and is_instance_valid(slot):
+					slot._clear_volume_feedback()
 
 func _start_drag():
 	if not has_item() or drag_preview_created:
@@ -668,16 +689,22 @@ func _update_preview_position(preview: Control):
 	preview.global_position = mouse_pos - preview.size / 2
 
 func _handle_drag_end(end_position: Vector2):
+	print("_handle_drag_end called at position: ", end_position)
+	
 	_cleanup_all_drag_previews()
 	
 	var drop_successful = false
 	
 	# Find target slot
 	var target_slot = _find_slot_at_position(end_position)
+	print("Found target slot: ", target_slot)
 	
 	if target_slot and target_slot != self:
+		print("Attempting drop on slot with item: ", target_slot.get_item().item_name if target_slot.has_item() else "empty")
 		drop_successful = _attempt_drop_on_slot(target_slot)
+		print("Drop successful: ", drop_successful)
 	else:
+		print("Attempting drop on container list")
 		drop_successful = _attempt_drop_on_container_list(end_position)
 	
 	# Clear drag data from viewport
@@ -691,10 +718,7 @@ func _handle_drag_end(end_position: Vector2):
 	
 	# Emit drag ended signal
 	item_drag_ended.emit(self, drop_successful)
-	
-	# Reset dragging state
-	is_dragging = false
-	drag_preview_created = false
+	print("Drag ended, success: ", drop_successful)
 	
 func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 	var content = _find_inventory_content()
@@ -803,18 +827,34 @@ func _find_slot_at_position(global_pos: Vector2) -> InventorySlot:
 	if not grid:
 		return null
 	
-	# Check all slots in the grid for the one under the mouse
-	for y in range(grid.slots.size()):
-		for x in range(grid.slots[y].size()):
-			var slot = grid.slots[y][x]
+	# Check if virtual scrolling is enabled
+	if grid.enable_virtual_scrolling:
+		# For virtual scrolling, check the virtual rendered slots
+		for slot in grid.virtual_rendered_slots:
 			if slot and slot != self and is_instance_valid(slot):
 				var slot_rect = Rect2(slot.global_position, slot.size)
 				# Add small margin for easier dropping
 				slot_rect = slot_rect.grow(2)
 				if slot_rect.has_point(global_pos):
 					return slot
-	
-	return null
+		return null
+	else:
+		# Traditional grid - check all slots in the grid
+		if not grid.slots or grid.slots.size() == 0:
+			return null
+			
+		for y in range(grid.slots.size()):
+			if not grid.slots[y]:
+				continue
+			for x in range(grid.slots[y].size()):
+				var slot = grid.slots[y][x]
+				if slot and slot != self and is_instance_valid(slot):
+					var slot_rect = Rect2(slot.global_position, slot.size)
+					# Add small margin for easier dropping
+					slot_rect = slot_rect.grow(2)
+					if slot_rect.has_point(global_pos):
+						return slot
+		return null
 
 func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	if not target_slot or not has_item():
