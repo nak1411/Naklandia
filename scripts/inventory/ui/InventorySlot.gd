@@ -1245,7 +1245,7 @@ func _find_item_actions():
 	"""Find the InventoryItemActions instance in the scene"""
 	var current = get_parent()
 	while current:
-		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowUI":
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindow":
 			return current.item_actions
 		current = current.get_parent()
 	return null

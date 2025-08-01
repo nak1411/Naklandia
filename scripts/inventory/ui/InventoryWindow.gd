@@ -440,6 +440,8 @@ func _on_window_resized_for_grid(_new_size: Vector2i):
 	
 func _setup_item_actions():
 	"""Initialize the item actions handler for context menus"""
+	print("Setting up item_actions...")
+	
 	# Get the scene's main window
 	var scene_window = get_viewport()
 	if scene_window is Window:
@@ -453,7 +455,9 @@ func _setup_item_actions():
 			push_error("Could not find parent window for InventoryItemActions")
 			return
 	
-	# CRITICAL: Set the inventory manager on item_actions
+	print("Created item_actions: ", item_actions)
+	
+	# Set the inventory manager on item_actions
 	if inventory_manager:
 		item_actions.set_inventory_manager(inventory_manager)
 		print("Set inventory manager on item_actions")
@@ -514,10 +518,14 @@ func _initialize_inventory_content():
 		# IMPORTANT: Set the current container first
 		current_container = default_container
 		
+		# Set current container on item_actions too
+		if item_actions and item_actions.has_method("set_current_container"):
+			item_actions.set_current_container(current_container)
+			print("Set current container on item_actions")
+		
 		# Then select it in the content
 		if content and content.has_method("select_container"):
 			content.select_container(default_container)
-		
 	
 	# Update containers list in content with ALL containers
 	if content and content.has_method("update_containers"):
@@ -1361,7 +1369,18 @@ func set_inventory_integration(integration):
 
 func set_inventory_manager(manager: InventoryManager):
 	inventory_manager = manager
-	if content_area and inventory_container:
+	
+	# Set up item actions now that we have inventory manager
+	if not item_actions:
+		_setup_item_actions()
+	
+	# Also set/update it on item_actions if it exists
+	if item_actions and item_actions.has_method("set_inventory_manager"):
+		item_actions.set_inventory_manager(inventory_manager)
+		print("Set inventory manager on item_actions")
+	
+	# Initialize content with inventory manager
+	if manager:
 		_initialize_inventory_content()
 
 func get_current_container() -> InventoryContainer_Base:
