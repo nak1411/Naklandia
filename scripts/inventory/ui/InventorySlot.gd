@@ -748,10 +748,16 @@ func _handle_drag_end(end_position: Vector2):
 		if not drop_successful:
 			drop_successful = _attempt_drop_on_container_list(end_position)
 	
-	# Rest of the method stays the same...
-	if get_viewport().has_meta("current_drag_data"):
-		get_viewport().remove_meta("current_drag_data")
+	# Set dragging to false BEFORE clearing drag data
+	is_dragging = false
+	drag_preview_created = false
 	
+	# Clear drag data
+	var viewport = get_viewport()
+	if viewport and viewport.has_meta("current_drag_data"):
+		viewport.remove_meta("current_drag_data")
+	
+	# Clear highlights
 	var content = _find_inventory_content()
 	if content:
 		content._clear_all_container_highlights()
@@ -797,6 +803,7 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 		if source_grid:
 			source_grid.refresh_display()
 			source_grid.trigger_compact_refresh()
+		
 		return true
 	
 	return false
@@ -1213,7 +1220,11 @@ func _can_accept_item_volume_check(incoming_item: InventoryItem_Base) -> bool:
 		return false
 	
 	# Get the source container of the incoming item
-	var drag_data = get_viewport().get_meta("current_drag_data", null)
+	var viewport = get_viewport()
+	var drag_data = null
+	if viewport:
+		drag_data = viewport.get_meta("current_drag_data", null)
+	
 	var source_container_id = ""
 	if drag_data:
 		source_container_id = drag_data.get("container_id", "")

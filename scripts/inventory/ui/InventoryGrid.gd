@@ -119,8 +119,9 @@ func _on_virtual_content_input(event: InputEvent):
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
 			# Check if we have drag data (mouse released after drag)
-			if get_viewport().has_meta("current_drag_data"):
-				var drag_data = get_viewport().get_meta("current_drag_data")
+			var viewport = get_viewport()
+			if viewport and viewport.has_meta("current_drag_data"):
+				var drag_data = viewport.get_meta("current_drag_data")
 				var source_slot = drag_data.get("source_slot")
 				
 				if source_slot and source_slot.has_item():

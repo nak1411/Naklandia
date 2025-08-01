@@ -11,6 +11,7 @@ var external_container_list: ItemList = null
 var using_external_container_list: bool = false
 var original_content_styles: Dictionary = {}
 var content_transparency_init: bool = false
+var is_drag_highlighting_active: bool = false
 
 # References
 var inventory_manager: InventoryManager
@@ -446,38 +447,65 @@ func _setup_container_drop_handling():
 
 func _process(_delta):
 	# Check for ongoing drags and highlight valid drop targets
-	if get_viewport().has_meta("current_drag_data"):
+	var viewport = get_viewport()
+	if viewport and viewport.has_meta("current_drag_data"):
+		var drag_data = viewport.get_meta("current_drag_data", null)
+		# Debug: Let's see what's in the drag data
+		if drag_data:
+			print("Drag data exists: ", drag_data.keys())
 		_update_container_drop_highlights()
 	else:
 		# No drag in progress - ensure highlights are cleared
 		_clear_all_container_highlights()
 
 func _update_container_drop_highlights():
-	var drag_data = get_viewport().get_meta("current_drag_data", null)
+	var viewport = get_viewport()
+	var drag_data = null
+	if viewport:
+		drag_data = viewport.get_meta("current_drag_data", null)
+	
 	if not drag_data or not container_list:
 		_clear_all_container_highlights()
 		return
 	
 	var item = drag_data.get("item") as InventoryItem_Base
-	if not item:
+	var source_slot = drag_data.get("source_slot")
+	
+	# Validate that the source slot is still valid and not freed
+	if not item or not source_slot or not is_instance_valid(source_slot):
 		_clear_all_container_highlights()
+		viewport.remove_meta("current_drag_data")
+		return
+	
+	# Now safely cast to InventorySlot since we know it's valid
+	var slot = source_slot as InventorySlot
+	
+	# Check if the source slot is still actually dragging
+	if not slot.is_dragging:
+		_clear_all_container_highlights()
+		viewport.remove_meta("current_drag_data")
 		return
 	
 	var mouse_pos = get_global_mouse_position()
 	var container_rect = Rect2(container_list.global_position, container_list.size)
-		
+	
+	# Check if mouse is over container list area
 	if container_rect.has_point(mouse_pos):
-		# Mouse is over container list - highlight containers based on transfer capability
-		for i in range(open_containers.size()):
-			var container = open_containers[i]
+		# Get the specific item index under the mouse
+		var local_pos = mouse_pos - container_list.global_position
+		var hovered_item_index = container_list.get_item_at_position(local_pos, true)
+		
+		# Clear all highlights first
+		_clear_all_container_highlights()
+		
+		# Only highlight if mouse is specifically over a valid container item
+		if hovered_item_index >= 0 and hovered_item_index < open_containers.size():
+			var container = open_containers[hovered_item_index]
 			
 			# Skip current container (same container transfers are handled differently)
-			if container == current_container:
-				container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
-				continue
-			
-			var highlight_color = _get_container_highlight_color(container, item)
-			container_list.set_item_custom_bg_color(i, highlight_color)
+			if container != current_container:
+				var highlight_color = _get_container_highlight_color(container, item)
+				container_list.set_item_custom_bg_color(hovered_item_index, highlight_color)
 	else:
 		# Mouse not over container list - clear all highlights
 		_clear_all_container_highlights()
@@ -542,14 +570,20 @@ func _clear_all_container_highlights():
 	
 	for i in range(container_list.get_item_count()):
 		container_list.set_item_custom_bg_color(i, Color.TRANSPARENT)
+		
+func force_clear_highlights():
+	"""Force clear all highlights and disable highlighting"""
+	is_drag_highlighting_active = false
+	_clear_all_container_highlights()
 
 func _gui_input(event: InputEvent):
 	if event is InputEventMouseMotion:
-		# If we have drag data but mouse exits container list, clear highlights
-		if get_viewport().has_meta("current_drag_data"):
-			var container_rect = Rect2(container_list.global_position, container_list.size)
-			if not container_rect.has_point(event.global_position):
+		var viewport = get_viewport()
+		if not (viewport and viewport.has_meta("current_drag_data")):
+			# No drag data - force clear highlights if they somehow got stuck
+			if is_drag_highlighting_active:
 				_clear_all_container_highlights()
+				is_drag_highlighting_active = false
 
 func _on_container_list_input(_event: InputEvent):
 	# Handle specific container list input events
