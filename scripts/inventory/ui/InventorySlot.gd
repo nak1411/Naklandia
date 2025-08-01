@@ -553,11 +553,24 @@ func _start_drag():
 	if not has_item() or drag_preview_created:
 		return  # Already created preview or no item
 	
+	# Check if shift is held for split functionality
+	var is_shift_held = Input.is_key_pressed(KEY_SHIFT)
+	
+	if is_shift_held and item.quantity > 1:
+		# Shift+drag with stackable item - open split dialog instead of dragging
+		print("Shift+drag detected - opening split dialog")
+		_show_split_stack_dialog()
+		
+		# Reset drag state since we're not actually dragging
+		is_dragging = false
+		drag_preview_created = false
+		return
+	
 	# Set flag to prevent multiple calls
 	drag_preview_created = true
 	
-	# Check if shift is held for partial transfer indication
-	var is_partial_transfer = Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1
+	# Check if shift is held for partial transfer indication (for container drops)
+	var is_partial_transfer = is_shift_held and item.quantity > 1
 	
 	# Create drag data for container list drops
 	var drag_data = {
@@ -681,7 +694,6 @@ func _update_preview_position(preview: Control):
 	preview.global_position = mouse_pos - preview.size / 2
 
 func _handle_drag_end(end_position: Vector2):
-	
 	_cleanup_all_drag_previews()
 	
 	var drop_successful = false
@@ -691,11 +703,10 @@ func _handle_drag_end(end_position: Vector2):
 	
 	if target_slot and target_slot != self:
 		drop_successful = _attempt_drop_on_slot(target_slot)
-		
+	else:
 		# Check if we're dropping on virtual content area
 		var grid = _get_inventory_grid()
 		if grid and grid.enable_virtual_scrolling and grid.virtual_content:
-			# Check if the drop position is within the virtual content bounds
 			var content_rect = Rect2(grid.virtual_content.global_position, grid.virtual_content.size)
 			
 			if content_rect.has_point(end_position):

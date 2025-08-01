@@ -453,6 +453,13 @@ func _setup_item_actions():
 			push_error("Could not find parent window for InventoryItemActions")
 			return
 	
+	# CRITICAL: Set the inventory manager on item_actions
+	if inventory_manager:
+		item_actions.set_inventory_manager(inventory_manager)
+		print("Set inventory manager on item_actions")
+	else:
+		print("WARNING: No inventory_manager available when setting up item_actions")
+	
 	# Connect to inventory manager updates
 	if item_actions.has_signal("container_refreshed"):
 		item_actions.container_refreshed.connect(_on_container_refreshed)

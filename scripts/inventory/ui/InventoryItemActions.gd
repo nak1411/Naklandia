@@ -629,16 +629,16 @@ func _generate_detailed_container_info(container: InventoryContainer_Base) -> St
 
 func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_stack: bool):
 	"""Perform the item stack split operation"""
+	
 	if not inventory_manager or not current_container or not item:
 		inventory_manager.auto_stack = original_auto_stack
 		return
 	
-	# Validate split amount
 	if split_amount <= 0 or split_amount >= item.quantity:
 		inventory_manager.auto_stack = original_auto_stack
 		return
 	
-	# Create the new item manually
+	# Create the new item
 	var new_item = InventoryItem_Base.new()
 	new_item.item_id = item.item_id
 	new_item.item_name = item.item_name
@@ -658,42 +658,36 @@ func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_s
 	new_item.container_volume = item.container_volume
 	new_item.container_type = item.container_type
 	
-	# Check if container has volume for the new item BEFORE modifying anything
-	# We need to temporarily create the reduced item to check volume properly
+	# Check volume
 	var temp_original_quantity = item.quantity
-	item.quantity -= split_amount  # Temporarily reduce to check volume
-	
+	item.quantity -= split_amount
 	var can_add = current_container.has_volume_for_item(new_item)
-	
-	item.quantity = temp_original_quantity  # Restore original quantity
+	item.quantity = temp_original_quantity
 	
 	if not can_add:
 		inventory_manager.auto_stack = original_auto_stack
 		return
 	
-	# Find a free position for the new item
-	var free_position = current_container.find_free_position()
+	# CRITICAL: Temporarily disable auto-stacking to prevent merging
+	var temp_auto_stack = inventory_manager.auto_stack
+	inventory_manager.auto_stack = false
 	
-	if free_position == Vector2i(-1, -1):
-		# No free space - can't split (though this shouldn't happen with volume-based system)
-		inventory_manager.auto_stack = original_auto_stack
-		return
-	
-	# Now it's safe to actually perform the split
-	# Reduce the original item's quantity
+	# Perform the split
 	item.quantity -= split_amount
+	current_container.items.append(new_item)
+	
+	# Connect signals for the new item
+	if not new_item.quantity_changed.is_connected(current_container._on_item_quantity_changed):
+		new_item.quantity_changed.connect(current_container._on_item_quantity_changed)
+	if not new_item.item_modified.is_connected(current_container._on_item_modified):
+		new_item.item_modified.connect(current_container._on_item_modified)
+	
+	# Emit signals with auto-stack disabled
+	current_container.item_added.emit(new_item, Vector2i(-1, -1))
 	item.quantity_changed.emit(item.quantity)
 	
-	# Add the new item to container with auto_stack explicitly disabled
-	var success = current_container.add_item(new_item, free_position, false)
-	
-	if not success:
-		# Failed to add - restore original quantity
-		item.quantity += split_amount
-		item.quantity_changed.emit(item.quantity)
-	
-	# Always restore auto-stack setting
-	inventory_manager.auto_stack = original_auto_stack
+	# Restore auto-stack setting
+	inventory_manager.auto_stack = temp_auto_stack
 
 func _show_transfer_failed_notification():
 	"""Show notification when item transfer fails"""
