@@ -355,6 +355,28 @@ func _hide_hover_glow():
 		if hover_glow: 
 			hover_glow.visible = false
 	)
+	
+func cleanup_glow():
+	"""Force cleanup of glow effects"""
+	if glow_tween:
+		glow_tween.kill()
+		glow_tween = null
+	
+	if hover_glow:
+		hover_glow.visible = false
+		hover_glow.queue_free()
+		hover_glow = null
+	
+	if glow_canvas_layer:
+		glow_canvas_layer.queue_free()
+		glow_canvas_layer = null
+	
+	is_hovered = false
+
+
+# Also add cleanup when the slot is freed
+func _exit_tree():
+	cleanup_glow()
 
 func _update_glow_opacity(opacity: float):
 	if hover_glow:

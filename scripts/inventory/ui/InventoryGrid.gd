@@ -185,6 +185,21 @@ func _update_virtual_viewport():
 	
 	# Always render items to fill the available space
 	_render_virtual_items()
+	
+func cleanup_all_glows():
+	"""Clean up glow effects on all slots"""
+	if enable_virtual_scrolling:
+		# Clean up virtual rendered slots
+		for slot in virtual_rendered_slots:
+			if slot and is_instance_valid(slot) and slot.has_method("cleanup_glow"):
+				slot.cleanup_glow()
+	else:
+		# Clean up traditional grid slots
+		for row in slots:
+			if row:
+				for slot in row:
+					if slot and is_instance_valid(slot) and slot.has_method("cleanup_glow"):
+						slot.cleanup_glow()
 		
 func _clear_virtual_slots():
 	"""Clear all virtual rendered slots"""
@@ -193,20 +208,20 @@ func _clear_virtual_slots():
 			slot.queue_free()
 	virtual_rendered_slots.clear()
 	
-func add_test_items_for_virtual_scroll():
-	"""Add many test items to verify virtual scrolling"""
-	if not container:
-		return
-	
-	for i in range(100):  # Add 100 test items
-		var test_item = InventoryItem_Base.new()
-		test_item.item_name = "Test Item " + str(i + 1)
-		test_item.quantity = 1
-		test_item.volume = 1.0
-		test_item.mass = 1.0
-		container.items.append(test_item)
-	
-	refresh_display()
+#func add_test_items_for_virtual_scroll():
+	#"""Add many test items to verify virtual scrolling"""
+	#if not container:
+		#return
+	#
+	#for i in range(100):  # Add 100 test items
+		#var test_item = InventoryItem_Base.new()
+		#test_item.item_name = "Test Item " + str(i + 1)
+		#test_item.quantity = 1
+		#test_item.volume = 1.0
+		#test_item.mass = 1.0
+		#container.items.append(test_item)
+	#
+	#refresh_display()
 
 func _render_virtual_items():
 	"""Render a dynamic grid that fills the available window space, like EVE Online"""

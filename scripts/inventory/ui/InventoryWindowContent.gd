@@ -190,11 +190,11 @@ func _setup_right_panel():
 	inventory_area.add_theme_constant_override("separation", 4)
 	add_child(inventory_area)
 	
-	# ADD TEST BUTTON
-	var test_button = Button.new()
-	test_button.text = "Add 100 Test Items (Virtual Scroll Test)"
-	test_button.pressed.connect(_on_test_button_pressed)
-	inventory_area.add_child(test_button)
+	## ADD TEST BUTTON
+	#var test_button = Button.new()
+	#test_button.text = "Add 100 Test Items (Virtual Scroll Test)"
+	#test_button.pressed.connect(_on_test_button_pressed)
+	#inventory_area.add_child(test_button)
 	
 	_setup_mass_info_bar(inventory_area)
 	
@@ -214,9 +214,9 @@ func _setup_right_panel():
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
 
-func _on_test_button_pressed():
-	if inventory_grid:
-		inventory_grid.add_test_items_for_virtual_scroll()
+#func _on_test_button_pressed():
+	#if inventory_grid:
+		#inventory_grid.add_test_items_for_virtual_scroll()
 
 func _setup_mass_info_bar(parent: Control):
 	var mass_bar_container = MarginContainer.new()
