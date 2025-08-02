@@ -147,35 +147,53 @@ func _create_main_popup():
 	# Create container for menu items
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 0)
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # Fill the entire popup
 	main_popup.add_child(vbox)
 	
 	# Calculate menu width if auto-sizing
 	if auto_size:
 		_calculate_optimal_width()
 	
-	# Create menu items
+	# Create menu items and track actual height
+	var actual_height = 0
 	for i in range(menu_items.size()):
 		var item_data = menu_items[i]
 		
 		if item_data.get("is_separator", false):
 			var separator = _create_separator()
 			vbox.add_child(separator)
+			actual_height += 1  # separator height
 		else:
 			var item_button = _create_menu_item_button(item_data, i)
 			vbox.add_child(item_button)
+			actual_height += item_height
 	
-	# Set popup size through content
-	var popup_height = _calculate_total_height()
-	vbox.custom_minimum_size = Vector2(menu_width, popup_height)
+	# Set the VBox size explicitly
+	vbox.custom_minimum_size = Vector2(menu_width, actual_height)
+	vbox.size = Vector2(menu_width, actual_height)
 	
-	# Style the popup
-	_style_popup(main_popup)
-	
-	# NOTE: Don't add to scene here - will be added in show_context_menu()
-	
-	# Connect popup signals
-	main_popup.popup_hide.connect(_on_main_popup_hide)
-	main_popup.visibility_changed.connect(_on_main_popup_visibility_changed)
+	# Create completely flat popup style with zero padding
+	var popup_style = StyleBoxFlat.new()
+	popup_style.bg_color = Color(0.1, 0.1, 0.1, 0.95)
+	popup_style.border_width_left = 1
+	popup_style.border_width_right = 1
+	popup_style.border_width_top = 1
+	popup_style.border_width_bottom = 1
+	popup_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
+	popup_style.corner_radius_top_left = 2
+	popup_style.corner_radius_top_right = 2
+	popup_style.corner_radius_bottom_left = 2
+	popup_style.corner_radius_bottom_right = 2
+	# Ensure zero margins and padding
+	popup_style.content_margin_left = 0
+	popup_style.content_margin_right = 0
+	popup_style.content_margin_top = 0
+	popup_style.content_margin_bottom = 0
+	popup_style.expand_margin_left = 0
+	popup_style.expand_margin_right = 0
+	popup_style.expand_margin_top = 0
+	popup_style.expand_margin_bottom = 0
+	main_popup.add_theme_stylebox_override("panel", popup_style)
 
 func _calculate_optimal_width():
 	"""Calculate optimal width based on menu item text lengths"""
@@ -202,15 +220,23 @@ func _calculate_optimal_width():
 	menu_width = min(max_text_width, max_width)
 
 func _calculate_total_height() -> int:
-	"""Calculate total height including separators"""
+	"""Calculate total height including separators - only count visible items"""
 	var total_height = 0
-	var separator_height = 1  # Changed from 2 to 1
+	var separator_height = 1
+	var visible_items = 0
+	var visible_separators = 0
 	
+	# Count actual visible items and separators
 	for item in menu_items:
 		if item.get("is_separator", false):
-			total_height += separator_height
+			visible_separators += 1
 		else:
+			visible_items += 1
 			total_height += item_height
+	
+	# Only add separator height if we actually have separators AND multiple groups
+	if visible_separators > 0 and visible_items > 2:
+		total_height += (visible_separators * separator_height)
 	
 	return total_height
 
@@ -697,27 +723,44 @@ func setup_item_context_menu(item: InventoryItem_Base):
 	"""Setup a typical inventory item context menu"""
 	clear_items()
 	
-	add_menu_item("item_info", "Item Information")
+	# Build menu items first
+	var menu_actions = []
 	
+	# Always add item info
+	menu_actions.append({"id": "item_info", "text": "Item Information"})
+	
+	# Add stack action if applicable
 	if item.quantity > 1:
-		add_menu_item("split_stack", "Split Stack")
+		menu_actions.append({"id": "split_stack", "text": "Split Stack"})
 	
-	add_separator()
-	
+	# Add type-specific action
 	match item.item_type:
 		InventoryItem_Base.ItemType.CONSUMABLE:
-			add_menu_item("use_item", "Use Item")
+			menu_actions.append({"id": "use_item", "text": "Use Item"})
 		InventoryItem_Base.ItemType.WEAPON, InventoryItem_Base.ItemType.ARMOR, InventoryItem_Base.ItemType.MODULE:
-			add_menu_item("equip_item", "Equip Item")
+			menu_actions.append({"id": "equip_item", "text": "Equip Item"})
 		InventoryItem_Base.ItemType.CONTAINER:
-			add_menu_item("open_container", "Open Container")
+			menu_actions.append({"id": "open_container", "text": "Open Container"})
 		InventoryItem_Base.ItemType.BLUEPRINT:
-			add_menu_item("view_blueprint", "View Blueprint")
+			menu_actions.append({"id": "view_blueprint", "text": "View Blueprint"})
 	
-	add_separator()
-	
+	# Add destroy action if applicable
 	if item.can_be_destroyed:
-		add_menu_item("destroy_item", "Destroy Item")
+		menu_actions.append({"id": "destroy_item", "text": "Destroy Item"})
+	
+	# Now add items to the actual menu
+	for i in range(menu_actions.size()):
+		var action = menu_actions[i]
+		add_menu_item(action.id, action.text)
+		
+		# Only add separators if we have more than 2 total actions AND we're not at the last item
+		if menu_actions.size() > 2 and i < menu_actions.size() - 1:
+			# Add separator after item_info if there are multiple groups
+			if action.id == "item_info" and menu_actions.size() > 2:
+				add_separator()
+			# Add separator before destroy_item if it exists and there are other actions
+			elif i == menu_actions.size() - 2 and menu_actions[menu_actions.size() - 1].id == "destroy_item":
+				add_separator()
 
 func setup_empty_area_context_menu():
 	"""Setup context menu for empty inventory areas"""

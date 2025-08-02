@@ -241,45 +241,80 @@ func _handle_move_container_items_action(action_id: String, container: Inventory
 
 # Dialog methods
 func show_item_details_dialog(item: InventoryItem_Base):
-	"""Show detailed item information dialog"""
-	var dialog_window = Window.new()
-	dialog_window.title = item.item_name
-	dialog_window.size = Vector2i(400, 350)
-	dialog_window.unresizable = true
-	dialog_window.always_on_top = true
-	dialog_window.set_flag(Window.FLAG_POPUP, false)
+	"""Show detailed item information dialog using DialogWindow_Base"""
+	# Create dialog using the base class
+	var dialog_window = DialogWindow_Base.new(item.item_name, Vector2(450, 400))
 	
-	# Track this dialog window
-	open_dialog_windows.append(dialog_window)
+	# Add to the highest canvas layer (same pattern as other DialogWindow_Base dialogs)
+	var ui_manager = window_parent.get_tree().get_first_node_in_group("ui_manager")
+	if ui_manager and ui_manager.has_method("get_pause_canvas"):
+		var pause_canvas = ui_manager.get_pause_canvas()
+		pause_canvas.add_child(dialog_window)
+	else:
+		# Fallback to adding to current scene
+		window_parent.get_tree().current_scene.add_child(dialog_window)
 	
-	# Position relative to inventory window
-	var inventory_center = window_parent.position + window_parent.size / 2
-	dialog_window.position = Vector2i(inventory_center - dialog_window.size / 2)
+	# Wait for dialog to be fully ready
+	if not dialog_window.is_node_ready():
+		await dialog_window.ready
 	
-	# Create content
+	# Wait one more frame to ensure all components are initialized
+	await dialog_window.get_tree().process_frame
+	
+	# Now add content - check if dialog_content exists
+	if not dialog_window.dialog_content:
+		push_error("Dialog content not initialized!")
+		return
+	
+	# Create scroll container for the content
+	var scroll_container = ScrollContainer.new()
+	scroll_container.custom_minimum_size = Vector2(400, 280)
+	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll_container.follow_focus = true
+	
+	# Create inner panel for padding
+	var inner_panel = Panel.new()
+	inner_panel.custom_minimum_size = Vector2(380, 0)
+	
+	# Create the item details content
 	var content = RichTextLabel.new()
 	content.bbcode_enabled = true
 	content.text = _generate_detailed_item_info(item)
 	content.fit_content = true
+	content.scroll_active = false
 	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	content.add_theme_constant_override("margin_left", 10)
-	content.add_theme_constant_override("margin_right", 10)
-	content.add_theme_constant_override("margin_top", 10)
-	content.add_theme_constant_override("margin_bottom", 50)
+	content.offset_left = 15
+	content.offset_right = -15
+	content.offset_top = 10
+	content.offset_bottom = -10
 	
-	dialog_window.add_child(content)
+	# Build hierarchy: ScrollContainer -> Panel -> RichTextLabel
+	inner_panel.add_child(content)
+	scroll_container.add_child(inner_panel)
 	
-	# Add to scene and show
-	window_parent.get_tree().current_scene.add_child(dialog_window)
-	dialog_window.popup()
-	dialog_window.grab_focus()
+	# Add scroll container to dialog
+	dialog_window.add_dialog_content(scroll_container)
 	
-	# Connect close events
-	dialog_window.close_requested.connect(func():
-		_safe_cleanup_dialog(dialog_window)
+	# Add close button
+	var close_button = dialog_window.add_button("Close")
+	close_button.custom_minimum_size = Vector2(100, 35)
+	
+	# Connect button event
+	close_button.pressed.connect(func():
+		dialog_window.close_dialog()
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
 	)
+	
+	# Connect close event
+	dialog_window.dialog_closed.connect(func():
+		if window_parent and is_instance_valid(window_parent):
+			window_parent.grab_focus()
+	)
+	
+	# Show the dialog
+	dialog_window.show_dialog(window_parent)
 
 func show_container_details_dialog(container: InventoryContainer_Base):
 	"""Show detailed container information dialog"""
@@ -412,79 +447,77 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	dialog_window.show_dialog(window_parent)
 
 func show_destroy_item_confirmation(item: InventoryItem_Base, _slot: InventorySlot):
-	"""Show confirmation dialog for item destruction"""
-	var dialog_window = Window.new()
-	dialog_window.title = "Destroy Item"
-	dialog_window.size = Vector2i(350, 120)
-	dialog_window.unresizable = true
-	dialog_window.always_on_top = true
-	dialog_window.set_flag(Window.FLAG_POPUP, false)
+	"""Show confirmation dialog for item destruction using DialogWindow_Base"""
+	# Create dialog using the base class - increased height to fit buttons
+	var dialog_window = DialogWindow_Base.new("Destroy Item", Vector2(350, 180))
 	
-	# Track this dialog window
-	open_dialog_windows.append(dialog_window)
+	# Add to the highest canvas layer (same pattern as split stack dialog)
+	var ui_manager = window_parent.get_tree().get_first_node_in_group("ui_manager")
+	if ui_manager and ui_manager.has_method("get_pause_canvas"):
+		var pause_canvas = ui_manager.get_pause_canvas()
+		pause_canvas.add_child(dialog_window)
+	else:
+		# Fallback to adding to current scene
+		window_parent.get_tree().current_scene.add_child(dialog_window)
 	
-	# Position relative to inventory window
-	var inventory_center = window_parent.position + window_parent.size / 2
-	dialog_window.position = Vector2i(inventory_center - dialog_window.size / 2)
+	# Wait for dialog to be fully ready
+	if not dialog_window.is_node_ready():
+		await dialog_window.ready
 	
-	# Create content container
-	var vbox = VBoxContainer.new()
-	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	vbox.add_theme_constant_override("margin_left", 10)
-	vbox.add_theme_constant_override("margin_right", 10)
-	vbox.add_theme_constant_override("margin_top", 10)
-	vbox.add_theme_constant_override("margin_bottom", 10)
+	# Wait one more frame to ensure all components are initialized
+	await dialog_window.get_tree().process_frame
 	
+	# Now add content - check if dialog_content exists
+	if not dialog_window.dialog_content:
+		push_error("Dialog content not initialized!")
+		return
+	
+	# Create the destroy confirmation content
 	var label = Label.new()
 	label.text = "Are you sure you want to destroy %s?\nThis action cannot be undone." % item.item_name
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vbox.add_child(label)
+	label.custom_minimum_size = Vector2(300, 80)  # Give the label a specific size
+	dialog_window.add_dialog_content(label)
 	
-	var button_container = HBoxContainer.new()
-	button_container.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_child(button_container)
+	# Add buttons with padding
+	var destroy_button = dialog_window.add_button("Destroy")
+	destroy_button.custom_minimum_size = Vector2(100, 35)
 	
-	var confirm_button = Button.new()
-	confirm_button.text = "Destroy"
-	confirm_button.custom_minimum_size = Vector2(80, 30)
-	button_container.add_child(confirm_button)
+	var cancel_button = dialog_window.add_button("Cancel")
+	cancel_button.custom_minimum_size = Vector2(100, 35)
 	
-	var cancel_button = Button.new()
-	cancel_button.text = "Cancel"
-	cancel_button.custom_minimum_size = Vector2(80, 30)
-	button_container.add_child(cancel_button)
-	
-	dialog_window.add_child(vbox)
-	
-	# Add to scene and show
-	window_parent.get_tree().current_scene.add_child(dialog_window)
-	dialog_window.popup()
-	dialog_window.grab_focus()
+	# Add spacing between buttons
+	if dialog_window.button_container:
+		dialog_window.button_container.add_theme_constant_override("separation", 15)
 	
 	# Connect button events
-	confirm_button.pressed.connect(func():
+	destroy_button.pressed.connect(func():
 		if inventory_manager:
 			inventory_manager.remove_item_from_container(item, current_container.container_id)
 			await window_parent.get_tree().process_frame
 			container_refreshed.emit()
-		_safe_cleanup_dialog(dialog_window)
+		dialog_window.close_dialog()
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
 	)
 	
 	cancel_button.pressed.connect(func():
-		_safe_cleanup_dialog(dialog_window)
+		dialog_window.close_dialog()
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
 	)
 	
-	dialog_window.close_requested.connect(func():
-		_safe_cleanup_dialog(dialog_window)
+	# Connect close event
+	dialog_window.dialog_closed.connect(func():
+		# Don't need to track this in open_dialog_windows since it's not a Window type
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
 	)
+	
+	# Show the dialog
+	dialog_window.show_dialog(window_parent)
 
 func show_clear_container_confirmation():
 	"""Show confirmation dialog for clearing container"""
