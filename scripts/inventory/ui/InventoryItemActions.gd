@@ -331,18 +331,17 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	# Create dialog using the base class
 	var dialog_window = DialogWindow_Base.new("Split Stack", Vector2(300, 180))
 	
-	# Track this dialog window
-	open_dialog_windows.append(dialog_window)
+	# DON'T track this dialog window in open_dialog_windows since it's not a Window type
+	# Instead, track it differently or modify your tracking system
 	
 	# Add to the highest canvas layer
 	var ui_manager = window_parent.get_tree().get_first_node_in_group("ui_manager")
 	if ui_manager and ui_manager.has_method("get_pause_canvas"):
 		var pause_canvas = ui_manager.get_pause_canvas()
 		pause_canvas.add_child(dialog_window)
-
-	
-	# Add to scene FIRST so it gets properly initialized
-	window_parent.get_tree().current_scene.add_child(dialog_window)
+	else:
+		# Fallback to adding to current scene
+		window_parent.get_tree().current_scene.add_child(dialog_window)
 	
 	# Wait for dialog to be fully ready
 	if not dialog_window.is_node_ready():
@@ -362,7 +361,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	dialog_window.add_dialog_content(label)
 	
-	# FIXED: Create spinbox manually (no create_spinbox method)
+	# Create spinbox manually
 	var spinbox_container = HBoxContainer.new()
 	spinbox_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	
@@ -380,7 +379,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	
 	dialog_window.add_dialog_content(spinbox_container)
 	
-	# FIXED: Add buttons without await (not async)
+	# Add buttons
 	var split_button = dialog_window.add_button("Split")
 	var cancel_button = dialog_window.add_button("Cancel")
 	
@@ -404,7 +403,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	# Connect close event
 	dialog_window.dialog_closed.connect(func():
 		inventory_manager.auto_stack = original_auto_stack
-		_safe_cleanup_dialog(dialog_window)
+		# Don't call _safe_cleanup_dialog since this isn't a Window
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
 	)

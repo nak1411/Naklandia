@@ -320,7 +320,8 @@ func _on_overlay_input(event: InputEvent):
 			if distance > drag_threshold:
 				_start_drag()
 				# IMPORTANT: Also set up data for Godot's drag system
-				set_drag_preview(_create_godot_drag_preview())
+				if get_viewport().gui_is_dragging():
+					set_drag_preview(_create_godot_drag_preview())
 
 func _create_godot_drag_preview() -> Control:
 	"""Create a simple preview for Godot's drag system"""
