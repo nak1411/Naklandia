@@ -7,6 +7,11 @@ var columns: Array[Dictionary]
 var row_height: int
 var is_selected: bool = false
 var is_hovered: bool = false
+var is_dragging: bool = false
+var drag_start_position: Vector2
+var drag_threshold: float = 5.0
+var drag_preview_created: bool = false
+
 
 var background: Panel
 var content_container: HBoxContainer
@@ -23,6 +28,8 @@ var use_alternate: bool = false
 signal row_clicked(row: InventoryListRow, item: InventoryItem_Base, event: InputEvent)
 signal row_double_clicked(row: InventoryListRow, item: InventoryItem_Base)
 signal row_right_clicked(row: InventoryListRow, item: InventoryItem_Base, position: Vector2)
+signal item_drag_started(row: InventoryListRow, item: InventoryItem_Base)
+signal item_drag_ended(row: InventoryListRow, success: bool)
 
 func _ready():
 	custom_minimum_size.y = row_height
@@ -61,7 +68,7 @@ func _setup_ui():
 	click_overlay.modulate = Color.TRANSPARENT  # Make it invisible
 	click_overlay.mouse_filter = Control.MOUSE_FILTER_PASS
 	
-	# Connect button signals to our row signals
+	# UPDATED: Connect to new enhanced input handler
 	click_overlay.gui_input.connect(_on_overlay_input)
 	click_overlay.mouse_entered.connect(_mouse_entered)
 	click_overlay.mouse_exited.connect(_mouse_exited)
@@ -274,18 +281,6 @@ func _update_background():
 	style.bg_color = color
 	background.add_theme_stylebox_override("panel", style)
 
-func _on_overlay_input(event: InputEvent):
-	if event is InputEventMouseButton:
-		if event.pressed:
-			match event.button_index:
-				MOUSE_BUTTON_LEFT:
-					if event.double_click:
-						row_double_clicked.emit(self, item)
-					else:
-						row_clicked.emit(self, item, event)
-				MOUSE_BUTTON_RIGHT:
-					row_right_clicked.emit(self, item, event.global_position)
-
 func _mouse_entered():
 	is_hovered = true
 	_update_background()
@@ -293,3 +288,597 @@ func _mouse_entered():
 func _mouse_exited():
 	is_hovered = false
 	_update_background()
+	
+func _on_overlay_input(event: InputEvent):
+	"""Enhanced input handling with drag and drop support"""
+	if not item:
+		return
+	
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed:
+				# Start potential drag
+				drag_start_position = mouse_event.global_position
+				is_dragging = false
+				drag_preview_created = false
+			else:
+				# Mouse released
+				if is_dragging:
+					_end_drag()
+				else:
+					# Regular click
+					row_clicked.emit(self, item, event)
+		
+		elif mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed:
+			row_right_clicked.emit(self, item, mouse_event.global_position)
+	
+	elif event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		if not is_dragging and drag_start_position != Vector2.ZERO:
+			var distance = event.global_position.distance_to(drag_start_position)
+			if distance > drag_threshold:
+				_start_drag()
+				# IMPORTANT: Also set up data for Godot's drag system
+				set_drag_preview(_create_godot_drag_preview())
+
+func _create_godot_drag_preview() -> Control:
+	"""Create a simple preview for Godot's drag system"""
+	var preview = _create_drag_preview()
+	# Make it slightly transparent to distinguish from our custom preview
+	preview.modulate.a = 0.7
+	return preview
+
+# Add these drag and drop methods
+func _start_drag():
+	"""Start dragging this list row item"""
+	if not item or is_dragging:
+		return
+	
+	is_dragging = true
+	drag_preview_created = false
+	
+	# Store drag data globally for compatibility with container drops
+	var drag_data = {
+		"source_row": self,
+		"item": item,
+		"container_id": _get_container_id(),
+		"partial_transfer": Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1,
+		"success_callback": _on_external_drop_result
+	}
+	
+	get_viewport().set_meta("current_drag_data", drag_data)
+	
+	# Create drag preview
+	var preview = _create_drag_preview()
+	
+	# Create canvas layer for preview
+	var drag_canvas = CanvasLayer.new()
+	drag_canvas.name = "DragCanvas"
+	drag_canvas.layer = 200
+	get_tree().root.add_child(drag_canvas)
+	drag_canvas.add_child(preview)
+	
+	preview.set_meta("drag_canvas", drag_canvas)
+	
+	# Add partial transfer indicator if needed
+	if drag_data.partial_transfer:
+		_add_partial_transfer_indicator(preview)
+	
+	# Start following mouse
+	_follow_mouse(preview)
+	
+	# Visual feedback on source row
+	modulate.a = 0.5
+	
+	# Emit signal
+	item_drag_started.emit(self, item)
+
+func _create_drag_preview() -> Control:
+	"""Create a visual preview for dragging that looks like a slot"""
+	var preview = Control.new()
+	preview.name = "DragPreview"
+	
+	# Make it smaller - 80% of slot size
+	var scale_factor = 0.8
+	preview.size = Vector2(64, 64) * scale_factor
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	# Background
+	var bg = Panel.new()
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.2, 0.2, 0.2, 0.8)
+	style.border_color = Color(0.5, 0.5, 0.5, 1.0)
+	style.border_width_left = 1
+	style.border_width_right = 1
+	style.border_width_top = 1
+	style.border_width_bottom = 1
+	bg.add_theme_stylebox_override("panel", style)
+	preview.add_child(bg)
+	
+	# Icon
+	var icon = TextureRect.new()
+	icon.texture = item.get_icon_texture()
+	icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.offset_left = 4
+	icon.offset_right = -4
+	icon.offset_top = 4
+	icon.offset_bottom = -4
+	preview.add_child(icon)
+	
+	# Quantity label
+	if item.quantity > 1:
+		var qty_label = Label.new()
+		qty_label.text = str(item.quantity)
+		qty_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+		qty_label.offset_left = -16  # Adjusted for smaller size
+		qty_label.offset_top = -14   # Adjusted for smaller size
+		qty_label.add_theme_font_size_override("font_size", 9)  # Slightly smaller font
+		qty_label.add_theme_color_override("font_color", Color.WHITE)
+		qty_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+		qty_label.add_theme_constant_override("shadow_offset_x", 1)
+		qty_label.add_theme_constant_override("shadow_offset_y", 1)
+		preview.add_child(qty_label)
+	
+	return preview
+
+func _add_preview_icon(container: HBoxContainer):
+	"""Add icon to drag preview"""
+	var icon_cell = Control.new()
+	icon_cell.custom_minimum_size.x = 20
+	icon_cell.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	
+	var icon = TextureRect.new()
+	icon.texture = item.get_icon_texture()
+	icon.custom_minimum_size = Vector2(16, 16)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	icon_cell.add_child(icon)
+	
+	container.add_child(icon_cell)
+
+func _add_preview_name(container: HBoxContainer):
+	"""Add name to drag preview"""
+	var name_cell = Control.new()
+	name_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var label = Label.new()
+	label.text = item.item_name
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.offset_left = 4
+	label.offset_right = -4
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.clip_contents = true
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.add_theme_font_size_override("font_size", 11)
+	label.add_theme_color_override("font_color", item.get_rarity_color())
+	name_cell.add_child(label)
+	
+	container.add_child(name_cell)
+
+func _add_preview_quantity(container: HBoxContainer):
+	"""Add quantity to drag preview"""
+	var qty_cell = Control.new()
+	qty_cell.custom_minimum_size.x = 40
+	qty_cell.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	
+	var label = Label.new()
+	var qty_text = str(item.quantity)
+	if item.quantity >= 1000:
+		qty_text = "%.1fk" % (item.quantity / 1000.0)
+	label.text = qty_text
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	label.add_theme_font_size_override("font_size", 10)
+	qty_cell.add_child(label)
+	
+	container.add_child(qty_cell)
+	
+func _add_partial_transfer_indicator(preview: Control):
+	"""Add visual indicator for partial transfer"""
+	var indicator = Label.new()
+	indicator.text = "½"
+	indicator.position = Vector2(preview.size.x - 15, -5)
+	indicator.size = Vector2(12, 12)
+	indicator.add_theme_font_size_override("font_size", 10)
+	indicator.add_theme_color_override("font_color", Color.YELLOW)
+	indicator.add_theme_color_override("font_shadow_color", Color.BLACK)
+	preview.add_child(indicator)
+
+func _follow_mouse(preview: Control):
+	"""Make the preview follow the mouse cursor"""
+	# Start a continuous update using a Timer instead of Tween
+	var timer = Timer.new()
+	timer.wait_time = 0.016  # ~60 FPS
+	timer.timeout.connect(_update_preview_position.bind(preview, timer))
+	preview.add_child(timer)
+	timer.start()
+	
+	# Set initial position
+	_update_preview_position(preview, timer)
+
+func _update_preview_position(preview: Control, timer: Timer):
+	"""Update preview position to follow mouse"""
+	if not is_instance_valid(preview) or not is_dragging:
+		if is_instance_valid(timer):
+			timer.queue_free()
+		return
+	
+	var mouse_pos = get_global_mouse_position()
+	preview.global_position = mouse_pos + Vector2(10, -preview.size.y * 0.5)  # Offset slightly from cursor
+
+func _attempt_drop_on_inventory(end_position: Vector2) -> bool:
+	"""Try to drop on inventory grid slots"""
+	var content = _find_inventory_content()
+	if not content:
+		return false
+	
+	var inventory_grid = content.get_inventory_grid()
+	if not inventory_grid:
+		return false
+	
+	# Check if drop position is over the inventory grid
+	var grid_rect = Rect2(inventory_grid.global_position, inventory_grid.size)
+	if not grid_rect.has_point(end_position):
+		return false
+	
+	# Find slot at drop position
+	var target_slot = inventory_grid.get_slot_at_position(end_position)
+	if target_slot:
+		# Drop on specific slot
+		return _handle_drop_on_slot(target_slot)
+	else:
+		# Drop on empty grid area
+		return _handle_drop_on_empty_grid(inventory_grid, end_position)
+
+func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
+	"""Try to drop on container list"""
+	var content = _find_inventory_content()
+	if not content or not content.container_list:
+		return false
+	
+	var container_list = content.container_list
+	var container_rect = Rect2(container_list.global_position, container_list.size)
+	
+	if not container_rect.has_point(end_position):
+		return false
+	
+	var local_pos = end_position - container_list.global_position
+	var item_index = container_list.get_item_at_position(local_pos, true)
+	
+	if item_index == -1 or item_index >= content.open_containers.size():
+		return false
+	
+	var target_container = content.open_containers[item_index]
+	var current_container_id = _get_container_id()
+	
+	if target_container.container_id == current_container_id:
+		return false
+	
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	# Determine transfer quantity
+	var transfer_quantity = item.quantity
+	if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
+		transfer_quantity = max(1, item.quantity / 2)  # Transfer half
+	
+	# Perform transfer
+	var success = inventory_manager.transfer_item(item, current_container_id, target_container.container_id, Vector2i(-1, -1), transfer_quantity)
+	
+	if success:
+		# Refresh displays
+		content.refresh_display()
+		return true
+	
+	return false
+
+func _handle_drop_on_slot(target_slot: InventorySlot) -> bool:
+	"""Handle dropping on a specific inventory slot"""
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	var current_container_id = _get_container_id()
+	var target_container_id = target_slot.get_container_id()
+	
+	if target_slot.has_item():
+		var target_item = target_slot.get_item()
+		
+		# Try stacking
+		if item.can_stack_with(target_item):
+			var space_available = target_item.max_stack_size - target_item.quantity
+			var amount_to_transfer = min(item.quantity, space_available)
+			
+			if amount_to_transfer > 0:
+				var success = inventory_manager.transfer_item(item, current_container_id, target_container_id, Vector2i(-1, -1), amount_to_transfer)
+				return success
+		
+		# Try swapping (same container only)
+		if current_container_id == target_container_id:
+			# Create temporary slots for swap
+			var temp_source_slot = InventorySlot.new()
+			temp_source_slot.set_item(item)
+			temp_source_slot.set_container_id(current_container_id)
+			
+			return temp_source_slot._handle_item_swap(target_slot, target_item, inventory_manager)
+	else:
+		# Empty slot - transfer item
+		var success = inventory_manager.transfer_item(item, current_container_id, target_container_id)
+		return success
+	
+	return false
+
+func _handle_drop_on_empty_grid(grid: InventoryGrid, position: Vector2) -> bool:
+	"""Handle dropping on empty grid area"""
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	var current_container_id = _get_container_id()
+	var grid_container_id = grid.container_id
+	
+	if current_container_id == grid_container_id:
+		return false  # Same container, no need to move
+	
+	# Transfer to target container
+	var success = inventory_manager.transfer_item(item, current_container_id, grid_container_id)
+	return success
+
+func _on_external_drop_result(success: bool):
+	"""Callback for external drop operations"""
+	if success:
+		# Refresh the list view
+		var list_view = _find_list_view()
+		if list_view:
+			list_view.refresh_display()
+
+# Helper methods
+func _get_container_id() -> String:
+	var list_view = _find_list_view()
+	if list_view:
+		return list_view.container_id
+	return ""
+
+func _get_inventory_manager() -> InventoryManager:
+	var scene_root = get_tree().current_scene
+	return _find_inventory_manager_recursive(scene_root)
+
+func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
+	if node is InventoryManager:
+		return node
+	
+	for child in node.get_children():
+		var result = _find_inventory_manager_recursive(child)
+		if result:
+			return result
+	
+	return null
+
+func _find_inventory_content() -> InventoryWindowContent:
+	var current = get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowContent":
+			return current
+		current = current.get_parent()
+	return null
+
+func _find_list_view() -> InventoryListView:
+	var current = get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryListView":
+			return current
+		current = current.get_parent()
+	return null
+	
+func _can_drop_data(position: Vector2, data: Variant) -> bool:
+	"""Check if we can accept a drop and provide visual feedback"""
+	
+	if not item or not data:
+		return false
+	
+	var source_item = data.get("item") as InventoryItem_Base
+	var source_row = data.get("source_row") as InventoryListRow
+	
+	if not source_item or source_row == self:
+		return false
+	
+	# Check if items can stack/merge
+	if item.can_stack_with(source_item):
+		_set_merge_highlight(true)
+		return true
+	
+	_set_merge_highlight(false)
+	return false
+
+func _drop_data(position: Vector2, data: Variant):
+	"""Handle the actual drop"""
+	_set_merge_highlight(false)
+	
+	if not data:
+		return
+	
+	var source_row = data.get("source_row") as InventoryListRow
+	var source_item = data.get("item") as InventoryItem_Base
+	
+	if not source_row or not source_item or source_row == self:
+		return
+	
+	_handle_merge_with_source(source_row, source_item)
+
+func _set_merge_highlight(enabled: bool):
+	"""Set visual feedback for potential merge"""
+	if enabled:
+		# Green highlight for valid merge
+		background.modulate = Color(0.5, 1.0, 0.5, 1.0)
+	else:
+		# Reset to normal color based on current state
+		if is_selected:
+			background.modulate = selected_color
+		elif is_hovered:
+			background.modulate = hover_color
+		elif use_alternate:
+			background.modulate = alternate_color
+		else:
+			background.modulate = normal_color
+
+func _handle_merge_with_source(source_row: InventoryListRow, source_item: InventoryItem_Base):
+	"""Handle merging items from source row to this row"""
+	
+	if not item.can_stack_with(source_item):
+		return
+	
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return
+	
+	# Get the list view and temporarily disable auto-refresh
+	var list_view = _find_list_view()
+	var was_auto_refreshing = false
+	if list_view and list_view.has_method("set_auto_refresh"):
+		was_auto_refreshing = list_view.get_auto_refresh()
+		list_view.set_auto_refresh(false)
+	
+	# Calculate how much we can stack
+	var space_available = item.max_stack_size - item.quantity
+	var amount_to_transfer = min(source_item.quantity, space_available)
+		
+	if amount_to_transfer <= 0:
+		# Re-enable auto-refresh before returning
+		if list_view and was_auto_refreshing:
+			list_view.set_auto_refresh(true)
+		return
+	
+	# Perform the merge directly on the items
+	item.quantity += amount_to_transfer
+	source_item.quantity -= amount_to_transfer
+	
+	
+	# Remove source item if empty (but don't refresh yet)
+	var container = _get_current_container()
+	if source_item.quantity <= 0 and container:
+		container.remove_item(source_item)
+	
+	# Re-enable auto-refresh and do a single refresh
+	if list_view:
+		if was_auto_refreshing:
+			list_view.set_auto_refresh(true)
+		# Do a single controlled refresh
+		list_view.refresh_display()
+	
+	# Notify that drop was successful
+	source_row._on_external_drop_result(true)
+	
+func _refresh_display():
+	"""Refresh this row's display"""
+	# Update the quantity cell if it exists
+	for i in range(cells.size()):
+		if i < columns.size() and columns[i].id == "quantity":
+			var cell = cells[i]
+			if cell.get_child_count() > 0:
+				var label = cell.get_child(0) as Label
+				if label:
+					var qty_text = str(item.quantity)
+					if item.quantity >= 1000:
+						qty_text = "%.1fk" % (item.quantity / 1000.0)
+					label.text = qty_text
+
+func _get_current_container() -> InventoryContainer_Base:
+	var list_view = _find_list_view()
+	if list_view:
+		return list_view.container
+	return null
+	
+func get_drag_data(position: Vector2) -> Variant:
+	"""Provide drag data for Godot's built-in drag system"""	
+	if not item:
+		return null
+	
+	var drag_data = {
+		"source_row": self,
+		"item": item,
+		"container_id": _get_container_id()
+	}
+	
+	return drag_data
+	
+func _end_drag():
+	"""End the drag operation"""
+	if not is_dragging:
+		return
+	
+	var drop_successful = false
+	var end_position = get_global_mouse_position()
+	
+	# NEW: Try to drop on other list rows first
+	drop_successful = _attempt_drop_on_list_rows(end_position)
+	
+	# Try to drop on inventory grid/slots
+	if not drop_successful:
+		drop_successful = _attempt_drop_on_inventory(end_position)
+	
+	# If that didn't work, try container list
+	if not drop_successful:
+		drop_successful = _attempt_drop_on_container_list(end_position)
+	
+	# Cleanup drag preview
+	_cleanup_drag_preview()
+	
+	# Cleanup
+	is_dragging = false
+	drag_preview_created = false
+	modulate.a = 1.0
+	_set_merge_highlight(false)
+	
+	# Clear drag data
+	var viewport = get_viewport()
+	if viewport and viewport.has_meta("current_drag_data"):
+		viewport.remove_meta("current_drag_data")
+	
+	# Clear highlights
+	var content = _find_inventory_content()
+	if content:
+		content._clear_all_container_highlights()
+	
+	item_drag_ended.emit(self, drop_successful)
+	
+func _attempt_drop_on_list_rows(end_position: Vector2) -> bool:
+	"""Try to drop on other list rows for merging"""
+	var list_view = _find_list_view()
+	if not list_view:
+		return false
+	
+	# Check all list rows to see if we're dropping on one
+	for row in list_view.item_rows:
+		if row == self or not is_instance_valid(row):
+			continue
+			
+		var row_rect = Rect2(row.global_position, row.size)
+		if row_rect.has_point(end_position):
+			# We're dropping on this row
+			var target_item = row.item
+			if target_item and item.can_stack_with(target_item):
+				row._handle_merge_with_source(self, item)
+				return true
+	
+	return false
+
+func _cleanup_drag_preview():
+	"""Clean up drag preview and canvas"""
+	var root = get_tree().root
+	var drag_canvases = []
+	
+	# Find all DragCanvas nodes
+	for child in root.get_children():
+		if child.name == "DragCanvas":
+			drag_canvases.append(child)
+	
+	# Clean them up
+	for canvas in drag_canvases:
+		if is_instance_valid(canvas):
+			canvas.queue_free()

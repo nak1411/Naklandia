@@ -626,18 +626,23 @@ func _update_container_drop_highlights():
 	
 	var item = drag_data.get("item") as InventoryItem_Base
 	var source_slot = drag_data.get("source_slot")
+	var source_row = drag_data.get("source_row")
 	
-	# Validate that the source slot is still valid and not freed
-	if not item or not source_slot or not is_instance_valid(source_slot):
-		_clear_all_container_highlights()
-		viewport.remove_meta("current_drag_data")
-		return
+	# Get the appropriate source object and validate it's still dragging
+	var source_dragging = false
+	var source_container_id = ""
 	
-	# Now safely cast to InventorySlot since we know it's valid
-	var slot = source_slot as InventorySlot
+	if source_slot and is_instance_valid(source_slot):
+		var slot = source_slot as InventorySlot
+		source_dragging = slot.is_dragging
+		source_container_id = slot.get_container_id()
+	elif source_row and is_instance_valid(source_row):
+		var row = source_row as InventoryListRow
+		source_dragging = row.is_dragging
+		source_container_id = row._get_container_id()
 	
-	# Check if the source slot is still actually dragging
-	if not slot.is_dragging:
+	# Validate that we have a valid source and item
+	if not item or not source_dragging:
 		_clear_all_container_highlights()
 		viewport.remove_meta("current_drag_data")
 		return
@@ -654,16 +659,19 @@ func _update_container_drop_highlights():
 		# Clear all highlights first
 		_clear_all_container_highlights()
 		
-		# Only highlight if mouse is specifically over a valid container item
+		# Only highlight if we have a valid container index
 		if hovered_item_index >= 0 and hovered_item_index < open_containers.size():
-			var container = open_containers[hovered_item_index]
+			var target_container = open_containers[hovered_item_index]
 			
-			# Skip current container (same container transfers are handled differently)
-			if container != current_container:
-				var highlight_color = _get_container_highlight_color(container, item)
-				container_list.set_item_custom_bg_color(hovered_item_index, highlight_color)
+			# Don't highlight the same container
+			if target_container.container_id == source_container_id:
+				return
+			
+			# Use existing highlight color logic
+			var highlight_color = _get_container_highlight_color(target_container, item)
+			container_list.set_item_custom_bg_color(hovered_item_index, highlight_color)
 	else:
-		# Mouse not over container list - clear all highlights
+		# Mouse not over container list
 		_clear_all_container_highlights()
 		
 func _debug_container_transfer_capability(container: InventoryContainer_Base, item: InventoryItem_Base) -> Dictionary:
