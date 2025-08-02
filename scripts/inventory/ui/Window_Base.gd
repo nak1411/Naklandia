@@ -113,7 +113,7 @@ func _input(event: InputEvent):
 
 func _handle_mouse_press(global_pos: Vector2):
 	# Check if we're starting a resize operation first
-	if can_resize and not is_maximized:
+	if can_resize and not is_maximized and size.x >= min_window_size.x and size.y >= min_window_size.y:
 		var resize_area = _get_resize_area_at_position(global_pos)
 		if resize_area != ResizeMode.NONE:
 			_start_resize(resize_area, global_pos)
@@ -143,30 +143,38 @@ func _get_resize_area_at_position(global_pos: Vector2) -> ResizeMode:
 	"""Check if global position is over a resize area"""
 	var local_pos = global_pos - global_position
 	
+	# If window is too small, disable resize detection to prevent conflicts
+	if size.x < min_window_size.x + 20 or size.y < min_window_size.y + 20:
+		return ResizeMode.NONE
+	
+	# Adjust resize border and corner sizes based on window size
+	var effective_border_width = min(resize_border_width, size.x * 0.1, size.y * 0.1)
+	var effective_corner_size = min(resize_corner_size, size.x * 0.15, size.y * 0.15)
+	
 	# Check if mouse is within resize borders
-	var in_left = local_pos.x <= resize_border_width
-	var in_right = local_pos.x >= size.x - resize_border_width
-	var in_top = local_pos.y <= resize_border_width
-	var in_bottom = local_pos.y >= size.y - resize_border_width
+	var in_left = local_pos.x <= effective_border_width
+	var in_right = local_pos.x >= size.x - effective_border_width
+	var in_top = local_pos.y <= effective_border_width
+	var in_bottom = local_pos.y >= size.y - effective_border_width
 	
 	# Check corners first (they take priority)
-	if in_top and in_left and local_pos.x <= resize_corner_size and local_pos.y <= resize_corner_size:
+	if in_top and in_left and local_pos.x <= effective_corner_size and local_pos.y <= effective_corner_size:
 		return ResizeMode.TOP_LEFT
-	elif in_top and in_right and local_pos.x >= size.x - resize_corner_size and local_pos.y <= resize_corner_size:
+	elif in_top and in_right and local_pos.x >= size.x - effective_corner_size and local_pos.y <= effective_corner_size:
 		return ResizeMode.TOP_RIGHT
-	elif in_bottom and in_left and local_pos.x <= resize_corner_size and local_pos.y >= size.y - resize_corner_size:
+	elif in_bottom and in_left and local_pos.x <= effective_corner_size and local_pos.y >= size.y - effective_corner_size:
 		return ResizeMode.BOTTOM_LEFT
-	elif in_bottom and in_right and local_pos.x >= size.x - resize_corner_size and local_pos.y >= size.y - resize_corner_size:
+	elif in_bottom and in_right and local_pos.x >= size.x - effective_corner_size and local_pos.y >= size.y - effective_corner_size:
 		return ResizeMode.BOTTOM_RIGHT
 	
 	# Check edges - but exclude corner areas
-	elif in_left and not (local_pos.y <= resize_corner_size or local_pos.y >= size.y - resize_corner_size):
+	elif in_left and not (local_pos.y <= effective_corner_size or local_pos.y >= size.y - effective_corner_size):
 		return ResizeMode.LEFT
-	elif in_right and not (local_pos.y <= resize_corner_size or local_pos.y >= size.y - resize_corner_size):
+	elif in_right and not (local_pos.y <= effective_corner_size or local_pos.y >= size.y - effective_corner_size):
 		return ResizeMode.RIGHT
-	elif in_top and not (local_pos.x <= resize_corner_size or local_pos.x >= size.x - resize_corner_size):
+	elif in_top and not (local_pos.x <= effective_corner_size or local_pos.x >= size.x - effective_corner_size):
 		return ResizeMode.TOP
-	elif in_bottom and not (local_pos.x <= resize_corner_size or local_pos.x >= size.x - resize_corner_size):
+	elif in_bottom and not (local_pos.x <= effective_corner_size or local_pos.x >= size.x - effective_corner_size):
 		return ResizeMode.BOTTOM
 	
 	return ResizeMode.NONE
@@ -770,13 +778,25 @@ func _handle_resize_motion(mouse_pos: Vector2):
 			new_size.x += delta.x
 			new_size.y += delta.y
 	
-	# Apply size constraints
-	new_size.x = max(min_window_size.x, min(new_size.x, max_window_size.x))
-	new_size.y = max(min_window_size.y, min(new_size.y, max_window_size.y))
+	# Apply size constraints BEFORE updating position and size
+	var constrained_size = Vector2(
+		max(min_window_size.x, min(new_size.x, max_window_size.x)),
+		max(min_window_size.y, min(new_size.y, max_window_size.y))
+	)
+	
+	# If size was constrained, adjust position for top/left resizes
+	if resize_mode in [ResizeMode.LEFT, ResizeMode.TOP, ResizeMode.TOP_LEFT, ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT]:
+		if constrained_size.x != new_size.x and resize_mode in [ResizeMode.LEFT, ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_LEFT]:
+			# Size was constrained on X axis for left resize - adjust position
+			new_position.x = resize_start_position.x + (resize_start_size.x - constrained_size.x)
+		
+		if constrained_size.y != new_size.y and resize_mode in [ResizeMode.TOP, ResizeMode.TOP_LEFT, ResizeMode.TOP_RIGHT]:
+			# Size was constrained on Y axis for top resize - adjust position
+			new_position.y = resize_start_position.y + (resize_start_size.y - constrained_size.y)
 	
 	# Update position and size
 	position = new_position
-	size = new_size
+	size = constrained_size
 	
 	window_resized.emit(Vector2i(size))
 

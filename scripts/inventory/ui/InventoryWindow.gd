@@ -338,9 +338,26 @@ func _switch_container(container: InventoryContainer_Base):
 
 # Override base class close behavior
 func _on_window_closed():
-	"""Custom close behavior for inventory window"""
-	# Save any inventory-specific state before closing
-	_save_inventory_state()
+	"""Override from Window_Base - handle inventory window close"""
+	# Find the inventory integration and close properly
+	var integration = _find_inventory_integration(get_tree().current_scene)
+	if integration:
+		# Call the integration's close method to restore player input
+		integration.is_inventory_open = false
+		integration._set_player_input_enabled(true)
+		
+		# Restore mouse mode if not paused
+		if not integration._is_pause_menu_open():
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		
+		# Save position
+		integration._save_window_position()
+		
+		# Emit the signal
+		integration.inventory_toggled.emit(false)
+	else:
+		# Fallback if integration not found
+		_reenable_player_input_fallback()
 
 func _save_inventory_state():
 	"""Save inventory-specific state"""

@@ -253,7 +253,7 @@ func _setup_external_glow():
 	# Create a dedicated CanvasLayer
 	glow_canvas_layer = CanvasLayer.new()
 	glow_canvas_layer.name = "GlowLayer"
-	glow_canvas_layer.layer = 100
+	glow_canvas_layer.layer = 60
 	get_tree().current_scene.add_child(glow_canvas_layer)
 	
 	# Create container for the 4 border lines
