@@ -241,26 +241,23 @@ func _setup_visual_components():
 	_update_visual_state()
 	
 func _setup_external_glow():
-	# Check if we have a valid tree first - but don't defer in a loop!
-	if not get_tree() or not get_tree().current_scene:
-		# Don't defer - just return and let it be called later naturally
-		return
-	
 	# Only create glow if we don't already have it
-	if glow_canvas_layer:
+	if hover_glow:
 		return
 	
-	# Create a dedicated CanvasLayer
-	glow_canvas_layer = CanvasLayer.new()
-	glow_canvas_layer.name = "GlowLayer"
-	glow_canvas_layer.layer = 60
-	get_tree().current_scene.add_child(glow_canvas_layer)
+	# Find the inventory grid container that has clipping enabled
+	var clipping_parent = _find_clipping_parent()
+	if not clipping_parent:
+		# Fallback to scene root if no clipping parent found
+		clipping_parent = get_tree().current_scene
 	
-	# Create container for the 4 border lines
+	# Create glow as a regular Control (not CanvasLayer) so it respects clipping
 	hover_glow = Control.new()
 	hover_glow.name = "SlotGlow_Lines"
 	hover_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hover_glow.visible = false
+	hover_glow.z_index = 100  # Use z_index instead of CanvasLayer for layering
+	clipping_parent.add_child(hover_glow)
 	
 	# Create 4 ColorRect lines for top, bottom, left, right
 	var top_line = ColorRect.new()
@@ -287,8 +284,27 @@ func _setup_external_glow():
 	hover_glow.add_child(bottom_line)
 	hover_glow.add_child(left_line)
 	hover_glow.add_child(right_line)
+
+func _find_clipping_parent() -> Control:
+	"""Find the nearest parent with clip_contents enabled, preferring non-ScrollContainer parents"""
+	var current_parent = get_parent()
+	var scroll_container_parent = null
 	
-	glow_canvas_layer.add_child(hover_glow)
+	while current_parent:
+		if current_parent is Control and current_parent.clip_contents:
+			# If it's a ScrollContainer, keep looking for a better parent
+			if current_parent is ScrollContainer:
+				scroll_container_parent = current_parent
+			else:
+				# Found a non-ScrollContainer with clipping, use this
+				return current_parent
+		current_parent = current_parent.get_parent()
+	
+	# If we only found a ScrollContainer, use that
+	if scroll_container_parent:
+		return scroll_container_parent
+	
+	return null
 	
 func _show_hover_glow():
 	# Only setup glow when we actually need it and can safely do so
@@ -302,14 +318,30 @@ func _show_hover_glow():
 	var border_width = 2
 	
 	# Calculate padding based on the proportional system we're now using
-	var padding = max(4, int(slot_size.x * 0.08))  # Same calculation as in _setup_visual_components
+	var padding = max(4, int(slot_size.x * 0.08))
 	
 	# Account for the margin container padding - the content is inset by padding pixels
-	var content_position = slot_global_rect.position + Vector2(padding, padding)
+	var content_global_position = slot_global_rect.position + Vector2(padding, padding)
 	var content_size = slot_global_rect.size - Vector2(padding * 2, padding * 2)
 	
+	# Convert global position to local position within the clipping parent
+	var clipping_parent = hover_glow.get_parent()
+	var local_position = content_global_position
+	
+	if clipping_parent and clipping_parent is Control:
+		# Get the clipping parent's global position
+		var parent_global_pos = clipping_parent.global_position
+		
+		# If the clipping parent is a ScrollContainer, we need to account for scroll offset
+		if clipping_parent is ScrollContainer:
+			var scroll_container = clipping_parent as ScrollContainer
+			parent_global_pos += Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
+		
+		# Convert to local coordinates
+		local_position = content_global_position - parent_global_pos
+	
 	# Position the container around the content area (not the full slot)
-	hover_glow.global_position = content_position - Vector2(border_width, border_width)
+	hover_glow.position = local_position - Vector2(border_width, border_width)
 	hover_glow.size = content_size + Vector2(border_width * 2, border_width * 2)
 	
 	# Position the 4 border lines
@@ -367,9 +399,8 @@ func cleanup_glow():
 		hover_glow.queue_free()
 		hover_glow = null
 	
-	if glow_canvas_layer:
-		glow_canvas_layer.queue_free()
-		glow_canvas_layer = null
+	# Remove the glow_canvas_layer references since we're not using it anymore
+	glow_canvas_layer = null
 	
 	is_hovered = false
 

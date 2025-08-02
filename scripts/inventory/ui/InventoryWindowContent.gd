@@ -306,25 +306,31 @@ func _setup_right_panel_only():
 	inventory_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inventory_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	inventory_area.add_theme_constant_override("separation", 4)
+	inventory_area.clip_contents = true  # Enable clipping
 	add_child(inventory_area)
 	
 	_setup_mass_info_bar(inventory_area)
 	
+	# Create clipping container for the grid
+	var grid_container = Control.new()
+	grid_container.name = "GridContainer"
+	grid_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	grid_container.clip_contents = true
+	inventory_area.add_child(grid_container)
+	
 	inventory_grid = InventoryGrid.new()
 	inventory_grid.name = "InventoryGrid"
+	inventory_grid.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	
 	# SET PROPERTIES BEFORE ADDING TO SCENE
 	inventory_grid.enable_virtual_scrolling = true
-	inventory_grid.slot_size = Vector2(96, 96)
+	inventory_grid.slot_size = Vector2(96, 96)  # Correct property name
 	inventory_grid.virtual_item_height = 96
 	
-	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	grid_container.add_child(inventory_grid)
 	
-	# ADD TO SCENE (this triggers _ready())
-	inventory_area.add_child(inventory_grid)
-	
-	# Connect grid signals properly
+	# Connect signals
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
 
@@ -334,29 +340,32 @@ func _setup_right_panel():
 	inventory_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inventory_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	inventory_area.add_theme_constant_override("separation", 4)
+	# Enable clipping for the entire right panel area
+	inventory_area.clip_contents = true
 	add_child(inventory_area)
-	
-	## ADD TEST BUTTON
-	#var test_button = Button.new()
-	#test_button.text = "Add 100 Test Items (Virtual Scroll Test)"
-	#test_button.pressed.connect(_on_test_button_pressed)
-	#inventory_area.add_child(test_button)
 	
 	_setup_mass_info_bar(inventory_area)
 	
+	# Create a container specifically for the grid with clipping
+	var grid_container = Control.new()
+	grid_container.name = "GridContainer"
+	grid_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	grid_container.clip_contents = true  # This will clip the grid content
+	inventory_area.add_child(grid_container)
+	
 	inventory_grid = InventoryGrid.new()
 	inventory_grid.name = "InventoryGrid"
-	inventory_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inventory_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_grid.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	
-	# Enable virtual scrolling
+	# SET PROPERTIES BEFORE ADDING TO SCENE
 	inventory_grid.enable_virtual_scrolling = true
-	inventory_grid.slot_size = Vector2(96, 96)
+	inventory_grid.slot_size = Vector2(96, 96)  # Correct property name
 	inventory_grid.virtual_item_height = 96
 	
-	inventory_area.add_child(inventory_grid)
+	grid_container.add_child(inventory_grid)
 	
-	# Connect grid signals properly
+	# Connect signals
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
 
