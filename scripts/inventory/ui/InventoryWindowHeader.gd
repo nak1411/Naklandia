@@ -11,6 +11,8 @@ var sort_dropdown: DropDownMenu_Base
 var original_header_styles: Dictionary = {}
 var header_transparency_init: bool = false
 var is_search_focused: bool = false
+var display_mode_button: Button
+var current_display_mode: InventoryGrid.DisplayMode = InventoryGrid.DisplayMode.GRID
 
 # References
 var inventory_manager: InventoryManager
@@ -20,6 +22,7 @@ var inventory_window: Window
 signal search_changed(text: String)
 signal filter_changed(filter_type: int)
 signal sort_requested(sort_type: InventoryManager.SortType)
+signal display_mode_changed(mode: InventoryGrid.DisplayMode)
 
 # State
 var current_transparency: float = 1.0
