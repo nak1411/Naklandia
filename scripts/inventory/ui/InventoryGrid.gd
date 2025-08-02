@@ -227,7 +227,6 @@ func _clear_virtual_slots():
 func _render_virtual_items():
 	"""Render a dynamic grid that fills the available window space, like EVE Online"""
 	if not virtual_content:
-		print("ERROR: virtual_content is null")
 		return
 		
 	
@@ -307,7 +306,6 @@ func _render_virtual_items():
 	
 func _cleanup_virtual_rendered_slots():
 	"""Properly clean up existing virtual rendered slots"""
-	print("Cleaning up ", virtual_rendered_slots.size(), " virtual rendered slots")
 	
 	# Disconnect signals and free slots
 	for slot in virtual_rendered_slots:
@@ -988,8 +986,8 @@ func _update_grid_size():
 
 # Container management
 func set_container(new_container: InventoryContainer_Base):
-	# Clear position tracking when changing containers
-	item_positions.clear()
+	# Don't clear position tracking when changing containers
+	# item_positions.clear()  # <-- REMOVE THIS LINE
 	
 	if container:
 		_disconnect_container_signals()
@@ -1000,8 +998,24 @@ func set_container(new_container: InventoryContainer_Base):
 	if container:
 		_connect_container_signals()
 		
-		# Use the original refresh system that was working before virtual scrolling
-		call_deferred("refresh_display")
+		# Only rebuild virtual_items if we don't have them or they're wrong
+		if enable_virtual_scrolling:
+			# Check if we need to rebuild virtual_items
+			var need_rebuild = virtual_items.is_empty()
+			if not need_rebuild:
+				# Check if current virtual_items match the container
+				for virtual_item in virtual_items:
+					if not virtual_item in container.items:
+						need_rebuild = true
+						break
+			
+			if need_rebuild:
+				call_deferred("refresh_display")
+			else:
+				# Just re-render with existing order
+				call_deferred("_render_virtual_items")
+		else:
+			call_deferred("refresh_display")
 	else:
 		# No container - clear everything
 		current_grid_width = min_grid_width
@@ -1011,6 +1025,7 @@ func set_container(new_container: InventoryContainer_Base):
 			grid_container = null
 		slots.clear()
 		available_slots.clear()
+		virtual_items.clear()
 		
 func _initialize_with_proper_size():
 	"""Initialize the grid with proper size after layout is complete"""
@@ -1198,7 +1213,7 @@ func _refresh_virtual_display():
 		return
 	
 	_is_refreshing_display = true
-	
+
 	# Collect visible items (this is fast)
 	virtual_items.clear()
 	for item in container.items:
@@ -1209,6 +1224,25 @@ func _refresh_virtual_display():
 	_render_virtual_items()
 	
 	_is_refreshing_display = false
+	
+func _need_to_rebuild_virtual_items() -> bool:
+	"""Check if we need to rebuild virtual_items array from container"""
+	# Count items that should be visible in container
+	var container_visible_count = 0
+	for item in container.items:
+		if _should_show_item(item):
+			container_visible_count += 1
+	
+	# If counts don't match, we need to rebuild
+	if container_visible_count != virtual_items.size():
+		return true
+	
+	# Check if all virtual_items are still in the container
+	for virtual_item in virtual_items:
+		if not virtual_item in container.items:
+			return true
+	
+	return false
 	
 func set_virtual_scrolling_enabled(enabled: bool):
 	"""Switch between virtual and traditional modes"""
@@ -1480,7 +1514,18 @@ func _handle_virtual_stack_merge(source_slot: InventorySlot, target_slot: Invent
 	
 func _handle_virtual_item_swap(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base, target_item: InventoryItem_Base, inventory_manager: InventoryManager) -> bool:
 	"""Handle swapping items in virtual mode"""
-	# For same container, just swap the visual slots
+	# Find the indices of the items in virtual_items array
+	var source_index = virtual_items.find(source_item)
+	var target_index = virtual_items.find(target_item)
+	
+	if source_index == -1 or target_index == -1:
+		return false
+	
+	# Swap the items in the virtual_items array to maintain visual order
+	virtual_items[source_index] = target_item
+	virtual_items[target_index] = source_item
+	
+	# Update the visual slots
 	source_slot.clear_item()
 	target_slot.clear_item()
 	source_slot.set_item(target_item)
@@ -1490,9 +1535,35 @@ func _handle_virtual_item_swap(source_slot: InventorySlot, target_slot: Inventor
 
 func _handle_virtual_move_to_empty(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base) -> bool:
 	"""Handle moving item to empty slot in virtual mode"""
-	# Same container - just move the visual representation
+	# Get slot indices to understand the visual positioning
+	var source_visual_index = -1
+	var target_visual_index = -1
+	
+	# Find the visual indices of the slots
+	for i in range(virtual_rendered_slots.size()):
+		if virtual_rendered_slots[i] == source_slot:
+			source_visual_index = i
+		elif virtual_rendered_slots[i] == target_slot:
+			target_visual_index = i
+	
+	if source_visual_index != -1 and target_visual_index != -1:
+		# Find the item in virtual_items array
+		var item_index = virtual_items.find(source_item)
+		if item_index != -1:
+			# Remove from current position
+			virtual_items.remove_at(item_index)
+			
+			# Insert at new position (adjust for removal if necessary)
+			var new_index = target_visual_index
+			if item_index < target_visual_index:
+				new_index -= 1
+			
+			virtual_items.insert(new_index, source_item)
+	
+	# Update visual slots
 	source_slot.clear_item()
 	target_slot.set_item(source_item)
+	
 	return true
 	
 func _handle_same_container_virtual_drop(source_item: InventoryItem_Base, target_item: InventoryItem_Base, source_slot: InventorySlot, target_slot: InventorySlot) -> bool:
@@ -1990,3 +2061,6 @@ func _get_item_type_from_filter(filter_index: int) -> InventoryItem_Base.ItemTyp
 		10: return InventoryItem_Base.ItemType.IMPLANT
 		11: return InventoryItem_Base.ItemType.SKILL_BOOK
 		_: return InventoryItem_Base.ItemType.MISCELLANEOUS
+
+func _is_connected_to_container() -> bool:
+	return container and container.item_added.is_connected(_on_container_item_added)

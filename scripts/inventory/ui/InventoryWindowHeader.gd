@@ -416,9 +416,10 @@ func _on_sort_button_pressed():
 	# Show dropdown at button position
 	var button_pos = sort_button.get_screen_position()
 	var dropdown_pos = Vector2(button_pos.x, button_pos.y + sort_button.size.y)
-		
-	# Add dropdown to scene so it can access viewport
-	get_viewport().add_child(sort_dropdown)
+	
+	# Only add dropdown to scene if it's not already there
+	if not sort_dropdown.get_parent():
+		get_viewport().add_child(sort_dropdown)
 	
 	# Show the menu
 	if sort_dropdown.has_method("show_menu"):

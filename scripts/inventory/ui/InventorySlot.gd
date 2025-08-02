@@ -1371,8 +1371,16 @@ func _handle_item_swap(target_slot: InventorySlot, target_item: InventoryItem_Ba
 		var grid = _get_inventory_grid()
 		
 		if grid and grid.enable_virtual_scrolling:
-			# For virtual mode, just swap the visual slots
-			# The items stay in the same container
+			# For virtual mode, swap both visual AND container order
+			var source_index = source_container.items.find(temp_source_item)
+			var target_index = source_container.items.find(temp_target_item)
+			
+			if source_index != -1 and target_index != -1:
+				# Swap items in the container's items array
+				source_container.items[source_index] = temp_target_item
+				source_container.items[target_index] = temp_source_item
+			
+			# Swap visual slots
 			clear_item()
 			target_slot.clear_item()
 			target_slot.set_item(temp_source_item)

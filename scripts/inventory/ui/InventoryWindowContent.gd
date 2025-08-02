@@ -44,8 +44,16 @@ func _ready():
 func set_display_mode(mode: InventoryDisplayMode.Mode):
 	if mode == current_display_mode:
 		return
+		
+	# Disconnect previous mode from container signals
+	match current_display_mode:
+		InventoryDisplayMode.Mode.GRID:
+			if inventory_grid:
+				inventory_grid._disconnect_container_signals()
+		InventoryDisplayMode.Mode.LIST:
+			if list_view:
+				list_view._disconnect_container_signals()
 	
-	print("InventoryWindowContent: Changing display mode from ", current_display_mode, " to ", mode)
 	current_display_mode = mode
 	
 	match mode:
@@ -54,8 +62,9 @@ func set_display_mode(mode: InventoryDisplayMode.Mode):
 		InventoryDisplayMode.Mode.LIST:
 			_switch_to_list_mode()
 	
-	# Force refresh after mode switch
+	# Connect new mode to container signals
 	if current_container:
+		_connect_container_signals()
 		call_deferred("_refresh_current_display")
 		
 func _refresh_current_display():
@@ -122,7 +131,6 @@ func _switch_to_grid_mode():
 func _on_item_context_menu_from_list(item: InventoryItem_Base, position: Vector2):
 	# Check if we still have a valid container
 	if not current_container:
-		print("ERROR: No current container for context menu")
 		return
 	
 	# Create a dummy slot for compatibility with existing context menu system
@@ -138,7 +146,6 @@ func _on_item_context_menu_from_list(item: InventoryItem_Base, position: Vector2
 func _on_list_item_selected(item: InventoryItem_Base):
 	# Check if we still have a valid container
 	if not current_container:
-		print("ERROR: No current container for item selection")
 		return
 	
 	# Create a dummy slot for compatibility with existing systems
@@ -397,6 +404,7 @@ func _setup_mass_info_bar(parent: Control):
 func _on_container_list_selected(index: int):
 	if index >= 0 and index < open_containers.size():
 		var selected_container = open_containers[index]
+		select_container(selected_container)
 		container_selected.emit(selected_container)
 
 func _on_item_activated(item: InventoryItem_Base, slot: InventorySlot):
@@ -431,9 +439,7 @@ func update_containers(containers: Array[InventoryContainer_Base]):
 		var item_index = list_to_update.get_item_count() - 1
 		container_list.set_item_tooltip_enabled(item_index, false)
 
-func select_container(container: InventoryContainer_Base):
-	print("InventoryWindowContent: Selecting container: ", container.container_name if container else "None")
-	
+func select_container(container: InventoryContainer_Base):	
 	# Disconnect from previous container if exists
 	if current_container:
 		_disconnect_container_signals()
@@ -444,25 +450,21 @@ func select_container(container: InventoryContainer_Base):
 	if container:
 		_connect_container_signals()
 	
-	# Always refresh both display modes when container changes
+	# Set container on both views, but don't double-refresh
 	if container:
-		print("Setting container on grid and list view")
 		
-		# Set container on grid
+		# Set container on grid - this already calls refresh_display internally
 		if inventory_grid:
 			inventory_grid.set_container(container)
 			await get_tree().process_frame
 			if inventory_grid.visible:
 				inventory_grid.refresh_display()
 		
-		# Set container on list view if it exists
+		# Set container on list view - this already calls refresh_display internally
 		if list_view:
 			list_view.set_container(container, container.container_id)
-			if list_view.visible:
-				list_view.refresh_display()
+			# REMOVE THIS LINE: list_view.refresh_display()
 	else:
-		print("Clearing containers from grid and list view")
-		
 		# Clear both displays
 		if inventory_grid:
 			inventory_grid.set_container(null)
@@ -470,8 +472,6 @@ func select_container(container: InventoryContainer_Base):
 			list_view.set_container(null, "")
 	
 	update_mass_info()
-
-
 	
 func _connect_container_signals():
 	"""Connect to container signals for real-time updates"""
@@ -483,10 +483,20 @@ func _connect_container_signals():
 		if not current_container.item_moved.is_connected(_on_container_item_moved):
 			current_container.item_moved.connect(_on_container_item_moved)
 		
-		# Also connect to individual item quantity changes for real-time updates
-		for item in current_container.items:
-			if not item.quantity_changed.is_connected(_on_item_quantity_changed):
-				item.quantity_changed.connect(_on_item_quantity_changed)
+		# Connect active display to container signals
+		match current_display_mode:
+			InventoryDisplayMode.Mode.GRID:
+				if inventory_grid and not inventory_grid._is_connected_to_container():
+					inventory_grid._connect_container_signals()
+				# Disconnect list view if connected
+				if list_view and list_view._is_connected_to_container():
+					list_view._disconnect_container_signals()
+			InventoryDisplayMode.Mode.LIST:
+				if list_view and not list_view._is_connected_to_container():
+					list_view._connect_container_signals()
+				# Disconnect grid if connected
+				if inventory_grid and inventory_grid._is_connected_to_container():
+					inventory_grid._disconnect_container_signals()
 
 func _disconnect_container_signals():
 	"""Disconnect from container signals"""
@@ -577,6 +587,9 @@ func get_current_container() -> InventoryContainer_Base:
 
 func get_inventory_grid() -> InventoryGrid:
 	return inventory_grid
+	
+func get_current_display_mode() -> InventoryDisplayMode.Mode:
+	return current_display_mode
 
 # Container drop handling methods
 func _setup_container_drop_handling():
@@ -589,9 +602,7 @@ func _process(_delta):
 	var viewport = get_viewport()
 	if viewport and viewport.has_meta("current_drag_data"):
 		var drag_data = viewport.get_meta("current_drag_data", null)
-		# Debug: Let's see what's in the drag data
-		if drag_data:
-			print("Drag data exists: ", drag_data.keys())
+
 		_update_container_drop_highlights()
 	else:
 		# No drag in progress - ensure highlights are cleared

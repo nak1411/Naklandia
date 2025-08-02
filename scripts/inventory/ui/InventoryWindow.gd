@@ -26,9 +26,7 @@ func _init():
 	max_window_size = Vector2(1400, 1000)
 
 func _setup_window_content():
-	"""Override base method to add inventory-specific content"""
-	print("Setting up inventory window content...")
-	
+	"""Override base method to add inventory-specific content"""	
 	# Call the original content setup method
 	_setup_content()
 
@@ -102,13 +100,9 @@ func _on_display_mode_changed(mode: InventoryDisplayMode.Mode):
 		content.set_display_mode(mode)
 	
 func _on_container_list_item_selected(index: int):
-	"""Handle container list selection"""
-	print("Container list item selected: ", index)
-	
+	"""Handle container list selection"""	
 	if index >= 0 and index < open_containers.size():
-		var selected_container = open_containers[index]
-		print("Switching to container: ", selected_container.container_name)
-		
+		var selected_container = open_containers[index]		
 		# Update current container
 		current_container = selected_container
 		
@@ -123,8 +117,6 @@ func _on_container_list_item_selected(index: int):
 		# Emit signal
 		container_switched.emit(selected_container)
 		
-		print("Container switch complete!")
-
 func _setup_inventory_content():
 	"""Initialize inventory-specific UI components"""
 	# Create main inventory container
@@ -215,20 +207,16 @@ func _find_parent_window() -> Window:
 
 func _initialize_inventory_content():
 	"""Initialize the inventory content with the inventory manager"""
-	print("Initializing inventory content with manager...")
 	
 	if not content or not inventory_manager:
-		print("Missing content or inventory_manager")
 		return
 	
 	# Set inventory manager on content
 	if content.has_method("set_inventory_manager"):
 		content.set_inventory_manager(inventory_manager)
-		print("Set inventory manager on content")
 	
 	# Get all accessible containers, not just player inventory
 	var all_containers = inventory_manager.get_accessible_containers()
-	print("Found ", all_containers.size(), " containers")
 	
 	if all_containers.size() > 0:
 		open_containers.clear()
@@ -244,7 +232,6 @@ func _initialize_inventory_content():
 		if not default_container:
 			default_container = all_containers[0]
 		
-		print("Using default container: ", default_container.container_name)
 		
 		# IMPORTANT: Set the current container first
 		current_container = default_container
@@ -252,17 +239,14 @@ func _initialize_inventory_content():
 		# Set current container on item_actions too
 		if item_actions and item_actions.has_method("set_current_container"):
 			item_actions.set_current_container(current_container)
-			print("Set current container on item_actions")
 		
 		# Update containers list in content with ALL containers
 		if content.has_method("update_containers"):
 			content.update_containers(all_containers)
-			print("Updated containers list in content")
 		
 		# Then select it in the content
 		if content.has_method("select_container"):
 			content.select_container(default_container)
-			print("Selected default container in content")
 			
 		# Select the default container in the list
 		var default_index = 0
@@ -273,14 +257,11 @@ func _initialize_inventory_content():
 		
 		if content.has_method("select_container_index"):
 			content.select_container_index(default_index)
-			print("Selected container index: ", default_index)
 	
 	# Force a refresh of the display
 	if content.has_method("refresh_display"):
 		content.refresh_display()
-		print("Refreshed content display")
 	
-	print("Inventory content initialization complete!")
 
 func _update_options_dropdown_text():
 	"""Update options dropdown with inventory-specific options"""
@@ -308,7 +289,17 @@ func _on_container_selected_from_header(container: InventoryContainer_Base):
 	_switch_container(container)
 
 func _on_container_selected_from_content(container: InventoryContainer_Base):
-	_switch_container(container)
+	"""Handle container selection from content"""
+	
+	# Update current container
+	current_container = container
+	
+	# Update item actions
+	if item_actions and item_actions.has_method("set_current_container"):
+		item_actions.set_current_container(container)
+	
+	# Emit signal
+	container_switched.emit(container)
 
 func _on_search_text_changed_from_header(search_text: String):
 	if content and content.has_method("filter_items"):
@@ -544,8 +535,18 @@ func _on_filter_changed(filter_type: int):
 
 func _on_sort_requested(sort_type):
 	"""Handle sort requests from header"""
-	if not inventory_manager or not current_container:
-		return
 	
+	if not inventory_manager:
+		return
+		
+	if not current_container:
+		return
+		
 	# Call the sort function on the inventory manager
 	inventory_manager.sort_container(current_container.container_id, sort_type)
+	
+	# Force grid refresh after sort
+	if content and content.inventory_grid:
+		await get_tree().process_frame  # Wait for sort to complete
+		content.inventory_grid.refresh_display()
+	

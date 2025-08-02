@@ -173,9 +173,7 @@ func _setup_detail_panel():
 	detail_content.name = "DetailContent"
 	detail_scroll.add_child(detail_content)
 
-func set_container(new_container: InventoryContainer_Base, new_container_id: String):
-	print("ListView: Setting container to: ", new_container.container_name if new_container else "None")
-	
+func set_container(new_container: InventoryContainer_Base, new_container_id: String):	
 	# Disconnect from old container - only if signals are actually connected
 	if container and is_instance_valid(container):
 		if container.item_added.is_connected(_on_container_item_added):
@@ -200,19 +198,15 @@ func set_container(new_container: InventoryContainer_Base, new_container_id: Str
 	# Always refresh the display, even if container is null (to clear it)
 	refresh_display()
 
-func refresh_display():
-	print("ListView: Refreshing display for container: ", container.container_name if container else "None")
-	
+func refresh_display():	
 	# Always clear first
 	_clear_list()
 	
 	if not container or not is_instance_valid(container):
-		print("ListView: No valid container, display cleared")
 		return
 	
 	# Get filtered and sorted items
 	var items = _get_filtered_sorted_items()
-	print("ListView: Found ", items.size(), " items to display")
 	
 	# Create rows for items
 	for i in items.size():
@@ -229,8 +223,6 @@ func refresh_display():
 		list_container.add_child(row)
 		item_rows.append(row)
 	
-	print("ListView: Added ", item_rows.size(), " rows to display")
-
 func _get_filtered_sorted_items() -> Array[InventoryItem_Base]:
 	var items: Array[InventoryItem_Base] = []
 	
@@ -240,7 +232,7 @@ func _get_filtered_sorted_items() -> Array[InventoryItem_Base]:
 			continue
 		items.append(item)
 	
-	# Sort items
+	# Sort items - THIS IS VISUAL ONLY, doesn't modify container
 	items.sort_custom(_compare_items)
 	
 	return items
@@ -280,7 +272,6 @@ func _compare_items(a: InventoryItem_Base, b: InventoryItem_Base) -> bool:
 	return result if sort_ascending else not result
 
 func _clear_list():
-	print("ListView: Clearing list display")
 	for row in item_rows:
 		if is_instance_valid(row):
 			row.queue_free()
@@ -454,15 +445,30 @@ func _update_header_widths():
 
 func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
 	if container and is_instance_valid(container):
-		print("ListView: Item added to container: ", item.item_name)
 		refresh_display()
 
 func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
 	if container and is_instance_valid(container):
-		print("ListView: Item removed from container: ", item.item_name)
 		refresh_display()
 
 func _on_container_item_moved(item: InventoryItem_Base, old_position: Vector2i, new_position: Vector2i):
 	if container and is_instance_valid(container):
-		print("ListView: Item moved in container: ", item.item_name)
 		refresh_display()
+		
+func _is_connected_to_container() -> bool:
+	return container and container.item_added.is_connected(_on_container_item_added)
+
+func _connect_container_signals():
+	if container and not _is_connected_to_container():
+		container.item_added.connect(_on_container_item_added)
+		container.item_removed.connect(_on_container_item_removed)
+		container.item_moved.connect(_on_container_item_moved)
+
+func _disconnect_container_signals():
+	if container and _is_connected_to_container():
+		if container.item_added.is_connected(_on_container_item_added):
+			container.item_added.disconnect(_on_container_item_added)
+		if container.item_removed.is_connected(_on_container_item_removed):
+			container.item_removed.disconnect(_on_container_item_removed)
+		if container.item_moved.is_connected(_on_container_item_moved):
+			container.item_moved.disconnect(_on_container_item_moved)
