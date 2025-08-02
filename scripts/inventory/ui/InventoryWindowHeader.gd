@@ -59,12 +59,14 @@ func _setup_controls():
 	filter_container.add_theme_constant_override("margin_right", 2)
 	filter_container.add_theme_constant_override("margin_bottom", 2)
 	
-	# Create filter button (regular Button)
+	# Create filter button (regular Button) - Make it more responsive
 	filter_options = Button.new()
 	filter_options.name = "FilterButton"
 	filter_options.text = "All Items ▼"
-	filter_options.custom_minimum_size.x = 120
+	filter_options.custom_minimum_size.x = 100  # Reduced from 120
+	filter_options.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
 	filter_options.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	filter_options.clip_contents = true  # Prevent text overflow
 	_style_custom_filter_button()
 	filter_container.add_child(filter_options)
 	
@@ -76,12 +78,14 @@ func _setup_controls():
 	sort_container.add_theme_constant_override("margin_right", 2)
 	sort_container.add_theme_constant_override("margin_bottom", 2)
 	
-	# Sort button (regular Button)
+	# Sort button (regular Button) - Make it more responsive
 	sort_button = Button.new()
 	sort_button.name = "SortButton"
 	sort_button.text = "Sort ▼"
-	sort_button.custom_minimum_size.x = 80
+	sort_button.custom_minimum_size.x = 60  # Reduced from 80
+	sort_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
 	sort_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sort_button.clip_contents = true  # Prevent text overflow
 	_style_custom_sort_button()
 	sort_container.add_child(sort_button)
 	
@@ -91,8 +95,7 @@ func _setup_controls():
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_child(spacer)
 	
-	# Search field - now on the right side
-	
+	# Search field - now on the right side, make it responsive
 	var search_container = MarginContainer.new()
 	add_child(search_container)
 	
@@ -102,18 +105,13 @@ func _setup_controls():
 	
 	search_field = LineEdit.new()
 	search_field.name = "SearchField"
-	search_field.placeholder_text = "Search items..."
-	search_field.custom_minimum_size.x = 150
-	search_field.focus_mode = Control.FOCUS_ALL  # Ensure it can receive focus
+	search_field.placeholder_text = "Search..."  # Shorter placeholder
+	search_field.custom_minimum_size.x = 100  # Reduced from 150
+	search_field.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
+	search_field.focus_mode = Control.FOCUS_ALL
 	search_container.add_child(search_field)
 	
-	# Right margin spacer
-	var right_margin = Control.new()
-	right_margin.name = "RightMargin"
-	right_margin.custom_minimum_size.x = 4
-	add_child(right_margin)
-	
-	# Display mode toggle button
+	# Display mode toggle button - Make it more responsive
 	var display_container = MarginContainer.new()
 	add_child(display_container)
 
@@ -125,8 +123,10 @@ func _setup_controls():
 	display_mode_button = Button.new()
 	display_mode_button.name = "DisplayModeButton"
 	display_mode_button.text = "Grid"
-	display_mode_button.custom_minimum_size.x = 60
+	display_mode_button.custom_minimum_size.x = 45  # Reduced from 60
+	display_mode_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
 	display_mode_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	display_mode_button.clip_contents = true  # Prevent text overflow
 	_style_custom_display_button()
 	display_container.add_child(display_mode_button)
 	

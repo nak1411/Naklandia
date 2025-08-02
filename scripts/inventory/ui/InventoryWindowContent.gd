@@ -45,6 +45,7 @@ func set_display_mode(mode: InventoryDisplayMode.Mode):
 	if mode == current_display_mode:
 		return
 	
+	print("InventoryWindowContent: Changing display mode from ", current_display_mode, " to ", mode)
 	current_display_mode = mode
 	
 	match mode:
@@ -52,23 +53,41 @@ func set_display_mode(mode: InventoryDisplayMode.Mode):
 			_switch_to_grid_mode()
 		InventoryDisplayMode.Mode.LIST:
 			_switch_to_list_mode()
+	
+	# Force refresh after mode switch
+	if current_container:
+		call_deferred("_refresh_current_display")
+		
+func _refresh_current_display():
+	"""Force refresh the currently visible display"""
+	if not current_container:
+		return
+		
+	match current_display_mode:
+		InventoryDisplayMode.Mode.GRID:
+			if inventory_grid and inventory_grid.visible:
+				inventory_grid.refresh_display()
+		InventoryDisplayMode.Mode.LIST:
+			if list_view and list_view.visible:
+				list_view.refresh_display()
 
 func _switch_to_list_mode():
 	# Hide grid
 	if inventory_grid:
 		inventory_grid.visible = false
 	
-	# Create or show list view in the same container as the grid
+	# Create or show list view
 	if not list_view:
 		list_view = InventoryListView.new()
 		list_view.name = "ListView"
 		list_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		list_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		list_view.clip_contents = true
 		
-		# Add to the same parent as inventory_grid
 		var grid_parent = inventory_grid.get_parent()
 		if grid_parent:
 			grid_parent.add_child(list_view)
+			list_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		
 		# Connect list view signals
 		list_view.item_selected.connect(_on_list_item_selected)
@@ -77,9 +96,15 @@ func _switch_to_list_mode():
 	
 	list_view.visible = true
 	
-	# Set container if we have one
+	# Force proper sizing
+	if list_view.get_parent():
+		list_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		list_view.size = list_view.get_parent().size
+	
+	# CRITICAL: Set container and refresh if we have one
 	if current_container:
 		list_view.set_container(current_container, current_container.container_id if current_container else "")
+		list_view.refresh_display()
 
 func _switch_to_grid_mode():
 	# Hide list view
@@ -89,13 +114,21 @@ func _switch_to_grid_mode():
 	# Show grid
 	if inventory_grid:
 		inventory_grid.visible = true
+		
+		# Refresh grid display when switching back
+		if current_container:
+			inventory_grid.refresh_display()
 
 func _on_item_context_menu_from_list(item: InventoryItem_Base, position: Vector2):
+	# Check if we still have a valid container
+	if not current_container:
+		print("ERROR: No current container for context menu")
+		return
+	
 	# Create a dummy slot for compatibility with existing context menu system
 	var dummy_slot = InventorySlot.new()
 	dummy_slot.set_item(item)
-	if current_container:
-		dummy_slot.set_container_id(current_container.container_id if current_container else "")
+	dummy_slot.set_container_id(current_container.container_id)
 	
 	item_context_menu.emit(item, dummy_slot, position)
 	
@@ -103,11 +136,15 @@ func _on_item_context_menu_from_list(item: InventoryItem_Base, position: Vector2
 	dummy_slot.queue_free()
 	
 func _on_list_item_selected(item: InventoryItem_Base):
+	# Check if we still have a valid container
+	if not current_container:
+		print("ERROR: No current container for item selection")
+		return
+	
 	# Create a dummy slot for compatibility with existing systems
 	var dummy_slot = InventorySlot.new()
 	dummy_slot.set_item(item)
-	if current_container:
-		dummy_slot.set_container_id(current_container.container_id if current_container else "")
+	dummy_slot.set_container_id(current_container.container_id)
 	
 	# Emit the existing signal that other systems expect
 	item_activated.emit(item, dummy_slot)
@@ -395,6 +432,8 @@ func update_containers(containers: Array[InventoryContainer_Base]):
 		container_list.set_item_tooltip_enabled(item_index, false)
 
 func select_container(container: InventoryContainer_Base):
+	print("InventoryWindowContent: Selecting container: ", container.container_name if container else "None")
+	
 	# Disconnect from previous container if exists
 	if current_container:
 		_disconnect_container_signals()
@@ -405,25 +444,34 @@ func select_container(container: InventoryContainer_Base):
 	if container:
 		_connect_container_signals()
 	
-	if not inventory_grid:
-		return
-	
+	# Always refresh both display modes when container changes
 	if container:
-		# Set the container on the grid first
-		inventory_grid.set_container(container)
-		await get_tree().process_frame
+		print("Setting container on grid and list view")
 		
-		# Use the original refresh_display instead of trigger_compact_refresh
-		inventory_grid.refresh_display()
-		# Also update list view if it exists
+		# Set container on grid
+		if inventory_grid:
+			inventory_grid.set_container(container)
+			await get_tree().process_frame
+			if inventory_grid.visible:
+				inventory_grid.refresh_display()
+		
+		# Set container on list view if it exists
 		if list_view:
-			list_view.set_container(container, container.container_id if container else "")
+			list_view.set_container(container, container.container_id)
+			if list_view.visible:
+				list_view.refresh_display()
 	else:
-		inventory_grid.set_container(null)
+		print("Clearing containers from grid and list view")
+		
+		# Clear both displays
+		if inventory_grid:
+			inventory_grid.set_container(null)
 		if list_view:
 			list_view.set_container(null, "")
 	
 	update_mass_info()
+
+
 	
 func _connect_container_signals():
 	"""Connect to container signals for real-time updates"""

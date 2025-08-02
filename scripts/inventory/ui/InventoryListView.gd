@@ -54,9 +54,10 @@ func _ready():
 	resized.connect(_on_resized)
 
 func _setup_ui():
-	# Create a simple VBox layout instead of HSplitContainer
+	# Create a simple VBox layout with proper clipping
 	var main_vbox = VBoxContainer.new()
 	main_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	main_vbox.clip_contents = true  # IMPORTANT: Clip the entire list view
 	add_child(main_vbox)
 	
 	# Create header
@@ -65,17 +66,15 @@ func _setup_ui():
 	# Create main list area
 	scroll_container = ScrollContainer.new()
 	scroll_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED  # Force no horizontal scrolling
+	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll_container.clip_contents = true  # Clip scroll content
 	main_vbox.add_child(scroll_container)
 	
 	list_container = VBoxContainer.new()
 	list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_container.clip_contents = true  # Clip list items
 	scroll_container.add_child(list_container)
-	
-	# Optional: Create a detail panel on the right if show_details is true
-	if show_details:
-		# Convert to HSplit if details are needed
-		_convert_to_split_layout()
 
 func _convert_to_split_layout():
 	# Only convert to split layout if we need the detail panel
@@ -106,6 +105,7 @@ func _setup_list_panel():
 func _setup_header(parent: Control):
 	header_container = HBoxContainer.new()
 	header_container.custom_minimum_size.y = header_height
+	header_container.clip_contents = true  # IMPORTANT: Clip header content
 	parent.add_child(header_container)
 	
 	# Create header background
@@ -119,31 +119,22 @@ func _setup_header(parent: Control):
 	header_bg.add_theme_stylebox_override("panel", style)
 	header_container.add_child(header_bg)
 	
-	# Calculate available width for dynamic column sizing
-	var total_fixed_width = 0
-	var expandable_columns = 0
-	
-	for column in columns:
-		if column.width <= 100:  # Fixed width columns
-			total_fixed_width += column.width
-		else:  # Expandable columns
-			expandable_columns += 1
-	
-	# Create column headers with proper sizing
+	# Create column headers with better constraints
 	for i in columns.size():
 		var column = columns[i]
 		var header_button = Button.new()
 		header_button.text = column.title
 		header_button.flat = true
 		header_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		header_button.clip_contents = true  # Clip button text
 		
-		# Set sizing based on column type
+		# Set sizing based on column type with minimum constraints
 		if column.width <= 100:  # Fixed width columns (icon, qty, etc.)
-			header_button.custom_minimum_size.x = column.width
+			header_button.custom_minimum_size.x = max(20, column.width)  # Minimum 20px
 			header_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		else:  # Expandable columns (name, type, etc.)
 			header_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			header_button.clip_contents = true
+			header_button.custom_minimum_size.x = 50  # Minimum width for expandable columns
 		
 		if column.sortable:
 			header_button.pressed.connect(_on_header_clicked.bind(column.id))
@@ -183,29 +174,45 @@ func _setup_detail_panel():
 	detail_scroll.add_child(detail_content)
 
 func set_container(new_container: InventoryContainer_Base, new_container_id: String):
+	print("ListView: Setting container to: ", new_container.container_name if new_container else "None")
+	
+	# Disconnect from old container - only if signals are actually connected
+	if container and is_instance_valid(container):
+		if container.item_added.is_connected(_on_container_item_added):
+			container.item_added.disconnect(_on_container_item_added)
+		if container.item_removed.is_connected(_on_container_item_removed):
+			container.item_removed.disconnect(_on_container_item_removed)
+		if container.item_moved.is_connected(_on_container_item_moved):
+			container.item_moved.disconnect(_on_container_item_moved)
+	
 	container = new_container
 	container_id = new_container_id
 	
-	if container:
-		# Connect container signals
+	# Connect to new container - only if not already connected
+	if container and is_instance_valid(container):
 		if not container.item_added.is_connected(_on_container_item_added):
 			container.item_added.connect(_on_container_item_added)
 		if not container.item_removed.is_connected(_on_container_item_removed):
-			container.item_removed.connect(_on_container_item_removed)
+			container.item_removed.connect(_on_container_item_removed)  # Fixed: was disconnect
 		if not container.item_moved.is_connected(_on_container_item_moved):
 			container.item_moved.connect(_on_container_item_moved)
 	
+	# Always refresh the display, even if container is null (to clear it)
 	refresh_display()
 
 func refresh_display():
-	if not container:
-		_clear_list()
-		return
+	print("ListView: Refreshing display for container: ", container.container_name if container else "None")
 	
+	# Always clear first
 	_clear_list()
+	
+	if not container or not is_instance_valid(container):
+		print("ListView: No valid container, display cleared")
+		return
 	
 	# Get filtered and sorted items
 	var items = _get_filtered_sorted_items()
+	print("ListView: Found ", items.size(), " items to display")
 	
 	# Create rows for items
 	for i in items.size():
@@ -221,6 +228,8 @@ func refresh_display():
 		
 		list_container.add_child(row)
 		item_rows.append(row)
+	
+	print("ListView: Added ", item_rows.size(), " rows to display")
 
 func _get_filtered_sorted_items() -> Array[InventoryItem_Base]:
 	var items: Array[InventoryItem_Base] = []
@@ -271,6 +280,7 @@ func _compare_items(a: InventoryItem_Base, b: InventoryItem_Base) -> bool:
 	return result if sort_ascending else not result
 
 func _clear_list():
+	print("ListView: Clearing list display")
 	for row in item_rows:
 		if is_instance_valid(row):
 			row.queue_free()
@@ -361,6 +371,40 @@ func _on_resized():
 	# Recalculate column widths when the view is resized
 	call_deferred("_calculate_column_widths")
 	call_deferred("_update_header_widths")
+	call_deferred("_handle_responsive_columns")
+	
+func _set_column_visibility(column_id: String, visible: bool):
+	"""Show/hide a column by ID"""
+	for i in columns.size():
+		if columns[i].id == column_id:
+			# Find the header button
+			if header_container and i + 1 < header_container.get_child_count():
+				var header_button = header_container.get_child(i + 1)  # +1 for background
+				if header_button:
+					header_button.visible = visible
+			
+			# Update all rows
+			for row in item_rows:
+				if is_instance_valid(row) and row.cells.size() > i:
+					row.cells[i].visible = visible
+			break
+	
+func _handle_responsive_columns():
+	"""Hide less important columns when space is very limited"""
+	var available_width = size.x
+	
+	if available_width < 300:  # Very small - hide optional columns
+		_set_column_visibility("total_volume", false)
+		_set_column_visibility("volume", false)
+		_set_column_visibility("rarity", false)
+	elif available_width < 400:  # Small - hide some columns
+		_set_column_visibility("total_volume", false)
+		_set_column_visibility("volume", false)
+		_set_column_visibility("rarity", true)
+	else:  # Normal - show all columns
+		_set_column_visibility("total_volume", true)
+		_set_column_visibility("volume", true)
+		_set_column_visibility("rarity", true)
 	
 func _calculate_column_widths():
 	if size.x <= 0:
@@ -409,10 +453,16 @@ func _update_header_widths():
 				header.clip_contents = true
 
 func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
-	refresh_display()
+	if container and is_instance_valid(container):
+		print("ListView: Item added to container: ", item.item_name)
+		refresh_display()
 
 func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
-	refresh_display()
+	if container and is_instance_valid(container):
+		print("ListView: Item removed from container: ", item.item_name)
+		refresh_display()
 
 func _on_container_item_moved(item: InventoryItem_Base, old_position: Vector2i, new_position: Vector2i):
-	refresh_display()
+	if container and is_instance_valid(container):
+		print("ListView: Item moved in container: ", item.item_name)
+		refresh_display()
