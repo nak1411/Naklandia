@@ -238,17 +238,33 @@ func _get_filtered_sorted_items() -> Array[InventoryItem_Base]:
 	return items
 
 func _should_show_item(item: InventoryItem_Base) -> bool:
-	# Apply search filter
-	if current_search_text.length() > 0:
-		if not item.item_name.to_lower().contains(current_search_text.to_lower()):
+	# Apply search filter first
+	if not current_search_text.is_empty():
+		if not item.item_name.to_lower().contains(current_search_text):
 			return false
 	
 	# Apply type filter
-	if current_filter_type > 0:
-		# Implement type filtering based on your item type system
-		pass
+	if current_filter_type == 0:  # All Items
+		return true
 	
-	return true
+	# Map filter indices to ItemType enum values
+	var item_type_filter = _get_item_type_from_filter(current_filter_type)
+	return item.item_type == item_type_filter
+	
+func _get_item_type_from_filter(filter_index: int) -> InventoryItem_Base.ItemType:
+	match filter_index:
+		1: return InventoryItem_Base.ItemType.WEAPON
+		2: return InventoryItem_Base.ItemType.ARMOR
+		3: return InventoryItem_Base.ItemType.CONSUMABLE
+		4: return InventoryItem_Base.ItemType.RESOURCE
+		5: return InventoryItem_Base.ItemType.BLUEPRINT
+		6: return InventoryItem_Base.ItemType.MODULE
+		7: return InventoryItem_Base.ItemType.SHIP
+		8: return InventoryItem_Base.ItemType.CONTAINER
+		9: return InventoryItem_Base.ItemType.AMMUNITION
+		10: return InventoryItem_Base.ItemType.IMPLANT
+		11: return InventoryItem_Base.ItemType.SKILL_BOOK
+		_: return InventoryItem_Base.ItemType.MISCELLANEOUS
 
 func _compare_items(a: InventoryItem_Base, b: InventoryItem_Base) -> bool:
 	var result: bool = false
@@ -300,6 +316,14 @@ func toggle_detail_panel():
 		detail_panel = null
 	
 	main_hsplit.split_offset = int(size.x - detail_panel_width) if show_details else int(size.x)
+	
+func apply_search(search_text: String):
+	"""Apply search filter - matches grid view interface"""
+	set_search_filter(search_text)
+
+func apply_filter(filter_type: int):
+	"""Apply type filter - matches grid view interface"""
+	set_type_filter(filter_type)
 
 # Signal handlers
 func _on_header_clicked(column_id: String):

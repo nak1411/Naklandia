@@ -505,20 +505,28 @@ func _on_search_changed(text: String):
 	if not content:
 		return
 	
-	# Get the inventory grid to apply the search
+	# Apply to grid view
 	var grid = get_inventory_grid()
 	if grid and grid.has_method("apply_search"):
 		grid.apply_search(text)
+	
+	# Apply to list view using the same interface
+	if content.list_view and content.list_view.has_method("apply_search"):
+		content.list_view.apply_search(text)
 
 func _on_filter_changed(filter_type: int):
 	"""Handle filter changes from header"""
 	if not content:
 		return
 	
-	# Get the inventory grid to apply the filter
+	# Apply to grid view
 	var grid = get_inventory_grid()
 	if grid and grid.has_method("apply_filter"):
 		grid.apply_filter(filter_type)
+	
+	# Apply to list view using the same interface
+	if content.list_view and content.list_view.has_method("apply_filter"):
+		content.list_view.apply_filter(filter_type)
 
 func _on_sort_requested(sort_type):
 	"""Handle sort requests from header"""
