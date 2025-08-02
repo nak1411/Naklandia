@@ -53,39 +53,42 @@ func set_display_mode(mode: InventoryDisplayMode.Mode):
 		InventoryDisplayMode.Mode.LIST:
 			_switch_to_list_mode()
 
+func _switch_to_list_mode():
+	# Hide grid
+	if inventory_grid:
+		inventory_grid.visible = false
+	
+	# Create or show list view in the same container as the grid
+	if not list_view:
+		list_view = InventoryListView.new()
+		list_view.name = "ListView"
+		list_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		list_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		
+		# Add to the same parent as inventory_grid
+		var grid_parent = inventory_grid.get_parent()
+		if grid_parent:
+			grid_parent.add_child(list_view)
+		
+		# Connect list view signals
+		list_view.item_selected.connect(_on_list_item_selected)
+		list_view.item_activated.connect(_on_item_activated)
+		list_view.item_context_menu.connect(_on_item_context_menu_from_list)
+	
+	list_view.visible = true
+	
+	# Set container if we have one
+	if current_container:
+		list_view.set_container(current_container, current_container.container_id if current_container else "")
+
 func _switch_to_grid_mode():
-	# Hide list view if it exists
+	# Hide list view
 	if list_view:
 		list_view.visible = false
 	
 	# Show grid
 	if inventory_grid:
 		inventory_grid.visible = true
-
-func _switch_to_list_mode():
-	# Hide grid
-	if inventory_grid:
-		inventory_grid.visible = false
-	
-	# Create or show list view
-	if not list_view:
-		list_view = InventoryListView.new()
-		list_view.name = "ListView"
-		
-		# Add to the right side of the split container (where the grid normally is)
-		add_child(list_view)
-		
-		# Connect list view signals using the existing signal handler names
-		list_view.item_selected.connect(_on_list_item_selected)
-		list_view.item_activated.connect(_on_item_activated)
-		list_view.item_context_menu.connect(_on_item_context_menu_from_list)
-	
-	list_view.visible = true
-	list_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	
-	# Set container if we have one
-	if current_container:
-		list_view.set_container(current_container, current_container.container_id if current_container else "")
 
 func _on_item_context_menu_from_list(item: InventoryItem_Base, position: Vector2):
 	# Create a dummy slot for compatibility with existing context menu system
@@ -139,6 +142,16 @@ func _update_split_offset():
 func _on_content_resized():
 	"""Called when the content area is resized"""
 	_update_split_offset()
+	call_deferred("_handle_display_resize")
+	
+func _handle_display_resize():
+	match current_display_mode:
+		InventoryDisplayMode.Mode.GRID:
+			if inventory_grid and inventory_grid.has_method("handle_window_resize"):
+				inventory_grid.handle_window_resize()
+		InventoryDisplayMode.Mode.LIST:
+			if list_view and list_view.has_method("_on_resized"):
+				list_view._on_resized()
 
 func _remove_split_container_outline():
 	# Remove the default HSplitContainer theme that creates outlines
@@ -697,3 +710,15 @@ func _apply_content_transparency_from_originals(transparency: float):
 	# Apply to inventory grid
 	if inventory_grid and inventory_grid.has_method("set_transparency"):
 		inventory_grid.set_transparency(transparency)
+		
+func filter_items(search_text: String):
+	if current_display_mode == InventoryDisplayMode.Mode.LIST and list_view:
+		list_view.set_search_filter(search_text)
+	elif inventory_grid:
+		inventory_grid.filter_items(search_text)
+
+func set_filter_type(filter_type: int):
+	if current_display_mode == InventoryDisplayMode.Mode.LIST and list_view:
+		list_view.set_type_filter(filter_type)
+	elif inventory_grid:
+		inventory_grid.set_filter_type(filter_type)

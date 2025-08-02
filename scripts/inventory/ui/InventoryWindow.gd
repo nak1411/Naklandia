@@ -45,7 +45,16 @@ func _setup_content():
 	header.name = "InventoryHeader"
 	inventory_container.add_child(header)
 	
-	# Connect header signals
+	# Create main content using InventoryWindowContent
+	content = InventoryWindowContent.new()
+	content.name = "InventoryContent"
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_container.add_child(content)
+	
+	# Wait for content to be ready
+	await get_tree().process_frame
+	
+	# Connect header signals AFTER both header and content are created
 	if header:
 		if header.has_signal("search_changed"):
 			header.search_changed.connect(_on_search_changed)
@@ -55,6 +64,38 @@ func _setup_content():
 			header.sort_requested.connect(_on_sort_requested)
 		if header.has_signal("display_mode_changed"):
 			header.display_mode_changed.connect(_on_display_mode_changed)
+	
+	if content:
+		if content.has_signal("container_selected"):
+			content.container_selected.connect(_on_container_selected_from_content)
+		if content.has_signal("item_activated"):
+			content.item_activated.connect(_on_item_activated_from_content)
+		if content.has_signal("item_context_menu"):
+			content.item_context_menu.connect(_on_item_context_menu_from_content)
+		
+		# Connect window resize to trigger grid reflow
+		window_resized.connect(_on_window_resized_for_grid)
+		window_resized.connect(_on_window_resized_for_inventory)
+	
+	# Initialize content with inventory manager if available
+	if inventory_manager:
+		_initialize_inventory_content()
+	
+	_setup_item_actions()
+	
+func _on_window_resized_for_inventory(new_size: Vector2i):
+	"""Handle window resize for inventory components"""
+	if content:
+		# Trigger content resize handling
+		call_deferred("_handle_content_resize")
+		
+func _handle_content_resize():
+	if not content:
+		return
+		
+	# Let the content handle its own resize
+	if content.has_method("_handle_display_resize"):
+		content._handle_display_resize()
 
 func _on_display_mode_changed(mode: InventoryDisplayMode.Mode):
 	if content and content.has_method("set_display_mode"):

@@ -35,13 +35,13 @@ var current_search_text: String = ""
 
 # Columns configuration
 var columns: Array[Dictionary] = [
-	{"id": "icon", "title": "", "width": 40, "sortable": false},
-	{"id": "name", "title": "Name", "width": 200, "sortable": true},
-	{"id": "quantity", "title": "Qty", "width": 60, "sortable": true},
-	{"id": "type", "title": "Type", "width": 120, "sortable": true},
-	{"id": "rarity", "title": "Rarity", "width": 80, "sortable": true},
-	{"id": "volume", "title": "Volume", "width": 80, "sortable": true},
-	{"id": "total_volume", "title": "Total Vol", "width": 80, "sortable": true}
+	{"id": "icon", "title": "", "width": 32, "sortable": false},
+	{"id": "name", "title": "Name", "width": 150, "sortable": true},  # Reduced from 200
+	{"id": "quantity", "title": "Qty", "width": 50, "sortable": true},  # Reduced from 60
+	{"id": "type", "title": "Type", "width": 100, "sortable": true},   # Reduced from 120
+	{"id": "rarity", "title": "Rarity", "width": 70, "sortable": true}, # Reduced from 80
+	{"id": "volume", "title": "Vol", "width": 60, "sortable": true},   # Reduced and shortened title
+	{"id": "total_volume", "title": "Total", "width": 60, "sortable": true} # Reduced from 80
 ]
 
 # Signals
@@ -51,34 +51,41 @@ signal item_context_menu(item: InventoryItem_Base, position: Vector2)
 
 func _ready():
 	_setup_ui()
+	resized.connect(_on_resized)
 
 func _setup_ui():
-	# Create main horizontal split
-	main_hsplit = HSplitContainer.new()
-	main_hsplit.name = "MainHSplit"
-	main_hsplit.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main_hsplit.split_offset = size.x - detail_panel_width if show_details else size.x
-	add_child(main_hsplit)
+	# Create a simple VBox layout instead of HSplitContainer
+	var main_vbox = VBoxContainer.new()
+	main_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(main_vbox)
 	
-	# Create list panel
-	list_panel = Control.new()
-	list_panel.name = "ListPanel"
-	list_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	main_hsplit.add_child(list_panel)
+	# Create header
+	_setup_header(main_vbox)
 	
-	# Create detail panel
+	# Create main list area
+	scroll_container = ScrollContainer.new()
+	scroll_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	main_vbox.add_child(scroll_container)
+	
+	list_container = VBoxContainer.new()
+	list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll_container.add_child(list_container)
+	
+	# Optional: Create a detail panel on the right if show_details is true
 	if show_details:
-		detail_panel = Control.new()
-		detail_panel.name = "DetailPanel"
-		detail_panel.custom_minimum_size.x = detail_panel_width
-		main_hsplit.add_child(detail_panel)
-		_setup_detail_panel()
-	
-	_setup_list_panel()
+		# Convert to HSplit if details are needed
+		_convert_to_split_layout()
+
+func _convert_to_split_layout():
+	# Only convert to split layout if we need the detail panel
+	# This keeps the simple layout when details aren't needed
+	pass  # Implement if you want the detail panel
 
 func _setup_list_panel():
 	var vbox = VBoxContainer.new()
 	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vbox.clip_contents = true  # Prevent overflow
 	list_panel.add_child(vbox)
 	
 	# Create header
@@ -88,10 +95,12 @@ func _setup_list_panel():
 	scroll_container = ScrollContainer.new()
 	scroll_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll_container.clip_contents = true  # Prevent horizontal overflow
 	vbox.add_child(scroll_container)
 	
 	list_container = VBoxContainer.new()
 	list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_container.clip_contents = true  # Prevent overflow
 	scroll_container.add_child(list_container)
 
 func _setup_header(parent: Control):
@@ -110,14 +119,31 @@ func _setup_header(parent: Control):
 	header_bg.add_theme_stylebox_override("panel", style)
 	header_container.add_child(header_bg)
 	
-	# Create column headers
+	# Calculate available width for dynamic column sizing
+	var total_fixed_width = 0
+	var expandable_columns = 0
+	
 	for column in columns:
+		if column.width <= 100:  # Fixed width columns
+			total_fixed_width += column.width
+		else:  # Expandable columns
+			expandable_columns += 1
+	
+	# Create column headers with proper sizing
+	for i in columns.size():
+		var column = columns[i]
 		var header_button = Button.new()
 		header_button.text = column.title
-		header_button.custom_minimum_size.x = column.width
-		header_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL if column.width > 100 else Control.SIZE_SHRINK_CENTER
 		header_button.flat = true
 		header_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		
+		# Set sizing based on column type
+		if column.width <= 100:  # Fixed width columns (icon, qty, etc.)
+			header_button.custom_minimum_size.x = column.width
+			header_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		else:  # Expandable columns (name, type, etc.)
+			header_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			header_button.clip_contents = true
 		
 		if column.sortable:
 			header_button.pressed.connect(_on_header_clicked.bind(column.id))
@@ -330,6 +356,57 @@ func _clear_selection():
 	for row in item_rows:
 		row.set_selected(false)
 	selected_items.clear()
+	
+func _on_resized():
+	# Recalculate column widths when the view is resized
+	call_deferred("_calculate_column_widths")
+	call_deferred("_update_header_widths")
+	
+func _calculate_column_widths():
+	if size.x <= 0:
+		return  # Not ready yet
+		
+	var available_width = size.x - 20  # Account for scrollbar and margins
+	var fixed_width_total = 0
+	var expandable_columns = 0
+	
+	# Calculate fixed width total
+	for column in columns:
+		if column.width <= 100:
+			fixed_width_total += column.width
+		else:
+			expandable_columns += 1
+	
+	# Calculate remaining width for expandable columns
+	var remaining_width = available_width - fixed_width_total
+	if remaining_width > 0 and expandable_columns > 0:
+		var expandable_width = remaining_width / expandable_columns
+		
+		# Update expandable column widths
+		for column in columns:
+			if column.width > 100:
+				column.width = max(80, expandable_width)  # Minimum 80px
+	
+	# Refresh the display with new widths
+	_update_header_widths()
+
+func _update_header_widths():
+	if not header_container:
+		return
+		
+	var headers = header_container.get_children()
+	# Skip the background panel (first child)
+	for i in range(1, min(headers.size(), columns.size() + 1)):
+		var header = headers[i]
+		var column = columns[i - 1]
+		
+		if header is Button:
+			if column.width <= 100:  # Fixed width
+				header.custom_minimum_size.x = column.width
+				header.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			else:  # Expandable
+				header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				header.clip_contents = true
 
 func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
 	refresh_display()

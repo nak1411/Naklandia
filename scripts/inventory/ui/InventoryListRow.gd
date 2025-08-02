@@ -43,14 +43,14 @@ func _setup_ui():
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background)
 	
-	# Content container
+	# Content container with proper sizing
 	content_container = HBoxContainer.new()
 	content_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	# Apply margins manually
 	content_container.offset_left = 4
-	content_container.offset_top = 4
+	content_container.offset_top = 2
 	content_container.offset_right = -4
-	content_container.offset_bottom = -4
+	content_container.offset_bottom = -2
+	content_container.clip_contents = true  # Prevent overflow
 	add_child(content_container)
 
 func _populate_cells():
@@ -68,14 +68,31 @@ func _populate_cells():
 
 func _create_cell(column: Dictionary) -> Control:
 	var cell = Control.new()
-	cell.custom_minimum_size.x = column.width
-	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL if column.width > 100 else Control.SIZE_SHRINK_CENTER
+	cell.clip_contents = true  # IMPORTANT: Prevent overflow
+	
+	# Set sizing based on column type
+	if column.width <= 100:  # Fixed width columns
+		cell.custom_minimum_size.x = column.width
+		cell.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	else:  # Expandable columns
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cell.clip_contents = true
 	
 	match column.id:
 		"icon":
 			var icon = TextureRect.new()
-			icon.texture = item.get_icon_texture()  # Changed from item.icon
-			icon.custom_minimum_size = Vector2(24, 24)
+			var texture = item.get_icon_texture()
+			if texture:
+				icon.texture = texture
+			else:
+				# Create a smaller fallback colored square
+				var fallback_image = Image.create(20, 20, false, Image.FORMAT_RGB8)
+				fallback_image.fill(item.get_type_color())
+				var fallback_texture = ImageTexture.new()
+				fallback_texture.set_image(fallback_image)
+				icon.texture = fallback_texture
+			
+			icon.custom_minimum_size = Vector2(20, 20)  # Smaller icon
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			icon.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 			cell.add_child(icon)
@@ -87,7 +104,8 @@ func _create_cell(column: Dictionary) -> Control:
 			label.offset_left = 4
 			label.offset_right = -4
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.clip_contents = true
+			label.clip_contents = true  # Prevent text overflow
+			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS  # Add ellipsis for long names
 			
 			# Color by rarity
 			label.add_theme_color_override("font_color", item.get_rarity_color())
@@ -97,49 +115,62 @@ func _create_cell(column: Dictionary) -> Control:
 			var label = Label.new()
 			label.text = str(item.quantity)
 			label.set_anchors_preset(Control.PRESET_FULL_RECT)
-			label.offset_left = 4
-			label.offset_right = -4
+			label.offset_left = 2
+			label.offset_right = -2
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			label.clip_contents = true
 			cell.add_child(label)
 		
 		"type":
 			var label = Label.new()
-			label.text = str(item.item_type).capitalize()
+			var type_text = str(item.item_type).capitalize()
+			# Truncate long type names
+			if type_text.length() > 10:
+				type_text = type_text.substr(0, 7) + "..."
+			label.text = type_text
 			label.set_anchors_preset(Control.PRESET_FULL_RECT)
 			label.offset_left = 4
 			label.offset_right = -4
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			label.clip_contents = true
 			cell.add_child(label)
 		
 		"rarity":
 			var label = Label.new()
-			label.text = str(item.item_rarity).capitalize()
+			var rarity_text = str(item.item_rarity).capitalize()
+			# Truncate long rarity names
+			if rarity_text.length() > 8:
+				rarity_text = rarity_text.substr(0, 5) + "..."
+			label.text = rarity_text
 			label.set_anchors_preset(Control.PRESET_FULL_RECT)
 			label.offset_left = 4
 			label.offset_right = -4
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.add_theme_color_override("font_color", item.get_rarity_color())
+			label.clip_contents = true
 			cell.add_child(label)
 		
 		"volume":
 			var label = Label.new()
 			label.text = "%.1f" % item.volume
 			label.set_anchors_preset(Control.PRESET_FULL_RECT)
-			label.offset_left = 4
-			label.offset_right = -4
+			label.offset_left = 2
+			label.offset_right = -2
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			label.clip_contents = true
 			cell.add_child(label)
 		
 		"total_volume":
 			var label = Label.new()
 			label.text = "%.1f" % (item.volume * item.quantity)
 			label.set_anchors_preset(Control.PRESET_FULL_RECT)
-			label.offset_left = 4
-			label.offset_right = -4
+			label.offset_left = 2
+			label.offset_right = -2
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			label.clip_contents = true
 			cell.add_child(label)
 	
 	return cell
