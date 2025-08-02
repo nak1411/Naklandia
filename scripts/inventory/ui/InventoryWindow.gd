@@ -52,6 +52,9 @@ func _setup_content():
 	# Wait for content to be ready
 	await get_tree().process_frame
 	
+	# FIXED: Setup item actions BEFORE initializing inventory content
+	_setup_item_actions()
+	
 	# Connect header signals AFTER both header and content are created
 	if header:
 		if header.has_signal("search_changed"):
@@ -73,13 +76,10 @@ func _setup_content():
 		
 		# Connect window resize to trigger grid reflow
 		window_resized.connect(_on_window_resized_for_grid)
-		window_resized.connect(_on_window_resized_for_inventory)
 	
 	# Initialize content with inventory manager if available
 	if inventory_manager:
 		_initialize_inventory_content()
-	
-	_setup_item_actions()
 	
 func _on_window_resized_for_inventory(new_size: Vector2i):
 	"""Handle window resize for inventory components"""
@@ -232,11 +232,10 @@ func _initialize_inventory_content():
 		if not default_container:
 			default_container = all_containers[0]
 		
-		
 		# IMPORTANT: Set the current container first
 		current_container = default_container
 		
-		# Set current container on item_actions too
+		# FIXED: Set current container on item_actions too
 		if item_actions and item_actions.has_method("set_current_container"):
 			item_actions.set_current_container(current_container)
 		
@@ -247,20 +246,6 @@ func _initialize_inventory_content():
 		# Then select it in the content
 		if content.has_method("select_container"):
 			content.select_container(default_container)
-			
-		# Select the default container in the list
-		var default_index = 0
-		for i in range(all_containers.size()):
-			if all_containers[i] == current_container:
-				default_index = i
-				break
-		
-		if content.has_method("select_container_index"):
-			content.select_container_index(default_index)
-	
-	# Force a refresh of the display
-	if content.has_method("refresh_display"):
-		content.refresh_display()
 	
 
 func _update_options_dropdown_text():
@@ -290,15 +275,12 @@ func _on_container_selected_from_header(container: InventoryContainer_Base):
 
 func _on_container_selected_from_content(container: InventoryContainer_Base):
 	"""Handle container selection from content"""
-	
-	# Update current container
 	current_container = container
 	
-	# Update item actions
+	# FIXED: Set current container on item_actions
 	if item_actions and item_actions.has_method("set_current_container"):
 		item_actions.set_current_container(container)
 	
-	# Emit signal
 	container_switched.emit(container)
 
 func _on_search_text_changed_from_header(search_text: String):
@@ -335,6 +317,11 @@ func _on_container_refreshed():
 func _switch_container(container: InventoryContainer_Base):
 	"""Switch to a different inventory container"""
 	current_container = container
+	
+	# FIXED: Update current container on item_actions
+	if item_actions and item_actions.has_method("set_current_container"):
+		item_actions.set_current_container(container)
+	
 	container_switched.emit(container)
 	
 	if content and content.has_method("display_container"):

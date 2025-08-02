@@ -647,35 +647,23 @@ func _generate_detailed_container_info(container: InventoryContainer_Base) -> St
 	return text
 
 func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_stack: bool):
-	"""Perform the item stack split operation"""
-	
-	print("SPLIT DEBUG: Starting split of ", item.item_name)
-	print("SPLIT DEBUG: Original quantity: ", item.quantity)
-	print("SPLIT DEBUG: Split amount: ", split_amount)
-	
+	"""Perform the item stack split operation"""	
 	if not inventory_manager or not current_container or not item:
-		print("SPLIT DEBUG: Missing manager, container, or item")
 		inventory_manager.auto_stack = original_auto_stack
 		return
 	
 	if split_amount <= 0 or split_amount >= item.quantity:
-		print("SPLIT DEBUG: Invalid split amount")
 		inventory_manager.auto_stack = original_auto_stack
 		return
 	
 	# FIXED: Use the built-in split_stack method which handles the volume correctly
 	var new_item = item.split_stack(split_amount)
 	if not new_item:
-		print("SPLIT DEBUG: split_stack returned null")
 		inventory_manager.auto_stack = original_auto_stack
 		return
 	
-	print("SPLIT DEBUG: After split_stack - Original quantity: ", item.quantity)
-	print("SPLIT DEBUG: New item quantity: ", new_item.quantity)
-	
 	# Check if container has space for the new item (AFTER the original was reduced)
 	if not current_container.has_volume_for_item(new_item):
-		print("SPLIT DEBUG: No volume for new item - restoring")
 		# Restore the split by adding back to original item
 		item.add_to_stack(new_item.quantity)
 		inventory_manager.auto_stack = original_auto_stack
@@ -686,14 +674,11 @@ func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_s
 	inventory_manager.auto_stack = false
 	
 	# Add the new item to the container
-	if not current_container.add_item(new_item):
-		print("SPLIT DEBUG: Failed to add new item - restoring")
+	if not current_container.add_item(new_item, Vector2i(-1, -1), false):
 		item.add_to_stack(new_item.quantity)
 		inventory_manager.auto_stack = original_auto_stack
 		return
-	
-	print("SPLIT DEBUG: Successfully split! Container now has ", current_container.items.size(), " items")
-	
+		
 	# Restore auto-stack setting
 	inventory_manager.auto_stack = temp_auto_stack
 	

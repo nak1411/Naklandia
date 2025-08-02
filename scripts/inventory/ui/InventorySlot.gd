@@ -590,7 +590,6 @@ func _start_drag():
 	
 	if is_shift_held and item.quantity > 1:
 		# Shift+drag with stackable item - open split dialog instead of dragging
-		print("Shift+drag detected - opening split dialog")
 		_show_split_stack_dialog()
 		
 		# Reset drag state since we're not actually dragging
@@ -1005,13 +1004,10 @@ func _update_item_display():
 	# Update rarity border if available
 	if rarity_border and item.item_rarity != InventoryItem_Base.ItemRarity.COMMON:
 		var rarity_color = item.get_rarity_color()
-		rarity_border.modulate = rarity_color
-		rarity_border.visible = true
-	elif rarity_border:
-		rarity_border.visible = false
+		# Set border color logic here...
 	
 	is_occupied = true
-
+	
 # Also add this helper method for volume-based partial transfers
 func _calculate_transferable_quantity(target_container: InventoryContainer_Base) -> int:
 	"""Calculate how many items can be transferred based on volume"""

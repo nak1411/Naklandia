@@ -228,7 +228,6 @@ func _render_virtual_items():
 	"""Render a dynamic grid that fills the available window space, like EVE Online"""
 	if not virtual_content:
 		return
-		
 	
 	_cleanup_virtual_rendered_slots()
 	
@@ -303,7 +302,7 @@ func _render_virtual_items():
 	var content_width = virtual_items_per_row * slot_size.x
 	virtual_content.custom_minimum_size = Vector2(content_width, virtual_total_height)
 	virtual_content.size = Vector2(content_width, virtual_total_height)
-	
+		
 func _cleanup_virtual_rendered_slots():
 	"""Properly clean up existing virtual rendered slots"""
 	
@@ -1216,10 +1215,11 @@ func _refresh_virtual_display():
 
 	# Collect visible items (this is fast)
 	virtual_items.clear()
+	
 	for item in container.items:
 		if _should_show_item(item):
 			virtual_items.append(item)
-	
+				
 	# Update existing slots instead of recreating everything
 	_render_virtual_items()
 	
