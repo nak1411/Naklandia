@@ -147,7 +147,8 @@ func _create_main_popup():
 	# Create container for menu items
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 0)
-	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # Fill the entire popup
+	# Remove the anchors preset line that's causing the issue
+	# vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # This line causes the warning
 	main_popup.add_child(vbox)
 	
 	# Calculate menu width if auto-sizing
@@ -168,9 +169,9 @@ func _create_main_popup():
 			vbox.add_child(item_button)
 			actual_height += item_height
 	
-	# Set the VBox size explicitly
+	# Set the VBox size using set_deferred to avoid the anchor warning
 	vbox.custom_minimum_size = Vector2(menu_width, actual_height)
-	vbox.size = Vector2(menu_width, actual_height)
+	vbox.set_deferred("size", Vector2(menu_width, actual_height))
 	
 	# Create completely flat popup style with zero padding
 	var popup_style = StyleBoxFlat.new()

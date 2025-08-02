@@ -112,10 +112,11 @@ func _switch_to_list_mode():
 	
 	list_view.visible = true
 	
-	# Force proper sizing
+	# Force proper sizing using set_deferred to avoid anchor warning
 	if list_view.get_parent():
 		list_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		list_view.size = list_view.get_parent().size
+		# Use set_deferred instead of direct size assignment
+		list_view.set_deferred("size", list_view.get_parent().size)
 	
 	# CRITICAL: Set container and refresh if we have one
 	if current_container:

@@ -560,7 +560,7 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 	# Determine transfer quantity
 	var transfer_quantity = item.quantity
 	if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
-		transfer_quantity = max(1, item.quantity / 2)  # Transfer half
+		transfer_quantity = max(1, int(item.quantity / 2.0))  # Transfer half
 	
 	# Perform transfer
 	var success = inventory_manager.transfer_item(item, current_container_id, target_container.container_id, Vector2i(-1, -1), transfer_quantity)

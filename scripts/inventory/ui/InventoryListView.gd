@@ -299,7 +299,7 @@ func toggle_detail_panel():
 		detail_panel.queue_free()
 		detail_panel = null
 	
-	main_hsplit.split_offset = size.x - detail_panel_width if show_details else size.x
+	main_hsplit.split_offset = int(size.x - detail_panel_width) if show_details else int(size.x)
 
 # Signal handlers
 func _on_header_clicked(column_id: String):
