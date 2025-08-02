@@ -74,7 +74,7 @@ func _create_cell(column: Dictionary) -> Control:
 	match column.id:
 		"icon":
 			var icon = TextureRect.new()
-			icon.texture = item.icon
+			icon.texture = item.get_icon_texture()  # Changed from item.icon
 			icon.custom_minimum_size = Vector2(24, 24)
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			icon.set_anchors_and_offsets_preset(Control.PRESET_CENTER)

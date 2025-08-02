@@ -12,7 +12,7 @@ var original_header_styles: Dictionary = {}
 var header_transparency_init: bool = false
 var is_search_focused: bool = false
 var display_mode_button: Button
-var current_display_mode: InventoryGrid.DisplayMode = InventoryGrid.DisplayMode.GRID
+var current_display_mode: InventoryDisplayMode.Mode = InventoryDisplayMode.Mode.GRID
 
 # References
 var inventory_manager: InventoryManager
@@ -22,7 +22,7 @@ var inventory_window: Window
 signal search_changed(text: String)
 signal filter_changed(filter_type: int)
 signal sort_requested(sort_type: InventoryManager.SortType)
-signal display_mode_changed(mode: InventoryGrid.DisplayMode)
+signal display_mode_changed(mode: InventoryDisplayMode.Mode)
 
 # State
 var current_transparency: float = 1.0
@@ -113,8 +113,67 @@ func _setup_controls():
 	right_margin.custom_minimum_size.x = 4
 	add_child(right_margin)
 	
+	# Display mode toggle button
+	var display_container = MarginContainer.new()
+	add_child(display_container)
+
+	display_container.add_theme_constant_override("margin_left", 4)
+	display_container.add_theme_constant_override("margin_top", 4)
+	display_container.add_theme_constant_override("margin_right", 2)
+	display_container.add_theme_constant_override("margin_bottom", 2)
+
+	display_mode_button = Button.new()
+	display_mode_button.name = "DisplayModeButton"
+	display_mode_button.text = "Grid"
+	display_mode_button.custom_minimum_size.x = 60
+	display_mode_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_style_custom_display_button()
+	display_container.add_child(display_mode_button)
+	
 	# Create dropdown menus (don't add as children initially)
 	_create_dropdown_menus()
+	
+func _style_custom_display_button():
+	var style_normal = StyleBoxFlat.new()
+	style_normal.bg_color = Color(0.3, 0.3, 0.3, 1.0)
+	style_normal.border_width_left = 1
+	style_normal.border_width_right = 1
+	style_normal.border_width_top = 1
+	style_normal.border_width_bottom = 1
+	style_normal.border_color = Color(0.6, 0.6, 0.6, 1.0)
+	style_normal.content_margin_left = 12
+	style_normal.content_margin_right = 12
+	style_normal.content_margin_top = 6
+	style_normal.content_margin_bottom = 6
+	
+	var style_hover = StyleBoxFlat.new()
+	style_hover.bg_color = Color(0.5, 0.5, 0.5, 1.0)
+	style_hover.border_width_left = 1
+	style_hover.border_width_right = 1
+	style_hover.border_width_top = 1
+	style_hover.border_width_bottom = 1
+	style_hover.border_color = Color(0.7, 0.7, 0.7, 1.0)
+	style_hover.content_margin_left = 12
+	style_hover.content_margin_right = 12
+	style_hover.content_margin_top = 6
+	style_hover.content_margin_bottom = 6
+	
+	display_mode_button.add_theme_stylebox_override("normal", style_normal)
+	display_mode_button.add_theme_stylebox_override("hover", style_hover)
+	display_mode_button.add_theme_stylebox_override("pressed", style_hover)
+	display_mode_button.add_theme_stylebox_override("focus", style_normal)
+	display_mode_button.add_theme_color_override("font_color", Color.WHITE)
+
+func _on_display_mode_toggled():
+	match current_display_mode:
+		InventoryDisplayMode.Mode.GRID:
+			current_display_mode = InventoryDisplayMode.Mode.LIST
+			display_mode_button.text = "List"
+		InventoryDisplayMode.Mode.LIST:
+			current_display_mode = InventoryDisplayMode.Mode.GRID
+			display_mode_button.text = "Grid"
+	
+	display_mode_changed.emit(current_display_mode)
 
 func _create_dropdown_menus():	
 	# Create filter dropdown
@@ -240,6 +299,9 @@ func _connect_signals():
 	
 	if sort_button:
 		sort_button.pressed.connect(_on_sort_button_pressed)
+		
+	if display_mode_button:
+		display_mode_button.pressed.connect(_on_display_mode_toggled)
 		
 func _on_search_focus_entered():
 	is_search_focused = true

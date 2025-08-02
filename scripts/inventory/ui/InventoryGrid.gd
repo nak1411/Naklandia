@@ -56,14 +56,6 @@ var selected_slots: Array[InventorySlot] = []
 var current_filter_type: int = 0  # 0 = All Items
 var current_search_text: String = ""
 
-enum DisplayMode {
-	GRID,
-	LIST
-}
-
-var current_display_mode: DisplayMode = DisplayMode.GRID
-var list_view: InventoryListView
-
 # Signals
 signal item_selected(item: InventoryItem_Base, slot: InventorySlot)
 signal item_activated(item: InventoryItem_Base, slot: InventorySlot)
@@ -1020,9 +1012,6 @@ func set_container(new_container: InventoryContainer_Base):
 		slots.clear()
 		available_slots.clear()
 		
-	if list_view:
-		list_view.set_container(container, container_id)
-		
 func _initialize_with_proper_size():
 	"""Initialize the grid with proper size after layout is complete"""
 	if not container:
@@ -1159,64 +1148,12 @@ func _rebuild_grid():
 				slots[y][x].set_container_id(container_id)
 
 # Display management
-func set_display_mode(mode: DisplayMode):
-	if mode == current_display_mode:
-		return
-	
-	current_display_mode = mode
-	
-	match mode:
-		DisplayMode.GRID:
-			_switch_to_grid_mode()
-		DisplayMode.LIST:
-			_switch_to_list_mode()
-
-func _switch_to_grid_mode():
-	if list_view:
-		list_view.visible = false
-	
-	if virtual_scroll_container:
-		virtual_scroll_container.visible = true
-	elif background_panel and grid_container:
-		background_panel.visible = true
-		grid_container.visible = true
-
-func _switch_to_list_mode():
-	# Hide grid components
-	if virtual_scroll_container:
-		virtual_scroll_container.visible = false
-	elif background_panel and grid_container:
-		background_panel.visible = false
-		grid_container.visible = false
-	
-	# Create or show list view
-	if not list_view:
-		list_view = InventoryListView.new()
-		list_view.name = "ListView"
-		add_child(list_view)
-		
-		# Connect list view signals to grid signals
-		list_view.item_selected.connect(func(item): item_selected.emit(item, null))
-		list_view.item_activated.connect(func(item): item_activated.emit(item, null))
-		list_view.item_context_menu.connect(func(item, pos): item_context_menu.emit(item, null, pos))
-	
-	list_view.visible = true
-	list_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	
-	# Set container if we have one
-	if container:
-		list_view.set_container(container, container_id)
 
 func refresh_display():
-	match current_display_mode:
-		DisplayMode.GRID:
-			if enable_virtual_scrolling:
-				_refresh_virtual_display()
-			else:
-				_refresh_traditional_display()
-		DisplayMode.LIST:
-			if list_view:
-				list_view.refresh_display()
+	if enable_virtual_scrolling:
+		_refresh_virtual_display()
+	else:
+		_refresh_traditional_display()
 
 func _refresh_traditional_display():
 	if enable_virtual_scrolling:

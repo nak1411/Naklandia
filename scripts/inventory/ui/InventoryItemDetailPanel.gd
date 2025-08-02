@@ -69,7 +69,7 @@ func display_item(item: InventoryItem_Base):
 		return
 	
 	# Update header
-	item_icon.texture = item.icon
+	item_icon.texture = item.get_icon_texture()  # Changed from item.icon
 	item_title.text = item.item_name
 	item_title.add_theme_color_override("font_color", item.get_rarity_color())
 	item_subtitle.text = str(item.item_type).capitalize() + " • " + str(item.item_rarity).capitalize()

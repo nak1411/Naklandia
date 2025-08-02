@@ -12,6 +12,8 @@ var using_external_container_list: bool = false
 var original_content_styles: Dictionary = {}
 var content_transparency_init: bool = false
 var is_drag_highlighting_active: bool = false
+var current_display_mode: InventoryDisplayMode.Mode = InventoryDisplayMode.Mode.GRID
+var list_view: InventoryListView
 
 # References
 var inventory_manager: InventoryManager
@@ -38,6 +40,77 @@ func _ready():
 	
 	# Connect to size changes to update split offset
 	resized.connect(_on_content_resized)
+	
+func set_display_mode(mode: InventoryDisplayMode.Mode):
+	if mode == current_display_mode:
+		return
+	
+	current_display_mode = mode
+	
+	match mode:
+		InventoryDisplayMode.Mode.GRID:
+			_switch_to_grid_mode()
+		InventoryDisplayMode.Mode.LIST:
+			_switch_to_list_mode()
+
+func _switch_to_grid_mode():
+	# Hide list view if it exists
+	if list_view:
+		list_view.visible = false
+	
+	# Show grid
+	if inventory_grid:
+		inventory_grid.visible = true
+
+func _switch_to_list_mode():
+	# Hide grid
+	if inventory_grid:
+		inventory_grid.visible = false
+	
+	# Create or show list view
+	if not list_view:
+		list_view = InventoryListView.new()
+		list_view.name = "ListView"
+		
+		# Add to the right side of the split container (where the grid normally is)
+		add_child(list_view)
+		
+		# Connect list view signals using the existing signal handler names
+		list_view.item_selected.connect(_on_list_item_selected)
+		list_view.item_activated.connect(_on_item_activated)
+		list_view.item_context_menu.connect(_on_item_context_menu_from_list)
+	
+	list_view.visible = true
+	list_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	# Set container if we have one
+	if current_container:
+		list_view.set_container(current_container, current_container.container_id if current_container else "")
+
+func _on_item_context_menu_from_list(item: InventoryItem_Base, position: Vector2):
+	# Create a dummy slot for compatibility with existing context menu system
+	var dummy_slot = InventorySlot.new()
+	dummy_slot.set_item(item)
+	if current_container:
+		dummy_slot.set_container_id(current_container.container_id if current_container else "")
+	
+	item_context_menu.emit(item, dummy_slot, position)
+	
+	# Clean up dummy slot
+	dummy_slot.queue_free()
+	
+func _on_list_item_selected(item: InventoryItem_Base):
+	# Create a dummy slot for compatibility with existing systems
+	var dummy_slot = InventorySlot.new()
+	dummy_slot.set_item(item)
+	if current_container:
+		dummy_slot.set_container_id(current_container.container_id if current_container else "")
+	
+	# Emit the existing signal that other systems expect
+	item_activated.emit(item, dummy_slot)
+	
+	# Clean up dummy slot
+	dummy_slot.queue_free()
 	
 func _update_split_offset():
 	"""Update split offset based on available space"""
@@ -329,8 +402,13 @@ func select_container(container: InventoryContainer_Base):
 		
 		# Use the original refresh_display instead of trigger_compact_refresh
 		inventory_grid.refresh_display()
+		# Also update list view if it exists
+		if list_view:
+			list_view.set_container(container, container.container_id if container else "")
 	else:
 		inventory_grid.set_container(null)
+		if list_view:
+			list_view.set_container(null, "")
 	
 	update_mass_info()
 	

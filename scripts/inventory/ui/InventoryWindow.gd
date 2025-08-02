@@ -53,40 +53,12 @@ func _setup_content():
 			header.filter_changed.connect(_on_filter_changed)
 		if header.has_signal("sort_requested"):
 			header.sort_requested.connect(_on_sort_requested)
-	
-	# Create main content using InventoryWindowContent
-	content = InventoryWindowContent.new()
-	content.name = "InventoryContent"
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	inventory_container.add_child(content)
-	
-	# Wait for content to be ready
-	await get_tree().process_frame
-	
-	# IMPORTANT: Connect to the container list selection signal
-	# This is what was missing!
-	if content.container_list:
-		if not content.container_list.item_selected.is_connected(_on_container_list_item_selected):
-			content.container_list.item_selected.connect(_on_container_list_item_selected)
-			print("Connected container list selection signal")
-	
-	# Connect content signals
-	if content:
-		if content.has_signal("container_selected"):
-			content.container_selected.connect(_on_container_selected_from_content)
-		if content.has_signal("item_activated"):
-			content.item_activated.connect(_on_item_activated_from_content)
-		if content.has_signal("item_context_menu"):
-			content.item_context_menu.connect(_on_item_context_menu_from_content)
-		
-		# Connect window resize to trigger grid reflow
-		window_resized.connect(_on_window_resized_for_grid)
-	
-	# Initialize content with inventory manager if available
-	if inventory_manager:
-		_initialize_inventory_content()
-	
-	_setup_item_actions()
+		if header.has_signal("display_mode_changed"):
+			header.display_mode_changed.connect(_on_display_mode_changed)
+
+func _on_display_mode_changed(mode: InventoryDisplayMode.Mode):
+	if content and content.has_method("set_display_mode"):
+		content.set_display_mode(mode)
 	
 func _on_container_list_item_selected(index: int):
 	"""Handle container list selection"""
