@@ -125,10 +125,25 @@ func _on_context_item_selected(item_id: String, _item_data: Dictionary, context_
 func _handle_item_action(action_id: String, context_data: Dictionary):
 	"""Handle actions on inventory items"""
 	var item = context_data.get("item") as InventoryItem_Base
-	var slot = context_data.get("slot") as InventorySlot
+	
+	# FIXED: Safely get slot without casting freed objects
+	var slot: InventorySlot = null
+	var slot_data = context_data.get("slot")
+	if slot_data and is_instance_valid(slot_data):
+		slot = slot_data as InventorySlot
 	
 	if not item:
 		return
+	
+	# FIXED: If slot is invalid, create a temporary one for compatibility
+	if not slot:
+		slot = InventorySlot.new()
+		slot.set_item(item)
+		slot.set_container_id(current_container.container_id if current_container else "")
+		# Add to pending cleanup
+		var window_content = _find_window_content()
+		if window_content and window_content.has_method("_add_pending_dummy_slot"):
+			window_content._add_pending_dummy_slot(slot)
 	
 	match action_id:
 		"item_info":
@@ -149,6 +164,14 @@ func _handle_item_action(action_id: String, context_data: Dictionary):
 			# Handle move actions
 			if action_id.begins_with("move_to_"):
 				_handle_move_item_action(action_id, item)
+				
+func _find_window_content():
+	"""Find the InventoryWindowContent instance"""
+	var current = window_parent.get_children()
+	for child in current:
+		if child.get_script() and child.get_script().get_global_name() == "InventoryWindow":
+			return child.content
+	return null
 
 func _handle_empty_area_action(action_id: String, _context_data: Dictionary):
 	"""Handle actions on empty inventory areas"""

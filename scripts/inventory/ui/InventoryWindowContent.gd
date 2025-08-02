@@ -787,3 +787,7 @@ func set_filter_type(filter_type: int):
 		list_view.set_type_filter(filter_type)
 	elif inventory_grid:
 		inventory_grid.set_filter_type(filter_type)
+		
+func _add_pending_dummy_slot(slot: InventorySlot):
+	"""Add a dummy slot to the cleanup list"""
+	pending_dummy_slots.append(slot)
