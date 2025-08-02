@@ -307,12 +307,16 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	
 	# Create dialog using the base class
 	var dialog_window = DialogWindow_Base.new("Split Stack", Vector2(300, 180))
-	dialog_window.center_on_parent = true
-	dialog_window.title_bar_active_color = Color(0.1, 0.1, 0.1, 1.0)
-	dialog_window.border_active_color = Color(0.1, 0.1, 0.1, 1.0)
 	
 	# Track this dialog window
 	open_dialog_windows.append(dialog_window)
+	
+	# Add to the highest canvas layer
+	var ui_manager = window_parent.get_tree().get_first_node_in_group("ui_manager")
+	if ui_manager and ui_manager.has_method("get_pause_canvas"):
+		var pause_canvas = ui_manager.get_pause_canvas()
+		pause_canvas.add_child(dialog_window)
+
 	
 	# Add to scene FIRST so it gets properly initialized
 	window_parent.get_tree().current_scene.add_child(dialog_window)
@@ -335,12 +339,27 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	dialog_window.add_dialog_content(label)
 	
-	# Create spinbox using the dialog's helper method
-	var spinbox = dialog_window.create_spinbox(1, item.quantity - 1, min(1, item.quantity - 1))
+	# FIXED: Create spinbox manually (no create_spinbox method)
+	var spinbox_container = HBoxContainer.new()
+	spinbox_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	
-	# Add buttons
-	var split_button = await dialog_window.add_button("Split")
-	var cancel_button = await dialog_window.add_button("Cancel")
+	var spinbox_label = Label.new()
+	spinbox_label.text = "Amount to split: "
+	spinbox_container.add_child(spinbox_label)
+	
+	var spinbox = SpinBox.new()
+	spinbox.min_value = 1
+	spinbox.max_value = item.quantity - 1
+	spinbox.value = min(1, item.quantity - 1)
+	spinbox.step = 1
+	spinbox.custom_minimum_size.x = 100
+	spinbox_container.add_child(spinbox)
+	
+	dialog_window.add_dialog_content(spinbox_container)
+	
+	# FIXED: Add buttons without await (not async)
+	var split_button = dialog_window.add_button("Split")
+	var cancel_button = dialog_window.add_button("Cancel")
 	
 	# Connect button events
 	split_button.pressed.connect(func():
@@ -630,64 +649,56 @@ func _generate_detailed_container_info(container: InventoryContainer_Base) -> St
 func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_stack: bool):
 	"""Perform the item stack split operation"""
 	
+	print("SPLIT DEBUG: Starting split of ", item.item_name)
+	print("SPLIT DEBUG: Original quantity: ", item.quantity)
+	print("SPLIT DEBUG: Split amount: ", split_amount)
+	
 	if not inventory_manager or not current_container or not item:
+		print("SPLIT DEBUG: Missing manager, container, or item")
 		inventory_manager.auto_stack = original_auto_stack
 		return
 	
 	if split_amount <= 0 or split_amount >= item.quantity:
+		print("SPLIT DEBUG: Invalid split amount")
 		inventory_manager.auto_stack = original_auto_stack
 		return
 	
-	# Create the new item
-	var new_item = InventoryItem_Base.new()
-	new_item.item_id = item.item_id
-	new_item.item_name = item.item_name
-	new_item.description = item.description
-	new_item.icon_path = item.icon_path
-	new_item.volume = item.volume
-	new_item.mass = item.mass
-	new_item.quantity = split_amount
-	new_item.max_stack_size = item.max_stack_size
-	new_item.item_type = item.item_type
-	new_item.item_rarity = item.item_rarity
-	new_item.is_contraband = item.is_contraband
-	new_item.base_value = item.base_value
-	new_item.can_be_destroyed = item.can_be_destroyed
-	new_item.is_unique = item.is_unique
-	new_item.is_container = item.is_container
-	new_item.container_volume = item.container_volume
-	new_item.container_type = item.container_type
-	
-	# Check volume
-	var temp_original_quantity = item.quantity
-	item.quantity -= split_amount
-	var can_add = current_container.has_volume_for_item(new_item)
-	item.quantity = temp_original_quantity
-	
-	if not can_add:
+	# FIXED: Use the built-in split_stack method which handles the volume correctly
+	var new_item = item.split_stack(split_amount)
+	if not new_item:
+		print("SPLIT DEBUG: split_stack returned null")
 		inventory_manager.auto_stack = original_auto_stack
 		return
 	
-	# CRITICAL: Temporarily disable auto-stacking to prevent merging
+	print("SPLIT DEBUG: After split_stack - Original quantity: ", item.quantity)
+	print("SPLIT DEBUG: New item quantity: ", new_item.quantity)
+	
+	# Check if container has space for the new item (AFTER the original was reduced)
+	if not current_container.has_volume_for_item(new_item):
+		print("SPLIT DEBUG: No volume for new item - restoring")
+		# Restore the split by adding back to original item
+		item.add_to_stack(new_item.quantity)
+		inventory_manager.auto_stack = original_auto_stack
+		return
+	
+	# Temporarily disable auto-stacking
 	var temp_auto_stack = inventory_manager.auto_stack
 	inventory_manager.auto_stack = false
 	
-	# Perform the split
-	item.quantity -= split_amount
-	current_container.items.append(new_item)
+	# Add the new item to the container
+	if not current_container.add_item(new_item):
+		print("SPLIT DEBUG: Failed to add new item - restoring")
+		item.add_to_stack(new_item.quantity)
+		inventory_manager.auto_stack = original_auto_stack
+		return
 	
-	# Connect signals for the new item
-	if not new_item.quantity_changed.is_connected(current_container._on_item_quantity_changed):
-		new_item.quantity_changed.connect(current_container._on_item_quantity_changed)
-	if not new_item.item_modified.is_connected(current_container._on_item_modified):
-		new_item.item_modified.connect(current_container._on_item_modified)
-	
-	# Emit signals with auto-stack disabled
-	current_container.item_added.emit(new_item, Vector2i(-1, -1))
-	item.quantity_changed.emit(item.quantity)
+	print("SPLIT DEBUG: Successfully split! Container now has ", current_container.items.size(), " items")
 	
 	# Restore auto-stack setting
 	inventory_manager.auto_stack = temp_auto_stack
+	
+	# Force display refresh
+	container_refreshed.emit()
 
 func _show_transfer_failed_notification():
 	"""Show notification when item transfer fails"""
@@ -765,3 +776,4 @@ func cleanup():
 	if context_menu and is_instance_valid(context_menu):
 		context_menu.queue_free()
 		context_menu = null
+	

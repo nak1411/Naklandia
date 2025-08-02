@@ -14,6 +14,7 @@ var content_transparency_init: bool = false
 var is_drag_highlighting_active: bool = false
 var current_display_mode: InventoryDisplayMode.Mode = InventoryDisplayMode.Mode.GRID
 var list_view: InventoryListView
+var pending_dummy_slots: Array[InventorySlot] = []
 
 # References
 var inventory_manager: InventoryManager
@@ -41,11 +42,17 @@ func _ready():
 	# Connect to size changes to update split offset
 	resized.connect(_on_content_resized)
 	
+	var cleanup_timer = Timer.new()
+	cleanup_timer.wait_time = 2.0  # Clean up every 2 seconds
+	cleanup_timer.timeout.connect(_cleanup_dummy_slots)
+	add_child(cleanup_timer)
+	cleanup_timer.start()
+	
 func set_display_mode(mode: InventoryDisplayMode.Mode):
 	if mode == current_display_mode:
 		return
 		
-	# Disconnect previous mode from container signals
+	# FIXED: Only disconnect the mode we're switching FROM
 	match current_display_mode:
 		InventoryDisplayMode.Mode.GRID:
 			if inventory_grid:
@@ -138,10 +145,10 @@ func _on_item_context_menu_from_list(item: InventoryItem_Base, position: Vector2
 	dummy_slot.set_item(item)
 	dummy_slot.set_container_id(current_container.container_id)
 	
-	item_context_menu.emit(item, dummy_slot, position)
+	# Store the dummy slot so we can clean it up later
+	pending_dummy_slots.append(dummy_slot)
 	
-	# Clean up dummy slot
-	dummy_slot.queue_free()
+	item_context_menu.emit(item, dummy_slot, position)
 	
 func _on_list_item_selected(item: InventoryItem_Base):
 	# Check if we still have a valid container
@@ -153,11 +160,18 @@ func _on_list_item_selected(item: InventoryItem_Base):
 	dummy_slot.set_item(item)
 	dummy_slot.set_container_id(current_container.container_id)
 	
+	# Store the dummy slot so we can clean it up later
+	pending_dummy_slots.append(dummy_slot)
+	
 	# Emit the existing signal that other systems expect
 	item_activated.emit(item, dummy_slot)
 	
-	# Clean up dummy slot
-	dummy_slot.queue_free()
+func _cleanup_dummy_slots():
+	"""Clean up any pending dummy slots"""
+	for slot in pending_dummy_slots:
+		if is_instance_valid(slot):
+			slot.queue_free()
+	pending_dummy_slots.clear()
 	
 func _update_split_offset():
 	"""Update split offset based on available space"""
@@ -483,20 +497,12 @@ func _connect_container_signals():
 		if not current_container.item_moved.is_connected(_on_container_item_moved):
 			current_container.item_moved.connect(_on_container_item_moved)
 		
-		# Connect active display to container signals
-		match current_display_mode:
-			InventoryDisplayMode.Mode.GRID:
-				if inventory_grid and not inventory_grid._is_connected_to_container():
-					inventory_grid._connect_container_signals()
-				# Disconnect list view if connected
-				if list_view and list_view._is_connected_to_container():
-					list_view._disconnect_container_signals()
-			InventoryDisplayMode.Mode.LIST:
-				if list_view and not list_view._is_connected_to_container():
-					list_view._connect_container_signals()
-				# Disconnect grid if connected
-				if inventory_grid and inventory_grid._is_connected_to_container():
-					inventory_grid._disconnect_container_signals()
+		# SIMPLIFIED: Just connect both - only the visible one will actually refresh
+		if inventory_grid and not inventory_grid._is_connected_to_container():
+			inventory_grid._connect_container_signals()
+		
+		if list_view and not list_view._is_connected_to_container():
+			list_view._connect_container_signals()
 
 func _disconnect_container_signals():
 	"""Disconnect from container signals"""

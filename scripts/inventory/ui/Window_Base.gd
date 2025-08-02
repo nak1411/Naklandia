@@ -112,13 +112,6 @@ func _input(event: InputEvent):
 		_handle_mouse_motion(event as InputEventMouseMotion)
 
 func _handle_mouse_press(global_pos: Vector2):
-	# Check if we're starting a resize operation first
-	if can_resize and not is_maximized and size.x >= min_window_size.x and size.y >= min_window_size.y:
-		var resize_area = _get_resize_area_at_position(global_pos)
-		if resize_area != ResizeMode.NONE:
-			_start_resize(resize_area, global_pos)
-			return
-	
 	# Otherwise, handle as potential drag start (but title bar input will override this)
 	mouse_pressed = true
 	click_start_position = global_pos

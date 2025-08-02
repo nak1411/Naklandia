@@ -6,6 +6,8 @@ extends Window_Base
 @export var dialog_title: String = "Dialog"
 @export var dialog_size: Vector2 = Vector2(400, 300)
 @export var is_modal: bool = true
+static var open_dialogs: Array[DialogWindow_Base] = []
+static var disabled_windows: Array[Control] = []
 
 # UI Components
 var dialog_content: VBoxContainer
@@ -30,11 +32,32 @@ func _init(title: String = "Dialog", size: Vector2 = Vector2(400, 300)):
 	can_resize = false
 	can_maximize = false
 	can_minimize = false
+	
+func _ready():
+	super._ready()
+	
+	# Disable automatic resize handling
+	can_resize = false
+
+# Override any resize-related methods
+func handle_window_resize():
+	# Do nothing for dialogs
+	pass
+
+func _handle_resize_motion(_global_pos: Vector2):
+	# Do nothing for dialogs
+	pass
+
+func _update_grid_size():
+	# Do nothing for dialogs
+	pass
 
 func _setup_window_content():
 	"""Override base method to add dialog-specific content"""
+	size = dialog_size
 	_setup_dialog_content()
 	_connect_dialog_signals()
+	
 
 func _setup_dialog_content():
 	# Create main content container
@@ -64,6 +87,8 @@ func _connect_dialog_signals():
 func _on_dialog_close_requested():
 	dialog_closed.emit()
 	close_dialog()
+	
+
 
 # Dialog-specific methods
 func add_dialog_content(content: Control):
@@ -111,18 +136,29 @@ func show_dialog(parent: Window = null):
 	
 	visible = true
 	
-func center_on_window(parent: Window):
+func center_on_window(parent):
 	"""Center this dialog on the specified parent window"""
 	if parent:
-		var parent_center = parent.position + parent.size / 2
+		# Handle both Window and Control types
+		var parent_pos: Vector2
+		var parent_size: Vector2
+		
+		if parent is Window:
+			parent_pos = Vector2(parent.position)
+			parent_size = Vector2(parent.size)
+		else:
+			# For Control-based windows, use global_position
+			parent_pos = parent.global_position
+			parent_size = parent.size
+		
+		var parent_center = parent_pos + parent_size / 2
 		position = parent_center - size / 2
 		
 		# Ensure dialog stays on screen
 		var viewport = get_viewport()
 		if viewport:
 			var screen_size = viewport.get_visible_rect().size
-			position.x = clamp(position.x, 0, screen_size.x - size.x)
-			position.y = clamp(position.y, 0, screen_size.y - size.y)
+			position = (screen_size - size) / 2
 	else:
 		center_on_viewport()
 
@@ -137,3 +173,4 @@ func center_on_viewport():
 	if viewport:
 		var screen_size = viewport.get_visible_rect().size
 		position = (screen_size - size) / 2
+		

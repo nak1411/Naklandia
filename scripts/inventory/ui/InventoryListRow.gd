@@ -50,8 +50,23 @@ func _setup_ui():
 	content_container.offset_top = 2
 	content_container.offset_right = -4
 	content_container.offset_bottom = -2
-	content_container.clip_contents = true  # Prevent overflow
+	content_container.clip_contents = true
+	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Let clicks pass through
 	add_child(content_container)
+	
+	# CRITICAL: Add invisible button overlay to capture ALL clicks
+	var click_overlay = Button.new()
+	click_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	click_overlay.flat = true
+	click_overlay.modulate = Color.TRANSPARENT  # Make it invisible
+	click_overlay.mouse_filter = Control.MOUSE_FILTER_PASS
+	
+	# Connect button signals to our row signals
+	click_overlay.gui_input.connect(_on_overlay_input)
+	click_overlay.mouse_entered.connect(_mouse_entered)
+	click_overlay.mouse_exited.connect(_mouse_exited)
+	
+	add_child(click_overlay)
 
 func _populate_cells():
 	# Clear existing cells
@@ -259,7 +274,7 @@ func _update_background():
 	style.bg_color = color
 	background.add_theme_stylebox_override("panel", style)
 
-func _gui_input(event: InputEvent):
+func _on_overlay_input(event: InputEvent):
 	if event is InputEventMouseButton:
 		if event.pressed:
 			match event.button_index:
