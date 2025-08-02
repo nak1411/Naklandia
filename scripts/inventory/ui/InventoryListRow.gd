@@ -319,16 +319,6 @@ func _on_overlay_input(event: InputEvent):
 			var distance = event.global_position.distance_to(drag_start_position)
 			if distance > drag_threshold:
 				_start_drag()
-				# IMPORTANT: Also set up data for Godot's drag system
-				if get_viewport().gui_is_dragging():
-					set_drag_preview(_create_godot_drag_preview())
-
-func _create_godot_drag_preview() -> Control:
-	"""Create a simple preview for Godot's drag system"""
-	var preview = _create_drag_preview()
-	# Make it slightly transparent to distinguish from our custom preview
-	preview.modulate.a = 0.7
-	return preview
 
 # Add these drag and drop methods
 func _start_drag():
@@ -376,48 +366,51 @@ func _start_drag():
 	item_drag_started.emit(self, item)
 
 func _create_drag_preview() -> Control:
-	"""Create a visual preview for dragging that looks like a slot"""
+	"""Create a simple item icon preview for dragging"""
 	var preview = Control.new()
 	preview.name = "DragPreview"
-	
-	# Make it smaller - 80% of slot size
-	var scale_factor = 0.8
-	preview.size = Vector2(64, 64) * scale_factor
+	preview.size = Vector2(32, 32)
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
-	# Background
-	var bg = Panel.new()
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.2, 0.2, 0.2, 0.8)
-	style.border_color = Color(0.5, 0.5, 0.5, 1.0)
-	style.border_width_left = 1
-	style.border_width_right = 1
-	style.border_width_top = 1
-	style.border_width_bottom = 1
-	bg.add_theme_stylebox_override("panel", style)
-	preview.add_child(bg)
+	# Debug what we're working with
+	print("Item icon_path: ", item.icon_path)
 	
-	# Icon
-	var icon = TextureRect.new()
-	icon.texture = item.get_icon_texture()
-	icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.offset_left = 4
-	icon.offset_right = -4
-	icon.offset_top = 4
-	icon.offset_bottom = -4
-	preview.add_child(icon)
+	# Try to get the texture
+	var texture: Texture2D = item.get_icon_texture()
 	
-	# Quantity label
+	if texture:
+		# Use the actual item icon
+		var icon = TextureRect.new()
+		icon.texture = texture
+		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		preview.add_child(icon)
+	else:
+		# Create a colored fallback like the slot does
+		var fallback = ColorRect.new()
+		fallback.color = item.get_type_color()
+		fallback.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		preview.add_child(fallback)
+		
+		# Add item type text as identifier
+		var label = Label.new()
+		label.text = item.item_name.substr(0, 3).to_upper()
+		label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_font_size_override("font_size", 8)
+		label.add_theme_color_override("font_color", Color.WHITE)
+		preview.add_child(label)
+	
+	# Quantity badge
 	if item.quantity > 1:
 		var qty_label = Label.new()
 		qty_label.text = str(item.quantity)
 		qty_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-		qty_label.offset_left = -16  # Adjusted for smaller size
-		qty_label.offset_top = -14   # Adjusted for smaller size
-		qty_label.add_theme_font_size_override("font_size", 9)  # Slightly smaller font
+		qty_label.offset_left = -12
+		qty_label.offset_top = -12
+		qty_label.add_theme_font_size_override("font_size", 8)
 		qty_label.add_theme_color_override("font_color", Color.WHITE)
 		qty_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 		qty_label.add_theme_constant_override("shadow_offset_x", 1)
