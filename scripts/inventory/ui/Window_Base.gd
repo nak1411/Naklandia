@@ -255,7 +255,7 @@ func _setup_window_ui():
 
 func _setup_window_buttons():
 	var button_size = Vector2(title_bar_height - 8, title_bar_height - 8)  # Leave more margin
-	var button_margin = 4.0
+	var button_margin = 2.0
 	var current_x = -button_margin
 	
 	# Close button
@@ -272,8 +272,10 @@ func _setup_window_buttons():
 		close_button.offset_top = (title_bar_height - button_size.y) / 2
 		close_button.offset_right = current_x
 		close_button.offset_bottom = (title_bar_height - button_size.y) / 2 + button_size.y
-		close_button.flat = true
+		close_button.flat = false  # Changed to false
+		close_button.focus_mode = Control.FOCUS_NONE
 		close_button.pressed.connect(_on_close_pressed)
+		_style_title_bar_button(close_button, "close")
 		title_bar.add_child(close_button)
 		current_x -= button_size.x + button_margin
 	
@@ -291,8 +293,10 @@ func _setup_window_buttons():
 		maximize_button.offset_top = (title_bar_height - button_size.y) / 2
 		maximize_button.offset_right = current_x
 		maximize_button.offset_bottom = (title_bar_height - button_size.y) / 2 + button_size.y
-		maximize_button.flat = true
+		maximize_button.flat = false  # Changed to false
+		maximize_button.focus_mode = Control.FOCUS_NONE
 		maximize_button.pressed.connect(_on_maximize_pressed)
+		_style_title_bar_button(maximize_button)
 		title_bar.add_child(maximize_button)
 		current_x -= button_size.x + button_margin
 	
@@ -310,8 +314,10 @@ func _setup_window_buttons():
 		minimize_button.offset_top = (title_bar_height - button_size.y) / 2
 		minimize_button.offset_right = current_x
 		minimize_button.offset_bottom = (title_bar_height - button_size.y) / 2 + button_size.y
-		minimize_button.flat = true
+		minimize_button.flat = false  # Changed to false
+		minimize_button.focus_mode = Control.FOCUS_NONE
 		minimize_button.pressed.connect(_on_minimize_pressed)
+		_style_title_bar_button(minimize_button)
 		title_bar.add_child(minimize_button)
 		current_x -= button_size.x + button_margin
 	
@@ -328,9 +334,42 @@ func _setup_window_buttons():
 	options_button.offset_top = (title_bar_height - button_size.y) / 2
 	options_button.offset_right = current_x
 	options_button.offset_bottom = (title_bar_height - button_size.y) / 2 + button_size.y
-	options_button.flat = true
+	options_button.flat = false  # Changed to false
+	options_button.focus_mode = Control.FOCUS_NONE
 	options_button.pressed.connect(_on_options_pressed)
+	_style_title_bar_button(options_button)
 	title_bar.add_child(options_button)
+
+func _style_title_bar_button(button: Button, button_type: String = "default"):
+	"""Style title bar buttons with subtle hover and click indicators"""
+	button.focus_mode = Control.FOCUS_NONE
+	
+	# Normal state - transparent
+	var normal_style = StyleBoxFlat.new()
+	normal_style.bg_color = Color.TRANSPARENT
+	
+	var hover_color = Color(1.0, 1.0, 1.0, 0.15)  # Default white
+	var pressed_color = Color(1.0, 1.0, 1.0, 0.25)
+	
+	# Special styling for close button
+	if button_type == "close":
+		hover_color = Color(0.8, 0.2, 0.2, 0.6)  # Red tint for close
+		pressed_color = Color(1.0, 0.2, 0.2, 0.8)
+	
+	var hover_style = StyleBoxFlat.new()
+	hover_style.bg_color = hover_color
+	
+	var pressed_style = StyleBoxFlat.new()
+	pressed_style.bg_color = pressed_color
+	
+	# Apply all styles
+	button.add_theme_stylebox_override("normal", normal_style)
+	button.add_theme_stylebox_override("hover", hover_style)
+	button.add_theme_stylebox_override("pressed", pressed_style)
+	button.add_theme_stylebox_override("focus", normal_style)
+	
+	# Make sure text is white and visible
+	button.add_theme_color_override("font_color", Color.WHITE)
 
 func _setup_resize_overlay():
 	if not can_resize:

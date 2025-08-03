@@ -9,7 +9,7 @@ extends Control
 @export var show_details: bool = true
 
 # Visual properties
-@export var row_alternate_color: Color = Color(0.12, 0.12, 0.12, 1.0)
+@export var row_alternate_color: Color = Color(0.13, 0.13, 0.13, 1.0)
 @export var row_selected_color: Color = Color(0.3, 0.4, 0.6, 1.0)
 @export var row_hover_color: Color = Color(0.9, 0.2, 0.2, 1.0)
 
@@ -83,14 +83,32 @@ func _setup_ui():
 	# Create header
 	_setup_header(main_vbox)
 	
+	# Add dark background panel ONLY for the list area (not header)
+	var list_area_container = Control.new()
+	list_area_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	list_area_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_vbox.add_child(list_area_container)
+	
+	# Add background panel to the list area only
+	var background_panel = Panel.new()
+	background_panel.name = "ListAreaBackground"
+	background_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	list_area_container.add_child(background_panel)
+	
+	# Use same dark background as grid view
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = Color(0.1, 0.1, 0.1, 1.0)
+	background_panel.add_theme_stylebox_override("panel", style_box)
+	
 	# Create main list area
 	scroll_container = ScrollContainer.new()
-	scroll_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED  # Force no horizontal scrolling
 	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll_container.clip_contents = true  # Clip scroll content
 	scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
-	main_vbox.add_child(scroll_container)
+	list_area_container.add_child(scroll_container)
 
 	scroll_container.gui_input.connect(_on_scroll_container_input)
 	
@@ -143,47 +161,72 @@ func _setup_list_panel():
 	list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_container.clip_contents = true  # Prevent overflow
 	scroll_container.add_child(list_container)
+	
 
 func _setup_header(parent: Control):
-	header_container = HBoxContainer.new()
-	header_container.custom_minimum_size.y = header_height
-	header_container.clip_contents = true  # IMPORTANT: Clip header content
-	parent.add_child(header_container)
+	# Create a container for the header
+	var header_wrapper = Control.new()
+	header_wrapper.name = "HeaderWrapper"
+	header_wrapper.custom_minimum_size.y = header_height
+	header_wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(header_wrapper)
 	
-	# Create header background
+	# Create the actual background panel
 	var header_bg = Panel.new()
+	header_bg.name = "HeaderBackground"
 	header_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	header_bg.z_index = -1
+	header_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header_wrapper.add_child(header_bg)
+	
+	# Style the background
 	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.08, 0.08, 1.0)
+	style.bg_color = Color(0.2, 0.2, 0.2, 1.0)  # Lighter than main background
 	style.border_width_bottom = 1
 	style.border_color = Color(0.3, 0.3, 0.3, 1.0)
 	header_bg.add_theme_stylebox_override("panel", style)
-	header_container.add_child(header_bg)
 	
-	# Create column headers with better constraints
+	# Now create the header container on top of the background
+	header_container = HBoxContainer.new()
+	header_container.name = "HeaderContainer"
+	header_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	header_container.clip_contents = true
+	header_wrapper.add_child(header_container)
+	
+	# Create column headers
 	for i in columns.size():
 		var column = columns[i]
 		var header_button = Button.new()
-		header_button.text = column.title
+		
+		# Always reserve space for sort indicator
+		var button_text = column.title
+		if column.sortable:
+			button_text += " ↓"  # Always show a sort indicator to reserve space
+		header_button.text = button_text
+		
 		header_button.flat = true
 		header_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		header_button.clip_contents = true  # Clip button text
+		header_button.clip_contents = true
 		
-		# Set sizing based on column type with minimum constraints
-		if column.width <= 100:  # Fixed width columns (icon, qty, etc.)
-			header_button.custom_minimum_size.x = max(20, column.width)  # Minimum 20px
-		else:  # Expandable columns (name, type, etc.)
+		# Make buttons transparent so background shows through
+		var transparent_style = StyleBoxFlat.new()
+		transparent_style.bg_color = Color.TRANSPARENT
+		header_button.add_theme_stylebox_override("normal", transparent_style)
+		header_button.add_theme_stylebox_override("hover", transparent_style)
+		header_button.add_theme_stylebox_override("pressed", transparent_style)
+		
+		if column.width <= 100:
+			header_button.custom_minimum_size.x = max(20, column.width)
+		else:
 			header_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			header_button.custom_minimum_size.x = 50  # Minimum width for expandable columns
+			header_button.custom_minimum_size.x = 50
 		
 		if column.sortable:
 			header_button.pressed.connect(_on_header_clicked.bind(column.id))
-			# Add sort indicator
-			if current_sort_column == column.id:
-				header_button.text += " ↑" if sort_ascending else " ↓"
 		
 		header_container.add_child(header_button)
+	
+	# Update the sort indicators after all buttons are created
+	_update_header_sort_indicators()
 
 func _setup_detail_panel():
 	if not detail_panel:
@@ -378,13 +421,16 @@ func _on_header_clicked(column_id: String):
 
 func _update_header_sort_indicators():
 	var headers = header_container.get_children()
-	for i in range(1, headers.size()):  # Skip background panel
+	for i in range(headers.size()):
 		var header = headers[i]
 		if header is Button:
-			var column = columns[i-1]
+			var column = columns[i]
 			header.text = column.title
-			if column.sortable and current_sort_column == column.id:
-				header.text += " ↑" if sort_ascending else " ↓"
+			if column.sortable:
+				if current_sort_column == column.id:
+					header.text += " ↑" if sort_ascending else " ↓"
+				else:
+					header.text += "  "  # Two spaces to maintain consistent width
 
 func _on_row_clicked(row: InventoryListRow, item: InventoryItem_Base, event: InputEvent):
 	if event is InputEventMouseButton:

@@ -122,16 +122,47 @@ func _setup_controls():
 
 	display_mode_button = Button.new()
 	display_mode_button.name = "DisplayModeButton"
-	display_mode_button.text = "Grid"
-	display_mode_button.custom_minimum_size.x = 45  # Reduced from 60
+	display_mode_button.text = "⊞"
+	display_mode_button.custom_minimum_size = Vector2(32, 32)  # Reduced from 60
 	display_mode_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
 	display_mode_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	display_mode_button.clip_contents = true  # Prevent text overflow
-	_style_custom_display_button()
+	display_mode_button.flat = false
+
+	_style_display_mode_button()
 	display_container.add_child(display_mode_button)
 	
 	# Create dropdown menus (don't add as children initially)
 	_create_dropdown_menus()
+
+func _style_display_mode_button():
+	if not display_mode_button:
+		return
+	
+	# Create normal style
+	var normal_style = StyleBoxFlat.new()
+	normal_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
+	normal_style.border_width_left = 1
+	normal_style.border_width_right = 1
+	normal_style.border_width_top = 1
+	normal_style.border_width_bottom = 1
+	normal_style.border_color = Color(0.5, 0.5, 0.5, 1.0)
+	
+	# Create hover style
+	var hover_style = normal_style.duplicate()
+	hover_style.bg_color = Color(0.4, 0.4, 0.4, 1.0)
+	
+	# Create pressed style
+	var pressed_style = normal_style.duplicate()
+	pressed_style.bg_color = Color(0.2, 0.2, 0.2, 1.0)
+	
+	display_mode_button.add_theme_stylebox_override("normal", normal_style)
+	display_mode_button.add_theme_stylebox_override("hover", hover_style)
+	display_mode_button.add_theme_stylebox_override("pressed", pressed_style)
+	
+	# Set font properties
+	display_mode_button.add_theme_color_override("font_color", Color.WHITE)
+	display_mode_button.add_theme_font_size_override("font_size", 14)
 	
 func _style_custom_display_button():
 	var style_normal = StyleBoxFlat.new()
@@ -168,10 +199,10 @@ func _on_display_mode_toggled():
 	match current_display_mode:
 		InventoryDisplayMode.Mode.GRID:
 			current_display_mode = InventoryDisplayMode.Mode.LIST
-			display_mode_button.text = "List"
+			display_mode_button.text = "☰"
 		InventoryDisplayMode.Mode.LIST:
 			current_display_mode = InventoryDisplayMode.Mode.GRID
-			display_mode_button.text = "Grid"
+			display_mode_button.text = "⊞"
 	
 	display_mode_changed.emit(current_display_mode)
 
