@@ -16,6 +16,7 @@ var drag_preview_created: bool = false
 var background: Panel
 var content_container: HBoxContainer
 var cells: Array[Control] = []
+var hover_overlay: Panel
 
 # Colors
 var normal_color: Color = Color.TRANSPARENT
@@ -23,6 +24,8 @@ var alternate_color: Color = Color(0.12, 0.12, 0.12, 1.0)
 var selected_color: Color = Color(0.3, 0.4, 0.6, 1.0)
 var hover_color: Color = Color(0.2, 0.2, 0.2, 1.0)
 var use_alternate: bool = false
+var hover_tween: Tween
+
 
 # Signals
 signal row_clicked(row: InventoryListRow, item: InventoryItem_Base, event: InputEvent)
@@ -49,6 +52,8 @@ func _setup_ui():
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background)
+	
+	_setup_hover_overlay()
 	
 	# Content container with proper sizing
 	content_container = HBoxContainer.new()
@@ -267,6 +272,10 @@ func _update_background():
 	if not background:
 		return
 	
+	# Don't update immediately if we're tweening
+	if hover_tween and hover_tween.is_valid():
+		return
+	
 	var color: Color
 	if is_selected:
 		color = selected_color
@@ -277,17 +286,75 @@ func _update_background():
 	else:
 		color = normal_color
 	
-	var style = StyleBoxFlat.new()
-	style.bg_color = color
-	background.add_theme_stylebox_override("panel", style)
+	_update_background_color(color)
 
 func _mouse_entered():
 	is_hovered = true
-	_update_background()
+	_animate_hover_in()
 
 func _mouse_exited():
 	is_hovered = false
-	_update_background()
+	_animate_hover_out()
+	
+func _update_background_color(color: Color):
+	if not background:
+		return
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = color
+	background.add_theme_stylebox_override("panel", style)
+	
+func _get_current_background_color() -> Color:
+	if not background:
+		return Color.TRANSPARENT
+	
+	var style = background.get_theme_stylebox("panel") as StyleBoxFlat
+	if style:
+		return style.bg_color
+	
+	return Color.TRANSPARENT
+
+func _animate_hover_in():
+	if hover_tween:
+		hover_tween.kill()
+	
+	if is_selected:
+		return
+	
+	hover_tween = create_tween()
+	hover_tween.set_parallel(true)
+	
+	# Subtle fade in the hover overlay
+	hover_tween.tween_property(hover_overlay, "modulate:a", 0.3, 0.12)
+	hover_tween.tween_property(self, "scale", Vector2(1.01, 1.0), 0.1)
+
+# Replace the _animate_hover_out function
+func _animate_hover_out():
+	if hover_tween:
+		hover_tween.kill()
+	
+	if is_selected:
+		return
+	
+	hover_tween = create_tween()
+	hover_tween.set_parallel(true)
+	
+	# Subtle fade out the hover overlay
+	hover_tween.tween_property(hover_overlay, "modulate:a", 0.0, 0.08)
+	hover_tween.tween_property(self, "scale", Vector2(1.0, 1.0), 0.08)
+	
+func _setup_hover_overlay():
+	hover_overlay = Panel.new()
+	hover_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	hover_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hover_overlay.modulate.a = 0.0  # Start invisible
+	
+	var style = StyleBoxFlat.new()
+	# Brighter hover color - lighter and more saturated
+	style.bg_color = Color(0.5, 0.8, 1.0, 1.0)  # Increased from the original hover_color
+	hover_overlay.add_theme_stylebox_override("panel", style)
+	
+	add_child(hover_overlay)
 	
 func _on_overlay_input(event: InputEvent):
 	"""Enhanced input handling with drag and drop support"""
@@ -876,3 +943,11 @@ func _cleanup_drag_preview():
 	for canvas in drag_canvases:
 		if is_instance_valid(canvas):
 			canvas.queue_free()
+			
+func _exit_tree():
+	if hover_tween:
+		hover_tween.kill()
+		hover_tween = null
+	if hover_overlay:
+		hover_overlay.queue_free()
+		hover_overlay = null
