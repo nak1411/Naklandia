@@ -47,10 +47,31 @@ var columns: Array[Dictionary] = [
 signal item_selected(item: InventoryItem_Base)
 signal item_activated(item: InventoryItem_Base)
 signal item_context_menu(item: InventoryItem_Base, position: Vector2)
+signal empty_area_context_menu(position: Vector2)
 
 func _ready():
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	_setup_ui()
 	resized.connect(_on_resized)
+
+func _gui_input(event: InputEvent):
+	"""Handle input on empty list areas"""
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			# Check if right-click is on empty area (not on a row)
+			var clicked_on_row = false
+			for row in item_rows:
+				if row and is_instance_valid(row):
+					var row_rect = Rect2(row.global_position, row.size)
+					if row_rect.has_point(mouse_event.global_position):
+						clicked_on_row = true
+						break
+			
+			if not clicked_on_row:
+				# Right-click on empty area
+				empty_area_context_menu.emit(mouse_event.global_position)
+				get_viewport().set_input_as_handled()
 
 func _setup_ui():
 	# Create a simple VBox layout with proper clipping
@@ -68,12 +89,34 @@ func _setup_ui():
 	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED  # Force no horizontal scrolling
 	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll_container.clip_contents = true  # Clip scroll content
+	scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	main_vbox.add_child(scroll_container)
+
+	scroll_container.gui_input.connect(_on_scroll_container_input)
 	
 	list_container = VBoxContainer.new()
 	list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_container.clip_contents = true  # Clip list items
 	scroll_container.add_child(list_container)
+
+func _on_scroll_container_input(event: InputEvent):
+	"""Handle input on scroll container (empty areas below items)"""
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			# Check if click is on empty area by checking if it hits any row
+			var clicked_on_row = false
+			for row in item_rows:
+				if row and is_instance_valid(row):
+					var row_rect = Rect2(row.global_position, row.size)
+					if row_rect.has_point(mouse_event.global_position):
+						clicked_on_row = true
+						break
+			
+			if not clicked_on_row:
+				# Right-click in empty area
+				empty_area_context_menu.emit(mouse_event.global_position)
+				get_viewport().set_input_as_handled()
 
 func _convert_to_split_layout():
 	# Only convert to split layout if we need the detail panel
@@ -383,9 +426,6 @@ func _on_resized():
 	call_deferred("_calculate_column_widths")
 	call_deferred("_update_header_widths")
 	call_deferred("_handle_responsive_columns")
-	
-	# Add this single line to fix header sticking
-	call_deferred("_force_header_layout_refresh")
 	
 func _set_column_visibility(column_id: String, visible: bool):
 	"""Show/hide a column by ID"""

@@ -25,6 +25,7 @@ var open_containers: Array[InventoryContainer_Base] = []
 signal container_selected(container: InventoryContainer_Base)
 signal item_activated(item: InventoryItem_Base, slot: InventorySlot)
 signal item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2)
+signal empty_area_context_menu(position: Vector2)
 
 func _ready():
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -109,13 +110,13 @@ func _switch_to_list_mode():
 		list_view.item_selected.connect(_on_list_item_selected)
 		list_view.item_activated.connect(_on_item_activated)
 		list_view.item_context_menu.connect(_on_item_context_menu_from_list)
+		list_view.empty_area_context_menu.connect(_on_empty_area_context_menu)  # ADD THIS
 	
 	list_view.visible = true
 	
 	# Force proper sizing using set_deferred to avoid anchor warning
 	if list_view.get_parent():
 		list_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		# Use set_deferred instead of direct size assignment
 		list_view.set_deferred("size", list_view.get_parent().size)
 	
 	# CRITICAL: Set container and refresh if we have one
@@ -252,6 +253,8 @@ func _setup_content():
 		_setup_left_panel()
 		_setup_right_panel()
 
+	
+
 func _setup_left_panel():
 	var left_panel = VBoxContainer.new()
 	left_panel.name = "LeftPanel"
@@ -333,6 +336,16 @@ func _setup_right_panel_only():
 	# Connect signals
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
+	inventory_grid.empty_area_context_menu.connect(_on_empty_area_context_menu)
+
+func _on_empty_area_context_menu(position: Vector2):
+	"""Handle empty area context menu from grid"""
+	empty_area_context_menu.emit(position)
+
+func set_item_actions(actions: InventoryItemActions):
+	"""Set item actions on the inventory grid"""
+	if inventory_grid and inventory_grid.has_method("set_item_actions"):
+		inventory_grid.set_item_actions(actions)
 
 func _setup_right_panel():
 	var inventory_area = VBoxContainer.new()
@@ -368,6 +381,7 @@ func _setup_right_panel():
 	# Connect signals
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
+	inventory_grid.empty_area_context_menu.connect(_on_empty_area_context_menu)
 
 #func _on_test_button_pressed():
 	#if inventory_grid:

@@ -24,6 +24,7 @@ var grid_transparency_init: bool = false
 var container: InventoryContainer_Base
 var window = InventoryWindowContent
 var container_id: String
+var item_actions: InventoryItemActions
 
 # Dynamic grid properties
 var current_grid_width: int = 0
@@ -60,6 +61,8 @@ var current_search_text: String = ""
 signal item_selected(item: InventoryItem_Base, slot: InventorySlot)
 signal item_activated(item: InventoryItem_Base, slot: InventorySlot)
 signal item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2)
+signal empty_area_context_menu(position: Vector2)
+
 
 func _ready():
 	if enable_virtual_scrolling:
@@ -101,6 +104,9 @@ func _setup_virtual_scrolling():
 	virtual_content.mouse_filter = Control.MOUSE_FILTER_STOP
 	virtual_scroll_container.add_child(virtual_content)
 	
+	# THIS IS THE MISSING CONNECTION!
+	virtual_content.gui_input.connect(_on_virtual_content_input)
+	
 	# Connect scroll events
 	virtual_scroll_container.get_v_scroll_bar().value_changed.connect(_on_virtual_scroll)
 	virtual_scroll_container.resized.connect(_on_virtual_container_resized)
@@ -111,13 +117,20 @@ func _setup_virtual_scrolling():
 	virtual_scroll_container.add_theme_stylebox_override("panel", style_box)
 		
 func _on_virtual_content_input(event: InputEvent):
-	"""Handle drops on empty virtual content area"""
+	"""Handle input on empty virtual content area"""
 	if not enable_virtual_scrolling:
 		return
 	
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
+		if mouse_event.pressed:
+			if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+				# Check if click is on empty area (not on a slot)
+				var clicked_slot = get_slot_at_position(mouse_event.global_position)
+				if not clicked_slot or not clicked_slot.has_item():
+					empty_area_context_menu.emit(mouse_event.global_position)
+					get_viewport().set_input_as_handled()
+		elif mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
 			# Check if we have drag data (mouse released after drag)
 			var viewport = get_viewport()
 			if viewport and viewport.has_meta("current_drag_data"):
@@ -1346,11 +1359,14 @@ func _gui_input(event: InputEvent):
 			if virtual_scroll_container:
 				virtual_scroll_container.scroll_vertical += 50
 			get_viewport().set_input_as_handled()
-		else:
-			# Let other mouse events pass through to slots
-			pass
+		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			# Handle right-click on empty areas in virtual mode
+			var clicked_slot = get_slot_at_position(mouse_event.global_position)
+			if not clicked_slot or not clicked_slot.has_item():
+				empty_area_context_menu.emit(mouse_event.global_position)
+				get_viewport().set_input_as_handled()
 	elif not enable_virtual_scrolling:
-		# Traditional mode handling (your existing code)
+		# Traditional mode handling
 		if event is InputEventMouseButton:
 			var mouse_event = event as InputEventMouseButton
 			if mouse_event.pressed:
@@ -1373,8 +1389,7 @@ func _focus_inventory_window():
 
 func _show_container_context_menu(position: Vector2):
 	"""Show context menu for container operations"""
-	# This will be implemented by the UI system
-	pass
+	empty_area_context_menu.emit(position)
 		
 func _clear_all_container_positions():
 	"""Clear all item positions in the container to avoid conflicts"""
@@ -1409,8 +1424,18 @@ func _on_slot_clicked(slot: InventorySlot, event: InputEvent):
 					item_selected.emit(slot.get_item(), slot)
 
 func _on_slot_right_clicked(slot: InventorySlot, event: InputEvent):
-	if slot.has_item():
-		item_context_menu.emit(slot.get_item(), slot, event.global_position)
+	"""Handle right-click on slots"""
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		
+		if slot.has_item():
+			# Slot has an item - show item context menu
+			item_context_menu.emit(slot.get_item(), slot, mouse_event.global_position)
+		else:
+			# Slot is empty - treat as empty area right-click
+			empty_area_context_menu.emit(mouse_event.global_position)
+		
+		get_viewport().set_input_as_handled()
 
 func _on_item_drag_started(slot: InventorySlot, item: InventoryItem_Base):
 	
@@ -2064,3 +2089,7 @@ func _get_item_type_from_filter(filter_index: int) -> InventoryItem_Base.ItemTyp
 
 func _is_connected_to_container() -> bool:
 	return container and container.item_added.is_connected(_on_container_item_added)
+
+func set_item_actions(actions: InventoryItemActions):
+	"""Set the item actions handler for context menus"""
+	item_actions = actions

@@ -73,6 +73,8 @@ func _setup_content():
 			content.item_activated.connect(_on_item_activated_from_content)
 		if content.has_signal("item_context_menu"):
 			content.item_context_menu.connect(_on_item_context_menu_from_content)
+		if content.has_signal("empty_area_context_menu"):
+			content.empty_area_context_menu.connect(_on_empty_area_context_menu_from_content)
 		
 		# Connect window resize to trigger grid reflow
 		window_resized.connect(_on_window_resized_for_grid)
@@ -80,6 +82,11 @@ func _setup_content():
 	# Initialize content with inventory manager if available
 	if inventory_manager:
 		_initialize_inventory_content()
+
+func _on_empty_area_context_menu_from_content(global_position: Vector2):
+	"""Handle empty area context menu from content"""
+	if item_actions and item_actions.has_method("show_empty_area_context_menu"):
+		item_actions.show_empty_area_context_menu(global_position)
 	
 func _on_window_resized_for_inventory(new_size: Vector2i):
 	"""Handle window resize for inventory components"""
@@ -195,6 +202,8 @@ func _setup_item_actions():
 	# Connect to inventory manager updates
 	if item_actions.has_signal("container_refreshed"):
 		item_actions.container_refreshed.connect(_on_container_refreshed)
+	if content and content.has_method("set_item_actions"):
+		content.set_item_actions(item_actions)
 
 func _find_parent_window() -> Window:
 	"""Find the parent window in the scene tree"""
