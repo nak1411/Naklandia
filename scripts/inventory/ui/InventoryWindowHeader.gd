@@ -391,9 +391,10 @@ func _on_filter_button_pressed():
 	# Show dropdown at button position
 	var button_pos = filter_options.get_screen_position()
 	var dropdown_pos = Vector2(button_pos.x, button_pos.y + filter_options.size.y)
-		
-	# Add dropdown to scene so it can access viewport
-	get_viewport().add_child(filter_dropdown)
+	
+	# Only add dropdown to scene if it's not already there
+	if not filter_dropdown.get_parent():
+		get_viewport().add_child(filter_dropdown)
 	
 	# Show the menu
 	if filter_dropdown.has_method("show_menu"):
@@ -441,12 +442,12 @@ func _on_sort_dropdown_selected(item_id: String, _item_data: Dictionary):
 func _on_filter_dropdown_closed():
 	# Remove filter dropdown from scene when it closes
 	if filter_dropdown and filter_dropdown.get_parent():
-		filter_dropdown.get_parent().remove_child(filter_dropdown)
+		filter_dropdown.get_parent().remove_child.call_deferred(filter_dropdown)
 
 func _on_sort_dropdown_closed():
 	# Remove sort dropdown from scene when it closes
 	if sort_dropdown and sort_dropdown.get_parent():
-		sort_dropdown.get_parent().remove_child(sort_dropdown)
+		sort_dropdown.get_parent().remove_child.call_deferred(sort_dropdown)
 
 # Public interface
 func set_inventory_manager(manager: InventoryManager):
