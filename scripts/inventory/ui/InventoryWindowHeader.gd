@@ -37,7 +37,7 @@ var current_filter_index = 0
 
 # Sort dropdown data
 var sort_items = [
-	"By Name", "By Type", "By Value", "By Volume", "By Rarity"
+	"By Name", "By Type", "By Value", "By Volume"
 ]
 var current_sort_index = 0
 

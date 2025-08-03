@@ -39,7 +39,6 @@ var columns: Array[Dictionary] = [
 	{"id": "name", "title": "Name", "width": 150, "sortable": true},  # Reduced from 200
 	{"id": "quantity", "title": "Qty", "width": 50, "sortable": true},  # Reduced from 60
 	{"id": "type", "title": "Type", "width": 100, "sortable": true},   # Reduced from 120
-	{"id": "rarity", "title": "Rarity", "width": 70, "sortable": true}, # Reduced from 80
 	{"id": "volume", "title": "Vol", "width": 60, "sortable": true},   # Reduced and shortened title
 	{"id": "total_volume", "title": "Total", "width": 60, "sortable": true} # Reduced from 80
 ]
@@ -276,8 +275,6 @@ func _compare_items(a: InventoryItem_Base, b: InventoryItem_Base) -> bool:
 			result = a.quantity < b.quantity
 		"type":
 			result = str(a.item_type) < str(b.item_type)
-		"rarity":
-			result = a.item_rarity < b.item_rarity
 		"volume":
 			result = a.volume < b.volume
 		"total_volume":
@@ -411,15 +408,12 @@ func _handle_responsive_columns():
 	if available_width < 300:  # Very small - hide optional columns
 		_set_column_visibility("total_volume", false)
 		_set_column_visibility("volume", false)
-		_set_column_visibility("rarity", false)
 	elif available_width < 400:  # Small - hide some columns
 		_set_column_visibility("total_volume", false)
 		_set_column_visibility("volume", false)
-		_set_column_visibility("rarity", true)
 	else:  # Normal - show all columns
 		_set_column_visibility("total_volume", true)
 		_set_column_visibility("volume", true)
-		_set_column_visibility("rarity", true)
 	
 func _calculate_column_widths():
 	if size.x <= 0:

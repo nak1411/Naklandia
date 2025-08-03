@@ -14,9 +14,8 @@ extends Resource
 @export var quantity: int = 1
 @export var max_stack_size: int = 1
 
-# Item type and rarity
+# Item type
 @export var item_type: ItemType = ItemType.MISCELLANEOUS
-@export var item_rarity: ItemRarity = ItemRarity.COMMON
 @export var is_contraband: bool = false
 
 # Value and meta properties
@@ -42,15 +41,6 @@ enum ItemType {
 	AMMUNITION,
 	IMPLANT,
 	SKILL_BOOK
-}
-
-enum ItemRarity {
-	COMMON,
-	UNCOMMON,
-	RARE,
-	EPIC,
-	LEGENDARY,
-	ARTIFACT
 }
 
 enum ContainerType {
@@ -125,7 +115,6 @@ func split_stack(split_quantity: int) -> InventoryItem_Base:
 	new_item.quantity = split_quantity
 	new_item.max_stack_size = max_stack_size
 	new_item.item_type = item_type
-	new_item.item_rarity = item_rarity
 	new_item.is_contraband = is_contraband
 	new_item.base_value = base_value
 	new_item.can_be_destroyed = can_be_destroyed
@@ -163,24 +152,6 @@ func remove_from_stack(amount: int) -> int:
 	item_modified.emit()
 	
 	return amount_to_remove
-
-# Rarity color coding (EVE-like)
-func get_rarity_color() -> Color:
-	match item_rarity:
-		ItemRarity.COMMON:
-			return Color.WHITE
-		ItemRarity.UNCOMMON:
-			return Color.GREEN
-		ItemRarity.RARE:
-			return Color.BLUE
-		ItemRarity.EPIC:
-			return Color.PURPLE
-		ItemRarity.LEGENDARY:
-			return Color.ORANGE
-		ItemRarity.ARTIFACT:
-			return Color.RED
-		_:
-			return Color.WHITE
 
 # Type color coding
 func get_type_color() -> Color:
@@ -236,7 +207,6 @@ func to_dict() -> Dictionary:
 		"quantity": quantity,
 		"max_stack_size": max_stack_size,
 		"item_type": item_type,
-		"item_rarity": item_rarity,
 		"is_contraband": is_contraband,
 		"base_value": base_value,
 		"can_be_destroyed": can_be_destroyed,
@@ -256,7 +226,6 @@ func from_dict(data: Dictionary):
 	quantity = data.get("quantity") if data.has("quantity") else 1
 	max_stack_size = data.get("max_stack_size") if data.has("max_stack_size") else 1
 	item_type = data.get("item_type") if data.has("item_type") else ItemType.MISCELLANEOUS
-	item_rarity = data.get("item_rarity") if data.has("item_rarity") else ItemRarity.COMMON
 	is_contraband = data.get("is_contraband") if data.has("is_contraband") else false
 	base_value = data.get("base_value") if data.has("base_value") else 0.0
 	can_be_destroyed = data.get("can_be_destroyed") if data.has("can_be_destroyed") else true

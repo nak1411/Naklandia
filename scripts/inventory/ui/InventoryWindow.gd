@@ -256,7 +256,6 @@ func _update_options_dropdown_text():
 	var options = [
 		"Sort by Name",
 		"Sort by Type", 
-		"Sort by Rarity",
 		"Sort by Quantity",
 		"---",
 		"Auto-Stack Items",

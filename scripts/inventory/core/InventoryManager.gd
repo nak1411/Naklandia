@@ -394,8 +394,6 @@ func sort_container(container_id: String, sort_type: SortType = SortType.BY_NAME
 			sorted_items.sort_custom(func(a, b): return a.get_total_value() > b.get_total_value())
 		SortType.BY_VOLUME:
 			sorted_items.sort_custom(func(a, b): return a.get_total_volume() > b.get_total_volume())
-		SortType.BY_RARITY:
-			sorted_items.sort_custom(func(a, b): return a.item_rarity > b.item_rarity)
 	
 	# Clear container and re-add items in sorted order
 	container.clear()
@@ -407,7 +405,6 @@ enum SortType {
 	BY_TYPE,
 	BY_VALUE,
 	BY_VOLUME,
-	BY_RARITY
 }
 
 # Container access management
@@ -491,7 +488,6 @@ func create_sample_items():
 			"mass": 0.01,
 			"max_stack": 999999,
 			"value": 5.0,
-			"rarity": InventoryItem_Base.ItemRarity.COMMON
 		},
 		{
 			"id": "laser_crystal",
@@ -501,7 +497,6 @@ func create_sample_items():
 			"mass": 2.0,
 			"max_stack": 999999,  # Changed from 1 to 10
 			"value": 15000.0,
-			"rarity": InventoryItem_Base.ItemRarity.RARE
 		},
 		{
 			"id": "ammo_hybrid",
@@ -511,7 +506,6 @@ func create_sample_items():
 			"mass": 0.01,
 			"max_stack": 999999,
 			"value": 100.0,
-			"rarity": InventoryItem_Base.ItemRarity.COMMON
 		},
 		{
 			"id": "blueprint_frigate",
@@ -521,7 +515,6 @@ func create_sample_items():
 			"mass": 0.1,
 			"max_stack": 999999,  # Changed from 1 to 5
 			"value": 50000.0,
-			"rarity": InventoryItem_Base.ItemRarity.EPIC
 		}
 	]
 	
@@ -533,7 +526,6 @@ func create_sample_items():
 		base_item.mass = item_data.mass
 		base_item.max_stack_size = item_data.max_stack
 		base_item.base_value = item_data.value
-		base_item.item_rarity = item_data.rarity
 		
 		# Add multiple copies of stackable items for testing
 		if item_data.max_stack > 1:
@@ -547,7 +539,6 @@ func create_sample_items():
 				item.mass = item_data.mass
 				item.max_stack_size = item_data.max_stack
 				item.base_value = item_data.value
-				item.item_rarity = item_data.rarity
 				item.quantity = 1
 				
 				player_inventory.add_item(item)

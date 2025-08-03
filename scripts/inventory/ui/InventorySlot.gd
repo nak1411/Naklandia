@@ -19,7 +19,6 @@ var container_id: String
 var background_panel: Panel
 var item_icon: TextureRect
 var quantity_label: Label
-var rarity_border: NinePatchRect
 var quantity_bg: Panel
 var hover_glow: Control
 var glow_canvas_layer: CanvasLayer
@@ -229,14 +228,6 @@ func _setup_visual_components():
 	quantity_label.add_theme_constant_override("shadow_offset_y", 1)
 	quantity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(quantity_label)
-	
-	# Rarity border (initially hidden)
-	rarity_border = NinePatchRect.new()
-	rarity_border.name = "RarityBorder"
-	rarity_border.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	rarity_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	rarity_border.visible = false
-	add_child(rarity_border)
 	
 	_update_visual_state()
 	
@@ -484,11 +475,6 @@ func _create_fallback_icon():
 	var texture = ImageTexture.new()
 	texture.set_image(image)
 	item_icon.texture = texture
-
-func _show_rarity_border():
-	rarity_border.visible = true
-	var rarity_color = item.get_rarity_color()
-	rarity_border.modulate = rarity_color
 
 func _update_tooltip():
 	if not item:
@@ -1010,8 +996,6 @@ func _update_item_display():
 			quantity_label.visible = false
 		if quantity_bg:
 			quantity_bg.visible = false
-		if rarity_border:
-			rarity_border.visible = false
 		is_occupied = false
 		return
 	
@@ -1030,13 +1014,7 @@ func _update_item_display():
 	
 	# Show quantity background when item is present
 	if quantity_bg:
-		quantity_bg.visible = true
-	
-	# Update rarity border if available
-	if rarity_border and item.item_rarity != InventoryItem_Base.ItemRarity.COMMON:
-		var rarity_color = item.get_rarity_color()
-		# Set border color logic here...
-	
+		quantity_bg.visible = true	
 	is_occupied = true
 	
 # Also add this helper method for volume-based partial transfers

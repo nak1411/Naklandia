@@ -200,8 +200,6 @@ func _handle_container_action(action_id: String, context_data: Dictionary):
 			sort_container_by_type(InventoryManager.SortType.BY_VALUE)
 		"sort_by_volume":
 			sort_container_by_type(InventoryManager.SortType.BY_VOLUME)
-		"sort_by_rarity":
-			sort_container_by_type(InventoryManager.SortType.BY_RARITY)
 		_:
 			# Handle move actions for containers
 			if action_id.begins_with("move_to_"):
@@ -642,7 +640,6 @@ func compact_container(container: InventoryContainer_Base):
 func _generate_detailed_item_info(item: InventoryItem_Base) -> String:
 	"""Generate detailed item information text"""
 	var text = "[center][b][font_size=16]%s[/font_size][/b][/center]\n" % item.item_name
-	text += "[center][color=%s]%s[/color][/center]\n\n" % [item.get_rarity_color().to_html(), InventoryItem_Base.ItemRarity.keys()[item.item_rarity]]
 	
 	text += "[b]General Information[/b]\n"
 	text += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]

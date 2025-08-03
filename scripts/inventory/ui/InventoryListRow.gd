@@ -134,7 +134,7 @@ func _create_cell(column: Dictionary) -> Control:
 			label.clip_contents = true
 			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 			label.add_theme_font_size_override("font_size", 11)  # Smaller font
-			label.add_theme_color_override("font_color", item.get_rarity_color())
+			label.add_theme_color_override("font_color", Color.WHITE)
 			cell.add_child(label)
 		
 		"quantity":
@@ -164,21 +164,6 @@ func _create_cell(column: Dictionary) -> Control:
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.clip_contents = true
 			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			label.add_theme_font_size_override("font_size", 10)
-			cell.add_child(label)
-		
-		"rarity":
-			var label = Label.new()
-			# Use single letter for rarity in small spaces
-			var rarity_text = _get_short_rarity_name(str(item.item_rarity))
-			label.text = rarity_text
-			label.set_anchors_preset(Control.PRESET_FULL_RECT)
-			label.offset_left = 2
-			label.offset_right = -2
-			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			label.add_theme_color_override("font_color", item.get_rarity_color())
-			label.clip_contents = true
 			label.add_theme_font_size_override("font_size", 10)
 			cell.add_child(label)
 		
@@ -241,23 +226,6 @@ func _get_short_type_name(type_name: String) -> String:
 			return "Book"
 		_:
 			return type_name.substr(0, 3)
-
-func _get_short_rarity_name(rarity_name: String) -> String:
-	match rarity_name.to_upper():
-		"COMMON":
-			return "C"
-		"UNCOMMON":
-			return "U"
-		"RARE":
-			return "R"
-		"EPIC":
-			return "E"
-		"LEGENDARY":
-			return "L"
-		"ARTIFACT":
-			return "A"
-		_:
-			return rarity_name.substr(0, 1)
 
 func set_alternate_color(alternate: bool, color: Color):
 	use_alternate = alternate
@@ -515,7 +483,7 @@ func _add_preview_name(container: HBoxContainer):
 	label.clip_contents = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.add_theme_font_size_override("font_size", 11)
-	label.add_theme_color_override("font_color", item.get_rarity_color())
+	label.add_theme_color_override("font_color", Color.WHITE)
 	name_cell.add_child(label)
 	
 	container.add_child(name_cell)

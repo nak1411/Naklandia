@@ -800,6 +800,5 @@ func setup_container_context_menu(_container: InventoryContainer_Base):
 	sort_submenu.append({"id": "sort_by_type", "text": "By Type"})
 	sort_submenu.append({"id": "sort_by_value", "text": "By Value"})
 	sort_submenu.append({"id": "sort_by_volume", "text": "By Volume"})
-	sort_submenu.append({"id": "sort_by_rarity", "text": "By Rarity"})
 	
 	add_menu_item("sort_container", "Sort Container", null, true, true, sort_submenu)
