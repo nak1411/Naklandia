@@ -130,7 +130,6 @@ func _setup_header(parent: Control):
 		# Set sizing based on column type with minimum constraints
 		if column.width <= 100:  # Fixed width columns (icon, qty, etc.)
 			header_button.custom_minimum_size.x = max(20, column.width)  # Minimum 20px
-			header_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		else:  # Expandable columns (name, type, etc.)
 			header_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			header_button.custom_minimum_size.x = 50  # Minimum width for expandable columns
@@ -385,6 +384,9 @@ func _on_resized():
 	call_deferred("_update_header_widths")
 	call_deferred("_handle_responsive_columns")
 	
+	# Add this single line to fix header sticking
+	call_deferred("_force_header_layout_refresh")
+	
 func _set_column_visibility(column_id: String, visible: bool):
 	"""Show/hide a column by ID"""
 	for i in columns.size():
@@ -456,7 +458,6 @@ func _update_header_widths():
 		if header is Button:
 			if column.width <= 100:  # Fixed width
 				header.custom_minimum_size.x = column.width
-				header.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			else:  # Expandable
 				header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 				header.clip_contents = true
