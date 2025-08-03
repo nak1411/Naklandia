@@ -36,11 +36,11 @@ var current_search_text: String = ""
 # Columns configuration
 var columns: Array[Dictionary] = [
 	{"id": "icon", "title": "", "width": 32, "sortable": false},
-	{"id": "name", "title": "Name", "width": 150, "sortable": true},  # Reduced from 200
-	{"id": "quantity", "title": "Qty", "width": 50, "sortable": true},  # Reduced from 60
-	{"id": "type", "title": "Type", "width": 100, "sortable": true},   # Reduced from 120
-	{"id": "volume", "title": "Vol", "width": 60, "sortable": true},   # Reduced and shortened title
-	{"id": "total_volume", "title": "Total", "width": 60, "sortable": true} # Reduced from 80
+	{"id": "name", "title": "Name", "width": 120, "sortable": true},  # Reduced from 200
+	{"id": "quantity", "title": "Qty", "width": 40, "sortable": true},  # Reduced from 60
+	{"id": "type", "title": "Type", "width": 40, "sortable": true},   # Reduced from 120
+	{"id": "volume", "title": "Vol", "width": 40, "sortable": true},   # Reduced and shortened title
+	{"id": "base_value", "title": "Total", "width": 80, "sortable": true} # Reduced from 80
 ]
 
 # Signals
@@ -277,8 +277,8 @@ func _compare_items(a: InventoryItem_Base, b: InventoryItem_Base) -> bool:
 			result = str(a.item_type) < str(b.item_type)
 		"volume":
 			result = a.volume < b.volume
-		"total_volume":
-			result = (a.volume * a.quantity) < (b.volume * b.quantity)
+		"base_value":
+			result = (a.base_value) < (b.base_value)
 		_:
 			result = a.item_name < b.item_name
 	
@@ -406,13 +406,13 @@ func _handle_responsive_columns():
 	var available_width = size.x
 	
 	if available_width < 300:  # Very small - hide optional columns
-		_set_column_visibility("total_volume", false)
+		_set_column_visibility("base_value", false)
 		_set_column_visibility("volume", false)
 	elif available_width < 400:  # Small - hide some columns
-		_set_column_visibility("total_volume", false)
+		_set_column_visibility("base_value", false)
 		_set_column_visibility("volume", false)
 	else:  # Normal - show all columns
-		_set_column_visibility("total_volume", true)
+		_set_column_visibility("base_value", true)
 		_set_column_visibility("volume", true)
 	
 func _calculate_column_widths():

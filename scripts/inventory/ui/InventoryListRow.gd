@@ -131,9 +131,10 @@ func _create_cell(column: Dictionary) -> Control:
 			label.offset_left = 2  # Reduced padding
 			label.offset_right = -2
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			label.clip_contents = true
 			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			label.add_theme_font_size_override("font_size", 11)  # Smaller font
+			label.add_theme_font_size_override("font_size", 16)  # Smaller font
 			label.add_theme_color_override("font_color", Color.WHITE)
 			cell.add_child(label)
 		
@@ -150,7 +151,7 @@ func _create_cell(column: Dictionary) -> Control:
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			label.clip_contents = true
-			label.add_theme_font_size_override("font_size", 10)  # Smaller font
+			label.add_theme_font_size_override("font_size", 16)  # Smaller font
 			cell.add_child(label)
 		
 		"type":
@@ -162,9 +163,10 @@ func _create_cell(column: Dictionary) -> Control:
 			label.offset_left = 2
 			label.offset_right = -2
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			label.clip_contents = true
 			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			label.add_theme_font_size_override("font_size", 10)
+			label.add_theme_font_size_override("font_size", 16)
 			cell.add_child(label)
 		
 		"volume":
@@ -179,15 +181,13 @@ func _create_cell(column: Dictionary) -> Control:
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			label.clip_contents = true
-			label.add_theme_font_size_override("font_size", 9)
+			label.add_theme_font_size_override("font_size", 16)
 			cell.add_child(label)
 		
-		"total_volume":
+		"base_value":
 			var label = Label.new()
-			var total_vol = item.volume * item.quantity
-			var total_text = "%.1f" % total_vol
-			if total_vol >= 1000:
-				total_text = "%.1fk" % (total_vol / 1000.0)
+			var base_value = item.base_value * item.quantity
+			var total_text = "%.1f" % base_value
 			label.text = total_text
 			label.set_anchors_preset(Control.PRESET_FULL_RECT)
 			label.offset_left = 1
@@ -195,7 +195,7 @@ func _create_cell(column: Dictionary) -> Control:
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			label.clip_contents = true
-			label.add_theme_font_size_override("font_size", 9)
+			label.add_theme_font_size_override("font_size", 16)
 			cell.add_child(label)
 	
 	return cell
