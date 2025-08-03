@@ -11,7 +11,7 @@ extends Control
 # Visual properties
 @export var row_alternate_color: Color = Color(0.12, 0.12, 0.12, 1.0)
 @export var row_selected_color: Color = Color(0.3, 0.4, 0.6, 1.0)
-@export var row_hover_color: Color = Color(0.2, 0.2, 0.2, 1.0)
+@export var row_hover_color: Color = Color(0.9, 0.2, 0.2, 1.0)
 
 # Container reference
 var container: InventoryContainer_Base
