@@ -8,6 +8,7 @@ extends Control
 @export var detail_panel_width: int = 300
 @export var show_details: bool = true
 
+
 # Visual properties
 @export var row_alternate_color: Color = Color(0.13, 0.13, 0.13, 1.0)
 @export var row_selected_color: Color = Color(0.3, 0.4, 0.6, 1.0)
@@ -23,7 +24,7 @@ var list_panel: Control
 var detail_panel: Control
 var scroll_container: ScrollContainer
 var list_container: VBoxContainer
-var header_container: HBoxContainer
+var header_container: GridContainer
 
 # List management
 var item_rows: Array[InventoryListRow] = []
@@ -36,10 +37,10 @@ var current_search_text: String = ""
 # Columns configuration
 var columns: Array[Dictionary] = [
 	{"id": "icon", "title": "", "width": 32, "sortable": false},
-	{"id": "name", "title": "Name", "width": 120, "sortable": true},  # Reduced from 200
-	{"id": "quantity", "title": "Qty", "width": 40, "sortable": true},  # Reduced from 60
-	{"id": "type", "title": "Type", "width": 40, "sortable": true},   # Reduced from 120
-	{"id": "volume", "title": "Vol", "width": 40, "sortable": true},   # Reduced and shortened title
+	{"id": "name", "title": "Name", "width": 120, "sortable": true}, # Reduced from 200
+	{"id": "quantity", "title": "Qty", "width": 40, "sortable": true}, # Reduced from 60
+	{"id": "type", "title": "Type", "width": 40, "sortable": true}, # Reduced from 120
+	{"id": "volume", "title": "Vol", "width": 40, "sortable": true}, # Reduced and shortened title
 	{"id": "base_value", "title": "Total", "width": 80, "sortable": true} # Reduced from 80
 ]
 
@@ -52,7 +53,6 @@ signal empty_area_context_menu(position: Vector2)
 func _ready():
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	_setup_ui()
-	resized.connect(_on_resized)
 
 func _gui_input(event: InputEvent):
 	"""Handle input on empty list areas"""
@@ -77,7 +77,7 @@ func _setup_ui():
 	# Create a simple VBox layout with proper clipping
 	var main_vbox = VBoxContainer.new()
 	main_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main_vbox.clip_contents = true  # IMPORTANT: Clip the entire list view
+	main_vbox.clip_contents = true # IMPORTANT: Clip the entire list view
 	add_child(main_vbox)
 	
 	# Create header
@@ -104,9 +104,9 @@ func _setup_ui():
 	# Create main list area
 	scroll_container = ScrollContainer.new()
 	scroll_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED  # Force no horizontal scrolling
+	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED # Force no horizontal scrolling
 	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll_container.clip_contents = true  # Clip scroll content
+	scroll_container.clip_contents = true # Clip scroll content
 	scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	list_area_container.add_child(scroll_container)
 
@@ -114,7 +114,7 @@ func _setup_ui():
 	
 	list_container = VBoxContainer.new()
 	list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_container.clip_contents = true  # Clip list items
+	list_container.clip_contents = true # Clip list items
 	scroll_container.add_child(list_container)
 
 func _on_scroll_container_input(event: InputEvent):
@@ -139,12 +139,12 @@ func _on_scroll_container_input(event: InputEvent):
 func _convert_to_split_layout():
 	# Only convert to split layout if we need the detail panel
 	# This keeps the simple layout when details aren't needed
-	pass  # Implement if you want the detail panel
+	pass # Implement if you want the detail panel
 
 func _setup_list_panel():
 	var vbox = VBoxContainer.new()
 	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	vbox.clip_contents = true  # Prevent overflow
+	vbox.clip_contents = true # Prevent overflow
 	list_panel.add_child(vbox)
 	
 	# Create header
@@ -154,79 +154,102 @@ func _setup_list_panel():
 	scroll_container = ScrollContainer.new()
 	scroll_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll_container.clip_contents = true  # Prevent horizontal overflow
+	scroll_container.clip_contents = true # Prevent horizontal overflow
 	vbox.add_child(scroll_container)
 	
 	list_container = VBoxContainer.new()
 	list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_container.clip_contents = true  # Prevent overflow
+	list_container.clip_contents = true # Prevent overflow
 	scroll_container.add_child(list_container)
 	
 
 func _setup_header(parent: Control):
-	# Create a container for the header
-	var header_wrapper = Control.new()
-	header_wrapper.name = "HeaderWrapper"
-	header_wrapper.custom_minimum_size.y = header_height
-	header_wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(header_wrapper)
+	header_container = GridContainer.new()
+	header_container.columns = columns.size()
+	header_container.custom_minimum_size.y = header_height
+	header_container.add_theme_constant_override("h_separation", 1)
+	header_container.add_theme_constant_override("v_separation", 0)
+	parent.add_child(header_container)
 	
-	# Create the actual background panel
-	var header_bg = Panel.new()
-	header_bg.name = "HeaderBackground"
-	header_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	header_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	header_wrapper.add_child(header_bg)
-	
-	# Style the background
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.2, 0.2, 0.2, 1.0)  # Lighter than main background
-	style.border_width_bottom = 1
-	style.border_color = Color(0.3, 0.3, 0.3, 1.0)
-	header_bg.add_theme_stylebox_override("panel", style)
-	
-	# Now create the header container on top of the background
-	header_container = HBoxContainer.new()
-	header_container.name = "HeaderContainer"
-	header_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	header_container.clip_contents = true
-	header_wrapper.add_child(header_container)
-	
-	# Create column headers
 	for i in columns.size():
 		var column = columns[i]
-		var header_button = Button.new()
+		var header_cell = Panel.new()
+		header_cell.mouse_filter = Control.MOUSE_FILTER_PASS
 		
-		# Always reserve space for sort indicator
-		var button_text = column.title
-		if column.sortable:
-			button_text += " ↓"  # Always show a sort indicator to reserve space
-		header_button.text = button_text
-		
-		header_button.flat = true
-		header_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		header_button.clip_contents = true
-		
-		# Make buttons transparent so background shows through
-		var transparent_style = StyleBoxFlat.new()
-		transparent_style.bg_color = Color.TRANSPARENT
-		header_button.add_theme_stylebox_override("normal", transparent_style)
-		header_button.add_theme_stylebox_override("hover", transparent_style)
-		header_button.add_theme_stylebox_override("pressed", transparent_style)
-		
-		if column.width <= 100:
-			header_button.custom_minimum_size.x = max(20, column.width)
+		if column.id == "name":
+			header_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			header_cell.custom_minimum_size.x = 100
 		else:
-			header_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			header_button.custom_minimum_size.x = 50
+			header_cell.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			header_cell.custom_minimum_size.x = column.width
+		
+		var style = StyleBoxFlat.new()
+		style.bg_color = Color(0.08, 0.08, 0.08, 1.0)
+		style.border_width_bottom = 1
+		style.border_width_right = 1 if i < columns.size() - 1 else 0
+		style.border_color = Color(0.3, 0.3, 0.3, 1.0)
+		header_cell.add_theme_stylebox_override("panel", style)
 		
 		if column.sortable:
-			header_button.pressed.connect(_on_header_clicked.bind(column.id))
+			var sort_button = Button.new()
+			sort_button.text = column.title
+			sort_button.flat = true
+			sort_button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			sort_button.alignment = HORIZONTAL_ALIGNMENT_CENTER if column.id in ["quantity", "type", "volume"] else HORIZONTAL_ALIGNMENT_LEFT
+			sort_button.pressed.connect(_on_header_clicked.bind(column.id))
+			
+			if current_sort_column == column.id:
+				sort_button.text += " ↑" if sort_ascending else " ↓"
+			
+			header_cell.add_child(sort_button)
+		else:
+			var header_label = Label.new()
+			header_label.text = column.title
+			header_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			header_label.offset_left = 4
+			header_label.offset_right = -4
+			header_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			header_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if column.id in ["quantity", "type", "volume"] else HORIZONTAL_ALIGNMENT_LEFT
+			header_cell.add_child(header_label)
 		
-		header_container.add_child(header_button)
+		header_container.add_child(header_cell)
+
+func _add_resize_handles(header_wrapper: Control):
+	var x_offset = 0
 	
-	# Update the sort indicators after all buttons are created
-	_update_header_sort_indicators()
+	for i in range(columns.size() - 1):
+		if i >= columns.size():
+			break
+			
+		var column = columns[i]
+		
+		if column.id == "name":
+			x_offset += 50
+		else:
+			x_offset += column.width
+		
+		# Create resize handle as overlay
+		var resize_handle = Control.new()
+		resize_handle.position.x = x_offset - 4
+		resize_handle.position.y = 0
+		resize_handle.size.x = 8
+		resize_handle.size.y = header_height
+		resize_handle.mouse_filter = Control.MOUSE_FILTER_PASS
+		resize_handle.mouse_default_cursor_shape = Control.CURSOR_HSIZE
+		resize_handle.z_index = 100
+		
+		var handle_bg = ColorRect.new()
+		handle_bg.color = Color.RED
+		handle_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		resize_handle.add_child(handle_bg)
+		
+		# TEST: Add direct mouse event handling
+		resize_handle.mouse_entered.connect(func(): print("Mouse entered handle ", i))
+		resize_handle.mouse_exited.connect(func(): print("Mouse exited handle ", i))
+		
+		header_wrapper.add_child(resize_handle)
+		
+		print("Added resize handle ", i, " at x=", resize_handle.position.x)
 
 func _setup_detail_panel():
 	if not detail_panel:
@@ -257,7 +280,7 @@ func _setup_detail_panel():
 	detail_content.name = "DetailContent"
 	detail_scroll.add_child(detail_content)
 
-func set_container(new_container: InventoryContainer_Base, new_container_id: String):	
+func set_container(new_container: InventoryContainer_Base, new_container_id: String):
 	# Disconnect from old container - only if signals are actually connected
 	if container and is_instance_valid(container):
 		if container.item_added.is_connected(_on_container_item_added):
@@ -275,14 +298,14 @@ func set_container(new_container: InventoryContainer_Base, new_container_id: Str
 		if not container.item_added.is_connected(_on_container_item_added):
 			container.item_added.connect(_on_container_item_added)
 		if not container.item_removed.is_connected(_on_container_item_removed):
-			container.item_removed.connect(_on_container_item_removed)  # Fixed: was disconnect
+			container.item_removed.connect(_on_container_item_removed) # Fixed: was disconnect
 		if not container.item_moved.is_connected(_on_container_item_moved):
 			container.item_moved.connect(_on_container_item_moved)
 	
 	# Always refresh the display, even if container is null (to clear it)
 	refresh_display()
 
-func refresh_display():	
+func refresh_display():
 	# Always clear first
 	_clear_list()
 	
@@ -328,7 +351,7 @@ func _should_show_item(item: InventoryItem_Base) -> bool:
 			return false
 	
 	# Apply type filter
-	if current_filter_type == 0:  # All Items
+	if current_filter_type == 0: # All Items
 		return true
 	
 	# Map filter indices to ItemType enum values
@@ -419,18 +442,19 @@ func _on_header_clicked(column_id: String):
 	_update_header_sort_indicators()
 	refresh_display()
 
+
 func _update_header_sort_indicators():
-	var headers = header_container.get_children()
-	for i in range(headers.size()):
-		var header = headers[i]
-		if header is Button:
-			var column = columns[i]
-			header.text = column.title
-			if column.sortable:
-				if current_sort_column == column.id:
-					header.text += " ↑" if sort_ascending else " ↓"
-				else:
-					header.text += "  "  # Two spaces to maintain consistent width
+	if not header_container:
+		return
+		
+	var header_index = 0
+	for child in header_container.get_children():
+		if child is Button and header_index < columns.size():
+			var column = columns[header_index]
+			child.text = column.title
+			if column.sortable and current_sort_column == column.id:
+				child.text += " ↑" if sort_ascending else " ↓"
+			header_index += 1
 
 func _on_row_clicked(row: InventoryListRow, item: InventoryItem_Base, event: InputEvent):
 	if event is InputEventMouseButton:
@@ -467,19 +491,13 @@ func _clear_selection():
 		row.set_selected(false)
 	selected_items.clear()
 	
-func _on_resized():
-	# Recalculate column widths when the view is resized
-	call_deferred("_calculate_column_widths")
-	call_deferred("_update_header_widths")
-	call_deferred("_handle_responsive_columns")
-	
 func _set_column_visibility(column_id: String, visible: bool):
 	"""Show/hide a column by ID"""
 	for i in columns.size():
 		if columns[i].id == column_id:
 			# Find the header button
 			if header_container and i + 1 < header_container.get_child_count():
-				var header_button = header_container.get_child(i + 1)  # +1 for background
+				var header_button = header_container.get_child(i + 1) # +1 for background
 				if header_button:
 					header_button.visible = visible
 			
@@ -493,60 +511,15 @@ func _handle_responsive_columns():
 	"""Hide less important columns when space is very limited"""
 	var available_width = size.x
 	
-	if available_width < 300:  # Very small - hide optional columns
+	if available_width < 300: # Very small - hide optional columns
 		_set_column_visibility("base_value", false)
 		_set_column_visibility("volume", false)
-	elif available_width < 400:  # Small - hide some columns
+	elif available_width < 400: # Small - hide some columns
 		_set_column_visibility("base_value", false)
 		_set_column_visibility("volume", false)
-	else:  # Normal - show all columns
+	else: # Normal - show all columns
 		_set_column_visibility("base_value", true)
 		_set_column_visibility("volume", true)
-	
-func _calculate_column_widths():
-	if size.x <= 0:
-		return  # Not ready yet
-		
-	var available_width = size.x - 20  # Account for scrollbar and margins
-	var fixed_width_total = 0
-	var expandable_columns = 0
-	
-	# Calculate fixed width total
-	for column in columns:
-		if column.width <= 100:
-			fixed_width_total += column.width
-		else:
-			expandable_columns += 1
-	
-	# Calculate remaining width for expandable columns
-	var remaining_width = available_width - fixed_width_total
-	if remaining_width > 0 and expandable_columns > 0:
-		var expandable_width = remaining_width / expandable_columns
-		
-		# Update expandable column widths
-		for column in columns:
-			if column.width > 100:
-				column.width = max(80, expandable_width)  # Minimum 80px
-	
-	# Refresh the display with new widths
-	_update_header_widths()
-
-func _update_header_widths():
-	if not header_container:
-		return
-		
-	var headers = header_container.get_children()
-	# Skip the background panel (first child)
-	for i in range(1, min(headers.size(), columns.size() + 1)):
-		var header = headers[i]
-		var column = columns[i - 1]
-		
-		if header is Button:
-			if column.width <= 100:  # Fixed width
-				header.custom_minimum_size.x = column.width
-			else:  # Expandable
-				header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-				header.clip_contents = true
 
 func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
 	if container and is_instance_valid(container):

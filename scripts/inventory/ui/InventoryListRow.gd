@@ -14,7 +14,7 @@ var drag_preview_created: bool = false
 
 
 var background: Panel
-var content_container: HBoxContainer
+var content_container: GridContainer
 var cells: Array[Control] = []
 var hover_overlay: Panel
 
@@ -55,29 +55,28 @@ func _setup_ui():
 	
 	_setup_hover_overlay()
 	
-	# Content container with proper sizing
-	content_container = HBoxContainer.new()
+	# Content container using GridContainer
+	content_container = GridContainer.new()
+	content_container.columns = columns.size()
 	content_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	content_container.offset_left = 4
+	content_container.offset_left = 0
 	content_container.offset_top = 2
-	content_container.offset_right = -4
+	content_container.offset_right = 0
 	content_container.offset_bottom = -2
-	content_container.clip_contents = true
-	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Let clicks pass through
+	content_container.add_theme_constant_override("h_separation", 1)
+	content_container.add_theme_constant_override("v_separation", 0)
+	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(content_container)
 	
-	# CRITICAL: Add invisible button overlay to capture ALL clicks
+	# Add invisible button overlay for clicks
 	var click_overlay = Button.new()
 	click_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	click_overlay.flat = true
-	click_overlay.modulate = Color.TRANSPARENT  # Make it invisible
+	click_overlay.modulate = Color.TRANSPARENT
 	click_overlay.mouse_filter = Control.MOUSE_FILTER_PASS
-	
-	# UPDATED: Connect to new enhanced input handler
 	click_overlay.gui_input.connect(_on_overlay_input)
 	click_overlay.mouse_entered.connect(_mouse_entered)
 	click_overlay.mouse_exited.connect(_mouse_exited)
-	
 	add_child(click_overlay)
 
 func _populate_cells():
@@ -94,17 +93,25 @@ func _populate_cells():
 		cells.append(cell)
 
 func _create_cell(column: Dictionary) -> Control:
-	var cell = Control.new()
-	cell.clip_contents = true  # IMPORTANT: Prevent overflow
+	var cell = Panel.new()
+	cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
-	# Set sizing with absolute minimums
-	if column.width <= 100:  # Fixed width columns
-		cell.custom_minimum_size.x = max(16, column.width)  # Absolute minimum 16px
-		cell.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	else:  # Expandable columns
+	# Set sizing to match header exactly
+	if column.id == "name":
 		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		cell.custom_minimum_size.x = 30  # Minimum 30px for expandable
+		cell.custom_minimum_size.x = 100
+	else:
+		cell.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		cell.custom_minimum_size.x = column.width
 	
+	# Style the cell with subtle borders
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color.TRANSPARENT
+	style.border_width_right = 1
+	style.border_color = Color(0.2, 0.2, 0.2, 0.5)
+	cell.add_theme_stylebox_override("panel", style)
+	
+	# Add content based on column type
 	match column.id:
 		"icon":
 			var icon = TextureRect.new()
@@ -112,14 +119,13 @@ func _create_cell(column: Dictionary) -> Control:
 			if texture:
 				icon.texture = texture
 			else:
-				# Create a very small fallback colored square
 				var fallback_image = Image.create(16, 16, false, Image.FORMAT_RGB8)
 				fallback_image.fill(item.get_type_color())
 				var fallback_texture = ImageTexture.new()
 				fallback_texture.set_image(fallback_image)
 				icon.texture = fallback_texture
 			
-			icon.custom_minimum_size = Vector2(16, 16)  # Very small icon
+			icon.custom_minimum_size = Vector2(16, 16)
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			icon.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 			cell.add_child(icon)
@@ -127,75 +133,36 @@ func _create_cell(column: Dictionary) -> Control:
 		"name":
 			var label = Label.new()
 			label.text = item.item_name
-			label.set_anchors_preset(Control.PRESET_FULL_RECT)
-			label.offset_left = 2  # Reduced padding
-			label.offset_right = -2
+			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			label.offset_left = 4
+			label.offset_right = -4
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			label.clip_contents = true
 			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			label.add_theme_font_size_override("font_size", 16)  # Smaller font
 			label.add_theme_color_override("font_color", Color.WHITE)
 			cell.add_child(label)
 		
 		"quantity":
 			var label = Label.new()
-			# Shorten quantity display for very small spaces
 			var qty_text = str(item.quantity)
 			if item.quantity >= 1000:
 				qty_text = "%.1fk" % (item.quantity / 1000.0)
 			label.text = qty_text
-			label.set_anchors_preset(Control.PRESET_FULL_RECT)
-			label.offset_left = 1
-			label.offset_right = -1
+			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			label.clip_contents = true
-			label.add_theme_font_size_override("font_size", 16)  # Smaller font
+			label.add_theme_color_override("font_color", Color.WHITE)
 			cell.add_child(label)
 		
-		"type":
+		# Add other column cases...
+		_:
 			var label = Label.new()
-			# Use abbreviations for type in small spaces
-			var type_text = _get_short_type_name(str(item.item_type))
-			label.text = type_text
-			label.set_anchors_preset(Control.PRESET_FULL_RECT)
-			label.offset_left = 2
-			label.offset_right = -2
+			label.text = "N/A"
+			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			label.clip_contents = true
-			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			label.add_theme_font_size_override("font_size", 16)
-			cell.add_child(label)
-		
-		"volume":
-			var label = Label.new()
-			var vol_text = "%.1f" % item.volume
-			if item.volume >= 1000:
-				vol_text = "%.1fk" % (item.volume / 1000.0)
-			label.text = vol_text
-			label.set_anchors_preset(Control.PRESET_FULL_RECT)
-			label.offset_left = 1
-			label.offset_right = -1
-			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			label.clip_contents = true
-			label.add_theme_font_size_override("font_size", 16)
-			cell.add_child(label)
-		
-		"base_value":
-			var label = Label.new()
-			var base_value = item.base_value * item.quantity
-			var total_text = "%.1f" % base_value
-			label.text = total_text
-			label.set_anchors_preset(Control.PRESET_FULL_RECT)
-			label.offset_left = 1
-			label.offset_right = -1
-			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			label.clip_contents = true
-			label.add_theme_font_size_override("font_size", 16)
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			cell.add_child(label)
 	
 	return cell
@@ -394,8 +361,8 @@ func _start_drag():
 	# Start following mouse
 	_follow_mouse(preview)
 	
-	# Visual feedback on source row
-	modulate.a = 0.5
+	# Visual feedback on source row - use lighter transparency to maintain layout
+	modulate.a = 0.7  # Changed from 0.5 to 0.7 to keep layout more stable
 	
 	# Emit signal
 	item_drag_started.emit(self, item)
@@ -844,38 +811,31 @@ func _end_drag():
 	var drop_successful = false
 	var end_position = get_global_mouse_position()
 	
-	# NEW: Try to drop on other list rows first
 	drop_successful = _attempt_drop_on_list_rows(end_position)
 	
-	# Try to drop on inventory grid/slots
 	if not drop_successful:
 		drop_successful = _attempt_drop_on_inventory(end_position)
 	
-	# If that didn't work, try container list
 	if not drop_successful:
 		drop_successful = _attempt_drop_on_container_list(end_position)
 	
-	# Cleanup drag preview
 	_cleanup_drag_preview()
 	
-	# Cleanup
 	is_dragging = false
 	drag_preview_created = false
 	modulate.a = 1.0
 	_set_merge_highlight(false)
 	
-	# Clear drag data
 	var viewport = get_viewport()
 	if viewport and viewport.has_meta("current_drag_data"):
 		viewport.remove_meta("current_drag_data")
 	
-	# Clear highlights
 	var content = _find_inventory_content()
 	if content:
 		content._clear_all_container_highlights()
 	
 	item_drag_ended.emit(self, drop_successful)
-	
+
 func _attempt_drop_on_list_rows(end_position: Vector2) -> bool:
 	"""Try to drop on other list rows for merging"""
 	var list_view = _find_list_view()
