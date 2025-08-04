@@ -58,7 +58,22 @@ func _gui_input(event: InputEvent):
 	"""Handle input on empty list areas"""
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
-		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			# Check if left-click is on empty area (not on a row)
+			var clicked_on_row = false
+			for row in item_rows:
+				if row and is_instance_valid(row):
+					var row_rect = Rect2(row.global_position, row.size)
+					if row_rect.has_point(mouse_event.global_position):
+						clicked_on_row = true
+						break
+			
+			if not clicked_on_row:
+				# Left-click in empty area - clear selection
+				_clear_selection()
+				get_viewport().set_input_as_handled()
+		
+		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
 			# Check if right-click is on empty area (not on a row)
 			var clicked_on_row = false
 			for row in item_rows:
@@ -69,52 +84,29 @@ func _gui_input(event: InputEvent):
 						break
 			
 			if not clicked_on_row:
-				# Right-click on empty area
+				# Right-click in empty area
 				empty_area_context_menu.emit(mouse_event.global_position)
 				get_viewport().set_input_as_handled()
 
 func _setup_ui():
-	# Create a simple VBox layout with proper clipping
+	# Create main container
 	var main_vbox = VBoxContainer.new()
 	main_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main_vbox.clip_contents = true # IMPORTANT: Clip the entire list view
 	add_child(main_vbox)
 	
-	# Create header
-	_setup_header(main_vbox)
+	# Create header row first (outside scroll container)
+	_create_header_row(main_vbox)
 	
-	# Add dark background panel ONLY for the list area (not header)
-	var list_area_container = Control.new()
-	list_area_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	list_area_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	main_vbox.add_child(list_area_container)
-	
-	# Add background panel to the list area only
-	var background_panel = Panel.new()
-	background_panel.name = "ListAreaBackground"
-	background_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	background_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	list_area_container.add_child(background_panel)
-	
-	# Use same dark background as grid view
-	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color(0.1, 0.1, 0.1, 1.0)
-	background_panel.add_theme_stylebox_override("panel", style_box)
-	
-	# Create main list area
+	# Create scroll container for data rows
 	scroll_container = ScrollContainer.new()
-	scroll_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED # Force no horizontal scrolling
+	scroll_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll_container.clip_contents = true # Clip scroll content
-	scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
-	list_area_container.add_child(scroll_container)
-
-	scroll_container.gui_input.connect(_on_scroll_container_input)
+	main_vbox.add_child(scroll_container)
 	
+	# Create list container for data rows only
 	list_container = VBoxContainer.new()
 	list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_container.clip_contents = true # Clip list items
 	scroll_container.add_child(list_container)
 
 func _on_scroll_container_input(event: InputEvent):
@@ -146,9 +138,7 @@ func _setup_list_panel():
 	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	vbox.clip_contents = true # Prevent overflow
 	list_panel.add_child(vbox)
-	
-	# Create header
-	_setup_header(vbox)
+
 	
 	# Create scrollable list
 	scroll_container = ScrollContainer.new()
@@ -163,56 +153,30 @@ func _setup_list_panel():
 	scroll_container.add_child(list_container)
 	
 
-func _setup_header(parent: Control):
+func _create_header_row(parent: Control):
+	"""Create header using the same structure as regular rows"""
+	var header_row = Control.new()
+	header_row.name = "HeaderRow"
+	header_row.custom_minimum_size.y = header_height
+	header_row.mouse_filter = Control.MOUSE_FILTER_PASS
+	
+	# Use the same GridContainer structure as rows
 	header_container = GridContainer.new()
 	header_container.columns = columns.size()
-	header_container.custom_minimum_size.y = header_height
+	header_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	header_container.add_theme_constant_override("h_separation", 1)
 	header_container.add_theme_constant_override("v_separation", 0)
-	parent.add_child(header_container)
+	header_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header_row.add_child(header_container)
 	
+	# Create header cells using the same logic as row cells
 	for i in columns.size():
 		var column = columns[i]
-		var header_cell = Panel.new()
-		header_cell.mouse_filter = Control.MOUSE_FILTER_PASS
-		
-		if column.id == "name":
-			header_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			header_cell.custom_minimum_size.x = 100
-		else:
-			header_cell.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-			header_cell.custom_minimum_size.x = column.width
-		
-		var style = StyleBoxFlat.new()
-		style.bg_color = Color(0.08, 0.08, 0.08, 1.0)
-		style.border_width_bottom = 1
-		style.border_width_right = 1 if i < columns.size() - 1 else 0
-		style.border_color = Color(0.3, 0.3, 0.3, 1.0)
-		header_cell.add_theme_stylebox_override("panel", style)
-		
-		if column.sortable:
-			var sort_button = Button.new()
-			sort_button.text = column.title
-			sort_button.flat = true
-			sort_button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-			sort_button.alignment = HORIZONTAL_ALIGNMENT_CENTER if column.id in ["quantity", "type", "volume"] else HORIZONTAL_ALIGNMENT_LEFT
-			sort_button.pressed.connect(_on_header_clicked.bind(column.id))
-			
-			if current_sort_column == column.id:
-				sort_button.text += " ↑" if sort_ascending else " ↓"
-			
-			header_cell.add_child(sort_button)
-		else:
-			var header_label = Label.new()
-			header_label.text = column.title
-			header_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-			header_label.offset_left = 4
-			header_label.offset_right = -4
-			header_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			header_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if column.id in ["quantity", "type", "volume"] else HORIZONTAL_ALIGNMENT_LEFT
-			header_cell.add_child(header_label)
-		
+		var header_cell = _create_header_cell(column)
 		header_container.add_child(header_cell)
+	
+	# Add header row to the parent (main_vbox, not list_container)
+	parent.add_child(header_row)
 
 func _add_resize_handles(header_wrapper: Control):
 	var x_offset = 0
@@ -250,6 +214,60 @@ func _add_resize_handles(header_wrapper: Control):
 		header_wrapper.add_child(resize_handle)
 		
 		print("Added resize handle ", i, " at x=", resize_handle.position.x)
+
+func _create_header_cell(column: Dictionary) -> Control:
+	"""Create header cell using the same sizing logic as row cells"""
+	var cell = Panel.new()
+	cell.mouse_filter = Control.MOUSE_FILTER_PASS
+	
+	# Use EXACTLY the same sizing logic as row cells
+	cell.custom_minimum_size.y = header_height  # Different height
+	if column.id == "name":
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cell.custom_minimum_size.x = 100
+	else:
+		cell.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		cell.custom_minimum_size.x = column.width
+	
+	# Header-specific styling
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.08, 0.08, 1.0)
+	style.border_width_bottom = 1
+	style.border_width_right = 1
+	style.border_color = Color(0.3, 0.3, 0.3, 1.0)
+	cell.add_theme_stylebox_override("panel", style)
+	
+	# Add header content
+	if column.sortable:
+		var sort_button = Button.new()
+		sort_button.text = column.title
+		sort_button.flat = true
+		sort_button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		# Use same alignment logic as rows
+		if column.id in ["quantity", "type", "volume", "base_value"]:
+			sort_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		else:
+			sort_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		sort_button.pressed.connect(_on_header_clicked.bind(column.id))
+		
+		if current_sort_column == column.id:
+			sort_button.text += " ↑" if sort_ascending else " ↓"
+		
+		cell.add_child(sort_button)
+	else:
+		var header_label = Label.new()
+		header_label.text = column.title
+		header_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		header_label.offset_left = 4
+		header_label.offset_right = -4
+		header_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		if column.id in ["quantity", "type", "volume", "base_value"]:
+			header_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		else:
+			header_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		cell.add_child(header_label)
+	
+	return cell
 
 func _setup_detail_panel():
 	if not detail_panel:

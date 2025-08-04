@@ -60,9 +60,9 @@ func _setup_ui():
 	content_container.columns = columns.size()
 	content_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content_container.offset_left = 0
-	content_container.offset_top = 2
+	content_container.offset_top = 0
 	content_container.offset_right = 0
-	content_container.offset_bottom = -2
+	content_container.offset_bottom = 0
 	content_container.add_theme_constant_override("h_separation", 1)
 	content_container.add_theme_constant_override("v_separation", 0)
 	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -95,6 +95,8 @@ func _populate_cells():
 func _create_cell(column: Dictionary) -> Control:
 	var cell = Panel.new()
 	cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	cell.custom_minimum_size.y = row_height
 	
 	# Set sizing to match header exactly
 	if column.id == "name":
@@ -114,6 +116,10 @@ func _create_cell(column: Dictionary) -> Control:
 	# Add content based on column type
 	match column.id:
 		"icon":
+			# Create a container to center the icon
+			var icon_container = CenterContainer.new()
+			icon_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			
 			var icon = TextureRect.new()
 			var texture = item.get_icon_texture()
 			if texture:
@@ -127,8 +133,9 @@ func _create_cell(column: Dictionary) -> Control:
 			
 			icon.custom_minimum_size = Vector2(16, 16)
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-			cell.add_child(icon)
+			
+			icon_container.add_child(icon)
+			cell.add_child(icon_container)
 		
 		"name":
 			var label = Label.new()
@@ -151,22 +158,70 @@ func _create_cell(column: Dictionary) -> Control:
 			label.text = qty_text
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			label.clip_contents = true
+			label.add_theme_color_override("font_color", Color.WHITE)
+			cell.add_child(label)
+
+		"type":
+			var label = Label.new()
+			var type_text = str(item.item_type)
+			label.text = type_text
+			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			label.clip_contents = true
+			label.add_theme_color_override("font_color", Color.WHITE)
+			cell.add_child(label)
+
+		"volume":
+			var label = Label.new()
+			var volume_text = str(item.volume * item.quantity)
+			if item.volume >= 1000:
+				volume_text = "%.1fk" % (item.volume / 1000.0)
+			label.text = volume_text
+			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			label.clip_contents = true
 			label.add_theme_color_override("font_color", Color.WHITE)
 			cell.add_child(label)
 		
-		# Add other column cases...
-		_:
+		"base_value":
 			var label = Label.new()
-			label.text = "N/A"
+			var value = item.base_value * item.quantity
+			label.text = _format_currency(value)
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			label.clip_contents = true
+			label.add_theme_color_override("font_color", Color.WHITE)
 			cell.add_child(label)
 	
 	return cell
+
+func _format_currency(value: float) -> String:
+	var formatted = "%.2f" % value
+	var parts = formatted.split(".")
+	var dollars = parts[0]
+	var cents = parts[1]
 	
+	# Add commas to the dollar part
+	var result = ""
+	var count = 0
+	
+	for i in range(dollars.length() - 1, -1, -1):
+		if count > 0 and count % 3 == 0:
+			result = "," + result
+		result = dollars[i] + result
+		count += 1
+	
+	# Only show cents if they're not zero
+	if cents != "00":
+		return result + "." + cents + " cr"
+	else:
+		return result + " cr"
+
 func _get_short_type_name(type_name: String) -> String:
 	match type_name.to_upper():
 		"WEAPON":
@@ -201,14 +256,29 @@ func set_alternate_color(alternate: bool, color: Color):
 
 func set_selected(selected: bool):
 	is_selected = selected
+	
+	# Kill any running hover animations immediately
+	if hover_tween and hover_tween.is_valid():
+		hover_tween.kill()
+		hover_tween = null
+	
+	# Force immediate background and overlay update
 	_update_background()
+	
+	# Critical: Properly manage hover overlay when selection changes
+	if hover_overlay:
+		if is_selected:
+			# When selected, hide hover overlay completely
+			hover_overlay.modulate.a = 0.0
+		elif is_hovered:
+			# If still hovered but not selected, show hover overlay
+			hover_overlay.modulate.a = 0.3
+		else:
+			# Not selected and not hovered, hide overlay
+			hover_overlay.modulate.a = 0.0
 
 func _update_background():
 	if not background:
-		return
-	
-	# Don't update immediately if we're tweening
-	if hover_tween and hover_tween.is_valid():
 		return
 	
 	var color: Color
