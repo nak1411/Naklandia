@@ -108,7 +108,6 @@ func _switch_to_list_mode():
 		
 		# Connect list view signals
 		list_view.item_selected.connect(_on_list_item_selected)
-		list_view.item_activated.connect(_on_item_activated)
 		list_view.item_context_menu.connect(_on_item_context_menu_from_list)
 		list_view.empty_area_context_menu.connect(_on_empty_area_context_menu)  # ADD THIS
 	

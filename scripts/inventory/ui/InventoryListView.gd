@@ -45,7 +45,6 @@ var columns: Array[Dictionary] = [
 
 # Signals
 signal item_selected(item: InventoryItem_Base)
-signal item_activated(item: InventoryItem_Base)
 signal item_context_menu(item: InventoryItem_Base, position: Vector2)
 signal empty_area_context_menu(position: Vector2)
 
@@ -343,7 +342,6 @@ func refresh_display():
 		
 		# Connect row signals
 		row.row_clicked.connect(_on_row_clicked)
-		row.row_double_clicked.connect(_on_row_double_clicked)
 		row.row_right_clicked.connect(_on_row_right_clicked)
 		
 		list_container.add_child(row)
@@ -499,8 +497,8 @@ func _on_row_clicked(row: InventoryListRow, item: InventoryItem_Base, event: Inp
 		
 		item_selected.emit(item)
 
-func _on_row_double_clicked(_row: InventoryListRow, item: InventoryItem_Base):
-	item_activated.emit(item)
+func _on_row_double_clicked(_row: InventoryListRow, _item: InventoryItem_Base):
+	pass
 
 func _on_row_right_clicked(_row: InventoryListRow, item: InventoryItem_Base, _position: Vector2):
 	item_context_menu.emit(item, position)
