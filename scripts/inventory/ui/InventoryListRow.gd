@@ -114,12 +114,17 @@ func _create_cell(column: Dictionary) -> Control:
 	cell.add_theme_stylebox_override("panel", style)
 	
 	# Add content based on column type
-	match column.id:
-		"icon":
-			# Create a container to center the icon
-			var icon_container = CenterContainer.new()
-			icon_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	match column.id:		
+		"name":
+			# Create horizontal container for icon + name
+			var hbox = HBoxContainer.new()
+			hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			hbox.offset_left = 4
+			hbox.offset_right = -4
+			hbox.add_theme_constant_override("separation", 4)
+			cell.add_child(hbox)
 			
+			# Add icon
 			var icon = TextureRect.new()
 			var texture = item.get_icon_texture()
 			if texture:
@@ -133,22 +138,19 @@ func _create_cell(column: Dictionary) -> Control:
 			
 			icon.custom_minimum_size = Vector2(16, 16)
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			hbox.add_child(icon)
 			
-			icon_container.add_child(icon)
-			cell.add_child(icon_container)
-		
-		"name":
+			# Add name label
 			var label = Label.new()
 			label.text = item.item_name
-			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-			label.offset_left = 4
-			label.offset_right = -4
+			label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			label.clip_contents = true
 			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 			label.add_theme_color_override("font_color", Color.WHITE)
-			cell.add_child(label)
+			hbox.add_child(label)
 		
 		"quantity":
 			var label = Label.new()

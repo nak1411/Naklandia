@@ -36,7 +36,6 @@ var current_search_text: String = ""
 
 # Columns configuration
 var columns: Array[Dictionary] = [
-	{"id": "icon", "title": "", "width": 32, "sortable": false},
 	{"id": "name", "title": "Name", "width": 120, "sortable": true}, # Reduced from 200
 	{"id": "quantity", "title": "Qty", "width": 40, "sortable": true}, # Reduced from 60
 	{"id": "type", "title": "Type", "width": 40, "sortable": true}, # Reduced from 120
@@ -242,6 +241,7 @@ func _create_header_cell(column: Dictionary) -> Control:
 		var sort_button = Button.new()
 		sort_button.text = column.title
 		sort_button.flat = true
+		sort_button.focus_mode = Control.FOCUS_NONE
 		sort_button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		# Use same alignment logic as rows
 		if column.id in ["quantity", "type", "volume", "base_value"]:
