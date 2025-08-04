@@ -154,9 +154,7 @@ func _create_cell(column: Dictionary) -> Control:
 		
 		"quantity":
 			var label = Label.new()
-			var qty_text = str(item.quantity)
-			if item.quantity >= 1000:
-				qty_text = "%.1fk" % (item.quantity / 1000.0)
+			var qty_text = str(item.quantity) + " "
 			label.text = qty_text
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -167,7 +165,7 @@ func _create_cell(column: Dictionary) -> Control:
 
 		"type":
 			var label = Label.new()
-			var type_text = str(item.item_type)
+			var type_text = str(item.item_type) + " "
 			label.text = type_text
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -178,9 +176,7 @@ func _create_cell(column: Dictionary) -> Control:
 
 		"volume":
 			var label = Label.new()
-			var volume_text = str(item.volume * item.quantity)
-			if item.volume >= 1000:
-				volume_text = "%.1fk" % (item.volume / 1000.0)
+			var volume_text = str(item.volume * item.quantity) + " "
 			label.text = volume_text
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -220,9 +216,9 @@ func _format_currency(value: float) -> String:
 	
 	# Only show cents if they're not zero
 	if cents != "00":
-		return result + "." + cents + " cr"
+		return result + "." + cents + " cr "
 	else:
-		return result + " cr"
+		return result + " cr "
 
 func _get_short_type_name(type_name: String) -> String:
 	match type_name.to_upper():
@@ -333,7 +329,7 @@ func _animate_hover_in():
 	
 	# Subtle fade in the hover overlay
 	hover_tween.tween_property(hover_overlay, "modulate:a", 0.3, 0.12)
-	hover_tween.tween_property(self, "scale", Vector2(1.01, 1.0), 0.1)
+	hover_tween.tween_property(self, "scale", Vector2(0.998, 1.0), 0.1)
 
 # Replace the _animate_hover_out function
 func _animate_hover_out():

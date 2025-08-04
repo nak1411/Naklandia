@@ -38,9 +38,9 @@ var current_search_text: String = ""
 var columns: Array[Dictionary] = [
 	{"id": "name", "title": "Name", "width": 120, "sortable": true}, # Reduced from 200
 	{"id": "quantity", "title": "Qty", "width": 40, "sortable": true}, # Reduced from 60
-	{"id": "type", "title": "Type", "width": 40, "sortable": true}, # Reduced from 120
-	{"id": "volume", "title": "Vol", "width": 40, "sortable": true}, # Reduced and shortened title
-	{"id": "base_value", "title": "Total", "width": 80, "sortable": true} # Reduced from 80
+	{"id": "type", "title": "Type", "width": 80, "sortable": true}, # Reduced from 120
+	{"id": "volume", "title": "Vol", "width": 80, "sortable": true}, # Reduced and shortened title
+	{"id": "base_value", "title": "Total", "width": 100, "sortable": true} # Reduced from 80
 ]
 
 # Signals
@@ -91,6 +91,7 @@ func _setup_ui():
 	# Create main container
 	var main_vbox = VBoxContainer.new()
 	main_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	main_vbox.offset_right = -8
 	add_child(main_vbox)
 	
 	# Create header row first (outside scroll container)
