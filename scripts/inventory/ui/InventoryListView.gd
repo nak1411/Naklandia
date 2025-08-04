@@ -499,10 +499,10 @@ func _on_row_clicked(row: InventoryListRow, item: InventoryItem_Base, event: Inp
 		
 		item_selected.emit(item)
 
-func _on_row_double_clicked(row: InventoryListRow, item: InventoryItem_Base):
+func _on_row_double_clicked(_row: InventoryListRow, item: InventoryItem_Base):
 	item_activated.emit(item)
 
-func _on_row_right_clicked(row: InventoryListRow, item: InventoryItem_Base, position: Vector2):
+func _on_row_right_clicked(_row: InventoryListRow, item: InventoryItem_Base, _position: Vector2):
 	item_context_menu.emit(item, position)
 
 func _clear_selection():
@@ -510,7 +510,7 @@ func _clear_selection():
 		row.set_selected(false)
 	selected_items.clear()
 	
-func _set_column_visibility(column_id: String, visible: bool):
+func _set_column_visibility(column_id: String, _visible: bool):
 	"""Show/hide a column by ID"""
 	for i in columns.size():
 		if columns[i].id == column_id:
@@ -540,15 +540,15 @@ func _handle_responsive_columns():
 		_set_column_visibility("base_value", true)
 		_set_column_visibility("volume", true)
 
-func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
+func _on_container_item_added(_item: InventoryItem_Base, _position: Vector2i):
 	if container and is_instance_valid(container):
 		refresh_display()
 
-func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
+func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i):
 	if container and is_instance_valid(container):
 		refresh_display()
 
-func _on_container_item_moved(item: InventoryItem_Base, old_position: Vector2i, new_position: Vector2i):
+func _on_container_item_moved(_item: InventoryItem_Base, _old_position: Vector2i, _new_position: Vector2i):
 	if container and is_instance_valid(container):
 		refresh_display()
 		

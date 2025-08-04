@@ -83,12 +83,12 @@ func _setup_content():
 	if inventory_manager:
 		_initialize_inventory_content()
 
-func _on_empty_area_context_menu_from_content(global_position: Vector2):
+func _on_empty_area_context_menu_from_content(_global_position: Vector2):
 	"""Handle empty area context menu from content"""
 	if item_actions and item_actions.has_method("show_empty_area_context_menu"):
 		item_actions.show_empty_area_context_menu(global_position)
 	
-func _on_window_resized_for_inventory(new_size: Vector2i):
+func _on_window_resized_for_inventory(_new_size: Vector2i):
 	"""Handle window resize for inventory components"""
 	if content:
 		# Trigger content resize handling
@@ -299,7 +299,7 @@ func _on_item_activated_from_content(item: InventoryItem_Base, slot: InventorySl
 	if item_actions and item_actions.has_method("handle_item_activation"):
 		item_actions.handle_item_activation(item, slot)
 
-func _on_item_context_menu_from_content(item: InventoryItem_Base, slot: InventorySlot, global_position: Vector2):
+func _on_item_context_menu_from_content(item: InventoryItem_Base, slot: InventorySlot, _global_position: Vector2):
 	if item_actions and item_actions.has_method("show_item_context_menu"):
 		item_actions.show_item_context_menu(item, slot, global_position)
 
@@ -308,7 +308,7 @@ func _on_window_resized_for_grid(_new_size: Vector2i):
 	if content and content.inventory_grid and content.inventory_grid.has_method("handle_window_resize"):
 		content.inventory_grid.handle_window_resize()
 
-func _on_options_dropdown_selected(index: int):
+func _on_options_dropdown_selected(_index: int):
 	"""Handle options dropdown selection"""
 	# Implement inventory-specific option handling
 	pass

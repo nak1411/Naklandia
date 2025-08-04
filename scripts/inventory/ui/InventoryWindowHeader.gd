@@ -117,7 +117,7 @@ func _setup_controls():
 
 	display_container.add_theme_constant_override("margin_left", 4)
 	display_container.add_theme_constant_override("margin_top", 4)
-	display_container.add_theme_constant_override("margin_right", 2)
+	display_container.add_theme_constant_override("margin_right", 8)
 	display_container.add_theme_constant_override("margin_bottom", 2)
 
 	display_mode_button = Button.new()

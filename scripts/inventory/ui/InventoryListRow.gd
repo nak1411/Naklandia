@@ -29,7 +29,6 @@ var hover_tween: Tween
 
 # Signals
 signal row_clicked(row: InventoryListRow, item: InventoryItem_Base, event: InputEvent)
-signal row_double_clicked(row: InventoryListRow, item: InventoryItem_Base)
 signal row_right_clicked(row: InventoryListRow, item: InventoryItem_Base, position: Vector2)
 signal item_drag_started(row: InventoryListRow, item: InventoryItem_Base)
 signal item_drag_ended(row: InventoryListRow, success: bool)
@@ -678,7 +677,7 @@ func _handle_drop_on_slot(target_slot: InventorySlot) -> bool:
 	
 	return false
 
-func _handle_drop_on_empty_grid(grid: InventoryGrid, position: Vector2) -> bool:
+func _handle_drop_on_empty_grid(grid: InventoryGrid, _position: Vector2) -> bool:
 	"""Handle dropping on empty grid area"""
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
@@ -740,7 +739,7 @@ func _find_list_view() -> InventoryListView:
 		current = current.get_parent()
 	return null
 	
-func _can_drop_data(position: Vector2, data: Variant) -> bool:
+func _can_drop_data(_position: Vector2, data: Variant) -> bool:
 	"""Check if we can accept a drop and provide visual feedback"""
 	
 	if not item or not data:
@@ -760,7 +759,7 @@ func _can_drop_data(position: Vector2, data: Variant) -> bool:
 	_set_merge_highlight(false)
 	return false
 
-func _drop_data(position: Vector2, data: Variant):
+func _drop_data(_position: Vector2, data: Variant):
 	"""Handle the actual drop"""
 	_set_merge_highlight(false)
 	
@@ -858,7 +857,7 @@ func _get_current_container() -> InventoryContainer_Base:
 		return list_view.container
 	return null
 	
-func get_drag_data(position: Vector2) -> Variant:
+func get_drag_data(_position: Vector2) -> Variant:
 	"""Provide drag data for Godot's built-in drag system"""	
 	if not item:
 		return null
