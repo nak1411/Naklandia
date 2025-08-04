@@ -2,6 +2,8 @@
 class_name InventorySlot
 extends Control
 
+const BloomMaterial = preload("res://scripts/inventory/ui/materials/BloomMaterial.gd")
+
 # Slot properties
 @export var slot_size: Vector2 = Vector2(96, 96)
 @export var border_color: Color = Color(0.2, 0.2, 0.2, 1.0)
@@ -24,6 +26,12 @@ var hover_glow: Control
 var glow_canvas_layer: CanvasLayer
 var is_hovered: bool = false
 var glow_tween: Tween
+
+@export var eve_glow_color: Color = Color(0.6, 0.8, 1.0, 1.0)  # EVE's signature blue
+@export var sharp_border_width: int = 2  # Always pixel-perfect width
+@export var glow_intensity: float = 0.8
+var bloom_material: EVEBloomMaterial
+var bloom_overlay: Control
 
 # State
 var is_highlighted: bool = false
@@ -235,6 +243,12 @@ func _setup_external_glow():
 	# Only create glow if we don't already have it
 	if hover_glow:
 		return
+
+	bloom_material = EVEBloomMaterial.new()
+	bloom_material.apply_slot_hover_preset()
+
+	var bloom_rect = ColorRect.new()
+	bloom_rect.material = bloom_material
 	
 	# Find the inventory grid container that has clipping enabled
 	var clipping_parent = _find_clipping_parent()
@@ -244,37 +258,48 @@ func _setup_external_glow():
 	
 	# Create glow as a regular Control (not CanvasLayer) so it respects clipping
 	hover_glow = Control.new()
-	hover_glow.name = "SlotGlow_Lines"
+	hover_glow.name = "SlotGlow_Sharp"
 	hover_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hover_glow.visible = false
-	hover_glow.z_index = 100  # Use z_index instead of CanvasLayer for layering
+	hover_glow.z_index = 100
 	clipping_parent.add_child(hover_glow)
 	
-	# Create 4 ColorRect lines for top, bottom, left, right
-	var top_line = ColorRect.new()
-	top_line.name = "TopLine"
-	top_line.color = Color(0.5, 0.8, 1.0, 0.0)
-	top_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Create EVE-style sharp border lines
+	_create_sharp_glow_lines()
+
+func _create_sharp_glow_lines():
+	"""Create pixel-perfect glow lines like EVE Online"""
+	if not hover_glow:
+		return
 	
-	var bottom_line = ColorRect.new()
-	bottom_line.name = "BottomLine"
-	bottom_line.color = Color(0.5, 0.8, 1.0, 0.0)
-	bottom_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Create 4 sharp ColorRect lines for top, bottom, left, right
+	var line_names = ["TopLine", "BottomLine", "LeftLine", "RightLine"]
 	
-	var left_line = ColorRect.new()
-	left_line.name = "LeftLine"
-	left_line.color = Color(0.5, 0.8, 1.0, 0.0)
-	left_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for line_name in line_names:
+		var line = ColorRect.new()
+		line.name = line_name
+		line.color = Color(eve_glow_color.r, eve_glow_color.g, eve_glow_color.b, 0.0)
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Ensure pixel-perfect rendering
+		line.set_meta("pixel_perfect", true)
+		
+		hover_glow.add_child(line)
 	
-	var right_line = ColorRect.new()
-	right_line.name = "RightLine"
-	right_line.color = Color(0.5, 0.8, 1.0, 0.0)
-	right_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Create corner accent dots for extra EVE-style flair
+	_create_corner_accents()
+
+func _create_corner_accents():
+	"""Add small corner accent dots like EVE Online"""
+	var corner_names = ["TopLeftCorner", "TopRightCorner", "BottomLeftCorner", "BottomRightCorner"]
 	
-	hover_glow.add_child(top_line)
-	hover_glow.add_child(bottom_line)
-	hover_glow.add_child(left_line)
-	hover_glow.add_child(right_line)
+	for corner_name in corner_names:
+		var corner = ColorRect.new()
+		corner.name = corner_name
+		corner.color = Color(eve_glow_color.r, eve_glow_color.g, eve_glow_color.b, 0.0)
+		corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		corner.custom_minimum_size = Vector2(4, 4)  # Small 4x4 pixel accent
+		
+		hover_glow.add_child(corner)
 
 func _find_clipping_parent() -> Control:
 	"""Find the nearest parent with clip_contents enabled, preferring non-ScrollContainer parents"""
@@ -298,89 +323,174 @@ func _find_clipping_parent() -> Control:
 	return null
 	
 func _show_hover_glow():
-	# Only setup glow when we actually need it and can safely do so
 	if not hover_glow and get_tree() and get_tree().current_scene:
 		_setup_external_glow()
 	
 	if not hover_glow or not item:
 		return
 	
+	_position_sharp_glow()
+	_animate_sharp_glow_in()
+
+func _position_sharp_glow():
+	"""Position the sharp glow with pixel-perfect alignment"""
 	var slot_global_rect = get_global_rect()
-	var border_width = 2
 	
-	# Calculate padding based on the proportional system we're now using
+	# Calculate padding based on the proportional system
 	var padding = max(4, int(slot_size.x * 0.08))
 	
-	# Account for the margin container padding - the content is inset by padding pixels
+	# Account for the margin container padding
 	var content_global_position = slot_global_rect.position + Vector2(padding, padding)
 	var content_size = slot_global_rect.size - Vector2(padding * 2, padding * 2)
 	
-	# Convert global position to local position within the clipping parent
+	# Convert to local coordinates within clipping parent
 	var clipping_parent = hover_glow.get_parent()
 	var local_position = content_global_position
 	
 	if clipping_parent and clipping_parent is Control:
-		# Get the clipping parent's global position
 		var parent_global_pos = clipping_parent.global_position
 		
-		# If the clipping parent is a ScrollContainer, we need to account for scroll offset
+		# Account for scroll offset if needed
 		if clipping_parent is ScrollContainer:
 			var scroll_container = clipping_parent as ScrollContainer
 			parent_global_pos += Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
 		
-		# Convert to local coordinates
 		local_position = content_global_position - parent_global_pos
 	
-	# Position the container around the content area (not the full slot)
-	hover_glow.position = local_position - Vector2(border_width, border_width)
-	hover_glow.size = content_size + Vector2(border_width * 2, border_width * 2)
+	# Snap to pixel grid for sharp edges
+	local_position.x = round(local_position.x)
+	local_position.y = round(local_position.y)
+	content_size.x = round(content_size.x)
+	content_size.y = round(content_size.y)
 	
-	# Position the 4 border lines
+	# Position the glow container
+	var glow_border_width = sharp_border_width
+	hover_glow.position = local_position - Vector2(glow_border_width, glow_border_width)
+	hover_glow.size = content_size + Vector2(glow_border_width * 2, glow_border_width * 2)
+	
+	# Position the sharp border lines
+	_position_border_lines()
+	_position_corner_accents()
+
+func _position_border_lines():
+	"""Position border lines with pixel-perfect alignment"""
 	var top_line = hover_glow.get_node("TopLine")
 	var bottom_line = hover_glow.get_node("BottomLine")
 	var left_line = hover_glow.get_node("LeftLine")
 	var right_line = hover_glow.get_node("RightLine")
 	
-	# Top line
+	var border_width = sharp_border_width
+	var glow_size = hover_glow.size
+	
+	# Top line - pixel perfect
 	top_line.position = Vector2(0, 0)
-	top_line.size = Vector2(hover_glow.size.x, border_width)
+	top_line.size = Vector2(glow_size.x, border_width)
 	
-	# Bottom line
-	bottom_line.position = Vector2(0, hover_glow.size.y - border_width)
-	bottom_line.size = Vector2(hover_glow.size.x, border_width)
+	# Bottom line - pixel perfect
+	bottom_line.position = Vector2(0, glow_size.y - border_width)
+	bottom_line.size = Vector2(glow_size.x, border_width)
 	
-	# Left line
+	# Left line - pixel perfect
 	left_line.position = Vector2(0, 0)
-	left_line.size = Vector2(border_width, hover_glow.size.y)
+	left_line.size = Vector2(border_width, glow_size.y)
 	
-	# Right line
-	right_line.position = Vector2(hover_glow.size.x - border_width, 0)
-	right_line.size = Vector2(border_width, hover_glow.size.y)
+	# Right line - pixel perfect
+	right_line.position = Vector2(glow_size.x - border_width, 0)
+	right_line.size = Vector2(border_width, glow_size.y)
+
+func _position_corner_accents():
+	"""Position corner accent dots"""
+	var corner_size = 4
+	var offset = 6  # Distance from corner
 	
+	var top_left = hover_glow.get_node("TopLeftCorner")
+	var top_right = hover_glow.get_node("TopRightCorner")
+	var bottom_left = hover_glow.get_node("BottomLeftCorner")
+	var bottom_right = hover_glow.get_node("BottomRightCorner")
+	
+	# Position corners with pixel-perfect alignment
+	top_left.position = Vector2(-offset, -offset)
+	top_left.size = Vector2(corner_size, corner_size)
+	
+	top_right.position = Vector2(hover_glow.size.x + offset - corner_size, -offset)
+	top_right.size = Vector2(corner_size, corner_size)
+	
+	bottom_left.position = Vector2(-offset, hover_glow.size.y + offset - corner_size)
+	bottom_left.size = Vector2(corner_size, corner_size)
+	
+	bottom_right.position = Vector2(hover_glow.size.x + offset - corner_size, hover_glow.size.y + offset - corner_size)
+	bottom_right.size = Vector2(corner_size, corner_size)
+
+func _animate_sharp_glow_in():
+	"""Animate sharp glow in with EVE-style timing"""
 	hover_glow.visible = true
 	
-	# Smooth fade in
+	# Kill existing tween
 	if glow_tween:
 		glow_tween.kill()
+	
 	glow_tween = create_tween()
-	glow_tween.tween_method(_update_glow_opacity, 0.0, 0.8, 0.15)
+	glow_tween.set_parallel(true)
+	
+	# Sharp fade-in for border lines
+	glow_tween.tween_method(_update_sharp_glow_opacity, 0.0, glow_intensity, 0.12)
+	
+	# Slightly delayed corner accent animation
+	glow_tween.tween_method(_update_corner_accents_opacity, 0.0, glow_intensity * 0.7, 0.08).set_delay(0.04)
+
+func _animate_sharp_glow_out():
+	"""Animate sharp glow out"""
+	if not hover_glow:
+		return
+	
+	if glow_tween:
+		glow_tween.kill()
+	
+	glow_tween = create_tween()
+	glow_tween.set_parallel(true)
+	
+	# Quick fade-out
+	glow_tween.tween_method(_update_sharp_glow_opacity, glow_intensity, 0.0, 0.08)
+	glow_tween.tween_method(_update_corner_accents_opacity, glow_intensity * 0.7, 0.0, 0.06)
+	
+	glow_tween.tween_callback(func(): 
+		if hover_glow: 
+			hover_glow.visible = false
+	).set_delay(0.08)
+
+func _update_sharp_glow_opacity(opacity: float):
+	"""Update border line opacity with sharp color"""
+	if not hover_glow:
+		return
+	
+	var sharp_color = Color(eve_glow_color.r, eve_glow_color.g, eve_glow_color.b, opacity)
+	
+	# Update all border lines
+	for child in hover_glow.get_children():
+		if child is ColorRect and child.name.ends_with("Line"):
+			child.color = sharp_color
+
+func _update_corner_accents_opacity(opacity: float):
+	"""Update corner accent opacity"""
+	if not hover_glow:
+		return
+	
+	var accent_color = Color(eve_glow_color.r * 1.2, eve_glow_color.g * 1.2, eve_glow_color.b * 1.2, opacity)
+	
+	# Update corner accents
+	for child in hover_glow.get_children():
+		if child is ColorRect and child.name.ends_with("Corner"):
+			child.color = accent_color
+
 
 func _hide_hover_glow():
 	if not hover_glow:
 		return
 	
-	# Smooth fade out
-	if glow_tween:
-		glow_tween.kill()
-	glow_tween = create_tween()
-	glow_tween.tween_method(_update_glow_opacity, 0.8, 0.0, 0.1)
-	glow_tween.tween_callback(func(): 
-		if hover_glow: 
-			hover_glow.visible = false
-	)
+	_animate_sharp_glow_out()
 	
 func cleanup_glow():
-	"""Force cleanup of glow effects"""
+	"""Force cleanup of glow effects with sharp transition"""
 	if glow_tween:
 		glow_tween.kill()
 		glow_tween = null
@@ -390,11 +500,16 @@ func cleanup_glow():
 		hover_glow.queue_free()
 		hover_glow = null
 	
-	# Remove the glow_canvas_layer references since we're not using it anymore
-	glow_canvas_layer = null
+	# Clean up bloom properties
+	if bloom_overlay:
+		bloom_overlay.queue_free()
+		bloom_overlay = null
 	
+	if bloom_material:
+		bloom_material = null
+	
+	glow_canvas_layer = null
 	is_hovered = false
-
 
 # Also add cleanup when the slot is freed
 func _exit_tree():

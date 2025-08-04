@@ -7,10 +7,6 @@ var container_list: ItemList
 var inventory_grid: InventoryGrid
 var mass_info_bar: Panel
 var mass_info_label: Label
-var external_container_list: ItemList = null
-var using_external_container_list: bool = false
-var original_content_styles: Dictionary = {}
-var content_transparency_init: bool = false
 var is_drag_highlighting_active: bool = false
 var current_display_mode: InventoryDisplayMode.Mode = InventoryDisplayMode.Mode.GRID
 var list_view: InventoryListView
@@ -234,25 +230,11 @@ func _remove_split_container_outline():
 	
 	set_theme(theme)
 
-func set_external_container_list(external_list: ItemList):
-	external_container_list = external_list
-	using_external_container_list = true
-	
-	# If the content is already set up, we need to reconnect signals
-	if external_list:
-		container_list = external_list  # Use the external list as our container_list reference
-
 # Modified _setup_content method
 func _setup_content():
-	if using_external_container_list:
-		# Only setup right panel since left panel is handled externally
-		_setup_right_panel_only()
-	else:
-		# Setup both panels
-		_setup_left_panel()
-		_setup_right_panel()
-
-	
+	# Setup both panels
+	_setup_left_panel()
+	_setup_right_panel()
 
 func _setup_left_panel():
 	var left_panel = VBoxContainer.new()
@@ -301,41 +283,6 @@ func _setup_left_panel():
 	
 	# Set up drop area handling
 	_setup_container_drop_handling()
-
-func _setup_right_panel_only():
-	var inventory_area = VBoxContainer.new()
-	inventory_area.name = "InventoryArea"
-	inventory_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inventory_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	inventory_area.add_theme_constant_override("separation", 4)
-	inventory_area.clip_contents = true  # Enable clipping
-	add_child(inventory_area)
-	
-	_setup_mass_info_bar(inventory_area)
-	
-	# Create clipping container for the grid
-	var grid_container = Control.new()
-	grid_container.name = "GridContainer"
-	grid_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid_container.clip_contents = true
-	inventory_area.add_child(grid_container)
-	
-	inventory_grid = InventoryGrid.new()
-	inventory_grid.name = "InventoryGrid"
-	inventory_grid.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	
-	# SET PROPERTIES BEFORE ADDING TO SCENE
-	inventory_grid.enable_virtual_scrolling = true
-	inventory_grid.slot_size = Vector2(96, 96)  # Correct property name
-	inventory_grid.virtual_item_height = 96
-	
-	grid_container.add_child(inventory_grid)
-	
-	# Connect signals
-	inventory_grid.item_activated.connect(_on_item_activated)
-	inventory_grid.item_context_menu.connect(_on_item_context_menu)
-	inventory_grid.empty_area_context_menu.connect(_on_empty_area_context_menu)
 
 func _on_empty_area_context_menu(position: Vector2):
 	"""Handle empty area context menu from grid"""
@@ -458,7 +405,7 @@ func update_containers(containers: Array[InventoryContainer_Base]):
 	open_containers = containers
 	
 	# Use external container list if available, otherwise use internal one
-	var list_to_update = external_container_list if using_external_container_list else container_list
+	var list_to_update = container_list
 	
 	if not list_to_update:
 		return
@@ -568,7 +515,7 @@ func _on_container_item_moved(item: InventoryItem_Base, old_position: Vector2i, 
 
 func select_container_index(index: int):
 	if index >= 0 and index < open_containers.size():
-		var list_to_use = external_container_list if using_external_container_list else container_list
+		var list_to_use = container_list
 		if list_to_use:
 			list_to_use.select(index)
 
@@ -778,30 +725,14 @@ func _on_container_list_input(_event: InputEvent):
 
 # Transparency handling
 func set_transparency(transparency: float):
-	# Store originals on first call
-	if not content_transparency_init:
-		_store_original_content_styles()
-		content_transparency_init = true
 	
 	modulate.a = transparency
 	
 	# Apply transparency using stored originals
 	_apply_content_transparency_from_originals(transparency)
 
-func _store_original_content_styles():
-	if mass_info_bar:
-		var style = mass_info_bar.get_theme_stylebox("panel")
-		if style and style is StyleBoxFlat:
-			original_content_styles["mass_panel"] = style.duplicate()
-
 func _apply_content_transparency_from_originals(transparency: float):
 	# Apply to mass info bar
-	if mass_info_bar and original_content_styles.has("mass_panel"):
-		var original = original_content_styles["mass_panel"] as StyleBoxFlat
-		var new_style = original.duplicate() as StyleBoxFlat
-		var orig_color = original.bg_color
-		new_style.bg_color = Color(orig_color.r, orig_color.g, orig_color.b, orig_color.a * transparency)
-		mass_info_bar.add_theme_stylebox_override("panel", new_style)
 	
 	# Apply to inventory grid
 	if inventory_grid and inventory_grid.has_method("set_transparency"):

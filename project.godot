@@ -16,11 +16,20 @@ run/main_scene="uid://r45rejc363d"
 config/features=PackedStringArray("4.4", "Forward Plus")
 config/icon="res://icon.svg"
 
+[rendering]
+
+environment/glow/upscale_mode=1
+environment/glow/use_high_quality=true
+textures/lossless_compression/force_png=true
+2d/snap_2d_transforms_to_pixel=true
+2d/snap_2d_vertices_to_pixel=true
+
 [display]
 
 window/size/viewport_width=1920
 window/size/viewport_height=1080
 window/size/always_on_top=true
+window/stretch/mode="disabled"
 
 [input]
 
