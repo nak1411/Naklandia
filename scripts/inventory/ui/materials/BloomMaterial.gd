@@ -25,13 +25,13 @@ func _setup_eve_bloom_shader():
 
 func apply_slot_hover_preset():
 	"""Enhanced preset for inventory slot hover with smooth falloff"""
-	set_shader_parameter("bloom_intensity", 2.0)
-	set_shader_parameter("inner_radius", 0.001)
-	set_shader_parameter("outer_radius", 0.01)
-	set_shader_parameter("glow_color", Color(0.65, 0.85, 1.0, 0.8))
+	set_shader_parameter("bloom_intensity", 12.0)
+	set_shader_parameter("inner_radius", 0.8)
+	set_shader_parameter("outer_radius", 0.42)
+	set_shader_parameter("glow_color", Color(0.75, 0.85, 1.0, 0.8))
 	set_shader_parameter("enable_pulse", false)
-	set_shader_parameter("falloff_power", 0.1)  # Smooth but defined falloff
-	set_shader_parameter("edge_softness", 0.9)  # Very soft edges
+	set_shader_parameter("falloff_power", 0.6)  # Smooth but defined falloff
+	set_shader_parameter("edge_softness", 0.2)  # Very soft edges
 
 func apply_selection_preset():
 	"""Enhanced preset for selected slots with stronger, pulsing bloom"""

@@ -184,6 +184,8 @@ func _setup_visual_components():
 	style_box.border_width_top = 0
 	style_box.border_width_bottom = 0
 	background_panel.add_theme_stylebox_override("panel", style_box)
+
+	_setup_internal_bloom()
 	
 	# Create a content container with MarginContainer for proper padding
 	var content_container = MarginContainer.new()
@@ -239,37 +241,33 @@ func _setup_visual_components():
 	
 	_update_visual_state()
 	
-func _setup_external_glow():
+func _setup_internal_bloom():
+	"""Create bloom effect as internal child between background and content"""
 	if hover_glow:
 		return
 	
-	var clipping_parent = _find_clipping_parent()
-	if not clipping_parent:
-		clipping_parent = get_tree().current_scene
+	# Create bloom background inside the slot, positioned to match content area
+	hover_glow = ColorRect.new()
+	hover_glow.name = "BloomBackground"
+	hover_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hover_glow.visible = false
 	
-	# Create a CanvasLayer specifically for bloom (behind UI)
-	glow_canvas_layer = CanvasLayer.new()
-	glow_canvas_layer.name = "SlotBloomLayer"
-	glow_canvas_layer.layer =  50 # Behind main UI (which is usually layer 10+)
-	get_tree().current_scene.add_child(glow_canvas_layer)
+	# Position and size to match the content area (with padding)
+	var padding = max(4, int(slot_size.x * 0.08))  # Same padding as content_container
+	hover_glow.position = Vector2(padding, padding)
+	hover_glow.size = slot_size - Vector2(padding * 2, padding * 2)
 	
-	# Create bloom background on the canvas layer
-	var bloom_bg = ColorRect.new()
-	bloom_bg.name = "BloomBackground"
-	bloom_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bloom_bg.visible = false
-	
-	# Setup simple bloom material
+	# Setup bloom material
 	bloom_material = BloomMaterial.new()
-	bloom_material.apply_slot_hover_preset()  # Uses the enhanced preset
+	bloom_material.apply_slot_hover_preset()
+	hover_glow.material = bloom_material
 	
-	bloom_bg.material = bloom_material
-	glow_canvas_layer.add_child(bloom_bg)
-	hover_glow = bloom_bg
+	# Add to slot AFTER background but BEFORE content
+	add_child(hover_glow)
 	
-	# Create sharp border lines
+	# Create sharp border lines as children of the bloom
 	_create_sharp_glow_lines()
-
+	
 func _create_sharp_glow_lines():
 	"""Create pixel-perfect glow lines like EVE Online"""
 	if not hover_glow:
@@ -327,7 +325,7 @@ func _find_clipping_parent() -> Control:
 	
 func _show_hover_glow():
 	if not hover_glow and get_tree() and get_tree().current_scene:
-		_setup_external_glow()
+		_setup_internal_bloom()
 	
 	if not hover_glow or not item:
 		return
@@ -354,31 +352,25 @@ func _position_sharp_glow():
 		# Handle scroll containers
 		if clipping_parent is ScrollContainer:
 			var scroll_container = clipping_parent as ScrollContainer
-			# SUBTRACT scroll offset instead of adding
 			parent_global_pos -= Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
 		
-		# Convert to local coordinates
+		# Convert to local coordinates BEFORE applying bloom extend
 		local_position = content_global_position - parent_global_pos
 	
-	# Snap to pixel grid
+	# Snap to pixel grid BEFORE applying bloom extend
 	local_position.x = round(local_position.x)
 	local_position.y = round(local_position.y)
 	content_size.x = round(content_size.x)
 	content_size.y = round(content_size.y)
 	
-	# Position the glow container
-	var glow_border_width = sharp_border_width
-	var bloom_extend = 16
-	
-	# Position hover_glow to center on the content area
-	hover_glow.position = local_position - Vector2(glow_border_width + bloom_extend, glow_border_width + bloom_extend)
-	hover_glow.size = content_size + Vector2((glow_border_width + bloom_extend) * 2, (glow_border_width + bloom_extend) * 2)
-	
+	# THEN apply the bloom extend offset
+	var bloom_extend = 8
+	hover_glow.position = local_position - Vector2(bloom_extend, bloom_extend)
+	hover_glow.size = content_size + Vector2(bloom_extend * 2, bloom_extend * 2)
 	
 	# Position sharp border lines around the content area
 	_position_border_lines()
 	_position_corner_accents()
-
 
 func _position_bloom_elements():
 	"""Position bloom background elements"""
@@ -398,28 +390,29 @@ func _position_bloom_elements():
 
 func _position_border_lines():
 	"""Position border lines correctly around content"""
-	var border_offset = Vector2(sharp_border_width + 16, sharp_border_width + 16)  # bloom_extend
-	var content_size = hover_glow.size - Vector2((sharp_border_width + 16) * 2, (sharp_border_width + 16) * 2)
+	var bloom_extend = 16
+	var glow_border_width = sharp_border_width
+	
+	# The content area is inset by bloom_extend within the hover_glow
+	var content_size = hover_glow.size - Vector2(bloom_extend * 2, bloom_extend * 2)
 	
 	var top_line = hover_glow.get_node("TopLine")
 	var bottom_line = hover_glow.get_node("BottomLine")
 	var left_line = hover_glow.get_node("LeftLine")
 	var right_line = hover_glow.get_node("RightLine")
 	
-	var border_width = sharp_border_width
+	# Position lines around the content area, offset by bloom_extend
+	top_line.position = Vector2(bloom_extend, bloom_extend)
+	top_line.size = Vector2(content_size.x, glow_border_width)
 	
-	# Position lines around the content area (not the full hover_glow)
-	top_line.position = border_offset
-	top_line.size = Vector2(content_size.x, border_width)
+	bottom_line.position = Vector2(bloom_extend, bloom_extend + content_size.y - glow_border_width)
+	bottom_line.size = Vector2(content_size.x, glow_border_width)
 	
-	bottom_line.position = border_offset + Vector2(0, content_size.y - border_width)
-	bottom_line.size = Vector2(content_size.x, border_width)
+	left_line.position = Vector2(bloom_extend, bloom_extend)
+	left_line.size = Vector2(glow_border_width, content_size.y)
 	
-	left_line.position = border_offset
-	left_line.size = Vector2(border_width, content_size.y)
-	
-	right_line.position = border_offset + Vector2(content_size.x - border_width, 0)
-	right_line.size = Vector2(border_width, content_size.y)
+	right_line.position = Vector2(bloom_extend + content_size.x - glow_border_width, bloom_extend)
+	right_line.size = Vector2(glow_border_width, content_size.y)
 
 func _position_corner_accents():
 	"""Position corner accents correctly"""
