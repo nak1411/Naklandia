@@ -224,11 +224,12 @@ func _remove_split_container_outline():
 	panel_style.border_width_top = 0
 	panel_style.border_width_bottom = 0
 	
-	theme.set_stylebox("grabber", "HSplitContainer", grabber_style)
-	theme.set_stylebox("panel", "HSplitContainer", panel_style)
-	theme.set_stylebox("bg", "HSplitContainer", panel_style)
+	# Fix: Use _theme instead of theme (which doesn't exist)
+	_theme.set_stylebox("grabber", "HSplitContainer", grabber_style)
+	_theme.set_stylebox("panel", "HSplitContainer", panel_style)
+	_theme.set_stylebox("bg", "HSplitContainer", panel_style)
 	
-	set_theme(theme)
+	set_theme(_theme)
 
 # Modified _setup_content method
 func _setup_content():
