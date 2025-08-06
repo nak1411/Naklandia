@@ -227,5 +227,18 @@ func auto_stack_container(container_id: String):
 	# Implement auto-stacking logic
 	pass
 
+# GETTERS AND SETTERS
 func _exit_tree():
 	save_inventory()
+
+func get_auto_stack() -> bool:
+	return settings.get("auto_stack", true)
+
+func set_auto_stack(value: bool):
+	settings.auto_stack = value
+
+func get_auto_sort() -> bool:
+	return settings.get("auto_sort", false)
+
+func set_auto_sort(value: bool):
+	settings.auto_sort = value

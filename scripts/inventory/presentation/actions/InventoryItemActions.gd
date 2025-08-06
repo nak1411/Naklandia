@@ -358,14 +358,11 @@ func show_container_details_dialog(container: InventoryContainer_Base):
 func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	"""Show split stack dialog using DialogWindow_Base"""
 	# Prevent auto-stacking while dialog is open
-	var original_auto_stack = inventory_manager.auto_stack
-	inventory_manager.auto_stack = false
+	var original_auto_stack = inventory_manager.settings.auto_stack
+	inventory_manager.set_auto_stack(false)
 	
 	# Create dialog using the base class
 	var dialog_window = DialogWindow_Base.new("Split Stack", Vector2(300, 180))
-	
-	# DON'T track this dialog window in open_dialog_windows since it's not a Window type
-	# Instead, track it differently or modify your tracking system
 	
 	# Add to the highest canvas layer
 	var ui_manager = window_parent.get_tree().get_first_node_in_group("ui_manager")
@@ -419,7 +416,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	# Connect button events
 	split_button.pressed.connect(func():
 		var split_amount = int(spinbox.value)
-		inventory_manager.auto_stack = original_auto_stack
+		inventory_manager.settings.auto_stack = original_auto_stack  # Updated
 		_perform_split(item, split_amount, original_auto_stack)
 		dialog_window.close_dialog()
 		if window_parent and is_instance_valid(window_parent):
@@ -427,7 +424,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	)
 	
 	cancel_button.pressed.connect(func():
-		inventory_manager.auto_stack = original_auto_stack
+		inventory_manager.settings.auto_stack = original_auto_stack  # Updated
 		dialog_window.close_dialog()
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
@@ -435,7 +432,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	
 	# Connect close event
 	dialog_window.dialog_closed.connect(func():
-		inventory_manager.auto_stack = original_auto_stack
+		inventory_manager.settings.auto_stack = original_auto_stack  # Updated
 		# Don't call _safe_cleanup_dialog since this isn't a Window
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
@@ -700,38 +697,38 @@ func _generate_detailed_container_info(container: InventoryContainer_Base) -> St
 func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_stack: bool):
 	"""Perform the item stack split operation"""	
 	if not inventory_manager or not current_container or not item:
-		inventory_manager.auto_stack = original_auto_stack
+		inventory_manager.set_auto_stack(original_auto_stack)
 		return
 	
 	if split_amount <= 0 or split_amount >= item.quantity:
-		inventory_manager.auto_stack = original_auto_stack
+		inventory_manager.set_auto_stack(original_auto_stack)
 		return
 	
 	# FIXED: Use the built-in split_stack method which handles the volume correctly
 	var new_item = item.split_stack(split_amount)
 	if not new_item:
-		inventory_manager.auto_stack = original_auto_stack
+		inventory_manager.set_auto_stack(original_auto_stack)
 		return
 	
 	# Check if container has space for the new item (AFTER the original was reduced)
 	if not current_container.has_volume_for_item(new_item):
 		# Restore the split by adding back to original item
 		item.add_to_stack(new_item.quantity)
-		inventory_manager.auto_stack = original_auto_stack
+		inventory_manager.set_auto_stack(original_auto_stack)
 		return
 	
 	# Temporarily disable auto-stacking
-	var temp_auto_stack = inventory_manager.auto_stack
-	inventory_manager.auto_stack = false
+	var temp_auto_stack = inventory_manager.settings.auto_stack
+	inventory_manager.settings.auto_stack = false
 	
 	# Add the new item to the container
 	if not current_container.add_item(new_item, Vector2i(-1, -1), false):
 		item.add_to_stack(new_item.quantity)
-		inventory_manager.auto_stack = original_auto_stack
+		inventory_manager.set_auto_stack(original_auto_stack)
 		return
 		
 	# Restore auto-stack setting
-	inventory_manager.auto_stack = temp_auto_stack
+	inventory_manager.settings.auto_stack = temp_auto_stack
 	
 	# Force display refresh
 	container_refreshed.emit()
