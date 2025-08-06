@@ -19,9 +19,6 @@ extends Interactable
 func _ready():
 	super._ready()
 	
-	# Set interaction properties
-	interaction_text = "Pick up"
-	interaction_key = "E"
 	is_repeatable = false  # One time use
 	
 	# Allow derived classes to customize before generation
@@ -30,10 +27,15 @@ func _ready():
 	# Auto-generate item data if needed
 	if auto_generate_item and not item_data:
 		_generate_item_data()
-	
-	# Update interaction text with item name
+
+	# Now set interaction properties with the proper item name
 	if item_data:
 		interaction_text = "Pick up " + item_data.item_name
+	else:
+		interaction_text = "Pick up Item"  # Fallback
+	
+	interaction_key = "E"
+	is_repeatable = false  # One time use
 
 # Virtual method - override in derived classes to set default properties
 func _configure_item_properties():

@@ -382,6 +382,28 @@ func _setup_mass_info_bar(parent: Control):
 	
 	margin_container.add_child(mass_info_label)
 
+func _format_currency(value: float) -> String:
+	var formatted = "%.2f" % value
+	var parts = formatted.split(".")
+	var dollars = parts[0]
+	var cents = parts[1]
+	
+	# Add commas to the dollar part
+	var result = ""
+	var count = 0
+	
+	for i in range(dollars.length() - 1, -1, -1):
+		if count > 0 and count % 3 == 0:
+			result = "," + result
+		result = dollars[i] + result
+		count += 1
+	
+	# Only show cents if they're not zero
+	if cents != "00":
+		return result + "." + cents + " cr "
+	else:
+		return result + " cr "
+
 func _on_container_list_selected(index: int):
 	if index >= 0 and index < open_containers.size():
 		var selected_container = open_containers[index]
@@ -543,8 +565,8 @@ func update_mass_info():
 	
 	var text = "Items: %d (%d types)  |  " % [info.total_quantity, info.item_count]
 	text += "Volume: %.1f/%.1f m³ (%.1f%%)  |  " % [info.volume_used, info.volume_max, info.volume_percentage]
-	text += "Mass: %.1f kg  |  " % info.total_mass
-	text += "Value: %.0f ISK" % info.total_value
+	text += "Mass: %.1f t  |  " % info.total_mass
+	text += "Value: " + _format_currency(info.total_value)
 	
 	mass_info_label.text = text
 	

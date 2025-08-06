@@ -137,8 +137,8 @@ func _get_tooltip_text() -> String:
 	tooltip += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
 	tooltip += "Quantity: %d\n" % item.quantity
 	tooltip += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
-	tooltip += "Mass: %.2f kg (%.2f kg total)\n" % [item.mass, item.get_total_mass()]
-	tooltip += "Value: %.2f ISK (%.2f ISK total)" % [item.base_value, item.get_total_value()]
+	tooltip += "Mass: %.2f t (%.2f t total)\n" % [item.mass, item.get_total_mass()]
+	tooltip += "Value: %.2f cr (%.2f cr total)" % [item.base_value, item.get_total_value()]
 	
 	if not item.description.is_empty():
 		tooltip += "\n\n[i]%s[/i]" % item.description

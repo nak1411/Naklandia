@@ -10,8 +10,8 @@ func _configure_item_properties():
 	item_type_override = InventoryItem_Base.ItemType.MODULE
 	item_name_override = "Gauss Turret"
 	item_description_override = "Turret firing a high velocity solid charge."
-	item_volume_override = 5.0
-	item_mass_override = 10.0
+	item_volume_override = 3.62
+	item_mass_override = 0.125
 	item_value_override = 50000.0
 	item_quantity = 1
 	icon_path_override = "res://assets/textures/ui/icons/module.png"

@@ -57,7 +57,8 @@ func setup_interaction_ui():
 	# Create prompt label
 	prompt_label = Label.new()
 	prompt_label.name = "PromptLabel"
-	prompt_label.text = prompt_text
+	# CHANGE THIS LINE - don't use the template text:
+	prompt_label.text = ""  # Start with empty text instead of prompt_text
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	prompt_label.add_theme_color_override("font_color", prompt_color)
@@ -88,7 +89,7 @@ func show_interaction_prompt(interactable: Interactable):
 	if not interactable:
 		return
 	
-	# Update prompt text
+	# Use the interactable's own text instead of generic "action"
 	var action_text = interactable.interaction_text
 	var key_text = interactable.interaction_key
 	prompt_label.text = "[%s] %s" % [key_text, action_text]
