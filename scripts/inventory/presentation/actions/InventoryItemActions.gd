@@ -193,13 +193,13 @@ func _handle_container_action(action_id: String, context_data: Dictionary):
 		"compact_container":
 			compact_container(container)
 		"sort_by_name":
-			sort_container_by_type(InventoryManager.SortType.BY_NAME)
+			sort_container_by_type(InventorySortType.Type.BY_NAME)
 		"sort_by_type":
-			sort_container_by_type(InventoryManager.SortType.BY_TYPE)
+			sort_container_by_type(InventorySortType.Type.BY_TYPE)
 		"sort_by_value":
-			sort_container_by_type(InventoryManager.SortType.BY_VALUE)
+			sort_container_by_type(InventorySortType.Type.BY_VALUE)
 		"sort_by_volume":
-			sort_container_by_type(InventoryManager.SortType.BY_VOLUME)
+			sort_container_by_type(InventorySortType.Type.BY_VOLUME)
 		_:
 			# Handle move actions for containers
 			if action_id.begins_with("move_to_"):
@@ -623,9 +623,9 @@ func stack_all_items():
 func sort_container():
 	"""Sort current container by name"""
 	if inventory_manager and current_container:
-		inventory_manager.sort_container(current_container.container_id, InventoryManager.SortType.BY_NAME)
+		inventory_manager.sort_container(current_container.container_id, InventorySortType.Type.BY_NAME)
 
-func sort_container_by_type(sort_type: InventoryManager.SortType):
+func sort_container_by_type(sort_type: InventorySortType.Type):
 	"""Sort current container by specified type"""
 	if inventory_manager and current_container:
 		inventory_manager.sort_container(current_container.container_id, sort_type)

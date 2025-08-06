@@ -536,7 +536,7 @@ func _on_filter_changed(filter_type: int):
 	if content.list_view and content.list_view.has_method("apply_filter"):
 		content.list_view.apply_filter(filter_type)
 
-func _on_sort_requested(sort_type):
+func _on_sort_requested(sort_type: InventorySortType.Type):
 	"""Handle sort requests from header"""
 	
 	if not inventory_manager:
@@ -545,7 +545,7 @@ func _on_sort_requested(sort_type):
 	if not current_container:
 		return
 		
-	# Call the sort function on the inventory manager
+	# Use the enum directly now
 	inventory_manager.sort_container(current_container.container_id, sort_type)
 	
 	# Force grid refresh after sort

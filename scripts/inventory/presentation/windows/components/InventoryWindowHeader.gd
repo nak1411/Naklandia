@@ -21,7 +21,7 @@ var inventory_window: Window
 # Signals
 signal search_changed(text: String)
 signal filter_changed(filter_type: int)
-signal sort_requested(sort_type: InventoryManager.SortType)
+signal sort_requested(sort_type: InventorySortType.Type)
 signal display_mode_changed(mode: InventoryDisplayMode.Mode)
 
 # State
@@ -458,7 +458,6 @@ func _on_sort_button_pressed():
 		sort_dropdown.show_menu(dropdown_pos)
 
 func _on_sort_dropdown_selected(item_id: String, _item_data: Dictionary):	
-	# Extract index from item_id (format: "sort_0", "sort_1", etc.)
 	var index_str = item_id.replace("sort_", "")
 	var index = int(index_str)
 	
@@ -466,8 +465,8 @@ func _on_sort_dropdown_selected(item_id: String, _item_data: Dictionary):
 		current_sort_index = index
 		sort_button.text = sort_items[index] + " ▼"
 		
-		# Convert to InventoryManager.SortType
-		var sort_type = index as InventoryManager.SortType
+		# Convert to InventorySortType.Type
+		var sort_type = index as InventorySortType.Type
 		sort_requested.emit(sort_type)
 
 func _on_filter_dropdown_closed():
