@@ -57,7 +57,7 @@ func _setup_hud():
 	# Slots container
 	slots_container = HBoxContainer.new()
 	slots_container.name = "SlotsContainer"
-	slots_container.add_theme_constant_override("separation", slot_spacing)
+	slots_container.add_theme_constant_override("separation", slot_spacing as int)
 	background_panel.add_child(slots_container)
 	
 	# Create quick slots
