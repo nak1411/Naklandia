@@ -1,9 +1,10 @@
-[gd_scene load_steps=15 format=3 uid="uid://r45rejc363d"]
+[gd_scene load_steps=16 format=3 uid="uid://r45rejc363d"]
 
 [ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
 [ext_resource type="PackedScene" uid="uid://b2wfoje26x7fv" path="res://scenes/player/player.tscn" id="2_d2t3o"]
 [ext_resource type="PackedScene" uid="uid://3crjjuj2n4na" path="res://scenes/objects/test_switch.tscn" id="3_ny3xg"]
 [ext_resource type="Script" uid="uid://criw8ficpl2be" path="res://scripts/ui/core/UIManager.gd" id="4_ny3xg"]
+[ext_resource type="Script" uid="uid://ve4ia0rua13g" path="res://scripts/world/objects/ItemSpawner.gd" id="6_1swwb"]
 [ext_resource type="Script" uid="uid://bes7x5gnitjur" path="res://scripts/ui/core/PauseMenu.gd" id="6_sa75b"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_ia1lp"]
@@ -114,3 +115,11 @@ script = ExtResource("6_sa75b")
 
 [node name="InventoryLayer" type="CanvasLayer" parent="."]
 layer = 50
+
+[node name="ItemSpawner" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.79922, 0.836777, -6.16311)
+script = ExtResource("6_1swwb")
+spawn_interval = 1.0
+auto_spawn = true
+max_spawned_items = 5
+spawn_height = 1.0
