@@ -1,0 +1,28 @@
+[gd_scene load_steps=4 format=3 uid="uid://bk8xg7m3y4tn2"]
+
+[ext_resource type="Script" path="res://scripts/inventory/items/PickupableItem.gd" id="1_pickup"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_pickup"]
+size = Vector3(0.5, 0.5, 0.5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_pickup"]
+size = Vector3(0.5, 0.5, 0.5)
+
+[node name="PickupItem" type="Area3D"]
+collision_layer = 2
+collision_mask = 0
+script = ExtResource("1_pickup")
+item_name_override = "Test Item"
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_pickup")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_pickup")
+
+[node name="RaycastTarget" type="StaticBody3D" parent="."]
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RaycastTarget"]
+shape = SubResource("BoxShape3D_pickup")

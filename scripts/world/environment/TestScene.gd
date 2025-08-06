@@ -5,7 +5,51 @@ extends Node3D
 
 func _ready():
 	setup_materials()
-	setup_ui_manager()  # Use UIManager instead of direct CanvasLayer
+	setup_ui_manager()
+	
+	# Wait for everything to initialize properly
+	await get_tree().create_timer(2.0).timeout
+	create_test_pickup()
+
+func create_test_pickup():
+	var pickup = Area3D.new()
+	pickup.name = "TestPickup"
+	pickup.global_position = Vector3(2, 1.5, 0)
+	pickup.collision_layer = 2
+	pickup.collision_mask = 0
+	
+	# Add mesh
+	var mesh_instance = MeshInstance3D.new()
+	var mesh = BoxMesh.new()
+	mesh.size = Vector3(0.5, 0.5, 0.5)
+	mesh_instance.mesh = mesh
+	pickup.add_child(mesh_instance)
+	
+	# Add collision to Area3D
+	var collision = CollisionShape3D.new()
+	var shape = BoxShape3D.new()
+	shape.size = Vector3(0.5, 0.5, 0.5)
+	collision.shape = shape
+	pickup.add_child(collision)
+	
+	# IMPORTANT: Add RaycastTarget like TestSwitch has
+	var raycast_target = StaticBody3D.new()
+	raycast_target.name = "RaycastTarget"
+	raycast_target.collision_layer = 2
+	raycast_target.collision_mask = 0
+	pickup.add_child(raycast_target)
+	
+	# Add collision to RaycastTarget
+	var target_collision = CollisionShape3D.new()
+	target_collision.shape = shape  # Same shape
+	raycast_target.add_child(target_collision)
+	
+	# Add script
+	var pickup_script = preload("res://scripts/inventory/items/PickupableItem.gd")
+	pickup.set_script(pickup_script)
+	
+	add_child(pickup)
+	print("Pickup with RaycastTarget created!")
 
 func setup_materials():
 	var materials = {
@@ -53,12 +97,3 @@ func setup_ui_manager():
 	var crosshair = CrosshairUI.new()
 	crosshair.name = "Crosshair"
 	ui_manager.add_hud_element(crosshair)
-	
-	print("UIManager setup complete with crosshair")
-
-func create_sample_menu():
-	# Example sample menu - you can remove this later
-	var sample_label = Label.new()
-	sample_label.text = "Sample Menu (Press ESC to hide)"
-	sample_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	ui_manager.add_menu_element(sample_label)
