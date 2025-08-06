@@ -798,7 +798,7 @@ func _handle_drop_on_slot(target_slot: InventorySlot) -> bool:
 			temp_source_slot.set_item(item)
 			temp_source_slot.set_container_id(current_container_id)
 			
-			return temp_source_slot._handle_item_swap(target_slot, target_item, inventory_manager)
+			return temp_source_slot._handle_item_swap(target_slot, target_item)
 	else:
 		# Empty slot - transfer item
 		var success = inventory_manager.transfer_item(item, current_container_id, target_container_id)

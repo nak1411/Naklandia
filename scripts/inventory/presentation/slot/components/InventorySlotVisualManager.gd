@@ -22,9 +22,21 @@ func _init(inventory_slot: InventorySlot):
 
 func setup_visual_components():
 	"""Set up all visual components for the slot"""
+	if not slot:
+		push_error("SlotVisualManager: slot reference is null!")
+		return
+	
 	_create_background_panel()
 	_create_content_container()
 	_create_item_display_components()
+	
+	# Verify all components were created
+	if not item_icon:
+		push_error("SlotVisualManager: Failed to create item_icon!")
+	if not quantity_label:
+		push_error("SlotVisualManager: Failed to create quantity_label!")
+	if not quantity_bg:
+		push_error("SlotVisualManager: Failed to create quantity_bg!")
 
 func _create_background_panel():
 	"""Create and style the background panel"""
@@ -100,10 +112,19 @@ func _create_item_display_components():
 
 func update_item_display():
 	"""Update the visual display for the current item"""
+	# Lazy initialization check
+	if not item_icon:
+		setup_visual_components()
+	
 	var item = slot.get_item()
 	
 	if not item:
 		_clear_item_display()
+		return
+	
+	# Now we should have components
+	if not item_icon:
+		push_error("SlotVisualManager: item_icon still null after setup!")
 		return
 	
 	# Update item icon
@@ -112,6 +133,11 @@ func update_item_display():
 		item_icon.texture = icon_texture
 	else:
 		_create_fallback_icon(item)
+	
+	# Ensure quantity components exist before updating
+	if not quantity_label or not quantity_bg:
+		push_warning("SlotVisualManager: quantity components not initialized")
+		return
 	
 	# Update quantity display
 	if item.quantity > 1:
@@ -124,9 +150,12 @@ func update_item_display():
 
 func _clear_item_display():
 	"""Clear all item-related visuals"""
-	item_icon.texture = null
-	quantity_label.visible = false
-	quantity_bg.visible = false
+	if item_icon:
+		item_icon.texture = null
+	if quantity_label:
+		quantity_label.visible = false
+	if quantity_bg:
+		quantity_bg.visible = false
 
 func _create_fallback_icon(item: InventoryItem_Base):
 	"""Create a fallback icon when no icon texture is available"""

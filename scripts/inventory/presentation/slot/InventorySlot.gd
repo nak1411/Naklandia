@@ -24,6 +24,7 @@ signal slot_clicked(slot: InventorySlot, event: InputEvent)
 signal slot_right_clicked(slot: InventorySlot, event: InputEvent)
 signal item_drag_started(slot: InventorySlot, item: InventoryItem_Base)
 signal item_drag_ended(slot: InventorySlot, success: bool)
+signal item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot)
 
 func _init():
 	custom_minimum_size = slot_size
@@ -32,6 +33,9 @@ func _init():
 func _ready():
 	_setup_components()
 	_connect_signals()
+
+	if visuals and item:
+		visuals.update_item_display()
 
 func _setup_components():
 	"""Initialize all component systems"""
@@ -45,6 +49,7 @@ func _setup_components():
 	# Connect drag handler signals
 	drag_handler.drag_started.connect(_on_drag_started)
 	drag_handler.drag_ended.connect(_on_drag_ended)
+	drag_handler.item_dropped_on_slot.connect(_on_item_dropped_on_slot)
 
 func _connect_signals():
 	"""Connect internal signals"""
@@ -96,11 +101,91 @@ func _on_drag_ended(source_slot: InventorySlot, success: bool):
 	"""Handle drag ended"""
 	item_drag_ended.emit(source_slot, success)
 
+func _on_item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot):
+	"""Handle item dropped on slot - forward to main signal"""
+	item_dropped_on_slot.emit(source_slot, target_slot)
+
+func _update_item_display():
+	"""Legacy method - delegate to visual manager"""
+	if visuals:
+		visuals.update_item_display()
+	else:
+		# If visuals aren't ready yet, defer the call
+		call_deferred("_deferred_update_item_display")
+
+func _update_visual_state():
+	"""Legacy method - delegate to visual manager"""
+	if visuals:
+		visuals.update_visual_state(is_highlighted, is_selected, has_item())
+
+func _deferred_update_item_display():
+	"""Deferred version for when visuals aren't ready"""
+	if visuals:
+		visuals.update_item_display()
+
+func _clear_item_display():
+	"""Legacy method - delegate to visual manager"""
+	if visuals:
+		visuals._clear_item_display()
+
+func _show_hover_glow():
+	"""Legacy method - visual effects handled by components now"""
+	# This is now handled by mouse_entered signal and tooltip manager
+	pass
+
+func _hide_hover_glow():
+	"""Legacy method - visual effects handled by components now"""  
+	# This is now handled by mouse_exited signal and tooltip manager
+	pass
+
+func _show_tooltip():
+	"""Legacy method - delegate to tooltip manager"""
+	if tooltip_manager:
+		tooltip_manager.show_tooltip()
+
+func _hide_tooltip():
+	"""Legacy method - delegate to tooltip manager"""
+	if tooltip_manager:
+		tooltip_manager.hide_tooltip()
+
+func cleanup_glow():
+	"""Legacy method - cleanup handled by components"""
+	# Cleanup is now handled in _exit_tree() by calling component cleanup methods
+	pass
+
+func _get_inventory_grid():
+	"""Legacy helper method"""
+	var current = get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryGrid":
+			return current
+		current = current.get_parent()
+	return null
+
+func _show_volume_feedback(can_drop: bool):
+	"""Legacy method - visual feedback for volume constraints"""
+	if can_drop:
+		# Green tint for valid drop
+		modulate = Color(0.8, 1.2, 0.8, 1.0)
+	else:
+		# Red tint for invalid drop (volume exceeded)
+		modulate = Color(1.2, 0.8, 0.8, 1.0)
+
+func _clear_volume_feedback():
+	"""Legacy method - clear volume feedback colors"""
+	modulate = Color(1.0, 1.0, 1.0, 1.0)
+
 # Public API (simplified)
 func set_item(new_item: InventoryItem_Base):
 	"""Set the item for this slot"""
 	item = new_item
-	visuals.update_item_display()
+	
+	# Only update visuals if the visual manager is ready
+	if visuals and visuals.item_icon:  # Check if visual components exist
+		visuals.update_item_display()
+	else:
+		# Defer the update if components aren't ready yet
+		call_deferred("_deferred_update_visuals")
 
 func clear_item():
 	"""Clear the item from this slot"""
@@ -150,13 +235,192 @@ func _exit_tree():
 
 # Legacy methods for compatibility with existing code
 func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
-	"""Legacy method - delegate to existing implementation"""
-	# This would contain the existing drop logic
-	# Keep this for now to maintain compatibility
-	pass
+	"""Legacy method - handle dropping on another slot"""
+	if not target_slot or not has_item():
+		return false
+	
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	# Same container - use existing logic
+	if target_slot.container_id == container_id:
+		return _handle_same_container_drop(target_slot)
+	
+	# Different containers - existing cross-container logic
+	var target_container = inventory_manager.get_container(target_slot.container_id)
+	if not target_container:
+		return false
+	
+	var available_volume = target_container.get_available_volume()
+	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
+	
+	if max_transferable <= 0:
+		return false
+	
+	var transfer_amount = min(item.quantity, max_transferable)
+	
+	if target_slot.has_item():
+		var target_item = target_slot.get_item()
+		if item.can_stack_with(target_item):
+			var stack_space = target_item.max_stack_size - target_item.quantity
+			transfer_amount = min(transfer_amount, stack_space)
+		
+		if transfer_amount <= 0:
+			return false
+	
+	# Use the transaction manager for the transfer
+	var success = inventory_manager.transfer_item(item, container_id, target_slot.container_id, Vector2i(-1, -1), transfer_amount)
+	
+	if success:
+		if item.quantity <= 0:
+			clear_item()
+		else:
+			visuals.update_item_display()
+		
+		# Refresh target display
+		target_slot.visuals.update_item_display()
+	
+	return success
 
 func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
-	"""Legacy method - delegate to existing implementation"""
-	# This would contain the existing container list drop logic
-	# Keep this for now to maintain compatibility
-	pass
+	"""Legacy method - handle dropping on container list"""
+	var content = _find_inventory_content()
+	if not content:
+		return false
+	
+	var container_list = content.container_list
+	if not container_list:
+		return false
+	
+	var container_rect = Rect2(container_list.global_position, container_list.size)
+	
+	if not container_rect.has_point(end_position):
+		return false
+	
+	var local_pos = end_position - container_list.global_position
+	var item_index = container_list.get_item_at_position(local_pos, true)
+	
+	if item_index == -1 or item_index >= content.open_containers.size():
+		return false
+	
+	var target_container = content.open_containers[item_index]
+	var inventory_manager = _get_inventory_manager()
+	
+	if not inventory_manager or not target_container or not has_item():
+		return false
+	
+	# Check if it's the same container
+	if target_container.container_id == container_id:
+		return false
+	
+	# Calculate transfer amount based on available volume
+	var available_volume = target_container.get_available_volume()
+	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
+	var transfer_amount = min(item.quantity, max_transferable)
+	
+	if transfer_amount <= 0:
+		return false
+	
+	# Perform the transfer
+	var success = inventory_manager.transfer_item(item, container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
+	
+	if success:
+		if item.quantity <= 0:
+			clear_item()
+		else:
+			visuals.update_item_display()
+	
+	return success
+
+func _handle_same_container_drop(target_slot: InventorySlot) -> bool:
+	"""Handle dropping on a slot within the same container"""
+	if target_slot.has_item():
+		return _handle_occupied_slot_drop(target_slot)
+	else:
+		return _handle_move_to_empty(target_slot)
+
+func _handle_occupied_slot_drop(target_slot: InventorySlot) -> bool:
+	"""Handle dropping on a slot that already has an item"""
+	var target_item = target_slot.get_item()
+	
+	# Try stacking if items are compatible
+	if item.can_stack_with(target_item):
+		return _handle_stack_merge(target_slot, target_item)
+	else:
+		# Swap items if they can't stack
+		return _handle_item_swap(target_slot, target_item)
+
+func _handle_move_to_empty(target_slot: InventorySlot) -> bool:
+	"""Handle moving to an empty slot"""
+	var temp_item = item
+	clear_item()
+	target_slot.set_item(temp_item)
+	return true
+
+func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_Base) -> bool:
+	"""Handle merging stacks"""
+	var space_available = target_item.max_stack_size - target_item.quantity
+	var amount_to_transfer = min(item.quantity, space_available)
+	
+	if amount_to_transfer <= 0:
+		return false
+	
+	# Update quantities
+	target_item.quantity += amount_to_transfer
+	item.quantity -= amount_to_transfer
+	
+	# Update displays
+	target_slot.visuals.update_item_display()
+	
+	if item.quantity <= 0:
+		clear_item()
+	else:
+		visuals.update_item_display()
+	
+	return true
+
+func _handle_item_swap(target_slot: InventorySlot, target_item: InventoryItem_Base) -> bool:
+	"""Handle swapping items between slots"""
+	var temp_item = item
+	clear_item()
+	target_slot.clear_item()
+	
+	set_item(target_item)
+	target_slot.set_item(temp_item)
+	
+	return true
+
+# Helper methods
+func _get_inventory_manager() -> InventoryManager:
+	"""Find the inventory manager"""
+	var current = get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindow":
+			return current.inventory_manager
+		current = current.get_parent()
+	
+	# Fallback - look for InventoryManager in scene
+	var scene_root = get_tree().current_scene
+	return _find_inventory_manager_recursive(scene_root)
+
+func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
+	"""Recursively find InventoryManager"""
+	if node is InventoryManager:
+		return node
+	
+	for child in node.get_children():
+		var result = _find_inventory_manager_recursive(child)
+		if result:
+			return result
+	
+	return null
+
+func _find_inventory_content():
+	"""Find the inventory content"""
+	var current = get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowContent":
+			return current
+		current = current.get_parent()
+	return null

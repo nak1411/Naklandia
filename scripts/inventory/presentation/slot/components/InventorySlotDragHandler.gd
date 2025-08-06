@@ -14,6 +14,7 @@ var drag_preview_created: bool = false
 # Signals
 signal drag_started(slot: InventorySlot, item: InventoryItem_Base)
 signal drag_ended(slot: InventorySlot, success: bool)
+signal item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot)
 
 func _init(inventory_slot: InventorySlot):
 	slot = inventory_slot
@@ -195,10 +196,28 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	if not target_slot or not slot.has_item():
 		return false
 	
-	# Delegate to slot's existing drop logic
-	if slot.has_method("_attempt_drop_on_slot"):
-		return slot._attempt_drop_on_slot(target_slot)
-	return false
+	# Emit the drop signal first
+	item_dropped_on_slot.emit(slot, target_slot)
+	
+	# Then handle the actual drop
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	# Use the inventory manager's transfer system
+	var success = inventory_manager.transfer_item(
+		slot.get_item(), 
+		slot.container_id, 
+		target_slot.container_id, 
+		target_slot.grid_position
+	)
+	
+	if success:
+		# Update visuals
+		slot.visuals.update_item_display()
+		target_slot.visuals.update_item_display()
+	
+	return success
 
 func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 	"""Attempt to drop on other valid targets"""
@@ -233,6 +252,31 @@ func _find_inventory_content():
 		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowContent":
 			return current
 		current = current.get_parent()
+	return null
+
+func _get_inventory_manager() -> InventoryManager:
+	"""Find the inventory manager in the scene hierarchy"""
+	# First try the parent chain looking for InventoryWindow
+	var current = slot.get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindow":
+			return current.inventory_manager
+		current = current.get_parent()
+	
+	# Fallback - look for InventoryManager in scene tree
+	var scene_root = slot.get_tree().current_scene
+	return _find_inventory_manager_recursive(scene_root)
+
+func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
+	"""Recursively find InventoryManager in scene tree"""
+	if node is InventoryManager:
+		return node
+	
+	for child in node.get_children():
+		var result = _find_inventory_manager_recursive(child)
+		if result:
+			return result
+	
 	return null
 
 func should_handle_input(event: InputEvent) -> bool:

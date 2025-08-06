@@ -104,7 +104,7 @@ func _get_tooltip_text(item: InventoryItem_Base) -> String:
 	
 	return tooltip_text
 
-func _find_inventory_window() -> Window:
+func _find_inventory_window() -> Control:
 	"""Find the inventory window in the scene hierarchy"""
 	var current = slot.get_parent()
 	while current:

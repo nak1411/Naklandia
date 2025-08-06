@@ -305,7 +305,7 @@ func _render_virtual_items():
 			# Set item if one belongs here
 			if item_for_this_slot:
 				slot.set_item(item_for_this_slot)
-				slot.call_deferred("_update_item_display")
+				slot.call_deferred("force_visual_refresh")
 			
 			virtual_rendered_slots.append(slot)
 			rendered_count += 1
