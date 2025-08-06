@@ -9,6 +9,8 @@ var grid_position: Vector2i
 var container_id: String
 var slot_padding: int = 8
 
+
+
 # Component systems
 var visuals: InventorySlotVisualManager
 var drag_handler: InventorySlotDragHandler
@@ -26,6 +28,34 @@ signal item_drag_started(slot: InventorySlot, item: InventoryItem_Base)
 signal item_drag_ended(slot: InventorySlot, success: bool)
 signal item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot)
 
+# Drag state properties (delegate to drag handler)
+var is_dragging: bool:
+	get:
+		if drag_handler:
+			return drag_handler.is_dragging
+		return false
+	set(value):
+		if drag_handler:
+			drag_handler.is_dragging = value
+
+var drag_preview_created: bool:
+	get:
+		if drag_handler:
+			return drag_handler.drag_preview_created
+		return false
+	set(value):
+		if drag_handler:
+			drag_handler.drag_preview_created = value
+
+var drag_start_position: Vector2:
+	get:
+		if drag_handler:
+			return drag_handler.drag_start_position
+		return Vector2.ZERO
+	set(value):
+		if drag_handler:
+			drag_handler.drag_start_position = value
+
 func _init():
 	custom_minimum_size = slot_size
 	size = slot_size
@@ -42,14 +72,29 @@ func _setup_components():
 	visuals = InventorySlotVisualManager.new(self)
 	drag_handler = InventorySlotDragHandler.new(self)
 	tooltip_manager = InventorySlotTooltipManager.new(self)
+
+	if not visuals:
+		push_error("InventorySlot: Failed to create SlotVisualManager")
+		return
+	
+	if not drag_handler:
+		push_error("InventorySlot: Failed to create SlotDragHandler")
+		return
+		
+	if not tooltip_manager:
+		push_error("InventorySlot: Failed to create SlotTooltipManager")
+		return
 	
 	visuals.setup_visual_components()
 	tooltip_manager.setup_tooltip()
 	
 	# Connect drag handler signals
-	drag_handler.drag_started.connect(_on_drag_started)
-	drag_handler.drag_ended.connect(_on_drag_ended)
-	drag_handler.item_dropped_on_slot.connect(_on_item_dropped_on_slot)
+	if drag_handler.drag_started.connect(_on_drag_started) != OK:
+		push_error("InventorySlot: Failed to connect drag_started signal")
+	if drag_handler.drag_ended.connect(_on_drag_ended) != OK:
+		push_error("InventorySlot: Failed to connect drag_ended signal")
+	if drag_handler.item_dropped_on_slot.connect(_on_item_dropped_on_slot) != OK:
+		push_error("InventorySlot: Failed to connect item_dropped_on_slot signal")
 
 func _connect_signals():
 	"""Connect internal signals"""
@@ -180,17 +225,32 @@ func set_item(new_item: InventoryItem_Base):
 	"""Set the item for this slot"""
 	item = new_item
 	
-	# Only update visuals if the visual manager is ready
-	if visuals and visuals.item_icon:  # Check if visual components exist
+	_ensure_components_ready()
+	if visuals:
 		visuals.update_item_display()
-	else:
-		# Defer the update if components aren't ready yet
-		call_deferred("_deferred_update_visuals")
+
+func _ensure_components_ready():
+	"""Ensure all components are initialized"""
+	if not visuals:
+		visuals = InventorySlotVisualManager.new(self)
+		if visuals:
+			visuals.setup_visual_components()
+	
+	if not drag_handler:
+		drag_handler = InventorySlotDragHandler.new(self)
+	
+	if not tooltip_manager:
+		tooltip_manager = InventorySlotTooltipManager.new(self)
+		if tooltip_manager:
+			tooltip_manager.setup_tooltip()
 
 func clear_item():
 	"""Clear the item from this slot"""
 	item = null
-	visuals.update_item_display()
+	
+	_ensure_components_ready()
+	if visuals:
+		visuals.update_item_display()
 
 func get_item() -> InventoryItem_Base:
 	return item
@@ -211,6 +271,10 @@ func set_selected(selected: bool):
 func set_grid_position(pos: Vector2i):
 	"""Set grid position"""
 	grid_position = pos
+
+func get_container_id() -> String:
+	"""Get the container ID"""
+	return container_id
 
 func set_container_id(id: String):
 	"""Set container ID"""
