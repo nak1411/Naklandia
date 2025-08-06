@@ -59,6 +59,7 @@ var current_search_text: String = ""
 
 # Signals
 signal item_selected(item: InventoryItem_Base, slot: InventorySlot)
+signal item_activated(item: InventoryItem_Base, slot: InventorySlot)
 signal item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2)
 signal empty_area_context_menu(position: Vector2)
 
@@ -151,7 +152,7 @@ func _handle_drop_on_empty_area(source_slot: InventorySlot, drop_position: Vecto
 	var local_pos = drop_position - virtual_content.global_position
 	var grid_col = int(local_pos.x / slot_size.x)
 	var grid_row = int(local_pos.y / virtual_item_height)
-	var _target_grid_pos = Vector2i(grid_col, grid_row)
+	var target_grid_pos = Vector2i(grid_col, grid_row)
 		
 	# Same container - move item to specific position
 	if source_slot.container_id == container_id:
@@ -181,7 +182,7 @@ func _on_virtual_container_resized():
 	# Immediately recalculate the grid layout for the new size
 	call_deferred("_update_virtual_viewport")
 	
-func _on_virtual_scroll(_value: float):
+func _on_virtual_scroll(value: float):
 	"""Handle virtual scroll position changes"""
 	if not enable_virtual_scrolling or virtual_items.is_empty():
 		return
@@ -251,15 +252,15 @@ func _render_virtual_items():
 	var max_visible_rows = max(1, int(available_height / slot_size.y))
 	
 	# Calculate total grid size - much more reasonable like EVE
-	var items_rows = float(virtual_items.size() + virtual_items_per_row - 1) / float(virtual_items_per_row) if virtual_items.size() > 0 else 0.0
+	var items_rows = (virtual_items.size() + virtual_items_per_row - 1) / virtual_items_per_row if virtual_items.size() > 0 else 0
 	var total_rows = max(max_visible_rows, items_rows + 3)  # Just 3 extra rows below items
 		
 	# Create item position mapping
-	var _item_positions = {}
+	var item_positions = {}
 	
 	# Place items compactly for now
 	for i in range(virtual_items.size()):
-		var row = int(i / float(virtual_items_per_row))
+		var row = i / virtual_items_per_row
 		var col = i % virtual_items_per_row
 		item_positions[virtual_items[i]] = Vector2i(col, row)
 	
@@ -269,7 +270,7 @@ func _render_virtual_items():
 	var last_visible_row = min(total_rows, int((scroll_offset + available_height) / slot_size.y) + 2)  # Small buffer below
 		
 	# Render visible grid slots
-	var _rendered_count = 0
+	var rendered_count = 0
 	for row in range(first_visible_row, last_visible_row):
 		for col in range(virtual_items_per_row):
 			var grid_pos = Vector2i(col, row)
@@ -307,7 +308,7 @@ func _render_virtual_items():
 				slot.call_deferred("_update_item_display")
 			
 			virtual_rendered_slots.append(slot)
-			_rendered_count += 1
+			rendered_count += 1
 		
 	# Update content size - much smaller now
 	virtual_total_height = total_rows * slot_size.y
@@ -378,7 +379,7 @@ func _update_container_positions_from_visual():
 				var slot = slots[y][x]
 				if slot and slot.has_item():
 					var item = slot.get_item()
-					var _position = Vector2i(x, y)
+					var position = Vector2i(x, y)
 					
 					# Update position tracking
 					item_positions[item] = position
@@ -401,7 +402,7 @@ func ensure_slots_for_items(item_count: int):
 	var current_slots = current_grid_width * current_grid_height
 	
 	if slots_needed > current_slots:
-		var new_height = int(ceil(float(slots_needed + current_grid_width - 1) / float(current_grid_width)))
+		var new_height = (slots_needed + current_grid_width - 1) / current_grid_width
 		if new_height > current_grid_height:
 			current_grid_height = new_height
 			_rebuild_grid()
@@ -411,11 +412,11 @@ func _ensure_adequate_slots():
 	if enable_virtual_scrolling:
 		return
 	var needed_total = current_grid_width * current_grid_height
-	var _current_total = 0
+	var current_total = 0
 	
 	for row in slots:
 		if row:
-			_current_total += row.size()
+			current_total += row.size()
 	
 	# Rebuild if dimensions changed or wrong number of children
 	var should_rebuild = false
@@ -621,7 +622,7 @@ func _create_virtual_slot(item: InventoryItem_Base, virtual_index: int) -> Inven
 	slot.set_item(item)
 	
 	# CRITICAL: Set grid position based on virtual layout
-	var row = int(float(virtual_index) / float(virtual_items_per_row))
+	var row = virtual_index / virtual_items_per_row
 	var col = virtual_index % virtual_items_per_row
 	slot.set_grid_position(Vector2i(col, row))
 	
@@ -841,7 +842,7 @@ func _rebuild_slots_structure():
 			grid_container.add_child(slot)
 			available_slots.append(Vector2i(x, y))
 
-func _place_item_at_position(item: InventoryItem_Base, _position: Vector2i):
+func _place_item_at_position(item: InventoryItem_Base, position: Vector2i):
 	"""Place an item at a specific grid position"""
 	if position.y >= slots.size() or position.x >= slots[position.y].size():
 		return
@@ -883,7 +884,7 @@ func _expand_grid_if_needed():
 	
 	# Calculate new grid dimensions
 	var slots_to_add = required_slots - current_slots
-	var rows_to_add = int(ceil(float(slots_to_add + current_grid_width - 1) / float(current_grid_width)))  # Ceiling division
+	var rows_to_add = (slots_to_add + current_grid_width - 1) / current_grid_width  # Ceiling division
 	
 	var new_height = current_grid_height + rows_to_add
 	
@@ -944,7 +945,7 @@ func _shrink_grid_if_possible():
 		return  # No shrinking needed
 	
 	# Remove excess rows
-	var _rows_to_remove = current_grid_height - target_height
+	var rows_to_remove = current_grid_height - target_height
 	
 	for y in range(target_height, current_grid_height):
 		if y < slots.size():
@@ -1309,7 +1310,7 @@ func _clear_all_slots():
 			if slots[y][x]:
 				slots[y][x].clear_item()
 
-func _place_item_in_grid(item: InventoryItem_Base, _position: Vector2i):
+func _place_item_in_grid(item: InventoryItem_Base, position: Vector2i):
 	if not _is_valid_position(position):
 		return
 	
@@ -1386,7 +1387,7 @@ func _focus_inventory_window():
 			break
 		parent = parent.get_parent()
 
-func _show_container_context_menu(_position: Vector2):
+func _show_container_context_menu(position: Vector2):
 	"""Show context menu for container operations"""
 	empty_area_context_menu.emit(position)
 		
@@ -1450,7 +1451,7 @@ func _on_item_drag_started(slot: InventorySlot, item: InventoryItem_Base):
 			"source_container_id": container_id
 		})
 
-func _on_item_drag_ended(_slot: InventorySlot, success: bool):
+func _on_item_drag_ended(slot: InventorySlot, success: bool):
 	if success:
 		if enable_virtual_scrolling:
 			# Refresh virtual display after successful drag
@@ -1536,7 +1537,7 @@ func _handle_virtual_stack_merge(source_slot: InventorySlot, target_slot: Invent
 	
 	return true
 	
-func _handle_virtual_item_swap(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base, target_item: InventoryItem_Base, _inventory_manager: InventoryManager) -> bool:
+func _handle_virtual_item_swap(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base, target_item: InventoryItem_Base, inventory_manager: InventoryManager) -> bool:
 	"""Handle swapping items in virtual mode"""
 	# Find the indices of the items in virtual_items array
 	var source_index = virtual_items.find(source_item)
@@ -1590,7 +1591,7 @@ func _handle_virtual_move_to_empty(source_slot: InventorySlot, target_slot: Inve
 	
 	return true
 	
-func _handle_same_container_virtual_drop(source_item: InventoryItem_Base, target_item: InventoryItem_Base, _source_slot: InventorySlot, _target_slot: InventorySlot) -> bool:
+func _handle_same_container_virtual_drop(source_item: InventoryItem_Base, target_item: InventoryItem_Base, source_slot: InventorySlot, target_slot: InventorySlot) -> bool:
 	"""Handle drops within the same container"""
 	if not container:
 		return false
@@ -1773,7 +1774,7 @@ func get_item_position(item: InventoryItem_Base) -> Vector2i:
 	"""Get item position from our grid tracking"""
 	return item_positions.get(item, Vector2i(-1, -1))
 
-func set_item_position(item: InventoryItem_Base, _position: Vector2i):
+func set_item_position(item: InventoryItem_Base, position: Vector2i):
 	"""Set item position in our grid tracking"""
 	if item in container.items:
 		item_positions[item] = position
@@ -1810,7 +1811,7 @@ func get_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlot:
 	return null
 
 # Container event handlers - DISABLE these during drag operations
-func _on_container_item_added(_item: InventoryItem_Base, _position: Vector2i):
+func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
 	if enable_virtual_scrolling:
 		# Just refresh virtual display
 		call_deferred("refresh_display")
@@ -1819,7 +1820,7 @@ func _on_container_item_added(_item: InventoryItem_Base, _position: Vector2i):
 		if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
 			call_deferred("_trigger_compact_refresh")
 
-func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i):
+func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
 	if enable_virtual_scrolling:
 		# Just refresh virtual display
 		call_deferred("refresh_display")
@@ -1828,7 +1829,7 @@ func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i):
 		if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
 			call_deferred("_trigger_compact_refresh")
 
-func _on_container_item_moved(item: InventoryItem_Base, _old_position: Vector2i, new_position: Vector2i):
+func _on_container_item_moved(item: InventoryItem_Base, old_position: Vector2i, new_position: Vector2i):
 	if enable_virtual_scrolling:
 		# In virtual mode, we don't track positions manually
 		call_deferred("refresh_display")

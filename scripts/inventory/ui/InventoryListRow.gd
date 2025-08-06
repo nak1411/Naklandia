@@ -133,17 +133,17 @@ func _get_tooltip_text() -> String:
 	if not item:
 		return ""
 	
-	var formatted_text = "[b]%s[/b]\n" % item.item_name
-	formatted_text += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
-	formatted_text += "Quantity: %d\n" % item.quantity
-	formatted_text += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
-	formatted_text += "Mass: %.2f kg (%.2f kg total)\n" % [item.mass, item.get_total_mass()]
-	formatted_text += "Value: %.2f ISK (%.2f ISK total)" % [item.base_value, item.get_total_value()]
+	var tooltip = "[b]%s[/b]\n" % item.item_name
+	tooltip += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
+	tooltip += "Quantity: %d\n" % item.quantity
+	tooltip += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
+	tooltip += "Mass: %.2f kg (%.2f kg total)\n" % [item.mass, item.get_total_mass()]
+	tooltip += "Value: %.2f ISK (%.2f ISK total)" % [item.base_value, item.get_total_value()]
 	
 	if not item.description.is_empty():
-		formatted_text += "\n\n[i]%s[/i]" % item.description
+		tooltip += "\n\n[i]%s[/i]" % item.description
 	
-	return formatted_text
+	return tooltip
 
 func _show_tooltip():
 	if not item or is_showing_tooltip:

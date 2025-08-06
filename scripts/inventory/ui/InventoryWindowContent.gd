@@ -132,7 +132,7 @@ func _switch_to_grid_mode():
 		if current_container:
 			inventory_grid.refresh_display()
 
-func _on_item_context_menu_from_list(item: InventoryItem_Base, menu_position: Vector2):
+func _on_item_context_menu_from_list(item: InventoryItem_Base, position: Vector2):
 	# Check if we still have a valid container
 	if not current_container:
 		return
@@ -145,7 +145,7 @@ func _on_item_context_menu_from_list(item: InventoryItem_Base, menu_position: Ve
 	# Store the dummy slot so we can clean it up later
 	pending_dummy_slots.append(dummy_slot)
 	
-	item_context_menu.emit(item, dummy_slot, menu_position)
+	item_context_menu.emit(item, dummy_slot, position)
 	
 func _on_list_item_selected(item: InventoryItem_Base):
 	# Check if we still have a valid container
@@ -210,7 +210,7 @@ func _handle_display_resize():
 
 func _remove_split_container_outline():
 	# Remove the default HSplitContainer theme that creates outlines
-	var _theme = Theme.new()
+	var theme = Theme.new()
 	
 	# Create custom grabber style without outlines
 	var grabber_style = StyleBoxFlat.new()
@@ -224,12 +224,11 @@ func _remove_split_container_outline():
 	panel_style.border_width_top = 0
 	panel_style.border_width_bottom = 0
 	
-	# Fix: Use _theme instead of theme (which doesn't exist)
-	_theme.set_stylebox("grabber", "HSplitContainer", grabber_style)
-	_theme.set_stylebox("panel", "HSplitContainer", panel_style)
-	_theme.set_stylebox("bg", "HSplitContainer", panel_style)
+	theme.set_stylebox("grabber", "HSplitContainer", grabber_style)
+	theme.set_stylebox("panel", "HSplitContainer", panel_style)
+	theme.set_stylebox("bg", "HSplitContainer", panel_style)
 	
-	set_theme(_theme)
+	set_theme(theme)
 
 # Modified _setup_content method
 func _setup_content():
@@ -285,7 +284,7 @@ func _setup_left_panel():
 	# Set up drop area handling
 	_setup_container_drop_handling()
 
-func _on_empty_area_context_menu(_position: Vector2):
+func _on_empty_area_context_menu(position: Vector2):
 	"""Handle empty area context menu from grid"""
 	empty_area_context_menu.emit(position)
 
@@ -326,6 +325,7 @@ func _setup_right_panel():
 	grid_container.add_child(inventory_grid)
 	
 	# Connect signals
+	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
 	inventory_grid.empty_area_context_menu.connect(_on_empty_area_context_menu)
 
@@ -394,7 +394,7 @@ func _on_container_list_selected(index: int):
 func _on_item_activated(item: InventoryItem_Base, slot: InventorySlot):
 	item_activated.emit(item, slot)
 
-func _on_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, _position: Vector2):
+func _on_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
 	item_context_menu.emit(item, slot, position)
 
 # Public interface with debug output
@@ -415,7 +415,7 @@ func update_containers(containers: Array[InventoryContainer_Base]):
 	for i in range(containers.size()):
 		var container = containers[i]
 		var _total_qty = container.get_total_quantity()
-		var _unique_items = container.get_item_count()
+		var unique_items = container.get_item_count()
 		
 		var container_text = container.container_name
 		
@@ -489,11 +489,11 @@ func _disconnect_container_signals():
 			if item.quantity_changed.is_connected(_on_item_quantity_changed):
 				item.quantity_changed.disconnect(_on_item_quantity_changed)
 			
-func _on_item_quantity_changed(_new_quantity: int):
+func _on_item_quantity_changed(new_quantity: int):
 	"""Handle item quantity changes - update mass info"""
 	update_mass_info()
 			
-func _on_container_item_added(item: InventoryItem_Base, _position: Vector2i):
+func _on_container_item_added(item: InventoryItem_Base, position: Vector2i):
 	"""Handle item added to current container - update mass info and connect to item signals"""
 	# Connect to the new item's quantity change signal
 	if not item.quantity_changed.is_connected(_on_item_quantity_changed):
@@ -501,7 +501,7 @@ func _on_container_item_added(item: InventoryItem_Base, _position: Vector2i):
 	
 	update_mass_info()
 
-func _on_container_item_removed(item: InventoryItem_Base, _position: Vector2i):
+func _on_container_item_removed(item: InventoryItem_Base, position: Vector2i):
 	"""Handle item removed from current container - update mass info and disconnect from item signals"""
 	# Disconnect from the removed item's quantity change signal
 	if item.quantity_changed.is_connected(_on_item_quantity_changed):
@@ -509,7 +509,7 @@ func _on_container_item_removed(item: InventoryItem_Base, _position: Vector2i):
 	
 	update_mass_info()
 
-func _on_container_item_moved(_item: InventoryItem_Base, _old_position: Vector2i, _new_position: Vector2i):
+func _on_container_item_moved(item: InventoryItem_Base, old_position: Vector2i, new_position: Vector2i):
 	"""Handle item moved within current container - usually no mass change, but update for consistency"""
 	update_mass_info()
 
@@ -577,7 +577,7 @@ func _process(_delta):
 	# Check for ongoing drags and highlight valid drop targets
 	var viewport = get_viewport()
 	if viewport and viewport.has_meta("current_drag_data"):
-		var _drag_data = viewport.get_meta("current_drag_data", null)
+		var drag_data = viewport.get_meta("current_drag_data", null)
 
 		_update_container_drop_highlights()
 	else:

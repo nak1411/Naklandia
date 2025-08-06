@@ -121,7 +121,7 @@ func get_accessible_containers() -> Array[InventoryContainer_Base]:
 	return accessible
 
 # Item operations
-func add_item_to_container(item: InventoryItem_Base, container_id: String, position: Vector2i = Vector2i(-1, -1), _auto_stack: bool = true) -> bool:
+func add_item_to_container(item: InventoryItem_Base, container_id: String, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
 	var container = get_container(container_id)
 	if not container:
 		return false
@@ -146,7 +146,7 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 	
 	# Handle transfer quantity
 	var transfer_quantity = quantity if quantity > 0 else item.quantity
-	var _transfer_item = item
+	var transfer_item = item
 	
 	# Declare transaction variable once at function level
 	var transaction: Dictionary
@@ -189,8 +189,8 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 			var stack_space = stackable_item.max_stack_size - stackable_item.quantity
 			
 			# Calculate volume constraint - how many items can fit by volume
-			var stack_available_volume = to_container.get_available_volume()
-			var volume_limited_quantity = int(stack_available_volume / item.volume) if item.volume > 0 else transfer_quantity
+			var available_volume = to_container.get_available_volume()
+			var volume_limited_quantity = int(available_volume / item.volume) if item.volume > 0 else transfer_quantity
 			
 			# Use the minimum of stack space, volume constraints, and requested quantity
 			var max_stackable = min(stack_space, min(volume_limited_quantity, transfer_quantity))
@@ -234,42 +234,42 @@ func transfer_item(item: InventoryItem_Base, from_container_id: String, to_conta
 	# Handle partial vs full transfer
 	if transfer_quantity >= item.quantity:
 		# Full transfer - move entire item
-		_transfer_item = item
+		transfer_item = item
 		
 		# Check if target container can accept the item
-		if not to_container.can_add_item(_transfer_item):
+		if not to_container.can_add_item(transfer_item):
 			return false
 		
 		# Remove from source and add to target
-		if not from_container.remove_item(_transfer_item):
+		if not from_container.remove_item(transfer_item):
 			return false
 		
-		if not to_container.add_item(_transfer_item, position):
+		if not to_container.add_item(transfer_item, position):
 			# Failed to add - restore to source
-			from_container.add_item(_transfer_item)
+			from_container.add_item(transfer_item)
 			return false
 	else:
 		# Partial transfer - use split_stack which handles quantity reduction
-		_transfer_item = item.split_stack(transfer_quantity)
-		if not _transfer_item:
+		transfer_item = item.split_stack(transfer_quantity)
+		if not transfer_item:
 			return false
 		
 		# Check if target container can accept the split item
-		if not to_container.can_add_item(_transfer_item):
+		if not to_container.can_add_item(transfer_item):
 			# Restore the split by adding back to original item
-			item.add_to_stack(_transfer_item.quantity)
+			item.add_to_stack(transfer_item.quantity)
 			return false
 		
 		# Add split item to target container
-		if not to_container.add_item(_transfer_item, position):
+		if not to_container.add_item(transfer_item, position):
 			# Failed to add - restore the split
-			item.add_to_stack(_transfer_item.quantity)
+			item.add_to_stack(transfer_item.quantity)
 			return false
 	
 	# Record transaction
 	transaction = {
-		"item_name": _transfer_item.item_name,
-		"quantity": _transfer_item.quantity,
+		"item_name": transfer_item.item_name,
+		"quantity": transfer_item.quantity,
 		"from_container": from_container_id,
 		"to_container": to_container_id,
 		"timestamp": Time.get_unix_time_from_system(),
@@ -301,7 +301,7 @@ func find_item_globally(item_id: String) -> Dictionary:
 	
 	return {}
 
-func find_items_by_name_globally(_name: String) -> Array[Dictionary]:
+func find_items_by_name_globally(name: String) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	
 	for container_id in containers:
@@ -473,7 +473,7 @@ func get_inventory_summary() -> Dictionary:
 	return summary
 
 # Item creation helpers
-func create_item(item_id: String, _name: String, quantity: int = 1) -> InventoryItem_Base:
+func create_item(item_id: String, name: String, quantity: int = 1) -> InventoryItem_Base:
 	var item = InventoryItem_Base.new(item_id, name)
 	item.quantity = quantity
 	return item
@@ -705,10 +705,10 @@ func transfer_partial_stack(item: InventoryItem_Base, quantity_to_transfer: int,
 			return {"success": false, "transferred": 0, "remaining": item.quantity}
 	
 	# Partial transfer - create new item for destination
-	var _transfer_item = item.duplicate()
-	_transfer_item.quantity = actual_transfer
+	var transfer_item = item.duplicate()
+	transfer_item.quantity = actual_transfer
 	
-	if to_container.add_item(_transfer_item):
+	if to_container.add_item(transfer_item):
 		# Reduce quantity in source
 		item.quantity -= actual_transfer
 		return {"success": true, "transferred": actual_transfer, "remaining": item.quantity}

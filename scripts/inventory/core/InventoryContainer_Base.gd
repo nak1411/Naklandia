@@ -22,6 +22,7 @@ var grid_slots: Array = []  # 2D array for grid-based positioning
 # Signals
 signal item_added(item: InventoryItem_Base, position: Vector2i)
 signal item_removed(item: InventoryItem_Base, position: Vector2i)
+signal container_full()
 signal item_moved(item: InventoryItem_Base, from_pos: Vector2i, to_pos: Vector2i)
 
 func _init(id: String = "", name: String = "Container", volume: float = 100.0):
@@ -134,7 +135,7 @@ func is_position_valid(pos: Vector2i) -> bool:
 	# The actual constraint is volume, not grid position
 	return pos.x >= 0 and pos.y >= 0
 
-func is_area_free(_pos: Vector2i, _exclude_item: InventoryItem_Base = null) -> bool:
+func is_area_free(pos: Vector2i, exclude_item: InventoryItem_Base = null) -> bool:
 	# Let the UI grid handle position conflicts
 	# For the container, we only care about volume
 	return get_available_volume() > 0
@@ -187,17 +188,17 @@ func auto_stack_items():
 					if other_item.quantity <= 0:
 						remove_item(other_item)
 
-func occupy_grid_area(_pos: Vector2i, _item: InventoryItem_Base):
+func occupy_grid_area(pos: Vector2i, _item: InventoryItem_Base):
 	# Volume-based system doesn't track grid positions in the container
 	# This is handled by the UI layer
 	pass
 
-func clear_grid_area(_pos: Vector2i):
+func clear_grid_area(pos: Vector2i):
 	# Volume-based system doesn't track grid positions in the container
 	# This is handled by the UI layer
 	pass
 
-func get_item_position(_item: InventoryItem_Base) -> Vector2i:
+func get_item_position(item: InventoryItem_Base) -> Vector2i:
 	# Return invalid position - let UI manage positioning
 	return Vector2i(-1, -1)
 
@@ -247,7 +248,7 @@ func can_add_item(item: InventoryItem_Base, exclude_item: InventoryItem_Base = n
 	return true
 
 # Replace the add_item method to work with dynamic positioning
-func add_item(item: InventoryItem_Base, _position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
+func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), auto_stack: bool = true) -> bool:
 	
 	if not can_add_item(item):
 		return false
@@ -283,7 +284,7 @@ func add_item(item: InventoryItem_Base, _position: Vector2i = Vector2i(-1, -1), 
 	item_added.emit(item, Vector2i(-1, -1))
 	return true
 	
-func assign_dynamic_position(item: InventoryItem_Base, _position: Vector2i):
+func assign_dynamic_position(item: InventoryItem_Base, position: Vector2i):
 	"""Assign a position to an item for grid display purposes"""
 	if item in items:
 		# This is now just for display - the actual constraint is volume

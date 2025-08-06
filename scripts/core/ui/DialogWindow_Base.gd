@@ -18,7 +18,7 @@ signal dialog_confirmed()
 signal dialog_cancelled()
 signal dialog_closed()
 
-func _init(title: String = "Dialog", _size: Vector2 = Vector2(400, 300)):
+func _init(title: String = "Dialog", size: Vector2 = Vector2(400, 300)):
 	super._init()
 	
 	# Set dialog-specific properties
