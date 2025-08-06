@@ -31,7 +31,6 @@ var resize_mode: ResizeMode = ResizeMode.NONE
 var resize_start_position: Vector2
 var resize_start_size: Vector2
 var resize_start_mouse: Vector2
-var _was_resizing: bool = false
 
 # UI Components
 var main_container: Control
@@ -693,7 +692,7 @@ func _setup_resize_area_geometry(area: Control, mode: ResizeMode):
 			area.offset_left = -corner
 			area.offset_top = -corner
 
-func _on_window_resized(new_size: Vector2i):
+func _on_window_resized(_new_size: Vector2i):
 	_update_edge_bloom_size()
 
 func _update_edge_bloom_size():
@@ -738,7 +737,7 @@ func _on_resize_area_entered(mode: ResizeMode):
 	#_update_border_visuals(mode)
 	_show_edge_bloom(mode)
 
-func _on_resize_area_exited(mode: ResizeMode):
+func _on_resize_area_exited(_mode: ResizeMode):
 	"""Handle mouse exiting a resize area"""
 	if not is_resizing:
 		mouse_default_cursor_shape = Control.CURSOR_ARROW

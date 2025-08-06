@@ -96,11 +96,11 @@ func _create_quick_slots():
 	# Select first slot by default
 	_select_slot(0)
 	
-func _on_quick_slot_drag_started(slot_index: int, slot: InventorySlot, item: InventoryItem_Base):
+func _on_quick_slot_drag_started(_slot_index: int, slot: InventorySlot, _item: InventoryItem_Base):
 	# Highlight the quick slot being dragged from
 	slot.modulate.a = 0.5
 
-func _on_quick_slot_drag_ended(slot_index: int, slot: InventorySlot, success: bool):
+func _on_quick_slot_drag_ended(_slot_index: int, slot: InventorySlot, success: bool):
 	# Restore slot appearance
 	slot.modulate.a = 1.0
 	
@@ -108,7 +108,7 @@ func _on_quick_slot_drag_ended(slot_index: int, slot: InventorySlot, success: bo
 	if success:
 		call_deferred("_refresh_quick_slots")
 
-func _on_quick_slot_dropped(slot_index: int, source_slot: InventorySlot, target_slot: InventorySlot):
+func _on_quick_slot_dropped(_slot_index: int, _source_slot: InventorySlot, _target_slot: InventorySlot):
 	# Handle drops within the quick slots
 	# The slots have already handled the item transfer
 	call_deferred("_refresh_quick_slots")
@@ -278,7 +278,7 @@ func _select_previous_slot():
 	_select_slot(prev_index)
 
 # Event handlers
-func _on_quick_slot_clicked(slot_index: int, slot: InventorySlot, event: InputEvent):
+func _on_quick_slot_clicked(slot_index: int, _slot: InventorySlot, event: InputEvent):
 	_select_slot(slot_index)
 	
 	var mouse_event = event as InputEventMouseButton
@@ -289,7 +289,7 @@ func _on_quick_slot_right_clicked(slot_index: int, slot: InventorySlot, event: I
 	if slot.has_item():
 		_show_quick_slot_context_menu(slot_index, slot, event.global_position)
 
-func _show_quick_slot_context_menu(slot_index: int, slot: InventorySlot, position: Vector2):
+func _show_quick_slot_context_menu(slot_index: int, slot: InventorySlot, _position: Vector2):
 	var popup = PopupMenu.new()
 	
 	popup.add_item("Use Item", 0)
@@ -338,7 +338,7 @@ func set_slot_count(count: int):
 	slot_count = count
 	_create_quick_slots()
 
-func set_slot_size(size: Vector2):
+func set_slot_size(_size: Vector2):
 	slot_size = size
 	for slot in quick_slots:
 		slot.slot_size = size

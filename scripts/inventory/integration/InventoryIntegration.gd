@@ -237,16 +237,16 @@ func _is_position_valid(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.y >= 0 and pos.x < screen_size.x and pos.y < screen_size.y
 
 # Signal handlers
-func _on_item_added(item_id: String, quantity: int):
+func _on_item_added(_item_id: String, _quantity: int):
 	pass
 
-func _on_item_removed(item_id: String, quantity: int):
+func _on_item_removed(_item_id: String, _quantity: int):
 	pass
 
-func _on_container_switched(container: InventoryContainer_Base):
+func _on_container_switched(_container: InventoryContainer_Base):
 	pass
 
-func _on_window_resized(new_size: Vector2i):
+func _on_window_resized(_new_size: Vector2i):
 	pass
 
 # Public interface methods

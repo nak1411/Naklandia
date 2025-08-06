@@ -140,7 +140,7 @@ func _show_tooltip():
 	tooltip_label.text = _get_tooltip_text()
 	
 	# Position below the slot
-	var tooltip_pos = global_position + Vector2(((slot_size.x / 2) + slot_padding / 2) - (tooltip.size.x / 2), slot_size.y + 5)
+	var tooltip_pos = global_position + Vector2(((slot_size.x / 2.0) + slot_padding / 2.0) - (tooltip.size.x / 2.0), slot_size.y + 5)
 	tooltip.position = tooltip_pos
 	tooltip.visible = true
 	is_showing_tooltip = true
@@ -154,17 +154,17 @@ func _get_tooltip_text() -> String:
 	if not item:
 		return ""
 	
-	var tooltip = "[b]%s[/b]\n" % item.item_name
-	tooltip += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
-	tooltip += "Quantity: %d\n" % item.quantity
-	tooltip += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
-	tooltip += "Mass: %.2f kg (%.2f kg total)\n" % [item.mass, item.get_total_mass()]
-	tooltip += "Value: %.2f ISK (%.2f ISK total)" % [item.base_value, item.get_total_value()]
+	var item_tooltip = "[b]%s[/b]\n" % item.item_name
+	item_tooltip += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
+	item_tooltip += "Quantity: %d\n" % item.quantity
+	item_tooltip += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
+	item_tooltip += "Mass: %.2f kg (%.2f kg total)\n" % [item.mass, item.get_total_mass()]
+	item_tooltip += "Value: %.2f ISK (%.2f ISK total)" % [item.base_value, item.get_total_value()]
 	
 	if not item.description.is_empty():
-		tooltip += "\n\n[i]%s[/i]" % item.description
+		item_tooltip += "\n\n[i]%s[/i]" % item.description
 	
-	return tooltip
+	return item_tooltip
 
 func _setup_visual_components():
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -613,17 +613,17 @@ func _update_tooltip():
 		tooltip_text = ""
 		return
 	
-	var tooltip = "%s\n" % item.item_name
-	tooltip += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
-	tooltip += "Quantity: %d\n" % item.quantity
-	tooltip += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
-	tooltip += "Mass: %.2f kg (%.2f kg total)\n" % [item.mass, item.get_total_mass()]
-	tooltip += "Value: %.2f ISK (%.2f ISK total)\n" % [item.base_value, item.get_total_value()]
+	var _item_tooltip = "%s\n" % item.item_name
+	_item_tooltip += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
+	_item_tooltip += "Quantity: %d\n" % item.quantity
+	_item_tooltip += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
+	_item_tooltip += "Mass: %.2f kg (%.2f kg total)\n" % [item.mass, item.get_total_mass()]
+	_item_tooltip += "Value: %.2f ISK (%.2f ISK total)\n" % [item.base_value, item.get_total_value()]
 	
 	if not item.description.is_empty():
-		tooltip += "\n%s" % item.description
+		_item_tooltip += "\n%s" % item.description
 	
-	tooltip_text = tooltip
+	tooltip_text = _item_tooltip
 
 # Calculate tooltip position (same position where Godot would show the tooltip)
 func get_tooltip_position() -> Vector2:
@@ -1617,7 +1617,7 @@ func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
 	
 	return null
 	
-func _can_drop_data(position: Vector2, data: Variant) -> bool:
+func _can_drop_data(_pos: Vector2, data: Variant) -> bool:
 	# Only accept drops if we can accept the item
 	if not data or not data.has("item"):
 		return false
@@ -1629,7 +1629,7 @@ func _can_drop_data(position: Vector2, data: Variant) -> bool:
 	# Check if we can accept this item (volume, compatibility, etc.)
 	return _can_accept_item_volume_check(item_to_drop)
 
-func _drop_data(position: Vector2, data: Variant):
+func _drop_data(_pos: Vector2, data: Variant):
 	if not data or not data.has("source_slot"):
 		return
 	
@@ -1640,7 +1640,7 @@ func _drop_data(position: Vector2, data: Variant):
 	# Emit the drop signal to let the grid handle it
 	item_dropped_on_slot.emit(source_slot, self)
 
-func get_drag_data(position: Vector2) -> Variant:
+func get_drag_data(_position: Vector2) -> Variant:
 	if not has_item():
 		return null
 	

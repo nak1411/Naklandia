@@ -19,7 +19,7 @@ func setup_materials():
 	_apply_material_to_path("Level/Wall2/MeshInstance3D", materials.wall)
 	_apply_material_to_path("TestObjects/Platform/MeshInstance3D", materials.platform)
 
-func _create_pbr_material(albedo: Color, roughness: float, metallic: float, name: String) -> StandardMaterial3D:
+func _create_pbr_material(albedo: Color, roughness: float, metallic: float, _name: String) -> StandardMaterial3D:
 	var material = StandardMaterial3D.new()
 	material.albedo_color = albedo
 	material.roughness = roughness

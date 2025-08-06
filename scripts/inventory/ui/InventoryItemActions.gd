@@ -233,7 +233,7 @@ func _handle_move_item_action(action_id: String, item: InventoryItem_Base):
 		if not success:
 			_show_transfer_failed_notification()
 
-func _handle_move_container_items_action(action_id: String, container: InventoryContainer_Base):
+func _handle_move_container_items_action(_action_id: String, _container: InventoryContainer_Base):
 	"""Handle moving all items from a container"""
 	# Implementation for bulk container moves
 

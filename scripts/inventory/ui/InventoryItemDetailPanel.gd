@@ -98,7 +98,7 @@ func _update_properties():
 		_add_separator()
 		_add_description(current_item.get_description())
 
-func _add_property(name: String, value: String):
+func _add_property(_name: String, value: String):
 	var property_row = HBoxContainer.new()
 	properties_container.add_child(property_row)
 	
