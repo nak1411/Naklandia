@@ -70,9 +70,6 @@ func _ready():
 	# Hide the window initially
 	inventory_window.visible = false
 	
-	# Add test items
-	_add_initial_test_items()
-	
 	setup_complete = true
 	setup_completed.emit()
 
@@ -110,13 +107,6 @@ func _load_and_apply_position():
 			inventory_window.center_on_screen()
 	else:
 		inventory_window.center_on_screen()
-
-func _add_initial_test_items():
-	if inventory_manager:
-		var player_inv = inventory_manager.get_player_inventory()
-		if player_inv:
-			player_inv.clear()
-		inventory_manager.create_sample_items()
 
 func _input(event):
 	if not setup_complete:

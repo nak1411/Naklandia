@@ -478,75 +478,6 @@ func create_item(item_id: String, name: String, quantity: int = 1) -> InventoryI
 	item.quantity = quantity
 	return item
 
-func create_sample_items():
-	var items = [
-		{
-			"id": "tritanium_ore",
-			"name": "Tritanium Ore",
-			"type": InventoryItem_Base.ItemType.RESOURCE,
-			"volume": 0.01,
-			"mass": 0.01,
-			"max_stack": 999999,
-			"value": 5.0,
-		},
-		{
-			"id": "laser_crystal",
-			"name": "Laser Focusing Crystal",
-			"type": InventoryItem_Base.ItemType.MODULE,
-			"volume": 5.0,
-			"mass": 2.0,
-			"max_stack": 999999,  # Changed from 1 to 10
-			"value": 15000.0,
-		},
-		{
-			"id": "ammo_hybrid",
-			"name": "Hybrid Charges",
-			"type": InventoryItem_Base.ItemType.AMMUNITION,
-			"volume": 0.025,
-			"mass": 0.01,
-			"max_stack": 999999,
-			"value": 100.0,
-		},
-		{
-			"id": "blueprint_frigate",
-			"name": "Frigate Blueprint",
-			"type": InventoryItem_Base.ItemType.BLUEPRINT,
-			"volume": 0.1,
-			"mass": 0.1,
-			"max_stack": 999999,  # Changed from 1 to 5
-			"value": 50000.0,
-		}
-	]
-	
-	for item_data in items:
-		# Create multiple instances of some items for testing stacking
-		var base_item = InventoryItem_Base.new(item_data.id, item_data.name)
-		base_item.item_type = item_data.type
-		base_item.volume = item_data.volume
-		base_item.mass = item_data.mass
-		base_item.max_stack_size = item_data.max_stack
-		base_item.base_value = item_data.value
-		
-		# Add multiple copies of stackable items for testing
-		if item_data.max_stack > 1:
-			# Add 3 separate stacks of 1 each (so you can test stacking them)
-			for i in range(3):
-				var item = InventoryItem_Base.new()
-				item.item_id = item_data.id  # Set ID explicitly after creation
-				item.item_name = item_data.name
-				item.item_type = item_data.type
-				item.volume = item_data.volume
-				item.mass = item_data.mass
-				item.max_stack_size = item_data.max_stack
-				item.base_value = item_data.value
-				item.quantity = 1
-				
-				player_inventory.add_item(item)
-		else:
-			# Just add one for non-stackable items
-			base_item.item_id = item_data.id  # Make sure base item has correct ID too
-			player_inventory.add_item(base_item)
-
 # Signal handlers
 func _on_container_item_added(item: InventoryItem_Base, _position: Vector2i):
 	# Only auto-stack if auto_stack is enabled
@@ -594,8 +525,6 @@ func save_inventory():
 func load_inventory():
 	var file = FileAccess.open(save_file_path, FileAccess.READ)
 	if not file:
-		print("No save file found, creating sample items")
-		create_sample_items()
 		return false
 	
 	var json_string = file.get_as_text()
@@ -605,8 +534,6 @@ func load_inventory():
 	var parse_result = json.parse(json_string)
 	if parse_result != OK:
 		print("Failed to parse save file!")
-		# If save file is corrupted, create new sample items
-		create_sample_items()
 		return false
 	
 	var save_data = json.data
@@ -623,8 +550,6 @@ func load_inventory():
 				break
 	
 	if needs_refresh:
-		print("Old save file detected with incorrect stack sizes, creating fresh sample items")
-		create_sample_items()
 		return false
 	
 	# Clear existing containers (except defaults)

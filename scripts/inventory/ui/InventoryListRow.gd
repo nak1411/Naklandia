@@ -205,10 +205,10 @@ func _populate_cells():
 		content_container.add_child(cell)
 		cells.append(cell)
 
+# Replace the icon creation part in the _create_cell function with this:
 func _create_cell(column: Dictionary) -> Control:
 	var cell = Panel.new()
 	cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
 	cell.custom_minimum_size.y = row_height
 	
 	# Set sizing to match header exactly
@@ -234,25 +234,36 @@ func _create_cell(column: Dictionary) -> Control:
 			hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			hbox.offset_left = 4
 			hbox.offset_right = -4
-			hbox.add_theme_constant_override("separation", 4)
+			hbox.add_theme_constant_override("separation", 6)
 			cell.add_child(hbox)
 			
-			# Add icon
+			# Create icon container - no clipping, just size constraint
+			var icon_container = Control.new()
+			icon_container.size = Vector2(18, 18)
+			icon_container.custom_minimum_size = Vector2(18, 18)
+			icon_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			icon_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			# NO clip_contents = true - we want scaling, not clipping
+			hbox.add_child(icon_container)
+			
+			# Create icon with proper scaling
 			var icon = TextureRect.new()
 			var texture = item.get_icon_texture()
 			if texture:
 				icon.texture = texture
 			else:
-				var fallback_image = Image.create(16, 16, false, Image.FORMAT_RGB8)
+				var fallback_image = Image.create(18, 18, false, Image.FORMAT_RGB8)
 				fallback_image.fill(item.get_type_color())
 				var fallback_texture = ImageTexture.new()
 				fallback_texture.set_image(fallback_image)
 				icon.texture = fallback_texture
 			
-			icon.custom_minimum_size = Vector2(16, 16)
+			# FIXED: Use anchors and proper stretch mode for scaling
+			icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			hbox.add_child(icon)
+			icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			icon_container.add_child(icon)
 			
 			# Add name label
 			var label = Label.new()
@@ -262,53 +273,48 @@ func _create_cell(column: Dictionary) -> Control:
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			label.clip_contents = true
 			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			label.add_theme_color_override("font_color", Color.WHITE)
 			hbox.add_child(label)
-		
+			
+		# Rest of columns remain the same...
 		"quantity":
 			var label = Label.new()
-			var qty_text = str(item.quantity) + " "
-			label.text = qty_text
+			label.text = str(item.quantity)
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			label.clip_contents = true
-			label.add_theme_color_override("font_color", Color.WHITE)
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			cell.add_child(label)
-
+			
 		"type":
 			var label = Label.new()
-			var type_text = str(item.item_type) + " "
-			label.text = type_text
+			var type_name = InventoryItem_Base.ItemType.keys()[item.item_type]
+			label.text = type_name.capitalize()
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			label.offset_left = 4
+			label.offset_right = -4
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			label.clip_contents = true
-			label.add_theme_color_override("font_color", Color.WHITE)
+			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 			cell.add_child(label)
-
+			
 		"volume":
 			var label = Label.new()
-			var volume_text = str(item.volume * item.quantity) + " "
-			label.text = volume_text
+			var total_volume = item.volume * item.quantity
+			label.text = "%.1f" % total_volume
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			label.clip_contents = true
-			label.add_theme_color_override("font_color", Color.WHITE)
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			cell.add_child(label)
-		
+			
 		"base_value":
 			var label = Label.new()
-			var value = item.base_value * item.quantity
-			label.text = _format_currency(value)
+			var total_value = item.base_value * item.quantity
+			label.text = "%.0f" % total_value
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			label.clip_contents = true
-			label.add_theme_color_override("font_color", Color.WHITE)
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			cell.add_child(label)
-	
+			
 	return cell
 
 func _format_currency(value: float) -> String:

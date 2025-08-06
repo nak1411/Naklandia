@@ -3,7 +3,7 @@ class_name InventoryListView
 extends Control
 
 # List properties
-@export var row_height: int = 32
+@export var row_height: int = 40
 @export var header_height: int = 28
 @export var detail_panel_width: int = 300
 @export var show_details: bool = true

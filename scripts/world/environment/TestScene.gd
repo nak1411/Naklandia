@@ -1,4 +1,4 @@
-# TestScene.gd - Updated to use UIManager
+# TestScene.gd - Updated to spawn different item types
 extends Node3D
 
 @onready var ui_manager: UIManager
@@ -9,91 +9,156 @@ func _ready():
 	
 	# Wait for everything to initialize properly
 	await get_tree().create_timer(2.0).timeout
-	create_test_pickup()
+	create_test_items()
 
-func create_test_pickup():
-	var pickup = Area3D.new()
-	pickup.name = "TestPickup"
-	pickup.global_position = Vector3(2, 1.5, 0)
-	pickup.collision_layer = 2
-	pickup.collision_mask = 0
+func create_test_items():
+	# Spawn different item types
+	spawn_ammo_pickup(Vector3(2, 1.5, 0))
+	spawn_module_pickup(Vector3(4, 1.5, 0))
+	spawn_resource_pickup(Vector3(6, 1.5, 0))
+	spawn_blueprint_pickup(Vector3(8, 1.5, 0))
+
+func spawn_ammo_pickup(position: Vector3):
+	# Create ammo programmatically - SAME as others
+	var ammo = AmmoPickup.new()
+	ammo.name = "Hybrid Charges"
+	ammo.global_position = position
+	ammo.collision_layer = 2
+	ammo.collision_mask = 0
 	
-	# Add mesh
+	# Add mesh and collision
 	var mesh_instance = MeshInstance3D.new()
 	var mesh = BoxMesh.new()
-	mesh.size = Vector3(0.5, 0.5, 0.5)
+	mesh.size = Vector3(0.3, 0.3, 0.8)  # Ammo-like shape
 	mesh_instance.mesh = mesh
-	pickup.add_child(mesh_instance)
+	ammo.add_child(mesh_instance)
 	
-	# Add collision to Area3D
 	var collision = CollisionShape3D.new()
 	var shape = BoxShape3D.new()
-	shape.size = Vector3(0.5, 0.5, 0.5)
+	shape.size = Vector3(0.3, 0.3, 0.8)
 	collision.shape = shape
-	pickup.add_child(collision)
+	ammo.add_child(collision)
 	
-	# IMPORTANT: Add RaycastTarget like TestSwitch has
+	# Add raycast target
 	var raycast_target = StaticBody3D.new()
 	raycast_target.name = "RaycastTarget"
 	raycast_target.collision_layer = 2
 	raycast_target.collision_mask = 0
-	pickup.add_child(raycast_target)
+	ammo.add_child(raycast_target)
 	
-	# Add collision to RaycastTarget
 	var target_collision = CollisionShape3D.new()
-	target_collision.shape = shape  # Same shape
+	target_collision.shape = shape
 	raycast_target.add_child(target_collision)
 	
-	# Add script
-	var pickup_script = preload("res://scripts/inventory/items/PickupableItem.gd")
-	pickup.set_script(pickup_script)
-	
-	add_child(pickup)
-	print("Pickup with RaycastTarget created!")
+	add_child(ammo)
 
+func spawn_module_pickup(position: Vector3):
+	# Create module programmatically
+	var module = ModulePickup.new()
+	module.name = "Gauss Turret"
+	module.global_position = position
+	module.collision_layer = 2
+	module.collision_mask = 0
+	module.module_name = "Gauss Turret"
+	
+	# Add mesh and collision
+	var mesh_instance = MeshInstance3D.new()
+	var mesh = BoxMesh.new()
+	mesh.size = Vector3(0.8, 0.3, 0.8)
+	mesh_instance.mesh = mesh
+	module.add_child(mesh_instance)
+
+	var collision = CollisionShape3D.new()
+	var shape = BoxShape3D.new()
+	shape.size = Vector3(0.8, 0.3, 0.8)
+	collision.shape = shape
+	module.add_child(collision)
+
+	# Add raycast target
+	var raycast_target = StaticBody3D.new()
+	raycast_target.name = "RaycastTarget"
+	raycast_target.collision_layer = 2
+	raycast_target.collision_mask = 0
+	module.add_child(raycast_target)
+
+	var target_collision = CollisionShape3D.new()
+	target_collision.shape = shape
+	raycast_target.add_child(target_collision)
+	
+	add_child(module)
+
+func spawn_resource_pickup(position: Vector3):
+	var resource = ResourcePickup.new()
+	resource.name = "Noxite"
+	resource.global_position = position
+	resource.collision_layer = 2
+	resource.collision_mask = 0
+	resource.resource_name = "Noxite"
+	resource.resource_quantity = 500
+	
+	# Add mesh and collision
+	var mesh_instance = MeshInstance3D.new()
+	var mesh = SphereMesh.new()
+	mesh.radius = 0.3
+	mesh_instance.mesh = mesh
+	resource.add_child(mesh_instance)
+
+	var collision = CollisionShape3D.new()
+	var shape = SphereShape3D.new()
+	shape.radius = 0.3
+	collision.shape = shape
+	resource.add_child(collision)
+
+	# Add raycast target
+	var raycast_target = StaticBody3D.new()
+	raycast_target.name = "RaycastTarget"
+	raycast_target.collision_layer = 2
+	raycast_target.collision_mask = 0
+	resource.add_child(raycast_target)
+	
+	var target_collision = CollisionShape3D.new()
+	target_collision.shape = shape
+	raycast_target.add_child(target_collision)
+	
+	add_child(resource)
+
+func spawn_blueprint_pickup(position: Vector3):
+	var blueprint = BlueprintPickup.new()
+	blueprint.name = "Hybrid Charge Blueprint"
+	blueprint.global_position = position
+	blueprint.collision_layer = 2
+	blueprint.collision_mask = 0
+	blueprint.blueprint_name = "Hybrid Charge Blueprint"
+	
+	# Add mesh and collision
+	var mesh_instance = MeshInstance3D.new()
+	var mesh = SphereMesh.new()
+	mesh.radius = 0.4
+	mesh_instance.mesh = mesh
+	blueprint.add_child(mesh_instance)
+
+	var collision = CollisionShape3D.new()
+	var shape = SphereShape3D.new()
+	shape.radius = 0.4
+	collision.shape = shape
+	blueprint.add_child(collision)
+
+	# Add raycast target
+	var raycast_target = StaticBody3D.new()
+	raycast_target.name = "RaycastTarget"
+	raycast_target.collision_layer = 2
+	raycast_target.collision_mask = 0
+	blueprint.add_child(raycast_target)
+
+	var target_collision = CollisionShape3D.new()
+	target_collision.shape = shape
+	raycast_target.add_child(target_collision)
+	
+	add_child(blueprint)
+
+# Rest of your existing methods...
 func setup_materials():
-	var materials = {
-		"floor": _create_pbr_material(Color(0.7, 0.7, 0.75), 0.8, 0.1, "Concrete Floor"),
-		"wall": _create_pbr_material(Color(0.5, 0.5, 0.55), 0.9, 0.0, "Stone Walls"), 
-		"platform": _create_pbr_material(Color(0.2, 0.4, 0.8), 0.3, 0.8, "Metal Platform")
-	}
-	
-	_apply_material_to_path("Level/Floor/MeshInstance3D", materials.floor)
-	_apply_material_to_path("Level/Wall1/MeshInstance3D", materials.wall)
-	_apply_material_to_path("Level/Wall2/MeshInstance3D", materials.wall)
-	_apply_material_to_path("TestObjects/Platform/MeshInstance3D", materials.platform)
-
-func _create_pbr_material(albedo: Color, roughness: float, metallic: float, name: String) -> StandardMaterial3D:
-	var material = StandardMaterial3D.new()
-	material.albedo_color = albedo
-	material.roughness = roughness
-	material.metallic = metallic
-	material.metallic_specular = 0.5
-	material.clearcoat_enabled = metallic > 0.5
-	material.clearcoat = 0.3 if metallic > 0.5 else 0.0
-	material.normal_enabled = true
-	material.normal_scale = 0.5
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	material.diffuse_mode = BaseMaterial3D.DIFFUSE_BURLEY
-	material.specular_mode = BaseMaterial3D.SPECULAR_SCHLICK_GGX
-	material.resource_name = name
-	return material
-
-func _apply_material_to_path(path: String, material: StandardMaterial3D):
-	var node = get_node_or_null(path)
-	if node and node is MeshInstance3D:
-		node.material_override = material
+	pass
 
 func setup_ui_manager():
-	# Create UI Manager
 	ui_manager = UIManager.new()
-	ui_manager.name = "UIManager"
-	add_child(ui_manager)
-	
-	# Wait for UI Manager to be ready
-	await ui_manager.ready
-	
-	# Add crosshair to HUD
-	var crosshair = CrosshairUI.new()
-	crosshair.name = "Crosshair"
-	ui_manager.add_hud_element(crosshair)

@@ -1,0 +1,29 @@
+[gd_scene load_steps=4 format=3 uid="uid://bk8xg7m3y4tn3"]
+
+[ext_resource type="Script" path="res://scripts/inventory/items/AmmoPickup.gd" id="1_ammo"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_ammo"]
+size = Vector3(0.3, 0.3, 0.8)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ammo"]
+size = Vector3(0.3, 0.3, 0.8)
+
+[node name="AmmoPickup" type="Area3D"]
+collision_layer = 2
+collision_mask = 0
+script = ExtResource("1_ammo")
+item_name_override = "Ammo"
+icon_path_override = "res://assets/textures/ui/icons/ammo.png"
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_ammo")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_ammo")
+
+[node name="RaycastTarget" type="StaticBody3D" parent="."]
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RaycastTarget"]
+shape = SubResource("BoxShape3D_ammo")

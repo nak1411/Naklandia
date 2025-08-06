@@ -1,4 +1,4 @@
-# PickupableItem.gd - Fixed version with correct add_item handling
+# PickupableItem.gd - Updated to treat all items consistently
 class_name PickupableItem
 extends Interactable
 
@@ -12,6 +12,9 @@ extends Interactable
 @export var item_mass_override: float = 1.0
 @export var item_value_override: float = 10.0
 @export var item_quantity: int = 1
+@export var icon_path_override: String = ""
+@export var item_id_override: String = ""
+@export var max_stack_size_override: int = 1  # NEW: Let each item type control its own stacking
 
 func _ready():
 	super._ready()
@@ -21,6 +24,9 @@ func _ready():
 	interaction_key = "E"
 	is_repeatable = false  # One time use
 	
+	# Allow derived classes to customize before generation
+	_configure_item_properties()
+	
 	# Auto-generate item data if needed
 	if auto_generate_item and not item_data:
 		_generate_item_data()
@@ -29,9 +35,18 @@ func _ready():
 	if item_data:
 		interaction_text = "Pick up " + item_data.item_name
 
+# Virtual method - override in derived classes to set default properties
+func _configure_item_properties():
+	# Base implementation does nothing
+	pass
+
 func _generate_item_data():
 	"""Generate item data based on export properties"""
 	item_data = InventoryItem_Base.new()
+	
+	# Set the item ID first
+	if not item_id_override.is_empty():
+		item_data.item_id = item_id_override
 	
 	# Use overrides or generate from name
 	if not item_name_override.is_empty():
@@ -45,9 +60,15 @@ func _generate_item_data():
 	item_data.mass = item_mass_override
 	item_data.base_value = item_value_override
 	item_data.quantity = item_quantity
-	item_data.max_stack_size = 999 if item_type_override == InventoryItem_Base.ItemType.RESOURCE else 1
+	
+	# FIXED: Use the override value directly instead of special logic
+	item_data.max_stack_size = max_stack_size_override
+	
+	# Set icon path if provided
+	if not icon_path_override.is_empty():
+		item_data.icon_path = icon_path_override
 
-# Override the interaction method from Interactable
+# Rest of your existing methods...
 func _perform_interaction() -> bool:
 	"""Handle pickup interaction"""
 	if not item_data:
@@ -77,12 +98,12 @@ func _perform_interaction() -> bool:
 		push_warning("PickupableItem: No player inventory found!")
 		return false
 	
-	# FIXED: Check if we can add the item first
+	# Check if we can add the item first
 	if not player_inventory.can_add_item(item_data):
 		print("Inventory is full or cannot accept this item!")
 		return false
 	
-	# FIXED: Try to add the item (returns bool, not remaining quantity)
+	# Try to add the item (returns bool, not remaining quantity)
 	var success = player_inventory.add_item(item_data)
 	
 	if success:

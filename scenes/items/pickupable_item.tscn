@@ -13,6 +13,7 @@ collision_layer = 2
 collision_mask = 0
 script = ExtResource("1_pickup")
 item_name_override = "Test Item"
+icon_path_override = "res://assets/textures/ui/icons/ammo.png"
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 mesh = SubResource("BoxMesh_pickup")
