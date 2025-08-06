@@ -647,11 +647,11 @@ func _generate_detailed_item_info(item: InventoryItem_Base) -> String:
 	
 	text += "[b]Physical Properties[/b]\n"
 	text += "Volume: %.3f m³ (%.3f m³ total)\n" % [item.volume, item.get_total_volume()]
-	text += "Mass: %.3f kg (%.3f kg total)\n\n" % [item.mass, item.get_total_mass()]
+	text += "Mass: %.3f t (%.3f t total)\n\n" % [item.mass, item.get_total_mass()]
 	
 	text += "[b]Economic Information[/b]\n"
-	text += "Base Value: %.2f ISK\n" % item.base_value
-	text += "Total Value: %.2f ISK\n\n" % item.get_total_value()
+	text += "Base Value: %.2f cr\n" % item.base_value
+	text += "Total Value: %.2f cr\n\n" % item.get_total_value()
 	
 	if item.is_container:
 		text += "[b]Container Properties[/b]\n"
@@ -688,8 +688,8 @@ func _generate_detailed_container_info(container: InventoryContainer_Base) -> St
 	text += "[b]Content Statistics[/b]\n"
 	text += "Item Types: %d\n" % info.item_count
 	text += "Total Items: %d\n" % info.total_quantity
-	text += "Total Mass: %.2f kg\n" % info.total_mass
-	text += "Total Value: %.2f ISK\n\n" % info.total_value
+	text += "Total Mass: %.2f t\n" % info.total_mass
+	text += "Total Value: %.2f cr\n\n" % info.total_value
 	
 	text += "[b]Security & Access[/b]\n"
 	text += "Secure Container: %s\n" % ("Yes" if container.is_secure else "No")

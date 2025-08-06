@@ -103,7 +103,7 @@ func create_item(item_type: String, position: Vector3) -> Node3D:
 func create_ammo_pickup(position: Vector3) -> AmmoPickup:
 	var ammo = AmmoPickup.new()
 	ammo.name = "Hybrid Charges"
-	ammo.global_position = position
+	ammo.position = position
 	ammo.collision_layer = 2
 	ammo.collision_mask = 0
 	
@@ -136,7 +136,7 @@ func create_ammo_pickup(position: Vector3) -> AmmoPickup:
 func create_module_pickup(position: Vector3) -> ModulePickup:
 	var module = ModulePickup.new()
 	module.name = "Gauss Turret"
-	module.global_position = position
+	module.position = position
 	module.collision_layer = 2
 	module.collision_mask = 0
 	module.module_name = "Gauss Turret"
@@ -170,7 +170,7 @@ func create_module_pickup(position: Vector3) -> ModulePickup:
 func create_resource_pickup(position: Vector3) -> ResourcePickup:
 	var resource = ResourcePickup.new()
 	resource.name = "Noxite"
-	resource.global_position = position
+	resource.position = position
 	resource.collision_layer = 2
 	resource.collision_mask = 0
 	resource.resource_name = "Noxite"
@@ -205,7 +205,7 @@ func create_resource_pickup(position: Vector3) -> ResourcePickup:
 func create_blueprint_pickup(position: Vector3) -> BlueprintPickup:
 	var blueprint = BlueprintPickup.new()
 	blueprint.name = "Hybrid Charge Blueprint"
-	blueprint.global_position = position
+	blueprint.position = position
 	blueprint.collision_layer = 2
 	blueprint.collision_mask = 0
 	blueprint.blueprint_name = "Hybrid Charge Blueprint"

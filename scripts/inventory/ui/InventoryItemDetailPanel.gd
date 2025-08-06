@@ -90,8 +90,8 @@ func _update_properties():
 	_add_property("Total Volume", "%.2f m³" % (current_item.volume * current_item.quantity))
 	
 	if current_item.has_method("get_item_value"):
-		_add_property("Value (each)", "%.0f credits" % current_item.get_item_value())
-		_add_property("Total Value", "%.0f credits" % (current_item.get_item_value() * current_item.quantity))
+		_add_property("Value (each)", "%.0f cr" % current_item.get_item_value())
+		_add_property("Total Value", "%.0f cr" % (current_item.get_item_value() * current_item.quantity))
 	
 	# Add description if available
 	if current_item.has_method("get_description") and current_item.get_description().length() > 0:
