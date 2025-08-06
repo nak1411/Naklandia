@@ -7,7 +7,6 @@ func _init():
 
 func _setup_eve_bloom_shader():
 	# Load the bloom shader
-	print("SHADER")
 	var bloom_shader = load("res://shaders/ui/bloom_glow.gdshader") as Shader
 	if bloom_shader:
 		shader = bloom_shader

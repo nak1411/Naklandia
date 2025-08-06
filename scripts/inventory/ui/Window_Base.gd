@@ -49,6 +49,20 @@ var corner_indicators: Array[ColorRect] = []
 var options_button: Button
 var options_dropdown: DropDownMenu_Base
 
+var edge_bloom_material: WindowEdgeBloomMaterial
+var edge_bloom_overlay: Control
+var edge_bloom_tween: Tween
+var current_bloom_state: BloomState = BloomState.NONE
+var last_known_size: Vector2
+
+enum BloomState {
+	NONE,
+	SUBTLE,
+	ACTIVE,
+	ALERT,
+	CRITICAL
+}
+
 # Resize overlay
 var resize_overlay: Control
 var resize_areas: Array[Control] = []
@@ -93,9 +107,18 @@ func _init():
 func _ready():
 	_setup_window_ui()
 	_setup_resize_overlay()
+	_setup_edge_bloom()
+
+	last_known_size = size
+	window_resized.connect(_on_window_resized)
 	
 	# Call virtual method for child classes to override
 	call_deferred("_setup_window_content")
+
+func _process(_delta):
+	if edge_bloom_overlay and size != last_known_size:
+		_update_edge_bloom_size()
+		last_known_size = size
 
 func _input(event: InputEvent):
 	if not visible or is_locked:
@@ -670,6 +693,17 @@ func _setup_resize_area_geometry(area: Control, mode: ResizeMode):
 			area.offset_left = -corner
 			area.offset_top = -corner
 
+func _on_window_resized(new_size: Vector2i):
+	_update_edge_bloom_size()
+
+func _update_edge_bloom_size():
+	if edge_bloom_material and edge_bloom_overlay:
+		var bloom_extend = 60.0  # Shorter extend
+		edge_bloom_material.set_window_size(size)
+		edge_bloom_material.set_bloom_extend(bloom_extend)
+		edge_bloom_overlay.position = Vector2(-bloom_extend, -bloom_extend)
+		edge_bloom_overlay.size = size + Vector2(bloom_extend * 2, bloom_extend * 2)
+
 func _on_resize_area_input(event: InputEvent, source_area: Control):
 	var mode = source_area.get_meta("resize_mode") as ResizeMode
 	
@@ -700,66 +734,148 @@ func _on_resize_area_entered(mode: ResizeMode):
 		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
 			mouse_default_cursor_shape = Control.CURSOR_BDIAGSIZE
 	
-	# Show border glow
-	_update_border_visuals(mode)
+	# Show border glow and edge bloom together
+	#_update_border_visuals(mode)
+	_show_edge_bloom(mode)
 
 func _on_resize_area_exited(mode: ResizeMode):
 	"""Handle mouse exiting a resize area"""
 	if not is_resizing:
 		mouse_default_cursor_shape = Control.CURSOR_ARROW
-		# Hide all border glows
-		_hide_all_border_visuals()
+		#_hide_all_border_visuals()
+		_hide_edge_bloom()
+
+func _show_edge_bloom(mode: ResizeMode):
+	"""Show edge bloom for specific resize mode with fade in"""
+	if edge_bloom_material and edge_bloom_overlay:
+		edge_bloom_material.show_edge(mode)
+		edge_bloom_overlay.visible = true
 		
-func _update_border_visuals(resize_mode: ResizeMode):
-	"""Update border glow visuals based on resize mode"""
-	# Hide all borders first
-	for line in border_lines:
-		_animate_border_visibility(line, false)
-	for corner in corner_indicators:
-		_animate_border_visibility(corner, false)
-	
-	# Show only the relevant border/corner
-	match resize_mode:
+		# Animate fade in
+		if edge_bloom_tween:
+			edge_bloom_tween.kill()
+		
+		edge_bloom_tween = create_tween()
+		edge_bloom_tween.tween_method(_update_edge_bloom_intensity, 0.0, edge_bloom_material.base_intensity, 0.15)
+
+func _hide_edge_bloom():
+	"""Hide edge bloom with fade out"""
+	if edge_bloom_material and edge_bloom_overlay:
+		# Animate fade out
+		if edge_bloom_tween:
+			edge_bloom_tween.kill()
+		
+		edge_bloom_tween = create_tween()
+		edge_bloom_tween.tween_method(_update_edge_bloom_intensity, edge_bloom_material.current_intensity, 0.0, 0.15)
+		edge_bloom_tween.tween_callback(func(): 
+			edge_bloom_material.hide_all_edges()
+			edge_bloom_overlay.visible = false
+		)
+
+func _update_edge_bloom_intensity(intensity: float):
+	"""Update edge bloom intensity during animation"""
+	if edge_bloom_material:
+		edge_bloom_material.set_intensity(intensity)
+
+func _animate_edge_alpha(mode: ResizeMode, from_alpha: float, to_alpha: float, duration: float):
+	"""Animate edge alpha for specific resize mode"""
+	match mode:
 		ResizeMode.LEFT:
-			if border_lines.size() > 0:
-				_animate_border_visibility(border_lines[0], true)  # Left border
+			edge_bloom_tween.tween_method(_set_left_alpha, from_alpha, to_alpha, duration)
 		ResizeMode.RIGHT:
-			if border_lines.size() > 1:
-				_animate_border_visibility(border_lines[1], true)  # Right border
+			edge_bloom_tween.tween_method(_set_right_alpha, from_alpha, to_alpha, duration)
 		ResizeMode.TOP:
-			if border_lines.size() > 2:
-				_animate_border_visibility(border_lines[2], true)  # Top border
+			edge_bloom_tween.tween_method(_set_top_alpha, from_alpha, to_alpha, duration)
 		ResizeMode.BOTTOM:
-			if border_lines.size() > 3:
-				_animate_border_visibility(border_lines[3], true)  # Bottom border
+			edge_bloom_tween.tween_method(_set_bottom_alpha, from_alpha, to_alpha, duration)
 		ResizeMode.TOP_LEFT:
-			if corner_indicators.size() > 0:
-				_animate_border_visibility(corner_indicators[0], true)  # Top-left corner
+			edge_bloom_tween.tween_method(_set_left_alpha, from_alpha, to_alpha, duration)
+			edge_bloom_tween.tween_method(_set_top_alpha, from_alpha, to_alpha, duration)
 		ResizeMode.TOP_RIGHT:
-			if corner_indicators.size() > 1:
-				_animate_border_visibility(corner_indicators[1], true)  # Top-right corner
+			edge_bloom_tween.tween_method(_set_right_alpha, from_alpha, to_alpha, duration)
+			edge_bloom_tween.tween_method(_set_top_alpha, from_alpha, to_alpha, duration)
 		ResizeMode.BOTTOM_LEFT:
-			if corner_indicators.size() > 2:
-				_animate_border_visibility(corner_indicators[2], true)  # Bottom-left corner
+			edge_bloom_tween.tween_method(_set_left_alpha, from_alpha, to_alpha, duration)
+			edge_bloom_tween.tween_method(_set_bottom_alpha, from_alpha, to_alpha, duration)
 		ResizeMode.BOTTOM_RIGHT:
-			if corner_indicators.size() > 3:
-				_animate_border_visibility(corner_indicators[3], true)  # Bottom-right corner
+			edge_bloom_tween.tween_method(_set_right_alpha, from_alpha, to_alpha, duration)
+			edge_bloom_tween.tween_method(_set_bottom_alpha, from_alpha, to_alpha, duration)
 
-func _hide_all_border_visuals():
-	"""Hide all border visual indicators"""
-	for line in border_lines:
-		_animate_border_visibility(line, false)
-	for corner in corner_indicators:
-		_animate_border_visibility(corner, false)
+# Helper methods for tween callbacks
+func _set_left_alpha(alpha: float):
+	edge_bloom_material.set_shader_parameter("left_edge_alpha", alpha)
 
-func _animate_border_visibility(element: ColorRect, show: bool):
-	"""Animate border visibility with smooth transition"""
-	var current_color = element.color
-	var target_alpha = 1.0 if show else 0.0
-	var target_color = Color(current_color.r, current_color.g, current_color.b, target_alpha)
+func _set_right_alpha(alpha: float):
+	edge_bloom_material.set_shader_parameter("right_edge_alpha", alpha)
+
+func _set_top_alpha(alpha: float):
+	edge_bloom_material.set_shader_parameter("top_edge_alpha", alpha)
+
+func _set_bottom_alpha(alpha: float):
+	edge_bloom_material.set_shader_parameter("bottom_edge_alpha", alpha)
+
+func _get_current_left_alpha() -> float:
+	return edge_bloom_material.get_shader_parameter("left_edge_alpha")
+
+func _get_current_right_alpha() -> float:
+	return edge_bloom_material.get_shader_parameter("right_edge_alpha")
+
+func _get_current_top_alpha() -> float:
+	return edge_bloom_material.get_shader_parameter("top_edge_alpha")
+
+func _get_current_bottom_alpha() -> float:
+	return edge_bloom_material.get_shader_parameter("bottom_edge_alpha")
+		
+# func _update_border_visuals(resize_mode: ResizeMode):
+# 	"""Update border glow visuals based on resize mode"""
+# 	# Hide all borders first
+# 	for line in border_lines:
+# 		_animate_border_visibility(line, false)
+# 	for corner in corner_indicators:
+# 		_animate_border_visibility(corner, false)
 	
-	var tween = create_tween()
-	tween.tween_property(element, "color", target_color, 0.15)
+# 	# Show only the relevant border/corner
+# 	match resize_mode:
+# 		ResizeMode.LEFT:
+# 			if border_lines.size() > 0:
+# 				_animate_border_visibility(border_lines[0], true)  # Left border
+# 		ResizeMode.RIGHT:
+# 			if border_lines.size() > 1:
+# 				_animate_border_visibility(border_lines[1], true)  # Right border
+# 		ResizeMode.TOP:
+# 			if border_lines.size() > 2:
+# 				_animate_border_visibility(border_lines[2], true)  # Top border
+# 		ResizeMode.BOTTOM:
+# 			if border_lines.size() > 3:
+# 				_animate_border_visibility(border_lines[3], true)  # Bottom border
+# 		ResizeMode.TOP_LEFT:
+# 			if corner_indicators.size() > 0:
+# 				_animate_border_visibility(corner_indicators[0], true)  # Top-left corner
+# 		ResizeMode.TOP_RIGHT:
+# 			if corner_indicators.size() > 1:
+# 				_animate_border_visibility(corner_indicators[1], true)  # Top-right corner
+# 		ResizeMode.BOTTOM_LEFT:
+# 			if corner_indicators.size() > 2:
+# 				_animate_border_visibility(corner_indicators[2], true)  # Bottom-left corner
+# 		ResizeMode.BOTTOM_RIGHT:
+# 			if corner_indicators.size() > 3:
+# 				_animate_border_visibility(corner_indicators[3], true)  # Bottom-right corner
+
+# func _hide_all_border_visuals():
+# 	"""Hide all border visual indicators"""
+# 	for line in border_lines:
+# 		_animate_border_visibility(line, false)
+# 	for corner in corner_indicators:
+# 		_animate_border_visibility(corner, false)
+
+# func _animate_border_visibility(element: ColorRect, show: bool):
+# 	"""Animate border visibility with smooth transition"""
+# 	var current_color = element.color
+# 	var target_alpha = 1.0 if show else 0.0
+# 	var target_color = Color(current_color.r, current_color.g, current_color.b, target_alpha)
+	
+# 	var tween = create_tween()
+# 	tween.tween_property(element, "color", target_color, 0.15)
 
 func _start_resize(mode: ResizeMode, mouse_pos: Vector2):
 	is_resizing = true
@@ -924,6 +1040,9 @@ func set_resizing_enabled(enabled: bool):
 
 func get_resizing_enabled() -> bool:
 	return can_resize
+
+func _on_size_changed():
+	_update_edge_bloom_size()
 	
 func show_window():
 	"""Show the window"""
@@ -1173,7 +1292,7 @@ func _enable_resize_visuals():
 func _disable_resize_visuals():
 	"""Disable all resize cursors and edge glows"""
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-	_hide_all_border_visuals()
+	#_hide_all_border_visuals()
 	
 	# Disable mouse detection on resize areas
 	if resize_overlay:
@@ -1182,3 +1301,22 @@ func _disable_resize_visuals():
 	for area in resize_areas:
 		if area:
 			area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func _setup_edge_bloom():
+	edge_bloom_overlay = ColorRect.new()
+	edge_bloom_overlay.name = "EdgeBloomOverlay"
+	edge_bloom_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	edge_bloom_overlay.color = Color.TRANSPARENT
+	edge_bloom_overlay.visible = true  # Keep visible, control with alpha
+	edge_bloom_overlay.z_index = 10
+	
+	var bloom_extend = 60.0  # Much smaller extend for shorter bloom
+	edge_bloom_overlay.position = Vector2(-bloom_extend, -bloom_extend)
+	edge_bloom_overlay.size = size + Vector2(bloom_extend * 2, bloom_extend * 2)
+	
+	edge_bloom_material = WindowEdgeBloomMaterial.new()
+	edge_bloom_material.set_window_size(size)
+	edge_bloom_material.set_bloom_extend(bloom_extend)
+	edge_bloom_overlay.material = edge_bloom_material
+	
+	add_child(edge_bloom_overlay)
