@@ -252,6 +252,7 @@ func _setup_left_panel():
 	container_list.custom_minimum_size = Vector2(160, 200)
 	container_list.auto_height = true
 	container_list.allow_rmb_select = false
+	container_list.focus_mode = Control.FOCUS_NONE
 	
 	# Set up drop detection on container list
 	container_list.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -311,6 +312,7 @@ func _setup_right_panel():
 	grid_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid_container.clip_contents = true  # This will clip the grid content
+	
 	inventory_area.add_child(grid_container)
 	
 	inventory_grid = InventoryGrid.new()
@@ -321,17 +323,12 @@ func _setup_right_panel():
 	inventory_grid.enable_virtual_scrolling = true
 	inventory_grid.slot_size = Vector2(96, 96)  # Correct property name
 	inventory_grid.virtual_item_height = 96
-	
 	grid_container.add_child(inventory_grid)
 	
 	# Connect signals
 	inventory_grid.item_activated.connect(_on_item_activated)
 	inventory_grid.item_context_menu.connect(_on_item_context_menu)
 	inventory_grid.empty_area_context_menu.connect(_on_empty_area_context_menu)
-
-#func _on_test_button_pressed():
-	#if inventory_grid:
-		#inventory_grid.add_test_items_for_virtual_scroll()
 
 func _setup_mass_info_bar(parent: Control):
 	var mass_bar_container = MarginContainer.new()

@@ -220,11 +220,6 @@ func _setup_window_ui():
 	# Style background
 	var bg_style = StyleBoxFlat.new()
 	bg_style.bg_color = background_color
-	bg_style.border_width_left = border_width
-	bg_style.border_width_right = border_width
-	bg_style.border_width_top = border_width
-	bg_style.border_width_bottom = border_width
-	bg_style.border_color = border_color
 	background_panel.add_theme_stylebox_override("panel", bg_style)
 	
 	# Title bar
