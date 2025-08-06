@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=3 uid="uid://bk8xg7m3y4tn2"]
 
-[ext_resource type="Script" path="res://scripts/inventory/items/PickupableItem.gd" id="1_pickup"]
+[ext_resource type="Script" uid="uid://0mfvh17e64l" path="res://scripts/inventory/items/PickupableItem.gd" id="1_pickup"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_pickup"]
 size = Vector3(0.5, 0.5, 0.5)
