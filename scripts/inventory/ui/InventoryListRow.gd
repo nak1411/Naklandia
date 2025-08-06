@@ -273,6 +273,7 @@ func _create_cell(column: Dictionary) -> Control:
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			label.clip_contents = true
 			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			label.add_theme_font_size_override("font_size", 12)
 			hbox.add_child(label)
 			
 		# Rest of columns remain the same...
@@ -282,6 +283,7 @@ func _create_cell(column: Dictionary) -> Control:
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			label.add_theme_font_size_override("font_size", 12)
 			cell.add_child(label)
 			
 		"type":
@@ -295,6 +297,7 @@ func _create_cell(column: Dictionary) -> Control:
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			label.clip_contents = true
 			label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			label.add_theme_font_size_override("font_size", 12)
 			cell.add_child(label)
 			
 		"volume":
@@ -303,16 +306,18 @@ func _create_cell(column: Dictionary) -> Control:
 			label.text = "%.1f" % total_volume
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			label.add_theme_font_size_override("font_size", 12)
 			cell.add_child(label)
 			
 		"base_value":
 			var label = Label.new()
 			var total_value = item.base_value * item.quantity
-			label.text = "%.0f" % total_value
+			label.text = _format_currency(total_value)
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			label.add_theme_font_size_override("font_size", 12)
 			cell.add_child(label)
 			
 	return cell

@@ -3,7 +3,7 @@ class_name InventoryListView
 extends Control
 
 # List properties
-@export var row_height: int = 40
+@export var row_height: int = 30
 @export var header_height: int = 28
 @export var detail_panel_width: int = 300
 @export var show_details: bool = true
@@ -38,7 +38,7 @@ var current_search_text: String = ""
 var columns: Array[Dictionary] = [
 	{"id": "name", "title": "Name", "width": 120, "sortable": true}, # Reduced from 200
 	{"id": "quantity", "title": "Qty", "width": 40, "sortable": true}, # Reduced from 60
-	{"id": "type", "title": "Type", "width": 80, "sortable": true}, # Reduced from 120
+	{"id": "type", "title": "Type", "width": 100, "sortable": true}, # Reduced from 120
 	{"id": "volume", "title": "Vol", "width": 80, "sortable": true}, # Reduced and shortened title
 	{"id": "base_value", "title": "Total", "width": 100, "sortable": true} # Reduced from 80
 ]
