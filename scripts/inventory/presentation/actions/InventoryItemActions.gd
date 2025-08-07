@@ -462,6 +462,9 @@ func show_destroy_item_confirmation(item: InventoryItem_Base, _slot: InventorySl
 	if not dialog_window.is_node_ready():
 		await dialog_window.ready
 	
+	# Explicitly initialize the dialog content
+	dialog_window._setup_window_content()
+	
 	# Wait one more frame to ensure all components are initialized
 	await dialog_window.get_tree().process_frame
 	
@@ -537,6 +540,9 @@ func show_clear_container_confirmation():
 	# Wait for dialog to be fully ready
 	if not dialog_window.is_node_ready():
 		await dialog_window.ready
+	
+	# Explicitly initialize the dialog content
+	dialog_window._setup_window_content()
 	
 	# Wait one more frame to ensure all components are initialized
 	await dialog_window.get_tree().process_frame
