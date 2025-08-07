@@ -8,22 +8,31 @@
 [ext_resource type="Script" uid="uid://bes7x5gnitjur" path="res://scripts/ui/core/PauseMenu.gd" id="6_sa75b"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_ia1lp"]
-ground_color = Color(0.3, 0.3, 0.4, 1)
+mie_eccentricity = 0.87
+turbidity = 32.98
+sun_disk_scale = 0.0
+ground_color = Color(0, 0, 0, 1)
 
 [sub_resource type="Sky" id="Sky_sasra"]
 sky_material = SubResource("PhysicalSkyMaterial_ia1lp")
 
 [sub_resource type="Environment" id="Environment_coq8p"]
 background_mode = 2
+background_energy_multiplier = 2.0
 sky = SubResource("Sky_sasra")
 ambient_light_source = 3
-ambient_light_energy = 0.3
 reflected_light_source = 2
+tonemap_mode = 2
+tonemap_exposure = 0.49
 ssao_enabled = true
 ssil_enabled = true
 sdfgi_enabled = true
 glow_enabled = true
+glow_intensity = 1.64
+volumetric_fog_density = 0.0
 adjustment_enabled = true
+adjustment_contrast = 1.84
+adjustment_saturation = 1.17
 
 [sub_resource type="BoxMesh" id="BoxMesh_2nij2"]
 size = Vector3(20, 0.2, 20)

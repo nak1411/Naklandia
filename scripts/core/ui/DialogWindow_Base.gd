@@ -13,6 +13,8 @@ static var disabled_windows: Array[Control] = []
 var dialog_content: VBoxContainer
 var button_container: HBoxContainer
 
+var _content_initialized: bool = false
+
 # Signals
 signal dialog_confirmed()
 signal dialog_cancelled()
@@ -54,6 +56,10 @@ func _update_grid_size():
 
 func _setup_window_content():
 	"""Override base method to add dialog-specific content"""
+	if _content_initialized:
+		return
+	
+	_content_initialized = true
 	size = dialog_size
 	_setup_dialog_content()
 	_connect_dialog_signals()
@@ -82,7 +88,8 @@ func _setup_dialog_content():
 
 func _connect_dialog_signals():
 	# Connect window signals to dialog signals
-	window_closed.connect(_on_dialog_close_requested)
+	if not window_closed.is_connected(_on_dialog_close_requested):
+		window_closed.connect(_on_dialog_close_requested)
 
 func _on_dialog_close_requested():
 	dialog_closed.emit()
