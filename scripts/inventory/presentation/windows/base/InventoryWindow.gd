@@ -346,7 +346,7 @@ func _on_window_closed():
 		integration._set_player_input_enabled(true)
 		
 		# Restore mouse mode if not paused
-		if not integration._is_pause_menu_open():
+		if integration.has_method("_is_pause_menu_open") and not integration._is_pause_menu_open():
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		
 		# Save position

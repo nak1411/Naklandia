@@ -1,8 +1,16 @@
-# InventoryIntegration.gd - Clean production version with CanvasLayer support
+# integration/InventoryIntegration.gd
+# Simplified combined integration system
 class_name InventoryIntegration
 extends Node
 
-# References
+# Integration layer components
+var player_adapter: PlayerAdapter
+var game_state_adapter: GameStateAdapter
+var ui_input_adapter: UIInputAdapter
+var event_bus: InventoryEventBus
+var event_handlers: GameEventHandlers
+
+# Original inventory system references
 var player: Player
 var inventory_manager: InventoryManager
 var inventory_window: InventoryWindow
@@ -16,27 +24,112 @@ var setup_complete: bool = false
 var saved_position: Vector2i = Vector2i.ZERO
 var position_save_file: String = "user://inventory_window_position.dat"
 
-# Input action names
-const TOGGLE_INVENTORY = "toggle_inventory"
-
 # Signals
 signal inventory_toggled(is_open: bool)
 signal setup_completed()
 
 func _ready():
-	# Set process mode to work even when paused
+	name = "InventoryIntegration"
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	
-	# Find the existing InventoryLayer in the scene hierarchy
+	print("InventoryIntegration: Starting setup...")
+	
+	# Setup integration layer first
+	_setup_integration_layer()
+	
+	# Then setup original inventory system
+	call_deferred("_setup_original_inventory_system")
+
+func _setup_integration_layer():
+	"""Setup the integration layer components"""
+	print("InventoryIntegration: Setting up integration layer...")
+	
+	# Create event bus first
+	event_bus = InventoryEventBus.new()
+	event_bus.name = "EventBus"
+	add_child(event_bus)
+	
+	# Create event handlers
+	event_handlers = GameEventHandlers.new()
+	event_handlers.name = "EventHandlers"
+	add_child(event_handlers)
+	
+	# Setup event handlers after next frame
+	call_deferred("_setup_event_handlers")
+	
+	# Create adapters
+	player_adapter = PlayerAdapter.new()
+	player_adapter.name = "PlayerAdapter"
+	add_child(player_adapter)
+	
+	game_state_adapter = GameStateAdapter.new()
+	game_state_adapter.name = "GameStateAdapter"
+	add_child(game_state_adapter)
+	
+	ui_input_adapter = UIInputAdapter.new()
+	ui_input_adapter.name = "UIInputAdapter"
+	add_child(ui_input_adapter)
+	
+	# Connect everything after next frame
+	call_deferred("_connect_integration_layer")
+
+func _setup_event_handlers():
+	"""Setup event handlers after components are ready"""
+	if event_handlers and event_bus:
+		event_handlers.setup(event_bus, self)
+
+func _connect_integration_layer():
+	"""Connect all integration components"""
+	print("InventoryIntegration: Connecting integration layer...")
+	
+	# Connect adapters to event bus
+	if player_adapter and event_bus:
+		player_adapter.setup_event_connections(event_bus)
+	
+	if game_state_adapter and event_bus:
+		game_state_adapter.setup_event_connections(event_bus)
+	
+	if ui_input_adapter and event_bus:
+		ui_input_adapter.setup_event_connections(event_bus)
+	
+	# Connect to external systems
+	_connect_external_signals()
+	
+	# Connect to integration events
+	if event_bus:
+		event_bus.inventory_opened.connect(_on_inventory_opened_event)
+		event_bus.inventory_closed.connect(_on_inventory_closed_event)
+	
+	print("InventoryIntegration: Integration layer connected")
+
+func _connect_external_signals():
+	"""Connect to external game system signals"""
+	# Connect to player signals
+	var player_node = get_tree().get_first_node_in_group("player")
+	if player_node and player_adapter:
+		player_adapter.connect_to_player(player_node)
+		print("InventoryIntegration: Connected to player")
+	
+	# Connect to UI manager
+	var ui_manager = get_tree().get_first_node_in_group("ui_manager")
+	if ui_manager and ui_input_adapter:
+		ui_input_adapter.connect_to_ui_manager(ui_manager)
+		print("InventoryIntegration: Connected to UI manager")
+
+func _setup_original_inventory_system():
+	"""Setup the original inventory system"""
+	print("InventoryIntegration: Setting up inventory system...")
+	
+	# Find or create the inventory canvas layer
 	var scene_root = get_tree().current_scene
 	inventory_canvas = scene_root.get_node_or_null("InventoryLayer")
 	
 	if not inventory_canvas:
-		push_error("InventoryLayer not found in scene! Please add a CanvasLayer named 'InventoryLayer' to your scene.")
-		return
-	
-	# Setup input actions
-	_setup_input_actions()
+		inventory_canvas = CanvasLayer.new()
+		inventory_canvas.name = "InventoryLayer" 
+		inventory_canvas.layer = 50
+		scene_root.add_child(inventory_canvas)
+		print("InventoryIntegration: Created InventoryLayer canvas")
 	
 	# Create inventory manager
 	inventory_manager = InventoryManager.new()
@@ -50,8 +143,6 @@ func _ready():
 	# Create inventory window
 	inventory_window = InventoryWindow.new()
 	inventory_window.name = "InventoryWindow"
-	
-	# Add to the existing InventoryLayer
 	inventory_canvas.add_child(inventory_window)
 	
 	# Wait for initialization
@@ -72,134 +163,88 @@ func _ready():
 	
 	setup_complete = true
 	setup_completed.emit()
-
-func _setup_input_actions():
-	if not InputMap.has_action(TOGGLE_INVENTORY):
-		InputMap.add_action(TOGGLE_INVENTORY)
-	else:
-		InputMap.action_erase_events(TOGGLE_INVENTORY)
 	
-	var key_event = InputEventKey.new()
-	key_event.keycode = KEY_I
-	key_event.pressed = true
-	InputMap.action_add_event(TOGGLE_INVENTORY, key_event)
+	print("InventoryIntegration: Setup complete!")
 
-func _connect_signals():
-	# Connect inventory manager signals
-	if inventory_manager.has_signal("item_added"):
-		inventory_manager.item_added.connect(_on_item_added)
-	if inventory_manager.has_signal("item_removed"):
-		inventory_manager.item_removed.connect(_on_item_removed)
-	
-	# Connect inventory window signals
-	if inventory_window:
-		inventory_window.container_switched.connect(_on_container_switched)
-		inventory_window.window_resized.connect(_on_window_resized)
+# Event handlers for integration layer
+func _on_inventory_opened_event():
+	"""Handle inventory opened event from integration system"""
+	print("InventoryIntegration: Inventory open event received")
+	if not is_inventory_open:
+		_show_inventory()
 
-func _load_and_apply_position():
-	var loaded_position = _load_window_position()
-	if loaded_position != Vector2i.ZERO:
-		saved_position = loaded_position
-		
-		if _is_position_valid(saved_position):
-			inventory_window.position = saved_position
-		else:
-			inventory_window.center_on_screen()
-	else:
-		inventory_window.center_on_screen()
+func _on_inventory_closed_event():
+	"""Handle inventory closed event from integration system"""
+	print("InventoryIntegration: Inventory close event received")
+	if is_inventory_open:
+		_hide_inventory()
 
-func _input(event):
-	if not setup_complete:
+func _show_inventory():
+	"""Show the inventory window"""
+	if not inventory_window or not setup_complete:
+		print("InventoryIntegration: Cannot show inventory - not ready")
 		return
-	
-	if event is InputEventKey and event.pressed and event.keycode == KEY_I:
-		# Check if search field has focus - if so, don't toggle inventory
-		if inventory_window and inventory_window.header and inventory_window.header.is_search_focused:
-			return  # Let the search field handle the 'I' key
 		
-		toggle_inventory()
-		get_viewport().set_input_as_handled()
+	print("InventoryIntegration: Showing inventory")
+	is_inventory_open = true
+	inventory_window.visible = true
+	inventory_window.move_to_front()
+	
+	# Disable player input
+	_set_player_input_enabled(false)
+	
+	# Set mouse mode
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	
+	# Emit signal
+	inventory_toggled.emit(true)
 
-func toggle_inventory():
+func _hide_inventory():
+	"""Hide the inventory window"""
 	if not inventory_window:
 		return
+		
+	print("InventoryIntegration: Hiding inventory")
+	is_inventory_open = false
+	inventory_window.visible = false
 	
-	is_inventory_open = !is_inventory_open
+	# Save position
+	_save_window_position()
 	
-	if is_inventory_open:
-		# Show and center the window
-		inventory_window.show_window()
-		
-		# Center with safety check
-		if inventory_window.get_viewport():
-			inventory_window.center_on_screen()
-		
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		
-		# PAUSE PLAYER MOVEMENT - Add this line
-		_set_player_input_enabled(false)
-		
-	else:
-		# Save position before closing
-		_save_window_position()
-		
-		inventory_window.hide_window()
-		
-		# Hide mouse cursor for FPS gameplay (unless pause menu is open)
-		if not _is_pause_menu_open():
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		
-		# RESUME PLAYER MOVEMENT - Add this line
-		_set_player_input_enabled(true)
+	# Re-enable player input
+	_set_player_input_enabled(true)
 	
-	inventory_toggled.emit(is_inventory_open)
+	# Restore mouse mode
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	
+	# Emit signal
+	inventory_toggled.emit(false)
+
+func _connect_signals():
+	"""Connect inventory manager signals"""
+	if inventory_manager and inventory_manager.has_signal("item_added"):
+		inventory_manager.item_added.connect(_on_item_added)
+	if inventory_manager and inventory_manager.has_signal("item_removed"):
+		inventory_manager.item_removed.connect(_on_item_removed)
+	
+	# Connect window signals
+	if inventory_window:
+		if inventory_window.has_signal("window_closed"):
+			inventory_window.window_closed.connect(_on_window_closed)
+		if inventory_window.has_signal("container_switched"):
+			inventory_window.container_switched.connect(_on_container_switched)
+
 func _set_player_input_enabled(enabled: bool):
-	"""Enable or disable player input processing"""
-	# Find the player node
-	var scene_root = get_tree().current_scene
-	var player_node = _find_node_by_name_recursive(scene_root, "Player")
-	
-	if player_node:
-		# Set the player's process mode to disable input when inventory is open
-		if enabled:
-			player_node.process_mode = Node.PROCESS_MODE_INHERIT
-		else:
-			player_node.process_mode = Node.PROCESS_MODE_DISABLED
-	
-	# Also disable input managers if they exist
-	var input_managers = get_tree().get_nodes_in_group("input_managers")
-	for input_manager in input_managers:
-		if enabled:
-			input_manager.process_mode = Node.PROCESS_MODE_INHERIT
-		else:
-			input_manager.process_mode = Node.PROCESS_MODE_DISABLED
+	"""Enable or disable player input"""
+	var player_node = get_tree().get_first_node_in_group("player")
+	if player_node and player_node.has_method("set_input_enabled"):
+		player_node.set_input_enabled(enabled)
+		print("InventoryIntegration: Player input enabled: ", enabled)
 
-func _is_pause_menu_open() -> bool:
-	# Check if pause menu exists and is visible
-	var pause_menus = get_tree().get_nodes_in_group("pause_menu")
-	for menu in pause_menus:
-		if menu.visible:
-			return true
-	
-	# Alternative check - look for pause menu by name
-	var scene_root = get_tree().current_scene
-	var pause_menu = _find_node_by_name_recursive(scene_root, "PauseMenu")
-	if pause_menu and pause_menu.visible:
-		return true
-	
-	return false
-
-func _find_node_by_name_recursive(node: Node, target_name: String) -> Node:
-	if node.name == target_name:
-		return node
-	
-	for child in node.get_children():
-		var result = _find_node_by_name_recursive(child, target_name)
-		if result:
-			return result
-	
-	return null
+func _load_and_apply_position():
+	var loaded_pos = _load_window_position()
+	if loaded_pos != Vector2i.ZERO and _is_position_valid(loaded_pos) and inventory_window:
+		inventory_window.position = loaded_pos
 
 func _save_window_position():
 	if inventory_window:
@@ -236,8 +281,26 @@ func _on_item_removed(_item_id: String, _quantity: int):
 func _on_container_switched(_container: InventoryContainer_Base):
 	pass
 
-func _on_window_resized(_new_size: Vector2i):
-	pass
+func _on_window_closed():
+	"""Handle window being closed"""
+	if event_bus:
+		event_bus.emit_inventory_closed()
+
+func _is_pause_menu_open() -> bool:
+	"""Check if pause menu is currently open"""
+	var ui_manager = get_tree().get_first_node_in_group("ui_manager")
+	if ui_manager and ui_manager.has_method("is_any_overlay_visible"):
+		return ui_manager.is_any_overlay_visible()
+	return false
+
+func set_integration_enabled(enabled: bool):
+	"""Enable/disable integration system processing"""
+	if ui_input_adapter:
+		ui_input_adapter.set_input_processing_enabled(enabled)
+	
+	# Also disable event processing in event handlers
+	if event_handlers:
+		event_handlers.set_process_mode(Node.PROCESS_MODE_DISABLED if not enabled else Node.PROCESS_MODE_INHERIT)
 
 # Public interface methods
 func is_inventory_window_open() -> bool:
@@ -250,9 +313,19 @@ func get_inventory_manager() -> InventoryManager:
 	return inventory_manager
 
 func close_inventory():
-	if is_inventory_open:
-		toggle_inventory()
+	if event_bus:
+		event_bus.emit_inventory_closed()
 
 func open_inventory():
-	if not is_inventory_open:
-		toggle_inventory()
+	if event_bus:
+		event_bus.emit_inventory_opened()
+
+func get_event_bus() -> InventoryEventBus:
+	return event_bus
+
+func get_player_adapter() -> PlayerAdapter:
+	return player_adapter
+
+func get_ui_input_adapter():
+	"""Get reference to UI input adapter"""
+	return ui_input_adapter

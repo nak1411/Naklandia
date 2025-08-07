@@ -61,6 +61,10 @@ func handle_mouse_motion(event: InputEventMouseMotion):
 
 func _create_drag_preview() -> Control:
 	"""Create a visual preview for the dragged item"""
+	# Disable integration input processing during drag
+	var ui_adapter = _get_ui_input_adapter()
+	if ui_adapter:
+		ui_adapter.set_drag_in_progress(true)
 	var preview = Control.new()
 	preview.name = "DragPreview"
 	
@@ -146,6 +150,11 @@ func _update_preview_position(preview: Control):
 
 func _handle_drag_end(end_position: Vector2):
 	"""Handle the end of a drag operation"""
+	# Re-enable integration input processing after drag
+	var ui_adapter = _get_ui_input_adapter()
+	if ui_adapter:
+		ui_adapter.set_drag_in_progress(false)
+
 	# Always reset visual state first
 	slot.modulate.a = 1.0
 	slot.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -251,6 +260,16 @@ func _get_inventory_grid():
 		if current.get_script() and current.get_script().get_global_name() == "InventoryGrid":
 			return current
 		current = current.get_parent()
+	return null
+
+func _get_ui_input_adapter():
+	"""Get reference to UI input adapter"""
+	if not slot:
+		return null
+		
+	var integration = slot.get_tree().get_first_node_in_group("inventory_integration")
+	if integration and integration.has_method("get_ui_input_adapter"):
+		return integration.get_ui_input_adapter()
 	return null
 
 func _find_inventory_content():

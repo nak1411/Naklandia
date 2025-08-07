@@ -132,3 +132,5 @@ spawn_interval = 1.0
 auto_spawn = true
 max_spawned_items = 5
 spawn_height = 1.0
+
+[node name="InventoryIntegration" type="Node" parent="."]
