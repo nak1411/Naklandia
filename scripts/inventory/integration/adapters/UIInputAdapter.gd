@@ -33,15 +33,11 @@ func connect_to_ui_manager(ui_manager: UIManager):
 
 func _input(event):
 	"""Handle input events and route them appropriately"""
-	# Skip input processing if disabled or during drag operations
-	if not input_processing_enabled or drag_in_progress:
-		return
-		
 	if not event is InputEventKey:
 		return
 		
-	# Handle inventory toggle - check for the actual input action
-	if event.is_action_pressed("toggle_inventory") or event.is_action_pressed("interact"):
+	# ONLY handle inventory toggle - remove the interact fallback
+	if event.is_action_pressed("toggle_inventory"):
 		if event_bus:
 			if input_mode == "game":
 				event_bus.emit_inventory_opened()
