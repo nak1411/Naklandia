@@ -825,10 +825,28 @@ func _handle_drop_on_empty_grid(grid: InventoryGrid, _position: Vector2) -> bool
 func _on_external_drop_result(success: bool):
 	"""Callback for external drop operations"""
 	if success:
-		# Refresh the list view
-		var list_view = _find_list_view()
-		if list_view:
-			list_view.refresh_display()
+		# Reset visual state immediately
+		modulate.a = 1.0
+		is_dragging = false
+		drag_preview_created = false
+		_set_merge_highlight(false)
+		mouse_filter = Control.MOUSE_FILTER_PASS  # Re-enable interaction
+		
+		# Clean up any remaining drag state
+		var viewport = get_viewport()
+		if viewport and viewport.has_meta("current_drag_data"):
+			viewport.remove_meta("current_drag_data")
+		
+		# Check if this row represents an empty item (quantity <= 0)
+		if item and item.quantity <= 0:
+			# This row should be removed, make it invisible and disable interaction
+			modulate.a = 0.0
+			mouse_filter = Control.MOUSE_FILTER_IGNORE
+			
+			# Trigger a deferred refresh to clean up properly
+			var list_view = _find_list_view()
+			if list_view:
+				call_deferred("_trigger_list_refresh", list_view)
 
 # Helper methods
 func _get_container_id() -> String:
@@ -950,21 +968,36 @@ func _handle_merge_with_source(source_row: ListRowManager, source_item: Inventor
 	item.quantity += amount_to_transfer
 	source_item.quantity -= amount_to_transfer
 	
+	# Store if the source item will be completely consumed
+	var source_will_be_empty = source_item.quantity <= 0
+	
+	# Immediately update source row visuals if it will be empty
+	if source_will_be_empty:
+		source_row.modulate.a = 0.0  # Make it invisible immediately
+		source_row.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Disable interaction
 	
 	# Remove source item if empty (but don't refresh yet)
 	var container = _get_current_container()
-	if source_item.quantity <= 0 and container:
+	if source_will_be_empty and container:
 		container.remove_item(source_item)
 	
-	# Re-enable auto-refresh and do a single refresh
+	# Update this row's display immediately to show new quantity
+	_refresh_display()
+	
+	# Re-enable auto-refresh and do a single controlled refresh
 	if list_view:
 		if was_auto_refreshing:
 			list_view.set_auto_refresh(true)
-		# Do a single controlled refresh
-		list_view.refresh_display()
+		# Do a single deferred refresh to clean up the empty row
+		call_deferred("_deferred_refresh_list", list_view)
 	
 	# Notify that drop was successful
 	source_row._on_external_drop_result(true)
+
+func _deferred_refresh_list(list_view: InventoryListView):
+	"""Deferred refresh to ensure proper cleanup"""
+	if list_view and is_instance_valid(list_view):
+		list_view.refresh_display()
 	
 func _refresh_display():
 	"""Refresh this row's display"""
@@ -979,6 +1012,11 @@ func _refresh_display():
 					if item.quantity >= 1000:
 						qty_text = "%.1fk" % (item.quantity / 1000.0)
 					label.text = qty_text
+
+func _trigger_list_refresh(list_view: InventoryListView):
+	"""Helper to trigger list refresh"""
+	if list_view and is_instance_valid(list_view):
+		list_view.refresh_display()
 
 func _get_current_container() -> InventoryContainer_Base:
 	var list_view = _find_list_view()

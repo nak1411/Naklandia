@@ -146,6 +146,10 @@ func _update_preview_position(preview: Control):
 
 func _handle_drag_end(end_position: Vector2):
 	"""Handle the end of a drag operation"""
+	# Always reset visual state first
+	slot.modulate.a = 1.0
+	slot.mouse_filter = Control.MOUSE_FILTER_PASS
+	
 	_cleanup_all_drag_previews()
 	
 	var drop_successful = false
@@ -168,6 +172,10 @@ func _handle_drag_end(end_position: Vector2):
 	var content = _find_inventory_content()
 	if content and content.has_method("force_clear_highlights"):
 		content.force_clear_highlights()
+	
+	# Reset all drag state
+	is_dragging = false
+	drag_preview_created = false
 	
 	drag_ended.emit(slot, drop_successful)
 

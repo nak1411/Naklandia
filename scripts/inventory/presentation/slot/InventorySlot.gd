@@ -284,6 +284,14 @@ func force_visual_refresh():
 	"""Force a complete visual refresh"""
 	visuals.force_visual_refresh()
 
+func _trigger_grid_refresh(grid):
+	"""Helper to trigger grid refresh - same pattern as list view"""
+	if grid and is_instance_valid(grid):
+		if grid.enable_virtual_scrolling:
+			grid._refresh_virtual_display()
+		else:
+			grid.refresh_display()
+
 func cleanup():
 	"""Clean up all components"""
 	if visuals:
@@ -434,13 +442,36 @@ func _handle_stack_merge(target_slot: InventorySlot, target_item: InventoryItem_
 	target_item.quantity += amount_to_transfer
 	item.quantity -= amount_to_transfer
 	
-	# Update displays
+	# Update target display immediately
 	target_slot.visuals.update_item_display()
 	
 	if item.quantity <= 0:
+		# SAME AS LIST VIEW: Immediately make source slot invisible
+		modulate.a = 0.0
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		
+		# Clear the slot properly
 		clear_item()
+		
+		# Clean up drag state
+		if drag_handler:
+			drag_handler.is_dragging = false
+			drag_handler.drag_preview_created = false
+		
+		# Trigger deferred refresh for grid cleanup (like list view does)
+		var grid = _get_inventory_grid()
+		if grid:
+			call_deferred("_trigger_grid_refresh", grid)
 	else:
+		# Reset visual state and update display
+		modulate.a = 1.0
+		mouse_filter = Control.MOUSE_FILTER_PASS
 		visuals.update_item_display()
+		
+		# Clean up drag state
+		if drag_handler:
+			drag_handler.is_dragging = false
+			drag_handler.drag_preview_created = false
 	
 	return true
 

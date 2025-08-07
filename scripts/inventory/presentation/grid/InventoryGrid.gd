@@ -19,6 +19,7 @@ extends Control
 
 var original_grid_styles: Dictionary = {}
 var grid_transparency_init: bool = false
+var _suppress_auto_refresh: bool = false
 
 # Container reference
 var container: InventoryContainer_Base
@@ -239,6 +240,7 @@ func _clear_virtual_slots():
 
 func _render_virtual_items():
 	"""Render a dynamic grid that fills the available window space, like EVE Online"""
+	
 	if not virtual_content:
 		return
 	
@@ -1177,6 +1179,11 @@ func _rebuild_grid():
 # Display management
 
 func refresh_display():
+	if _suppress_auto_refresh:
+		print("DEBUG: refresh_display() suppressed")
+		return
+		
+	print("DEBUG: refresh_display() called")
 	if enable_virtual_scrolling:
 		_refresh_virtual_display()
 	else:
@@ -1220,18 +1227,33 @@ func _refresh_traditional_display():
 	
 func _refresh_virtual_display():
 	"""Optimized refresh - avoid unnecessary work"""
+	if _suppress_auto_refresh:
+		print("DEBUG: _refresh_virtual_display() suppressed")
+		return
+		
+	print("DEBUG: _refresh_virtual_display called - THIS WILL RESET VISUAL ORDER!")
+	print("DEBUG: Call stack:")
+	var stack = get_stack()
+	for frame in stack:
+		print("DEBUG:   ", frame.source, ":", frame.line, " in ", frame.function)
 	
 	if not container or _is_refreshing_display:
+		print("DEBUG: Refresh aborted - no container or already refreshing")
 		return
 	
 	_is_refreshing_display = true
 
 	# Collect visible items (this is fast)
+	print("DEBUG: Clearing virtual_items and rebuilding from container")
 	virtual_items.clear()
 	
 	for item in container.items:
 		if _should_show_item(item):
 			virtual_items.append(item)
+	
+	print("DEBUG: Rebuilt virtual_items:")
+	for i in range(virtual_items.size()):
+		print("DEBUG:   [", i, "] ", virtual_items[i].item_name)
 				
 	# Update existing slots instead of recreating everything
 	_render_virtual_items()
@@ -1438,6 +1460,8 @@ func _on_slot_right_clicked(slot: InventorySlot, event: InputEvent):
 		get_viewport().set_input_as_handled()
 
 func _on_item_drag_started(slot: InventorySlot, item: InventoryItem_Base):
+	# Apply visual feedback like other components do
+	slot.modulate.a = 0.6  # Make it semi-transparent during drag
 	
 	if enable_virtual_scrolling:
 		# Store the item being dragged and find its index in virtual_items
@@ -1452,33 +1476,187 @@ func _on_item_drag_started(slot: InventorySlot, item: InventoryItem_Base):
 		})
 
 func _on_item_drag_ended(slot: InventorySlot, success: bool):
+	# Always reset visual state first, regardless of success
+	slot.modulate.a = 1.0
+	slot.mouse_filter = Control.MOUSE_FILTER_PASS
+	
+	# Reset drag handler state
+	if slot.drag_handler:
+		slot.drag_handler.is_dragging = false
+		slot.drag_handler.drag_preview_created = false
+	
+	# Clear any drag metadata
+	var viewport = get_viewport()
+	if viewport and viewport.has_meta("current_drag_data"):
+		viewport.remove_meta("current_drag_data")
+	if viewport and viewport.has_meta("virtual_drag_data"):
+		viewport.remove_meta("virtual_drag_data")
+	
 	if success:
 		if enable_virtual_scrolling:
 			# Refresh virtual display after successful drag
-			call_deferred("_shrink_grid_if_possible")
+			call_deferred("_refresh_virtual_display")
 		else:
 			# Traditional handling
 			_update_available_slots()
-			call_deferred("_shrink_grid_if_possible")
+		call_deferred("_shrink_grid_if_possible")
 
 func _on_item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot):
+	print("DEBUG: _on_item_dropped_on_slot called")
+	
+	var result = false
 	
 	if enable_virtual_scrolling:
-		# For virtual scrolling, use the existing slot logic but prevent refresh_display
-		_is_refreshing_display = true  # Block refresh during operation
+		print("DEBUG: Taking virtual path")
 		
-		var result = source_slot._attempt_drop_on_slot(target_slot)
+		# Store the initial state to determine what type of operation this was
+		var target_had_item = target_slot.has_item()
+		var source_item = source_slot.get_item()
+		var target_item = target_slot.get_item() if target_had_item else null
 		
-		_is_refreshing_display = false  # Re-enable refresh
+		# Suppress auto-refreshes during our operation
+		_suppress_auto_refresh = true
 		
-		# Only refresh if successful
+		_is_refreshing_display = true
+		result = _handle_virtual_slot_drop(source_slot, target_slot)
+		_is_refreshing_display = false
+		
+		# Determine operation type and handle refreshes
 		if result:
-			call_deferred("_refresh_virtual_display")
+			var was_merge = target_had_item and source_item and target_item and source_item.can_stack_with(target_item)
+			
+			if was_merge:
+				print("DEBUG: Merge operation, allowing refresh")
+				_suppress_auto_refresh = false
+				call_deferred("_refresh_virtual_display")
+			else:
+				print("DEBUG: Move/swap operation, suppressing refresh briefly")
+				# Allow refresh after a short delay to let any pending calls finish
+				call_deferred("_allow_refresh_after_delay")
+		else:
+			_suppress_auto_refresh = false
 	else:
-		# Traditional drop handling
-		var result = source_slot._attempt_drop_on_slot(target_slot)
+		result = _handle_traditional_slot_drop(source_slot, target_slot)
 		if result:
 			_update_available_slots()
+	
+	print("DEBUG: _on_item_dropped_on_slot finished - result: ", result)
+
+func _allow_refresh_after_delay():
+	"""Re-enable auto refresh after a brief delay"""
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_suppress_auto_refresh = false
+	print("DEBUG: Auto-refresh re-enabled")
+	
+func _handle_traditional_slot_drop(source_slot: InventorySlot, target_slot: InventorySlot) -> bool:
+	"""Handle dropping in traditional mode using the same logic as virtual mode"""
+	if not source_slot.has_item() or not target_slot:
+		return false
+	
+	var source_item = source_slot.get_item()
+	var target_item = target_slot.get_item() if target_slot.has_item() else null
+	
+	# Same container operations
+	if source_slot.container_id == target_slot.container_id:
+		if target_item:
+			# Try to stack or swap
+			if source_item.can_stack_with(target_item):
+				return _handle_traditional_stack_merge(source_slot, target_slot, source_item, target_item)
+			else:
+				return _handle_traditional_item_swap(source_slot, target_slot, source_item, target_item)
+		else:
+			# Move to empty slot
+			return _handle_traditional_move_to_empty(source_slot, target_slot, source_item)
+	else:
+		# Cross-container transfer - use inventory manager
+		var inventory_manager = _get_inventory_manager()
+		if not inventory_manager:
+			return false
+		
+		var success = inventory_manager.transfer_item(
+			source_item, 
+			source_slot.container_id, 
+			target_slot.container_id, 
+			target_slot.grid_position
+		)
+		
+		if success:
+			# Update visuals immediately
+			if source_item.quantity <= 0:
+				source_slot.clear_item()
+			else:
+				source_slot.visuals.update_item_display()
+			target_slot.visuals.update_item_display()
+		
+		return success
+
+func _handle_traditional_stack_merge(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base, target_item: InventoryItem_Base) -> bool:
+	"""Handle stacking items in traditional mode - same as virtual but with proper visual cleanup"""
+	var space_available = target_item.max_stack_size - target_item.quantity
+	var amount_to_transfer = min(source_item.quantity, space_available)
+	
+	if amount_to_transfer <= 0:
+		return false
+	
+	# Update the items directly
+	target_item.quantity += amount_to_transfer
+	source_item.quantity -= amount_to_transfer
+	
+	# Update target slot display immediately
+	target_slot.visuals.update_item_display()
+	
+	if source_item.quantity <= 0:
+		# LIKE LIST VIEW: Immediately make source slot invisible and clear it
+		source_slot.modulate.a = 0.0
+		source_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		
+		# Remove source item from container
+		if container:
+			container.remove_item(source_item)
+		
+		# Clear the slot
+		source_slot.clear_item()
+		
+		# Clean up drag state
+		if source_slot.drag_handler:
+			source_slot.drag_handler.is_dragging = false
+			source_slot.drag_handler.drag_preview_created = false
+		
+		# Trigger deferred refresh to clean up properly
+		call_deferred("_deferred_traditional_refresh")
+	else:
+		# Reset visual state and update display  
+		source_slot.modulate.a = 1.0
+		source_slot.mouse_filter = Control.MOUSE_FILTER_PASS
+		source_slot.visuals.update_item_display()
+		
+		# Clean up drag state
+		if source_slot.drag_handler:
+			source_slot.drag_handler.is_dragging = false
+			source_slot.drag_handler.drag_preview_created = false
+	
+	return true
+
+func _handle_traditional_item_swap(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base, target_item: InventoryItem_Base) -> bool:
+	"""Handle swapping items in traditional mode"""
+	# Swap the items
+	source_slot.clear_item()
+	target_slot.clear_item()
+	source_slot.set_item(target_item)
+	target_slot.set_item(source_item)
+	
+	return true
+
+func _handle_traditional_move_to_empty(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base) -> bool:
+	"""Handle moving item to empty slot in traditional mode"""
+	source_slot.clear_item()
+	target_slot.set_item(source_item)
+	return true
+
+func _deferred_traditional_refresh():
+	"""Deferred refresh for traditional display - same pattern as list view"""
+	refresh_display()
 			
 func _handle_virtual_slot_drop(source_slot: InventorySlot, target_slot: InventorySlot) -> bool:
 	"""Handle dropping in virtual scrolling mode without triggering refresh_display"""
@@ -1519,10 +1697,14 @@ func _handle_virtual_stack_merge(source_slot: InventorySlot, target_slot: Invent
 	target_item.quantity += amount_to_transfer
 	source_item.quantity -= amount_to_transfer
 	
-	# Update slot displays immediately
+	# Update target slot display immediately
 	target_slot._update_item_display()
 	
 	if source_item.quantity <= 0:
+		# SAME AS LIST VIEW: Immediately make source slot invisible
+		source_slot.modulate.a = 0.0
+		source_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		
 		# Remove source item from container and virtual_items
 		var source_index = virtual_items.find(source_item)
 		if source_index != -1:
@@ -1531,65 +1713,141 @@ func _handle_virtual_stack_merge(source_slot: InventorySlot, target_slot: Invent
 		var source_container = container
 		if source_container:
 			source_container.remove_item(source_item)
+		
+		# Clear the slot
 		source_slot.clear_item()
+		
+		# Clean up drag state
+		if source_slot.drag_handler:
+			source_slot.drag_handler.is_dragging = false
+			source_slot.drag_handler.drag_preview_created = false
+		
+		# Trigger deferred refresh (like list view does)
+		call_deferred("_deferred_virtual_refresh")
 	else:
+		# Reset visual state and update display
+		source_slot.modulate.a = 1.0
+		source_slot.mouse_filter = Control.MOUSE_FILTER_PASS
 		source_slot._update_item_display()
+		
+		# Clean up drag state
+		if source_slot.drag_handler:
+			source_slot.drag_handler.is_dragging = false
+			source_slot.drag_handler.drag_preview_created = false
 	
 	return true
 	
 func _handle_virtual_item_swap(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base, target_item: InventoryItem_Base, inventory_manager: InventoryManager) -> bool:
 	"""Handle swapping items in virtual mode"""
-	# Find the indices of the items in virtual_items array
+	print("DEBUG: _handle_virtual_item_swap called")
+	
+	# Find the indices in both arrays
 	var source_index = virtual_items.find(source_item)
 	var target_index = virtual_items.find(target_item)
 	
 	if source_index == -1 or target_index == -1:
 		return false
 	
-	# Swap the items in the virtual_items array to maintain visual order
+	# Reset visual states
+	source_slot.modulate.a = 1.0
+	source_slot.mouse_filter = Control.MOUSE_FILTER_PASS
+	target_slot.modulate.a = 1.0
+	target_slot.mouse_filter = Control.MOUSE_FILTER_PASS
+	
+	# Update both container and virtual_items
+	if container:
+		var container_source_index = container.items.find(source_item)
+		var container_target_index = container.items.find(target_item)
+		
+		if container_source_index != -1 and container_target_index != -1:
+			container.items[container_source_index] = target_item
+			container.items[container_target_index] = source_item
+	
 	virtual_items[source_index] = target_item
 	virtual_items[target_index] = source_item
 	
-	# Update the visual slots
+	# Update visual slots
 	source_slot.clear_item()
 	target_slot.clear_item()
 	source_slot.set_item(target_item)
 	target_slot.set_item(source_item)
 	
+	# Clean up drag states
+	if source_slot.drag_handler:
+		source_slot.drag_handler.is_dragging = false
+		source_slot.drag_handler.drag_preview_created = false
+	
 	return true
 
 func _handle_virtual_move_to_empty(source_slot: InventorySlot, target_slot: InventorySlot, source_item: InventoryItem_Base) -> bool:
 	"""Handle moving item to empty slot in virtual mode"""
-	# Get slot indices to understand the visual positioning
-	var source_visual_index = -1
-	var target_visual_index = -1
+	print("DEBUG: _handle_virtual_move_to_empty called")
+	print("DEBUG: Moving ", source_item.item_name, " to empty slot at position ", target_slot.grid_position)
 	
-	# Find the visual indices of the slots
-	for i in range(virtual_rendered_slots.size()):
-		if virtual_rendered_slots[i] == source_slot:
-			source_visual_index = i
-		elif virtual_rendered_slots[i] == target_slot:
-			target_visual_index = i
+	# We need to update virtual_items to reflect the new visual order
+	# even for moves to empty slots, to keep things in sync for future swaps
 	
-	if source_visual_index != -1 and target_visual_index != -1:
-		# Find the item in virtual_items array
-		var item_index = virtual_items.find(source_item)
-		if item_index != -1:
-			# Remove from current position
-			virtual_items.remove_at(item_index)
+	var source_item_index = virtual_items.find(source_item)
+	if source_item_index == -1:
+		print("DEBUG: Could not find source item in virtual_items")
+		return false
+	
+	# Calculate where this item should be in the virtual_items array
+	# based on the target slot's position relative to other items
+	var target_grid_pos = target_slot.grid_position
+	
+	# Count how many existing items are visually positioned before the target position
+	var items_before = 0
+	for i in range(virtual_items.size()):
+		if virtual_items[i] == source_item:
+			continue  # Skip the item we're moving
+		
+		# Find where this item is visually displayed
+		var item_visual_pos = _get_item_visual_position(virtual_items[i])
+		if item_visual_pos != Vector2i(-1, -1):
+			# Convert to linear position for comparison
+			var item_linear = item_visual_pos.y * virtual_items_per_row + item_visual_pos.x
+			var target_linear = target_grid_pos.y * virtual_items_per_row + target_grid_pos.x
 			
-			# Insert at new position (adjust for removal if necessary)
-			var new_index = target_visual_index
-			if item_index < target_visual_index:
-				new_index -= 1
-			
-			virtual_items.insert(new_index, source_item)
+			if item_linear < target_linear:
+				items_before += 1
+	
+	# Remove item from current position in virtual_items
+	virtual_items.remove_at(source_item_index)
+	
+	# Insert at new position
+	var new_index = clamp(items_before, 0, virtual_items.size())
+	virtual_items.insert(new_index, source_item)
+	
+	print("DEBUG: Updated virtual_items - moved to index ", new_index)
+	print("DEBUG: virtual_items after move:")
+	for i in range(virtual_items.size()):
+		print("DEBUG:   [", i, "] ", virtual_items[i].item_name)
+	
+	# Reset visual states
+	source_slot.modulate.a = 1.0
+	source_slot.mouse_filter = Control.MOUSE_FILTER_PASS
+	target_slot.modulate.a = 1.0
+	target_slot.mouse_filter = Control.MOUSE_FILTER_PASS
 	
 	# Update visual slots
 	source_slot.clear_item()
 	target_slot.set_item(source_item)
 	
+	# Clean up drag states
+	if source_slot.drag_handler:
+		source_slot.drag_handler.is_dragging = false
+		source_slot.drag_handler.drag_preview_created = false
+	
+	print("DEBUG: Virtual move completed successfully")
 	return true
+
+func _get_item_visual_position(item: InventoryItem_Base) -> Vector2i:
+	"""Helper to find where an item is currently displayed visually"""
+	for slot in virtual_rendered_slots:
+		if slot and slot.has_item() and slot.get_item() == item:
+			return slot.grid_position
+	return Vector2i(-1, -1)
 	
 func _handle_same_container_virtual_drop(source_item: InventoryItem_Base, target_item: InventoryItem_Base, source_slot: InventorySlot, target_slot: InventorySlot) -> bool:
 	"""Handle drops within the same container"""
@@ -1729,6 +1987,11 @@ func _refresh_virtual_display_after_drop():
 	_refresh_virtual_display()
 	await get_tree().process_frame
 	virtual_scroll_container.scroll_vertical = current_scroll
+
+func _deferred_virtual_refresh():
+	"""Deferred refresh for virtual display - same pattern as list view"""
+	if enable_virtual_scrolling:
+		_refresh_virtual_display()
 
 func _toggle_slot_selection(slot: InventorySlot):
 	if enable_virtual_scrolling:
