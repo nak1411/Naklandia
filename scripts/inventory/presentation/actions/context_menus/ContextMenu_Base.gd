@@ -8,11 +8,11 @@ var main_popup: PopupPanel
 var submenu_popup: PopupPanel
 
 # Visual properties
-var item_height: int = 33
+var item_height: int =20
 var menu_width: int = 180
 var submenu_width: int = 120
 var item_padding_horizontal: int = 12
-var item_padding_vertical: int = 6
+var item_padding_vertical: int = 0
 
 # Context menu specific properties
 var auto_size: bool = true
@@ -83,7 +83,7 @@ func show_context_menu(show_position: Vector2, data: Dictionary = {}, parent_win
 		final_position = current_mouse_pos
 	
 	# Add small offset to avoid cursor overlap (optional - you can remove this if you want it exactly at cursor)
-	var popup_offset = Vector2(5, 5)  # Reduced offset for closer following
+	var popup_offset = Vector2(5, 5)
 	final_position += popup_offset
 	
 	# Ensure menu stays within screen bounds
@@ -92,9 +92,15 @@ func show_context_menu(show_position: Vector2, data: Dictionary = {}, parent_win
 	# Add the popup to the viewport
 	viewport.add_child(main_popup)
 	
-	# Set position and show
+	# Set position and show with explicit size
 	main_popup.position = Vector2i(final_position)
-	main_popup.popup()
+	
+	# Calculate the actual required size based on content
+	var actual_height = _calculate_total_height()
+	var popup_size = Vector2i(menu_width, actual_height)
+	
+	# Force the popup to use the exact size we want
+	main_popup.popup(Rect2i(final_position, popup_size))
 	
 	# Delay input processing to avoid immediate closure
 	await get_tree().process_frame
@@ -147,8 +153,6 @@ func _create_main_popup():
 	# Create container for menu items
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 0)
-	# Remove the anchors preset line that's causing the issue
-	# vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)  # This line causes the warning
 	main_popup.add_child(vbox)
 	
 	# Calculate menu width if auto-sizing
@@ -169,9 +173,9 @@ func _create_main_popup():
 			vbox.add_child(item_button)
 			actual_height += item_height
 	
-	# Set the VBox size using set_deferred to avoid the anchor warning
+	# Set the VBox to exactly match the content
 	vbox.custom_minimum_size = Vector2(menu_width, actual_height)
-	vbox.set_deferred("size", Vector2(menu_width, actual_height))
+	vbox.size = Vector2(menu_width, actual_height)
 	
 	# Create completely flat popup style with zero padding
 	var popup_style = StyleBoxFlat.new()
@@ -181,10 +185,6 @@ func _create_main_popup():
 	popup_style.border_width_top = 1
 	popup_style.border_width_bottom = 1
 	popup_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
-	popup_style.corner_radius_top_left = 2
-	popup_style.corner_radius_top_right = 2
-	popup_style.corner_radius_bottom_left = 2
-	popup_style.corner_radius_bottom_right = 2
 	# Ensure zero margins and padding
 	popup_style.content_margin_left = 0
 	popup_style.content_margin_right = 0
@@ -236,7 +236,7 @@ func _calculate_total_height() -> int:
 			total_height += item_height
 	
 	# Only add separator height if we actually have separators AND multiple groups
-	if visible_separators > 0 and visible_items > 2:
+	if visible_separators > 0 and visible_items > 1:
 		total_height += (visible_separators * separator_height)
 	
 	return total_height
@@ -295,12 +295,12 @@ func _create_menu_item_button(item_data: Dictionary, index: int) -> Button:
 
 func _style_popup(popup: PopupPanel):
 	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color(0.2, 0.2, 0.2, 0.95)
+	style_box.bg_color = Color(0.15, 0.15, 0.15, 0.95)
 	style_box.border_width_left = 1
 	style_box.border_width_right = 1
 	style_box.border_width_top = 1
 	style_box.border_width_bottom = 1
-	style_box.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	style_box.border_color = Color(0.2, 0.2, 0.2, 1.0)
 	
 	# Add subtle shadow effect
 	style_box.shadow_color = Color(0, 0, 0, 0.3)
@@ -314,12 +314,13 @@ func _style_menu_button(button: Button, enabled: bool = true):
 	var font_color = Color.WHITE if enabled else Color(0.6, 0.6, 0.6, 1.0)
 	button.add_theme_color_override("font_color", font_color)
 	button.add_theme_color_override("font_disabled_color", Color(0.4, 0.4, 0.4, 1.0))
+	button.add_theme_font_size_override("font_size", 14)
 	button.focus_mode = Control.FOCUS_NONE
 	button.flat = false  # Enable default button styling including hover
 	
 	# Create normal style with padding - exact same colors as SimpleDropdownMenu
 	var normal_style = StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.15, 0.15, 0.15, 1.0) if enabled else Color(0.1, 0.1, 0.1, 1.0)
+	normal_style.bg_color = Color(0.07, 0.07, 0.07, 0.8) if enabled else Color(0.1, 0.1, 0.1, 1.0)
 	normal_style.content_margin_left = item_padding_horizontal
 	normal_style.content_margin_right = item_padding_horizontal
 	normal_style.content_margin_top = item_padding_vertical
