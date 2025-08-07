@@ -622,9 +622,15 @@ func view_blueprint(item: InventoryItem_Base):
 
 # Container action implementations
 func stack_all_items():
-	"""Stack all compatible items in current container"""
-	if inventory_manager and current_container:
-		inventory_manager.auto_stack_container(current_container.container_id)
+	"""Stack all stackable items in the current container using inventory manager"""
+	if not current_container or not inventory_manager:
+		return
+	
+	# Use the inventory manager's auto-stack functionality
+	inventory_manager.auto_stack_container(current_container.container_id)
+	
+	# Emit refresh signal to update display
+	container_refreshed.emit()
 
 func sort_container():
 	"""Sort current container by name"""

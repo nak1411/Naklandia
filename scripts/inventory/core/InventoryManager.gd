@@ -222,10 +222,14 @@ func remove_item_from_container(item: InventoryItem_Base, container_id: String) 
 		return false
 	return container.remove_item(item)
 
-# TODO: Implement remaining methods by delegating to appropriate subsystems
 func auto_stack_container(container_id: String):
-	# Implement auto-stacking logic
-	pass
+	"""Auto-stack all compatible items in the specified container"""
+	var container = get_container(container_id)
+	if not container:
+		return
+	
+	# Use the container logic for auto-stacking
+	InventoryContainerLogic.auto_stack_items(container)
 
 # GETTERS AND SETTERS
 func _exit_tree():
