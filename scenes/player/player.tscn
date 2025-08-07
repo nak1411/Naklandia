@@ -1,5 +1,6 @@
-[gd_scene load_steps=10 format=3 uid="uid://b2wfoje26x7fv"]
+[gd_scene load_steps=11 format=3 uid="uid://b2wfoje26x7fv"]
 
+[ext_resource type="Script" uid="uid://bkwn4ro4reyj4" path="res://scripts/inventory/integration/InventoryIntegration.gd" id="1_1jxqw"]
 [ext_resource type="Script" uid="uid://ckniy4t5b4kte" path="res://scripts/core/player/Player.gd" id="1_hqtel"]
 [ext_resource type="Script" uid="uid://c0bnvtexowx2r" path="res://scripts/core/player/MouseLook.gd" id="2_sweqy"]
 [ext_resource type="Script" uid="uid://bxbhdc3dkjtx0" path="res://scripts/core/player/PlayerMovement.gd" id="3_2hs0m"]
@@ -50,3 +51,6 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("7_ui")
+
+[node name="InventoryIntegration" type="Node" parent="."]
+script = ExtResource("1_1jxqw")

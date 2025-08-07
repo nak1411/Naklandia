@@ -46,6 +46,14 @@ func _input(event):
 	# Only handle input if enabled
 	if not input_enabled:
 		return
+	
+	# Handle interaction immediately on input
+	if event.is_action_pressed("interact") and interaction_system:
+		print("Attempting interaction")
+		var success = interaction_system.attempt_interaction()
+		if success:
+			get_viewport().set_input_as_handled()
+		return
 		
 	# Pass input to mouse look
 	if mouse_look:
