@@ -437,7 +437,7 @@ func from_dict(data: Dictionary):
 	max_volume = data.get("max_volume") if data.has("max_volume") else 100.0
 	grid_width = data.get("grid_width") if data.has("grid_width") else 10
 	grid_height = data.get("grid_height") if data.has("grid_height") else 10
-	container_type = data.get("container_type") if data.has("container_type") else ContainerTypes.Type.GENERAL_CARGO
+	container_type = data.get("container_type", ContainerTypes.Type.GENERAL_CARGO)
 	
 	# Handle allowed_item_types array conversion
 	var allowed_types_data = data.get("allowed_item_types") if data.has("allowed_item_types") else []
@@ -470,6 +470,21 @@ func clear():
 	for item in items.duplicate():
 		remove_item(item)
 	_initialize_grid()
+
+func get_container_id() -> String:
+	return container_id
+
+func get_container_name() -> String:
+	return container_name
+
+func get_items() -> Array[InventoryItem_Base]:
+	return items
+
+func get_total_volume() -> float:
+	return max_volume
+
+func get_used_volume() -> float:
+	return get_current_volume()
 
 # Debug
 func get_debug_string() -> String:

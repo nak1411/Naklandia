@@ -93,7 +93,7 @@ func _get_tooltip_text(item: InventoryItem_Base) -> String:
 		return ""
 	
 	var tooltip_text = "[b]%s[/b]\n" % item.item_name
-	tooltip_text += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
+	tooltip_text += "Type: %s\n" % ItemTypes.Type.keys()[item.item_type]
 	tooltip_text += "Quantity: %d\n" % item.quantity
 	tooltip_text += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
 	tooltip_text += "Mass: %.2f t (%.2f t total)\n" % [item.mass, item.get_total_mass()]

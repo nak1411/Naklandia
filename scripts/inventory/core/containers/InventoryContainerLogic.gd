@@ -106,7 +106,7 @@ static func calculate_total_mass(container: InventoryContainer_Base) -> float:
 	
 	return total_mass
 
-static func find_items_by_type(container: InventoryContainer_Base, item_type: InventoryItem_Base.ItemType) -> Array[InventoryItem_Base]:
+static func find_items_by_type(container: InventoryContainer_Base, item_type: ItemTypes.Type) -> Array[InventoryItem_Base]:
 	"""Find all items of a specific type"""
 	var found_items: Array[InventoryItem_Base] = []
 	

@@ -736,13 +736,13 @@ func setup_item_context_menu(item: InventoryItem_Base):
 	
 	# Add type-specific action
 	match item.item_type:
-		InventoryItem_Base.ItemType.CONSUMABLE:
+		ItemTypes.Type.CONSUMABLE:
 			menu_actions.append({"id": "use_item", "text": "Use Item"})
-		InventoryItem_Base.ItemType.WEAPON, InventoryItem_Base.ItemType.ARMOR, InventoryItem_Base.ItemType.MODULE:
+		ItemTypes.Type.WEAPON, ItemTypes.Type.ARMOR, ItemTypes.Type.MODULE:
 			menu_actions.append({"id": "equip_item", "text": "Equip Item"})
-		InventoryItem_Base.ItemType.CONTAINER:
+		ItemTypes.Type.CONTAINER:
 			menu_actions.append({"id": "open_container", "text": "Open Container"})
-		InventoryItem_Base.ItemType.BLUEPRINT:
+		ItemTypes.Type.BLUEPRINT:
 			menu_actions.append({"id": "view_blueprint", "text": "View Blueprint"})
 	
 	# Add destroy action if applicable

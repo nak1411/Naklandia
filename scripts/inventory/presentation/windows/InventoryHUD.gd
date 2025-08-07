@@ -214,11 +214,11 @@ func use_selected_slot():
 
 func _handle_item_use(item: InventoryItem_Base):
 	match item.item_type:
-		InventoryItem_Base.ItemType.CONSUMABLE:
+		ItemTypes.Type.CONSUMABLE: 
 			_use_consumable(item)
-		InventoryItem_Base.ItemType.WEAPON:
+		ItemTypes.Type.WEAPON:     
 			_equip_weapon(item)
-		InventoryItem_Base.ItemType.ARMOR:
+		ItemTypes.Type.ARMOR:      
 			_equip_armor(item)
 		_:
 			print("Cannot use item: ", item.item_name)
@@ -324,7 +324,7 @@ func _show_item_info(item: InventoryItem_Base):
 	var tooltip = AcceptDialog.new()
 	tooltip.title = item.item_name
 	tooltip.dialog_text = "Type: %s\nQuantity: %d\nValue: %.2f ISK" % [
-		InventoryItem_Base.ItemType.keys()[item.item_type],
+		ItemTypes.Type.keys()[item.item_type],
 		item.quantity,
 		item.get_total_value()
 	]
