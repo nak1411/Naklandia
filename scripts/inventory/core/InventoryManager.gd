@@ -32,6 +32,10 @@ signal inventory_saved()
 func _ready():
 	_initialize_core_systems()
 	_initialize_default_containers()
+	
+	if save_system.save_exists():
+		load_inventory()
+		
 	_setup_autosave()
 
 func _initialize_core_systems():
@@ -174,6 +178,11 @@ func get_accessible_containers() -> Array[InventoryContainer_Base]:
 	return accessible
 
 func get_player_inventory() -> InventoryContainer_Base:
+	if player_inventory:
+		# Try to find it in containers
+		var found_container = containers.get("player_inventory")
+		if found_container:
+			player_inventory = found_container  # Restore the reference
 	return player_inventory
 
 func get_player_cargo() -> InventoryContainer_Base:

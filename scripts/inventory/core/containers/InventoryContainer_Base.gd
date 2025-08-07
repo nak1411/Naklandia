@@ -273,6 +273,7 @@ func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), a
 	# We just add the item and let the grid handle positioning
 	items.append(item)
 	
+	
 	# Connect to item signals
 	if not item.quantity_changed.is_connected(_on_item_quantity_changed):
 		item.quantity_changed.connect(_on_item_quantity_changed)
@@ -281,6 +282,7 @@ func add_item(item: InventoryItem_Base, position: Vector2i = Vector2i(-1, -1), a
 	
 	# The grid will handle positioning, so we emit with an invalid position
 	# The grid will assign a proper position
+
 	item_added.emit(item, Vector2i(-1, -1))
 	return true
 	

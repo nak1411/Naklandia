@@ -31,9 +31,7 @@ signal setup_completed()
 func _ready():
 	name = "InventoryIntegration"
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	
-	print("InventoryIntegration: Starting setup...")
-	
+		
 	# Setup integration layer first
 	_setup_integration_layer()
 	
@@ -41,9 +39,7 @@ func _ready():
 	call_deferred("_setup_original_inventory_system")
 
 func _setup_integration_layer():
-	"""Setup the integration layer components"""
-	print("InventoryIntegration: Setting up integration layer...")
-	
+	"""Setup the integration layer components"""	
 	# Create event bus first
 	event_bus = InventoryEventBus.new()
 	event_bus.name = "EventBus"
@@ -80,7 +76,6 @@ func _setup_event_handlers():
 
 func _connect_integration_layer():
 	"""Connect all integration components"""
-	print("InventoryIntegration: Connecting integration layer...")
 	
 	# Connect adapters to event bus
 	if player_adapter and event_bus:
@@ -100,32 +95,25 @@ func _connect_integration_layer():
 		event_bus.inventory_opened.connect(_on_inventory_opened_event)
 		event_bus.inventory_closed.connect(_on_inventory_closed_event)
 	
-	print("InventoryIntegration: Integration layer connected")
-
 func _connect_external_signals():
 	"""Connect to external game system signals"""
 	# Connect to player signals
 	var player_node = get_tree().get_first_node_in_group("player")
 	if player_node and player_adapter:
 		player_adapter.connect_to_player(player_node)
-		print("InventoryIntegration: Connected to player")
 	
 	# Connect to UI manager
 	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
 	if ui_managers.size() > 0 and ui_input_adapter:
 		ui_input_adapter.connect_to_ui_manager(ui_managers[0])
-		print("InventoryIntegration: Connected to UI manager")
 	
 	# Connect to game state manager
 	var game_state_nodes = get_tree().get_nodes_in_group("game_state")
 	if game_state_nodes.size() > 0 and game_state_adapter:
 		game_state_adapter.connect_to_game_state(game_state_nodes[0])
-		print("InventoryIntegration: Connected to game state")
 
 func _setup_original_inventory_system():
-	"""Setup the original inventory system"""
-	print("InventoryIntegration: Setting up inventory system...")
-	
+	"""Setup the original inventory system"""	
 	# Find or create the inventory canvas layer
 	var scene_root = get_tree().current_scene
 	inventory_canvas = scene_root.get_node_or_null("InventoryLayer")
@@ -135,7 +123,6 @@ func _setup_original_inventory_system():
 		inventory_canvas.name = "InventoryLayer" 
 		inventory_canvas.layer = 50
 		scene_root.add_child(inventory_canvas)
-		print("InventoryIntegration: Created InventoryLayer canvas")
 	
 	# Create inventory manager
 	inventory_manager = InventoryManager.new()
@@ -175,13 +162,11 @@ func _setup_original_inventory_system():
 # Event handlers for integration layer
 func _on_inventory_opened_event():
 	"""Handle inventory opened event from integration system"""
-	print("InventoryIntegration: Inventory open event received")
 	if not is_inventory_open:
 		_show_inventory()
 
 func _on_inventory_closed_event():
 	"""Handle inventory closed event from integration system"""
-	print("InventoryIntegration: Inventory close event received")
 	if is_inventory_open:
 		_hide_inventory()
 
@@ -191,7 +176,6 @@ func _show_inventory():
 		print("InventoryIntegration: Cannot show inventory - not ready")
 		return
 		
-	print("InventoryIntegration: Showing inventory")
 	is_inventory_open = true
 	inventory_window.visible = true
 	inventory_window.move_to_front()
@@ -210,7 +194,6 @@ func _hide_inventory():
 	if not inventory_window:
 		return
 		
-	print("InventoryIntegration: Hiding inventory")
 	is_inventory_open = false
 	inventory_window.visible = false
 	
@@ -225,6 +208,31 @@ func _hide_inventory():
 	
 	# Emit signal
 	inventory_toggled.emit(false)
+
+func _refresh_inventory_display():
+	"""Force refresh the inventory display"""
+	if inventory_window and inventory_window.content and inventory_window.visible:
+		print("Forcing inventory display refresh...")
+		
+		# FIX: Synchronize container references before refreshing
+		var correct_container = inventory_manager.get_player_inventory()
+		if correct_container and inventory_window.content.current_container != correct_container:
+			print("Synchronizing container references...")
+			inventory_window.content.current_container = correct_container
+			
+			if inventory_window.content.inventory_grid:
+				inventory_window.content.inventory_grid.set_container(correct_container)
+			
+			if inventory_window.content.list_view:
+				inventory_window.content.list_view.set_container(correct_container, correct_container.container_id)
+		
+		inventory_window.content.refresh_display()
+		
+		# Also refresh the specific display mode
+		if inventory_window.content.inventory_grid and inventory_window.content.inventory_grid.visible:
+			inventory_window.content.inventory_grid.refresh_display()
+		if inventory_window.content.list_view and inventory_window.content.list_view.visible:
+			inventory_window.content.list_view.refresh_display()
 
 func _connect_signals():
 	"""Connect inventory manager signals"""
@@ -245,7 +253,6 @@ func _set_player_input_enabled(enabled: bool):
 	var player_node = get_tree().get_first_node_in_group("player")
 	if player_node and player_node.has_method("set_input_enabled"):
 		player_node.set_input_enabled(enabled)
-		print("InventoryIntegration: Player input enabled: ", enabled)
 
 func _load_and_apply_position():
 	var loaded_pos = _load_window_position()

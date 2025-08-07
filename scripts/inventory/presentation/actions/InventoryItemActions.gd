@@ -167,10 +167,55 @@ func _handle_item_action(action_id: String, context_data: Dictionary):
 				
 func _find_window_content():
 	"""Find the InventoryWindowContent instance"""
-	var current = window_parent.get_children()
-	for child in current:
+	
+	if not window_parent:
+		print("No window_parent!")
+		return null
+	
+	# Method 1: Check if window_parent IS the InventoryWindow
+	if window_parent.get_script() and window_parent.get_script().get_global_name() == "InventoryWindow":
+		var content = window_parent.get("content")
+		return content
+	
+	# Method 2: Search children of window_parent
+	var children = window_parent.get_children()
+	
+	for i in range(children.size()):
+		var child = children[i]
+		
 		if child.get_script() and child.get_script().get_global_name() == "InventoryWindow":
-			return child.content
+			var content = child.get("content")
+			if content:
+				return content
+		elif child.get_script() and child.get_script().get_global_name() == "InventoryWindowContent":
+			return child
+	
+	# Method 3: Search recursively
+	var found_content = _find_content_recursive(window_parent)
+	
+	return found_content
+
+func _find_content_recursive(node: Node) -> Node:
+	"""Recursively search for InventoryWindowContent"""
+	if not node:
+		return null
+		
+	# Check if this node is what we're looking for
+	if node.get_script() and node.get_script().get_global_name() == "InventoryWindowContent":
+		return node
+	
+	# Check if this node has a content property (like InventoryWindow)
+	if node.has_method("get") and node.get("content"):
+		var content = node.get("content")
+		if content and content.get_script() and content.get_script().get_global_name() == "InventoryWindowContent":
+			return content
+	
+	# Search children
+	for child in node.get_children():
+		var result = _find_content_recursive(child)
+		if result:
+			return result
+	
 	return null
 
 func _handle_empty_area_action(action_id: String, _context_data: Dictionary):
@@ -522,7 +567,9 @@ func show_destroy_item_confirmation(item: InventoryItem_Base, _slot: InventorySl
 
 func show_clear_container_confirmation():
 	"""Show confirmation dialog for clearing container using DialogWindow_Base"""
+
 	if not current_container:
+		print("ERROR: No current container!")
 		return
 	
 	# Create dialog using the base class - same style as destroy item
@@ -575,23 +622,55 @@ func show_clear_container_confirmation():
 	# Connect button events
 	clear_button.pressed.connect(func():
 		if current_container:
+			# Clear the container
 			current_container.clear()
-			await window_parent.get_tree().process_frame
+						
+			# Update references (existing code)
+			if inventory_manager:
+				inventory_manager.containers[current_container.container_id] = current_container
+				if current_container.container_id == "player_inventory":
+					inventory_manager.player_inventory = current_container
+				if inventory_manager.save_system:
+					inventory_manager.save_system.containers_ref = inventory_manager.containers
+			
+			# Save
+			inventory_manager.save_inventory()
+			
+			# ENHANCED FIX: More thorough UI synchronization
+			var window_content = _find_window_content()
+			if window_content:
+				
+				# Step 1: Disconnect from old container
+				if window_content.current_container and window_content.current_container != current_container:
+					if window_content.inventory_grid:
+						window_content.inventory_grid.set_container(null)
+					if window_content.list_view:
+						window_content.list_view.set_container(null, "")
+				
+				# Step 2: Set new container reference everywhere
+				window_content.current_container = current_container
+				
+				# Step 3: Force UI components to use new container with explicit refresh
+				if window_content.inventory_grid:
+					window_content.inventory_grid.set_container(current_container)
+					# Force grid to refresh immediately
+					window_content.inventory_grid.refresh_display()
+				
+				if window_content.list_view:
+					window_content.list_view.set_container(current_container, current_container.container_id)
+					# Force list to refresh immediately
+					window_content.list_view.refresh_display()
+				
+				# Step 4: Wait a frame for UI updates
+				await window_parent.get_tree().process_frame
+				
+				# Step 5: Final refresh
+				window_content.refresh_display()
+							
+			# Emit refresh signal for any other listeners
 			container_refreshed.emit()
+					
 		dialog_window.close_dialog()
-		if window_parent and is_instance_valid(window_parent):
-			window_parent.grab_focus()
-	)
-	
-	cancel_button.pressed.connect(func():
-		dialog_window.close_dialog()
-		if window_parent and is_instance_valid(window_parent):
-			window_parent.grab_focus()
-	)
-	
-	# Connect close event
-	dialog_window.dialog_closed.connect(func():
-		# Don't need to track this in open_dialog_windows since it's not a Window type
 		if window_parent and is_instance_valid(window_parent):
 			window_parent.grab_focus()
 	)

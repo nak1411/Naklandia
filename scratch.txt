@@ -1,0 +1,175 @@
+InventorySaveSystem: Save file exists check - user://inventory_save.dat = true
+Save file exists, loading inventory...
+=== LOAD INVENTORY DEBUG START ===
+Load called from: [{ "source": "res://scripts/inventory/core/persistance/InventorySaveSystem.gd", "function": "load_inventory", "line": 137 }, { "source": "res://scripts/inventory/core/InventoryManager.gd", "function": "load_inventory", "line": 161 }, { "source": "res://scripts/inventory/core/InventoryManager.gd", "function": "_ready", "line": 39 }, { "source": "res://scripts/inventory/integration/InventoryIntegration.gd", "function": "_setup_original_inventory_system", "line": 130 }]
+Loading from file: user://inventory_save.dat
+Absolute path: C:/Users/Justin/AppData/Roaming/Godot/app_userdata/Naklandia/inventory_save.dat
+Loaded file size: 1690 characters
+First 200 characters: {"containers":{"hangar_0":{"allowed_item_types":[],"container_id":"hangar_0","container_name":"Hangar Division 1","container_type":3,"grid_height":25,"grid_width":20,"is_secure":false,"items":[],"max_
+About to load 1 items into player_inventory
+=== APPLYING SAVE DATA DEBUG ===
+Loading containers data with keys: ["hangar_0", "hangar_1", "hangar_2", "player_cargo", "player_inventory"]
+Loading container: hangar_0
+  Loading 0 items into container
+  Container loaded with 0 items
+Loading container: hangar_1
+  Loading 0 items into container
+  Container loaded with 0 items
+Loading container: hangar_2
+  Loading 0 items into container
+  Container loaded with 0 items
+Loading container: player_cargo
+  Loading 0 items into container
+  Container loaded with 0 items
+Loading container: player_inventory
+  Loading 1 items into container
+    Loading item 0: Noxite qty: 1.0
+  Container loaded with 1 items
+InventorySaveSystem: Inventory loaded from: user://inventory_save.dat
+=== APPLYING SAVE DATA DEBUG END ===
+Load result: true
+=== LOAD INVENTORY DEBUG END ===
+=== LOAD INVENTORY DEBUG START ===
+Load called from: [{ "source": "res://scripts/inventory/core/persistance/InventorySaveSystem.gd", "function": "load_inventory", "line": 137 }, { "source": "res://scripts/inventory/core/InventoryManager.gd", "function": "load_inventory", "line": 161 }, { "source": "res://scripts/inventory/integration/InventoryIntegration.gd", "function": "_setup_original_inventory_system", "line": 131 }]
+Loading from file: user://inventory_save.dat
+Absolute path: C:/Users/Justin/AppData/Roaming/Godot/app_userdata/Naklandia/inventory_save.dat
+Loaded file size: 1690 characters
+First 200 characters: {"containers":{"hangar_0":{"allowed_item_types":[],"container_id":"hangar_0","container_name":"Hangar Division 1","container_type":3,"grid_height":25,"grid_width":20,"is_secure":false,"items":[],"max_
+About to load 1 items into player_inventory
+=== APPLYING SAVE DATA DEBUG ===
+Loading containers data with keys: ["hangar_0", "hangar_1", "hangar_2", "player_cargo", "player_inventory"]
+Loading container: hangar_0
+  Loading 0 items into container
+  Container loaded with 0 items
+Loading container: hangar_1
+  Loading 0 items into container
+  Container loaded with 0 items
+Loading container: hangar_2
+  Loading 0 items into container
+  Container loaded with 0 items
+Loading container: player_cargo
+  Loading 0 items into container
+  Container loaded with 0 items
+Loading container: player_inventory
+  Loading 1 items into container
+    Loading item 0: Noxite qty: 1.0
+  Container loaded with 1 items
+InventorySaveSystem: Inventory loaded from: user://inventory_save.dat
+=== APPLYING SAVE DATA DEBUG END ===
+Load result: true
+=== LOAD INVENTORY DEBUG END ===
+2
+InventoryIntegration: Setup complete!
+Container cleared, items: 0
+=== PRE-SAVE VERIFICATION ===
+ItemActions container items: 0
+InventoryManager.player_inventory items: 0
+InventoryManager.containers['player_inventory'] items: 0
+SaveSystem.containers_ref['player_inventory'] items: 0
+Same object - ItemActions vs InventoryManager: true
+Same object - ItemActions vs containers dict: true
+Same object - ItemActions vs save system: true
+=== PRE-SAVE VERIFICATION END ===
+=== SAVE OPERATION #1 START ===
+Time: 2025-08-07T12:55:38
+Called from: [{ "source": "res://scripts/inventory/core/persistance/InventorySaveSystem.gd", "function": "save_inventory", "line": 30 }, { "source": "res://scripts/inventory/core/InventoryManager.gd", "function": "save_inventory", "line": 158 }, { "source": "res://scripts/inventory/presentation/actions/InventoryItemActions.gd", "function": "<anonymous lambda>", "line": 651 }]
+Save system instance: <RefCounted#-9223371987814971811>
+Save file path: user://inventory_save.dat
+Absolute path: C:/Users/Justin/AppData/Roaming/Godot/app_userdata/Naklandia/inventory_save.dat
+Save file already exists - will overwrite
+Existing save file size: 1690 characters
+=== CONTAINER SAVE DEBUG ===
+Saving container: player_inventory
+  Container name: Personal Inventory
+  Container reference: <Resource#-9223371987798194594>
+  Items count: 0
+  Saved container to dict with 0 items
+Saving container: player_cargo
+  Container name: Cargo Hold
+  Container reference: <Resource#-9223371987781417377>
+  Items count: 0
+  Saved container to dict with 0 items
+Saving container: hangar_0
+  Container name: Hangar Division 1
+  Container reference: <Resource#-9223371987764640160>
+  Items count: 0
+  Saved container to dict with 0 items
+Saving container: hangar_1
+  Container name: Hangar Division 2
+  Container reference: <Resource#-9223371987747862943>
+  Items count: 0
+  Saved container to dict with 0 items
+Saving container: hangar_2
+  Container name: Hangar Division 3
+  Container reference: <Resource#-9223371987731085726>
+  Items count: 0
+  Saved container to dict with 0 items
+=== CONTAINER SAVE DEBUG END ===
+=== IMMEDIATE SAVE VERIFICATION ===
+Saved file size: 1273 characters
+Verified: player_inventory has 0 items in saved file
+InventorySaveSystem: Inventory saved to: user://inventory_save.dat
+=== SAVE OPERATION #1 COMPLETE ===
+Container cleared and saved successfully.
+=== CREATING BACKUP ===
+Backup created at: user://inventory_save_backup.dat
+Backup size: 1273 characters
+=== BACKUP CREATED ===
+=== INVENTORY MANAGER EXIT DETAILED DEBUG ===
+_exit_tree called
+=== CONTAINER REFERENCES DEBUG ===
+Direct player_inventory reference: <Resource#-9223371987798194594>
+  Items in direct reference: 0
+Containers dictionary keys: ["player_inventory", "player_cargo", "hangar_0", "hangar_1", "hangar_2"]
+player_inventory from containers dict: <Resource#-9223371987798194594>
+  Items in dict reference: 0
+Same object? true
+Save system player_inventory: <Resource#-9223371987798194594>
+  Items in save system reference: 0
+Save system matches direct? true
+Save system matches dict? true
+=== CONTAINER REFERENCES DEBUG END ===
+=== WHAT WOULD BE SAVED DEBUG ===
+Would save player_inventory with 0 items
+=== WHAT WOULD BE SAVED DEBUG END ===
+=== SAVE OPERATION #2 START ===
+Time: 2025-08-07T12:55:40
+Called from: [{ "source": "res://scripts/inventory/core/persistance/InventorySaveSystem.gd", "function": "save_inventory", "line": 30 }, { "source": "res://scripts/inventory/core/InventoryManager.gd", "function": "save_inventory", "line": 158 }, { "source": "res://scripts/inventory/core/InventoryManager.gd", "function": "_exit_tree", "line": 295 }]
+Save system instance: <RefCounted#-9223371987814971811>
+Save file path: user://inventory_save.dat
+Absolute path: C:/Users/Justin/AppData/Roaming/Godot/app_userdata/Naklandia/inventory_save.dat
+Save file already exists - will overwrite
+Existing save file size: 1273 characters
+=== CONTAINER SAVE DEBUG ===
+Saving container: player_inventory
+  Container name: Personal Inventory
+  Container reference: <Resource#-9223371987798194594>
+  Items count: 0
+  Saved container to dict with 0 items
+Saving container: player_cargo
+  Container name: Cargo Hold
+  Container reference: <Resource#-9223371987781417377>
+  Items count: 0
+  Saved container to dict with 0 items
+Saving container: hangar_0
+  Container name: Hangar Division 1
+  Container reference: <Resource#-9223371987764640160>
+  Items count: 0
+  Saved container to dict with 0 items
+Saving container: hangar_1
+  Container name: Hangar Division 2
+  Container reference: <Resource#-9223371987747862943>
+  Items count: 0
+  Saved container to dict with 0 items
+Saving container: hangar_2
+  Container name: Hangar Division 3
+  Container reference: <Resource#-9223371987731085726>
+  Items count: 0
+  Saved container to dict with 0 items
+=== CONTAINER SAVE DEBUG END ===
+=== IMMEDIATE SAVE VERIFICATION ===
+Saved file size: 1273 characters
+Verified: player_inventory has 0 items in saved file
+InventorySaveSystem: Inventory saved to: user://inventory_save.dat
+=== SAVE OPERATION #2 COMPLETE ===
+=== INVENTORY MANAGER EXIT DEBUG END ===
