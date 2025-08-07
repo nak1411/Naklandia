@@ -70,12 +70,12 @@ func _on_inventory_closed():
 		connected_game_state.request_unpause("inventory_open")
 
 func _on_save_requested():
-	"""Handle save request from inventory system"""
+	"""Handle save requests from inventory"""
 	if connected_game_state and connected_game_state.has_method("save_game"):
-		connected_game_state.save_game()
+		connected_game_state.save_game("inventory_save")
 
 func _on_load_requested():
-	"""Handle load request from inventory system"""
+	"""Handle load requests from inventory"""
 	if connected_game_state and connected_game_state.has_method("load_game"):
 		connected_game_state.load_game()
 

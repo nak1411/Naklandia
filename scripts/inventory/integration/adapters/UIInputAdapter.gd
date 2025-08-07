@@ -91,7 +91,6 @@ func _enable_game_input():
 
 func _enable_menu_input():
 	"""Configure input for menu mode"""
-	# Set mouse mode for menu interaction
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 # Event handlers
@@ -114,26 +113,22 @@ func _on_inventory_closed():
 func _on_ui_focus_changed(has_focus: bool):
 	"""Handle UI focus changes"""
 	if event_bus:
+		# Emit focus state to other systems
 		event_bus.emit_ui_focus_changed(has_focus)
 
 func _on_layer_visibility_changed(layer_name: String, visible: bool):
 	"""Handle UI layer visibility changes"""
-	# Update input mode based on visible layers
-	if connected_ui_manager:
-		if connected_ui_manager.is_any_overlay_visible():
-			if input_mode == "game":
-				set_input_mode("menu")
-		else:
-			if input_mode != "game":
-				set_input_mode("game")
+	if event_bus:
+		event_bus.emit_signal("ui_layer_changed", layer_name, visible)
 
 func set_drag_in_progress(dragging: bool):
 	"""Enable/disable input processing during drag operations"""
 	drag_in_progress = dragging
 
 func set_input_processing_enabled(enabled: bool):
-	"""Enable/disable input processing entirely"""
+	"""Enable/disable input processing"""
 	input_processing_enabled = enabled
+	set_process_unhandled_input(enabled)
 
 # Public interface
 func get_input_mode() -> String:

@@ -111,10 +111,16 @@ func _connect_external_signals():
 		print("InventoryIntegration: Connected to player")
 	
 	# Connect to UI manager
-	var ui_manager = get_tree().get_first_node_in_group("ui_manager")
-	if ui_manager and ui_input_adapter:
-		ui_input_adapter.connect_to_ui_manager(ui_manager)
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0 and ui_input_adapter:
+		ui_input_adapter.connect_to_ui_manager(ui_managers[0])
 		print("InventoryIntegration: Connected to UI manager")
+	
+	# Connect to game state manager
+	var game_state_nodes = get_tree().get_nodes_in_group("game_state")
+	if game_state_nodes.size() > 0 and game_state_adapter:
+		game_state_adapter.connect_to_game_state(game_state_nodes[0])
+		print("InventoryIntegration: Connected to game state")
 
 func _setup_original_inventory_system():
 	"""Setup the original inventory system"""

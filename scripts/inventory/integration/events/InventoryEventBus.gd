@@ -81,6 +81,24 @@ func emit_ui_focus_changed(has_focus: bool):
 	if _should_emit_event("ui_focus_changed"):
 		ui_focus_changed.emit(has_focus)
 
+func emit_inventory_state_changed(state: String):
+	inventory_state_changed.emit(state)
+
+func emit_item_equipped(item_data: Dictionary):
+	item_equipped.emit(item_data)
+
+func emit_item_unequipped(item_data: Dictionary):
+	item_unequipped.emit(item_data)
+
+func emit_item_moved(from_container: String, to_container: String, item_data: Dictionary):
+	item_moved.emit(from_container, to_container, item_data)
+
+func emit_save_requested():
+	save_requested.emit()
+
+func emit_load_requested():
+	load_requested.emit()
+
 func emit_game_paused():
 	game_paused.emit()
 
