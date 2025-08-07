@@ -301,6 +301,9 @@ func show_item_details_dialog(item: InventoryItem_Base):
 	if not dialog_window.is_node_ready():
 		await dialog_window.ready
 	
+	# FIXED: Explicitly initialize the dialog content (this was missing!)
+	dialog_window._setup_window_content()
+	
 	# Wait one more frame to ensure all components are initialized
 	await dialog_window.get_tree().process_frame
 	

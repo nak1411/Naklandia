@@ -68,8 +68,41 @@ func show_tooltip():
 	# Update tooltip content
 	tooltip_label.text = _get_tooltip_text(item)
 	
-	# Position below the slot
-	var tooltip_pos = slot.global_position + Vector2(((slot.slot_size.x / 2) + slot.slot_padding / 2) - (tooltip.size.x / 2), slot.slot_size.y + 5)
+	# Get the inventory window to use as reference
+	var inventory_window = _find_inventory_window()
+	if not inventory_window:
+		return
+	
+	# Convert slot's global position to inventory window's local space
+	var slot_global_pos = slot.global_position
+	var window_global_pos = inventory_window.global_position
+	var slot_local_to_window = slot_global_pos - window_global_pos
+	
+	# Calculate tooltip position below the slot
+	var tooltip_pos = slot_local_to_window + Vector2(
+		(slot.slot_size.x - tooltip.size.x) / 2,  # Center horizontally
+		slot.slot_size.y + 5  # Position below with 5px gap
+	)
+	
+	# Ensure tooltip stays within window bounds
+	var window_rect = Rect2(Vector2.ZERO, inventory_window.size)
+	var tooltip_rect = Rect2(tooltip_pos, tooltip.size)
+	
+	# Adjust horizontal position if tooltip goes outside window
+	if tooltip_rect.position.x < 0:
+		tooltip_pos.x = 0
+	elif tooltip_rect.end.x > window_rect.size.x:
+		tooltip_pos.x = window_rect.size.x - tooltip.size.x
+	
+	# Adjust vertical position if tooltip goes outside window
+	if tooltip_rect.end.y > window_rect.size.y:
+		# Position above the slot instead
+		tooltip_pos.y = slot_local_to_window.y - tooltip.size.y - 5
+	
+	# Ensure tooltip doesn't go above window top
+	if tooltip_pos.y < 0:
+		tooltip_pos.y = slot_local_to_window.y + slot.slot_size.y + 5
+	
 	tooltip.position = tooltip_pos
 	tooltip.visible = true
 	is_showing_tooltip = true
