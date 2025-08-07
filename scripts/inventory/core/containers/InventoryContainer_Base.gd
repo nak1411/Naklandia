@@ -10,8 +10,8 @@ extends Resource
 @export var grid_height: int = 10
 
 # Container type and restrictions
-@export var container_type: InventoryItem_Base.ContainerType = InventoryItem_Base.ContainerType.GENERAL_CARGO
-@export var allowed_item_types: Array[InventoryItem_Base.ItemType] = []
+@export var container_type: ContainerTypes.Type = ContainerTypes.Type.GENERAL_CARGO
+@export var allowed_item_types: Array[ItemTypes.Type] = []
 @export var is_secure: bool = false
 @export var requires_docking: bool = false
 
@@ -326,7 +326,7 @@ func find_stackable_item(item: InventoryItem_Base) -> InventoryItem_Base:
 			return existing_item
 	return null
 
-func find_items_by_type(item_type: InventoryItem_Base.ItemType) -> Array[InventoryItem_Base]:
+func find_items_by_type(item_type: ItemTypes.Type) -> Array[InventoryItem_Base]:
 	var filtered_items: Array[InventoryItem_Base] = []
 	for item in items:
 		if item.item_type == item_type:
@@ -394,18 +394,18 @@ func _on_item_modified():
 	pass
 
 # Container type management
-func set_container_type(new_type: InventoryItem_Base.ContainerType):
+func set_container_type(new_type: ContainerTypes.Type):
 	container_type = new_type
 	_update_type_restrictions()
 
 func _update_type_restrictions():
 	allowed_item_types.clear()
 	match container_type:
-		InventoryItem_Base.ContainerType.AMMUNITION_BAY:
-			allowed_item_types.append(InventoryItem_Base.ItemType.AMMUNITION)
-		InventoryItem_Base.ContainerType.FUEL_BAY:
-			allowed_item_types.append(InventoryItem_Base.ItemType.RESOURCE)  # Assuming fuel is a resource
-		InventoryItem_Base.ContainerType.SECURE_CONTAINER:
+		ContainerTypes.Type.AMMUNITION_BAY:
+			allowed_item_types.append(ItemTypes.Type.AMMUNITION)
+		ContainerTypes.Type.FUEL_BAY:
+			allowed_item_types.append(ItemTypes.Type.RESOURCE)  # Assuming fuel is a resource
+		ContainerTypes.Type.SECURE_CONTAINER:
 			is_secure = true
 		_:
 			pass  # Allow all types - keep array empty
@@ -437,13 +437,13 @@ func from_dict(data: Dictionary):
 	max_volume = data.get("max_volume") if data.has("max_volume") else 100.0
 	grid_width = data.get("grid_width") if data.has("grid_width") else 10
 	grid_height = data.get("grid_height") if data.has("grid_height") else 10
-	container_type = data.get("container_type") if data.has("container_type") else InventoryItem_Base.ContainerType.GENERAL_CARGO
+	container_type = data.get("container_type") if data.has("container_type") else ContainerTypes.Type.GENERAL_CARGO
 	
 	# Handle allowed_item_types array conversion
 	var allowed_types_data = data.get("allowed_item_types") if data.has("allowed_item_types") else []
 	allowed_item_types.clear()
 	for item_type in allowed_types_data:
-		if item_type is InventoryItem_Base.ItemType:
+		if item_type is ItemTypes.Type:
 			allowed_item_types.append(item_type)
 	
 	is_secure = data.get("is_secure") if data.has("is_secure") else false

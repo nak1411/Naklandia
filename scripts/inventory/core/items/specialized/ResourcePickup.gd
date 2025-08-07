@@ -8,7 +8,7 @@ extends PickupableItem
 func _configure_item_properties():
 	# Set consistent properties for all ammo pickups
 	item_id_override = "resource_noxite"
-	item_type_override = InventoryItem_Base.ItemType.RESOURCE
+	item_type_override = ItemTypes.Type.RESOURCE
 	item_name_override = "Noxite"
 	item_description_override = "A liquid that can be used as a fuel source."
 	item_volume_override = 0.125

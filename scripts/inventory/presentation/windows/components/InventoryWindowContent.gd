@@ -383,26 +383,7 @@ func _setup_mass_info_bar(parent: Control):
 	margin_container.add_child(mass_info_label)
 
 func _format_currency(value: float) -> String:
-	var formatted = "%.2f" % value
-	var parts = formatted.split(".")
-	var dollars = parts[0]
-	var cents = parts[1]
-	
-	# Add commas to the dollar part
-	var result = ""
-	var count = 0
-	
-	for i in range(dollars.length() - 1, -1, -1):
-		if count > 0 and count % 3 == 0:
-			result = "," + result
-		result = dollars[i] + result
-		count += 1
-	
-	# Only show cents if they're not zero
-	if cents != "00":
-		return result + "." + cents + " cr "
-	else:
-		return result + " cr "
+	return InventoryMath.format_currency(value)
 
 func _on_container_list_selected(index: int):
 	if index >= 0 and index < open_containers.size():

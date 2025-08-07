@@ -5,7 +5,7 @@ extends Interactable
 # Item properties
 @export var item_data: InventoryItem_Base
 @export var auto_generate_item: bool = true
-@export var item_type_override: InventoryItem_Base.ItemType = InventoryItem_Base.ItemType.MISCELLANEOUS
+@export var item_type_override: ItemTypes.Type = ItemTypes.Type.MISCELLANEOUS
 @export var item_name_override: String = ""
 @export var item_description_override: String = ""
 @export var item_volume_override: float = 1.0
@@ -14,7 +14,7 @@ extends Interactable
 @export var item_quantity: int = 1
 @export var icon_path_override: String = ""
 @export var item_id_override: String = ""
-@export var max_stack_size_override: int = 1  # NEW: Let each item type control its own stacking
+@export var max_stack_size_override: int = 1
 
 func _ready():
 	super._ready()
@@ -62,8 +62,7 @@ func _generate_item_data():
 	item_data.mass = item_mass_override
 	item_data.base_value = item_value_override
 	item_data.quantity = item_quantity
-	
-	# FIXED: Use the override value directly instead of special logic
+
 	item_data.max_stack_size = max_stack_size_override
 	
 	# Set icon path if provided

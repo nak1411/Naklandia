@@ -653,7 +653,7 @@ func _generate_detailed_item_info(item: InventoryItem_Base) -> String:
 	var text = "[center][b][font_size=16]%s[/font_size][/b][/center]\n" % item.item_name
 	
 	text += "[b]General Information[/b]\n"
-	text += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
+	text += "Type: %s\n" % ItemTypes.get_type_name(item.item_type)
 	text += "Quantity: %d\n" % item.quantity
 	text += "Max Stack Size: %d\n\n" % item.max_stack_size
 	
@@ -668,7 +668,7 @@ func _generate_detailed_item_info(item: InventoryItem_Base) -> String:
 	if item.is_container:
 		text += "[b]Container Properties[/b]\n"
 		text += "Container Volume: %.2f m³\n" % item.container_volume
-		text += "Container Type: %s\n\n" % InventoryItem_Base.ContainerType.keys()[item.container_type]
+		text += "Container Type: %s\n\n" % ContainerTypes.Type.keys()[item.container_type]
 	
 	text += "[b]Flags[/b]\n"
 	text += "Unique: %s\n" % ("Yes" if item.is_unique else "No")
@@ -688,7 +688,7 @@ func _generate_detailed_container_info(container: InventoryContainer_Base) -> St
 	
 	text += "[b]Container Properties[/b]\n"
 	text += "Container ID: %s\n" % container.container_id
-	text += "Container Type: %s\n" % InventoryItem_Base.ContainerType.keys()[container.container_type]
+	text += "Container Type: %s\n" % ContainerTypes.Type.keys()[container.container_type]
 	text += "Grid Size: %d × %d\n\n" % [container.grid_width, container.grid_height]
 	
 	text += "[b]Capacity Information[/b]\n"

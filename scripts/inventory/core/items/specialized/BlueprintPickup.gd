@@ -7,7 +7,7 @@ extends PickupableItem
 func _configure_item_properties():
 	# Set consistent properties for all ammo pickups
 	item_id_override = "blueprint_hybrid_charges"
-	item_type_override = InventoryItem_Base.ItemType.BLUEPRINT
+	item_type_override = ItemTypes.Type.BLUEPRINT
 	item_name_override = "Hybrid Charge Blueprint"
 	item_description_override = "Blueprint for manufacturing Hybrid Charges."
 	item_volume_override = 0.015

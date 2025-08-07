@@ -222,21 +222,6 @@ func _clear_virtual_slots():
 		if is_instance_valid(slot):
 			slot.queue_free()
 	virtual_rendered_slots.clear()
-	
-#func add_test_items_for_virtual_scroll():
-	#"""Add many test items to verify virtual scrolling"""
-	#if not container:
-		#return
-	#
-	#for i in range(100):  # Add 100 test items
-		#var test_item = InventoryItem_Base.new()
-		#test_item.item_name = "Test Item " + str(i + 1)
-		#test_item.quantity = 1
-		#test_item.volume = 1.0
-		#test_item.mass = 1.0
-		#container.items.append(test_item)
-	#
-	#refresh_display()
 
 func _render_virtual_items():
 	"""Render a dynamic grid that fills the available window space, like EVE Online"""
@@ -2301,24 +2286,76 @@ func _should_show_item(item: InventoryItem_Base) -> bool:
 	var item_type_filter = _get_item_type_from_filter(current_filter_type)
 	return item.item_type == item_type_filter
 
-func _get_item_type_from_filter(filter_index: int) -> InventoryItem_Base.ItemType:
+func _get_item_type_from_filter(filter_index: int) -> ItemTypes.Type:  # ← CHANGED RETURN TYPE
 	match filter_index:
-		1: return InventoryItem_Base.ItemType.WEAPON
-		2: return InventoryItem_Base.ItemType.ARMOR
-		3: return InventoryItem_Base.ItemType.CONSUMABLE
-		4: return InventoryItem_Base.ItemType.RESOURCE
-		5: return InventoryItem_Base.ItemType.BLUEPRINT
-		6: return InventoryItem_Base.ItemType.MODULE
-		7: return InventoryItem_Base.ItemType.SHIP
-		8: return InventoryItem_Base.ItemType.CONTAINER
-		9: return InventoryItem_Base.ItemType.AMMUNITION
-		10: return InventoryItem_Base.ItemType.IMPLANT
-		11: return InventoryItem_Base.ItemType.SKILL_BOOK
-		_: return InventoryItem_Base.ItemType.MISCELLANEOUS
-
+		1: return ItemTypes.Type.WEAPON       
+		2: return ItemTypes.Type.ARMOR        
+		3: return ItemTypes.Type.CONSUMABLE   
+		4: return ItemTypes.Type.RESOURCE     
+		5: return ItemTypes.Type.BLUEPRINT    
+		6: return ItemTypes.Type.MODULE       
+		7: return ItemTypes.Type.SHIP         
+		8: return ItemTypes.Type.CONTAINER    
+		9: return ItemTypes.Type.AMMUNITION   
+		11: return ItemTypes.Type.SKILL_BOOK  
+		10: return ItemTypes.Type.IMPLANT     
+		_: return ItemTypes.Type.MISCELLANEOUS
 func _is_connected_to_container() -> bool:
 	return container and container.item_added.is_connected(_on_container_item_added)
 
 func set_item_actions(actions: InventoryItemActions):
 	"""Set the item actions handler for context menus"""
 	item_actions = actions
+
+func clear_display():
+	"""Clear the display - implements IInventoryRenderer"""
+	if enable_virtual_scrolling:
+		virtual_items.clear()
+		for slot in virtual_rendered_slots:
+			if is_instance_valid(slot):
+				slot.queue_free()
+		virtual_rendered_slots.clear()
+	else:
+		_clear_all_slots()
+		# Also clear selection and positions
+		selected_slots.clear()
+		item_positions.clear()
+
+func handle_item_drop(item: InventoryItem_Base, position: Vector2) -> bool:
+	"""Handle item drop - implements IInventoryRenderer"""
+	# Find the slot at the given position
+	var target_slot = get_slot_at_position(position)
+	if not target_slot:
+		return false
+	
+	# For now, return false as this would need a source slot
+	# This interface method might need redesign, but we'll implement it for completeness
+	return false
+
+func handle_item_selection(item: InventoryItem_Base):
+	"""Handle item selection - implements IInventoryRenderer"""
+	# Find the slot containing this item
+	if enable_virtual_scrolling:
+		for slot in virtual_rendered_slots:
+			if slot and slot.has_item() and slot.get_item() == item:
+				_toggle_slot_selection(slot)
+				break
+	else:
+		for y in current_grid_height:
+			for x in current_grid_width:
+				if y < slots.size() and x < slots[y].size():
+					var slot = slots[y][x]
+					if slot and slot.has_item() and slot.get_item() == item:
+						_toggle_slot_selection(slot)
+						return
+
+func show_drop_preview(position: Vector2, item: InventoryItem_Base):
+	"""Show drop preview - implements IInventoryRenderer"""
+	# Find target slot and show preview
+	var target_slot = get_slot_at_position(position)
+	if target_slot:
+		target_slot.set_highlighted(true)
+
+func hide_drop_preview():
+	"""Hide drop preview - implements IInventoryRenderer"""
+	clear_all_highlighting()

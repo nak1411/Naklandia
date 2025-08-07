@@ -15,7 +15,7 @@ extends Resource
 @export var max_stack_size: int = 1
 
 # Item type
-@export var item_type: ItemType = ItemType.MISCELLANEOUS
+@export var item_type: ItemTypes.Type = ItemTypes.Type.MISCELLANEOUS
 @export var is_contraband: bool = false
 
 # Value and meta properties
@@ -26,32 +26,7 @@ extends Resource
 # Container properties (if this item is a container)
 @export var is_container: bool = false
 @export var container_volume: float = 0.0
-@export var container_type: ContainerType = ContainerType.NONE
-
-enum ItemType {
-	MISCELLANEOUS,
-	WEAPON,
-	ARMOR,
-	CONSUMABLE,
-	RESOURCE,
-	BLUEPRINT,
-	MODULE,
-	SHIP,
-	CONTAINER,
-	AMMUNITION,
-	IMPLANT,
-	SKILL_BOOK
-}
-
-enum ContainerType {
-	NONE,
-	GENERAL_CARGO,
-	SECURE_CONTAINER,
-	HANGAR_DIVISION,
-	SHIP_CARGO,
-	AMMUNITION_BAY,
-	FUEL_BAY
-}
+@export var container_type: ContainerTypes.Type = ContainerTypes.Type.NONE
 
 # Signals
 signal quantity_changed(new_quantity: int)
@@ -155,31 +130,7 @@ func remove_from_stack(amount: int) -> int:
 
 # Type color coding
 func get_type_color() -> Color:
-	match item_type:
-		ItemType.WEAPON:
-			return Color.CRIMSON
-		ItemType.ARMOR:
-			return Color.STEEL_BLUE
-		ItemType.CONSUMABLE:
-			return Color.LIME_GREEN
-		ItemType.RESOURCE:
-			return Color.SANDY_BROWN
-		ItemType.BLUEPRINT:
-			return Color.CYAN
-		ItemType.MODULE:
-			return Color.MAGENTA
-		ItemType.SHIP:
-			return Color.GOLD
-		ItemType.CONTAINER:
-			return Color.DARK_GRAY
-		ItemType.AMMUNITION:
-			return Color.YELLOW
-		ItemType.IMPLANT:
-			return Color.PINK
-		ItemType.SKILL_BOOK:
-			return Color.LIGHT_BLUE
-		_:
-			return Color.WHITE
+	return ItemTypes.get_type_color(item_type)
 
 # Icon management
 func get_icon_texture() -> Texture2D:
@@ -225,15 +176,18 @@ func from_dict(data: Dictionary):
 	mass = data.get("mass") if data.has("mass") else 1.0
 	quantity = data.get("quantity") if data.has("quantity") else 1
 	max_stack_size = data.get("max_stack_size") if data.has("max_stack_size") else 1
-	item_type = data.get("item_type") if data.has("item_type") else ItemType.MISCELLANEOUS
+	item_type = data.get("item_type", ItemTypes.Type.MISCELLANEOUS)
 	is_contraband = data.get("is_contraband") if data.has("is_contraband") else false
 	base_value = data.get("base_value") if data.has("base_value") else 0.0
 	can_be_destroyed = data.get("can_be_destroyed") if data.has("can_be_destroyed") else true
 	is_unique = data.get("is_unique") if data.has("is_unique") else false
 	is_container = data.get("is_container") if data.has("is_container") else false
 	container_volume = data.get("container_volume") if data.has("container_volume") else 0.0
-	container_type = data.get("container_type") if data.has("container_type") else ContainerType.NONE
+	container_type = data.get("container_type", ContainerTypes.Type.NONE)
 
-# Debug
-func get_debug_string() -> String:
-	return "%s (ID: %s) - Qty: %d, Vol: %.2fm³, Mass: %.2fkg" % [item_name, item_id, quantity, volume, mass]
+func get_item_id() -> String:
+	return item_id
+
+func get_item_name() -> String:
+	return item_name
+

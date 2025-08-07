@@ -7,7 +7,7 @@ extends PickupableItem
 func _configure_item_properties():
 	# Set consistent properties for all ammo pickups
 	item_id_override = "module_gauss_turret"
-	item_type_override = InventoryItem_Base.ItemType.MODULE
+	item_type_override = ItemTypes.Type.MODULE
 	item_name_override = "Gauss Turret"
 	item_description_override = "Turret firing a high velocity solid charge."
 	item_volume_override = 3.62

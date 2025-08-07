@@ -55,7 +55,7 @@ func _initialize_default_containers():
 	player_cargo = InventoryContainer_Base.new("player_cargo", "Cargo Hold", 500.0)
 	player_cargo.grid_width = 15
 	player_cargo.grid_height = 20
-	player_cargo.container_type = InventoryItem_Base.ContainerType.SHIP_CARGO
+	player_cargo.container_type = ContainerTypes.Type.SHIP_CARGO
 	add_container(player_cargo)
 	
 	# Create hangar containers
@@ -63,7 +63,7 @@ func _initialize_default_containers():
 		var hangar = InventoryContainer_Base.new("hangar_%d" % i, "Hangar Division %d" % (i + 1), 1000.0)
 		hangar.grid_width = 20
 		hangar.grid_height = 25
-		hangar.container_type = InventoryItem_Base.ContainerType.HANGAR_DIVISION
+		hangar.container_type = ContainerTypes.Type.HANGAR_DIVISION
 		hangar.requires_docking = true
 		hangar_containers.append(hangar)
 		add_container(hangar)

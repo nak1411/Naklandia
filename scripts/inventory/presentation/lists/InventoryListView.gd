@@ -338,20 +338,20 @@ func _should_show_item(item: InventoryItem_Base) -> bool:
 	var item_type_filter = _get_item_type_from_filter(current_filter_type)
 	return item.item_type == item_type_filter
 	
-func _get_item_type_from_filter(filter_index: int) -> InventoryItem_Base.ItemType:
+func _get_item_type_from_filter(filter_index: int) -> ItemTypes.Type:  # ← CHANGED RETURN TYPE
 	match filter_index:
-		1: return InventoryItem_Base.ItemType.WEAPON
-		2: return InventoryItem_Base.ItemType.ARMOR
-		3: return InventoryItem_Base.ItemType.CONSUMABLE
-		4: return InventoryItem_Base.ItemType.RESOURCE
-		5: return InventoryItem_Base.ItemType.BLUEPRINT
-		6: return InventoryItem_Base.ItemType.MODULE
-		7: return InventoryItem_Base.ItemType.SHIP
-		8: return InventoryItem_Base.ItemType.CONTAINER
-		9: return InventoryItem_Base.ItemType.AMMUNITION
-		10: return InventoryItem_Base.ItemType.IMPLANT
-		11: return InventoryItem_Base.ItemType.SKILL_BOOK
-		_: return InventoryItem_Base.ItemType.MISCELLANEOUS
+		1: return ItemTypes.Type.WEAPON          
+		2: return ItemTypes.Type.ARMOR             
+		3: return ItemTypes.Type.CONSUMABLE      
+		4: return ItemTypes.Type.RESOURCE       
+		5: return ItemTypes.Type.BLUEPRINT      
+		6: return ItemTypes.Type.MODULE         
+		7: return ItemTypes.Type.SHIP           
+		8: return ItemTypes.Type.CONTAINER      
+		9: return ItemTypes.Type.AMMUNITION     
+		10: return ItemTypes.Type.IMPLANT       
+		11: return ItemTypes.Type.SKILL_BOOK    
+		_: return ItemTypes.Type.MISCELLANEOUS  
 
 func _compare_items(a: InventoryItem_Base, b: InventoryItem_Base) -> bool:
 	var result: bool = false
@@ -500,6 +500,37 @@ func _connect_container_signals():
 		container.item_added.connect(_on_container_item_added)
 		container.item_removed.connect(_on_container_item_removed)
 		container.item_moved.connect(_on_container_item_moved)
+
+func clear_display():
+	"""Clear the list display"""
+	_clear_list()
+
+func handle_item_drop(item: InventoryItem_Base, position: Vector2) -> bool:
+	"""Handle item drop - implements renderer interface"""
+	# For list view, drops would typically just add to the container
+	return false  # Implement based on your drop logic
+
+func handle_item_selection(item: InventoryItem_Base):
+	"""Handle item selection - implements renderer interface"""
+	if item in selected_items:
+		selected_items.erase(item)
+	else:
+		selected_items.append(item)
+	
+	# Update visual state of affected rows
+	for row in item_rows:
+		if row.item == item:
+			row.set_selected(item in selected_items)
+
+func show_drop_preview(position: Vector2, item: InventoryItem_Base):
+	"""Show drop preview - implements renderer interface"""
+	# Could highlight the drop target row
+	pass
+
+func hide_drop_preview():
+	"""Hide drop preview - implements renderer interface"""
+	# Clear any preview highlighting
+	pass
 
 func _disconnect_container_signals():
 	if container and _is_connected_to_container():

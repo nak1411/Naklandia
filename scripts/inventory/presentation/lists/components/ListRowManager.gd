@@ -134,7 +134,10 @@ func _get_tooltip_text() -> String:
 		return ""
 	
 	var tooltip = "[b]%s[/b]\n" % item.item_name
-	tooltip += "Type: %s\n" % InventoryItem_Base.ItemType.keys()[item.item_type]
+
+	var type_name = ItemTypes.get_type_name(item.item_type)
+
+	tooltip += "Type: %s\n" % type_name
 	tooltip += "Quantity: %d\n" % item.quantity
 	tooltip += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
 	tooltip += "Mass: %.2f t (%.2f t total)\n" % [item.mass, item.get_total_mass()]
@@ -288,8 +291,7 @@ func _create_cell(column: Dictionary) -> Control:
 			
 		"type":
 			var label = Label.new()
-			var type_name = InventoryItem_Base.ItemType.keys()[item.item_type]
-			label.text = type_name.capitalize()
+			label.text = ItemTypes.get_type_name(item.item_type)  # ← NEW
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.offset_left = 4
 			label.offset_right = -4
@@ -323,26 +325,7 @@ func _create_cell(column: Dictionary) -> Control:
 	return cell
 
 func _format_currency(value: float) -> String:
-	var formatted = "%.2f" % value
-	var parts = formatted.split(".")
-	var dollars = parts[0]
-	var cents = parts[1]
-	
-	# Add commas to the dollar part
-	var result = ""
-	var count = 0
-	
-	for i in range(dollars.length() - 1, -1, -1):
-		if count > 0 and count % 3 == 0:
-			result = "," + result
-		result = dollars[i] + result
-		count += 1
-	
-	# Only show cents if they're not zero
-	if cents != "00":
-		return result + "." + cents + " cr "
-	else:
-		return result + " cr "
+	return InventoryMath.format_currency(value)
 
 func _get_short_type_name(type_name: String) -> String:
 	match type_name.to_upper():

@@ -7,7 +7,7 @@ extends PickupableItem
 func _configure_item_properties():
 	# Set consistent properties for all ammo pickups
 	item_id_override = "ammo_hybrid_charges"
-	item_type_override = InventoryItem_Base.ItemType.AMMUNITION
+	item_type_override = ItemTypes.Type.AMMUNITION
 	item_name_override = "Hybrid Charges"
 	item_description_override = "Standard ammunition for hybrid weapon systems."
 	item_volume_override = 0.025
