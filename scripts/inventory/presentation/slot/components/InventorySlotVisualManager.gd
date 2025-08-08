@@ -7,7 +7,10 @@ var slot: InventorySlot
 var background_panel: Panel
 var item_icon: TextureRect
 var quantity_label: Label
+var item_name_label: Label
 var quantity_bg: Panel
+var label_canvas: CanvasLayer
+var is_slot_positioned: bool = false
 
 # Visual properties
 var slot_size: Vector2
@@ -37,6 +40,8 @@ func setup_visual_components():
 		push_error("SlotVisualManager: Failed to create quantity_label!")
 	if not quantity_bg:
 		push_error("SlotVisualManager: Failed to create quantity_bg!")
+	if not item_name_label:
+		push_error("SlotVisualManager: Failed to create item_name_label!")
 
 func _create_background_panel():
 	"""Create and style the background panel"""
@@ -98,13 +103,93 @@ func _create_item_display_components():
 	quantity_label.name = "QuantityLabel"
 	quantity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	quantity_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	quantity_label.add_theme_font_size_override("font_size", 10)  # Fixed size like EVE
+	quantity_label.add_theme_font_size_override("font_size", 10)
 	quantity_label.add_theme_color_override("font_color", Color.WHITE)
 	quantity_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	quantity_label.add_theme_constant_override("shadow_offset_x", 1)
 	quantity_label.add_theme_constant_override("shadow_offset_y", 1)
 	quantity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	quantity_bg.add_child(quantity_label)
+	
+	# Create the label
+	print("Creating item name label for slot: ", slot.name if slot else "null slot")
+	
+	# Create canvas layer as direct child of slot
+	label_canvas = CanvasLayer.new()
+	label_canvas.name = "ItemNameCanvas"
+	label_canvas.layer = 75
+	slot.add_child(label_canvas)
+	
+	# Create the label
+	item_name_label = Label.new()
+	item_name_label.name = "ItemNameLabel"
+	item_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	item_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	item_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	# Style the label
+	item_name_label.add_theme_color_override("font_color", Color.WHITE)
+	item_name_label.add_theme_font_size_override("font_size", 10)
+	item_name_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	item_name_label.add_theme_constant_override("shadow_offset_x", 1)
+	item_name_label.add_theme_constant_override("shadow_offset_y", 1)
+	
+	item_name_label.visible = false
+
+	label_canvas.add_child(item_name_label)
+
+func _check_slot_positioning():
+	"""Check if the slot has a valid position in the scene tree"""
+	if slot.global_position != Vector2.ZERO and slot.size != Vector2.ZERO:
+		if not is_slot_positioned:
+			is_slot_positioned = true
+			# If we have an item and now the slot is positioned, update the label
+			var item = slot.get_item()
+			if item and item.item_name:
+				item_name_label.text = item.item_name
+				item_name_label.visible = true
+				_position_label_correctly()
+
+func _update_item_name_label(item: InventoryItem_Base):
+	"""Update the item name label text and position"""
+	if not item_name_label:
+		return
+	
+	# Check if slot is properly positioned (not at origin and has valid size)
+	_check_slot_positioning()
+	
+	if item and item.item_name and is_slot_positioned:
+		item_name_label.text = item.item_name
+		item_name_label.visible = true
+		_position_label_correctly()
+	else:
+		item_name_label.visible = false
+
+func _update_label_position():
+	"""Update label position to follow the slot"""
+	if not item_name_label or not item_name_label.visible:
+		return
+
+	# Set size and position
+	item_name_label.size = Vector2(slot.size.x, 18)
+	item_name_label.position = Vector2(
+		slot.global_position.x,
+		slot.global_position.y + slot.size.y + 2
+	)
+
+func _position_label_correctly():
+	"""Position the label correctly relative to the slot"""
+	if not item_name_label or not item_name_label.visible or not is_slot_positioned:
+		return
+	
+	# Set size first
+	item_name_label.size = Vector2(slot.size.x, 18)
+	
+	# Position using the slot's global position (screen coordinates for CanvasLayer)
+	item_name_label.position = Vector2(
+		slot.global_position.x,
+		slot.global_position.y + slot.size.y + 2
+	)
 
 func update_item_display():
 	"""Update the visual display for the current item"""
@@ -145,6 +230,12 @@ func update_item_display():
 		quantity_label.visible = false
 		quantity_bg.visible = false
 
+	_update_item_name_label(item)
+	
+	# Update position whenever display updates
+	if item_name_label and item_name_label.visible:
+		call_deferred("_position_label_correctly")
+
 func _auto_scale_quantity_label():
 	"""Resize background to fit quantity text at fixed font size like EVE Online"""
 	if not quantity_label or not quantity_bg:
@@ -183,6 +274,8 @@ func _clear_item_display():
 		quantity_label.visible = false
 	if quantity_bg:
 		quantity_bg.visible = false
+	if item_name_label:
+		item_name_label.visible = false
 
 func _create_fallback_icon(item: InventoryItem_Base):
 	"""Create a fallback icon when no icon texture is available"""
@@ -226,8 +319,14 @@ func force_visual_refresh():
 
 func cleanup():
 	"""Clean up visual components"""
-	# Components will be automatically freed when slot is freed
+	# Clean up components
+	if label_canvas and is_instance_valid(label_canvas):
+		label_canvas.queue_free()
+	
 	background_panel = null
 	item_icon = null
 	quantity_label = null
 	quantity_bg = null
+	item_name_label = null
+	label_canvas = null
+	is_slot_positioned = false
