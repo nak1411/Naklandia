@@ -1,4 +1,4 @@
-# InteractionSystem.gd - Fixed crosshair connection
+# InteractionSystem.gd - Enhanced with distance-based UI and crosshair
 class_name InteractionSystem
 extends Node
 
@@ -15,6 +15,7 @@ var crosshair_ref: CrosshairUI
 # Current interaction state
 var current_interactable: Interactable = null
 var interaction_available: bool = false
+var current_distance: float = 0.0
 
 # Signals
 signal interactable_found(interactable: Interactable)
@@ -59,10 +60,14 @@ func _process(_delta):
 	# Update raycaster
 	if raycaster:
 		raycaster.update_raycast()
-	
-	# Update UI
-	if ui and current_interactable:
-		ui.update_interaction_prompt(current_interactable)
+		# Update distance for existing interactable
+		if current_interactable and raycaster.has_method("get_current_distance"):
+			current_distance = raycaster.get_current_distance()
+			# Update UI with new distance
+			if ui:
+				ui.update_interaction_prompt(current_interactable, current_distance)
+			# Update crosshair
+			_update_crosshair_interaction()
 
 func attempt_interaction() -> bool:
 	if current_interactable and interaction_available:
@@ -82,15 +87,16 @@ func attempt_interaction() -> bool:
 	
 	return false
 
-func _on_interactable_detected(interactable: Interactable):
+func _on_interactable_detected(interactable: Interactable, distance: float):
 	current_interactable = interactable
 	interaction_available = true
+	current_distance = distance
 	
-	# Update UI
+	# Update UI with distance
 	if ui:
-		ui.show_interaction_prompt(interactable)
+		ui.show_interaction_prompt(interactable, distance)
 	
-	# Update crosshair
+	# Update crosshair with distance
 	_update_crosshair_interaction()
 	
 	# Emit signal
@@ -99,6 +105,7 @@ func _on_interactable_detected(interactable: Interactable):
 func _on_interactable_lost():
 	current_interactable = null
 	interaction_available = false
+	current_distance = 0.0
 	
 	# Update UI
 	if ui:
@@ -112,8 +119,13 @@ func _on_interactable_lost():
 
 func _update_crosshair_interaction():
 	# Update crosshair if we have a reference
-	if crosshair_ref and crosshair_ref.has_method("set_interaction_state"):
-		crosshair_ref.set_interaction_state(interaction_available)
+	if crosshair_ref:
+		if crosshair_ref.has_method("set_interaction_state"):
+			# Use new method with distance if available
+			crosshair_ref.set_interaction_state(interaction_available, current_distance)
+		elif crosshair_ref.has_method("set_interaction_state_simple"):
+			# Fallback to simple method
+			crosshair_ref.set_interaction_state_simple(interaction_available)
 
 func _find_crosshair_recursive(node: Node) -> CrosshairUI:
 	if node is CrosshairUI:
@@ -138,7 +150,12 @@ func is_interaction_available() -> bool:
 func get_interaction_distance() -> float:
 	return interaction_distance
 
+func get_current_distance() -> float:
+	return current_distance
+
 func set_interaction_distance(distance: float):
 	interaction_distance = distance
 	if raycaster:
 		raycaster.setup_raycaster(distance, interaction_layer)
+	if crosshair_ref:
+		crosshair_ref.max_interaction_distance = distance

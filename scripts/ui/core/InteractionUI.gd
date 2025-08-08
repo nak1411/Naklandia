@@ -1,4 +1,4 @@
-# InteractionUI.gd - Handles interaction UI prompts and feedback
+# InteractionUI.gd - Text-only interaction prompts with proximity-based visibility
 class_name InteractionUI
 extends Control
 
@@ -6,8 +6,11 @@ extends Control
 @export_group("Interaction Prompt")
 @export var prompt_text: String = "[E] {action}"
 @export var prompt_color: Color = Color.WHITE
-@export var prompt_bg_color: Color = Color(0, 0, 0, 0.7)
-@export var prompt_padding: Vector2 = Vector2(16, 8)
+@export var crosshair_offset: Vector2 = Vector2(0, 40)  # Offset below crosshair
+
+@export_group("Proximity Settings")
+@export var text_show_distance: float = 1.5  # Distance when text appears
+@export var max_interaction_distance: float = 3.0  # Maximum interaction range
 
 @export_group("Animation")
 @export var fade_duration: float = 0.2
@@ -16,12 +19,14 @@ extends Control
 @export var pulse_intensity: float = 0.3
 
 # UI nodes
-var prompt_panel: Panel
 var prompt_label: Label
 var feedback_timer: float = 0.0
+var crosshair_ref: CrosshairUI
 
-# Animation state
-var prompt_is_visible: bool = false  # Changed from is_visible to avoid shadowing
+# State tracking
+var current_interactable: Interactable
+var current_distance: float = 0.0
+var prompt_is_visible: bool = false
 var fade_tween: Tween
 var pulse_time: float = 0.0
 
@@ -30,46 +35,37 @@ func _ready():
 
 func setup_interaction_ui():
 	# Set up control properties
-	set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	z_index = 50
+	z_index = 60  # Above crosshair (which is 50)
 	
-	# Create prompt panel
-	prompt_panel = Panel.new()
-	prompt_panel.name = "PromptPanel"
-	prompt_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(prompt_panel)
-	
-	# Style the panel
-	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = prompt_bg_color
-	style_box.corner_radius_top_left = 8
-	style_box.corner_radius_top_right = 8
-	style_box.corner_radius_bottom_left = 8
-	style_box.corner_radius_bottom_right = 8
-	style_box.border_width_left = 2
-	style_box.border_width_right = 2
-	style_box.border_width_top = 2
-	style_box.border_width_bottom = 2
-	style_box.border_color = Color.WHITE.darkened(0.3)
-	prompt_panel.add_theme_stylebox_override("panel", style_box)
-	
-	# Create prompt label
+	# Create prompt label only (no panel background)
 	prompt_label = Label.new()
 	prompt_label.name = "PromptLabel"
-	# CHANGE THIS LINE - don't use the template text:
-	prompt_label.text = ""  # Start with empty text instead of prompt_text
+	prompt_label.text = ""
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	prompt_label.add_theme_color_override("font_color", prompt_color)
 	prompt_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	prompt_label.add_theme_constant_override("shadow_offset_x", 1)
 	prompt_label.add_theme_constant_override("shadow_offset_y", 1)
-	prompt_panel.add_child(prompt_label)
+	add_child(prompt_label)
+	
+	# Find crosshair reference
+	_find_crosshair_reference()
 	
 	# Initially hidden
 	modulate.a = 0.0
 	visible = false
+
+func _find_crosshair_reference():
+	await get_tree().process_frame
+	
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		var ui_manager = ui_managers[0]
+		if ui_manager.has_method("get_crosshair"):
+			crosshair_ref = ui_manager.get_crosshair()
 
 func _process(delta):
 	# Handle feedback timer
@@ -84,27 +80,56 @@ func _process(delta):
 		var pulse_alpha = 1.0 + sin(pulse_time) * pulse_intensity
 		if prompt_label:
 			prompt_label.modulate.a = pulse_alpha
+	
+	# Position prompt under crosshair
+	_update_prompt_position()
 
-func show_interaction_prompt(interactable: Interactable):
+func _update_prompt_position():
+	if not prompt_label:
+		return
+	
+	# Get screen center (crosshair position)
+	var screen_center = get_viewport().get_visible_rect().size / 2
+	
+	# Calculate text size for centering
+	var text_size = Vector2.ZERO
+	if prompt_label.text != "":
+		text_size = prompt_label.get_theme_font("font").get_string_size(
+			prompt_label.text,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			prompt_label.get_theme_font_size("font_size")
+		)
+	
+	# Position label under crosshair with offset
+	var final_position = screen_center + crosshair_offset - (text_size / 2)
+	prompt_label.position = final_position
+	prompt_label.size = text_size
+
+func show_interaction_prompt(interactable: Interactable, distance: float = 0.0):
 	if not interactable:
 		return
 	
-	# Use the interactable's own text instead of generic "action"
+	# Store current interactable and distance
+	current_interactable = interactable
+	current_distance = distance
+	
+	# Set text from interactable
 	var action_text = interactable.interaction_text
 	var key_text = interactable.interaction_key
 	prompt_label.text = "[%s] %s" % [key_text, action_text]
 	
-	# Resize panel to fit text
-	_resize_prompt_panel()
-	
-	# Show with fade animation
-	_fade_in()
+	# Only show text if close enough
+	if distance <= text_show_distance:
+		_fade_in()
+	else:
+		_fade_out()
 
-func hide_interaction_prompt():
-	_fade_out()
-
-func update_interaction_prompt(interactable: Interactable):
-	if prompt_is_visible and interactable:
+func update_interaction_prompt(interactable: Interactable, distance: float = 0.0):
+	if interactable:
+		current_interactable = interactable
+		current_distance = distance
+		
 		# Update text if it changed
 		var action_text = interactable.interaction_text
 		var key_text = interactable.interaction_key
@@ -112,20 +137,26 @@ func update_interaction_prompt(interactable: Interactable):
 		
 		if prompt_label.text != new_text:
 			prompt_label.text = new_text
-			_resize_prompt_panel()
+		
+		# Show/hide based on distance
+		if distance <= text_show_distance and not prompt_is_visible:
+			_fade_in()
+		elif distance > text_show_distance and prompt_is_visible:
+			_fade_out()
+
+func hide_interaction_prompt():
+	current_interactable = null
+	current_distance = 0.0
+	_fade_out()
 
 func show_interaction_feedback(message: String = "Interacted!", duration: float = 1.0):
-	# Temporarily show feedback message
 	if prompt_label:
 		prompt_label.text = message
-		_resize_prompt_panel()
-		
-		# Set timer to restore original prompt
 		feedback_timer = duration
 		
 		# Flash effect
 		var flash_tween = create_tween()
-		flash_tween.tween_method(_set_panel_color, Color.WHITE, prompt_bg_color, 0.3)
+		flash_tween.tween_method(_set_label_color, Color.YELLOW, prompt_color, 0.3)
 
 func _fade_in():
 	if fade_tween:
@@ -148,53 +179,38 @@ func _fade_out():
 	fade_tween.tween_property(self, "modulate:a", 0.0, fade_duration)
 	fade_tween.tween_callback(func(): visible = false)
 
-func _resize_prompt_panel():
-	if not prompt_label or not prompt_panel:
-		return
-	
-	# Calculate required size
-	var text_size = prompt_label.get_theme_font("font").get_string_size(
-		prompt_label.text,
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		prompt_label.get_theme_font_size("font_size")
-	)
-	
-	# Set panel size with padding
-	var panel_size = text_size + prompt_padding * 2
-	prompt_panel.custom_minimum_size = panel_size
-	prompt_panel.size = panel_size
-	
-	# Center the panel
-	prompt_panel.position = -panel_size / 2
-	
-	# Position label within panel
-	prompt_label.position = prompt_padding
-	prompt_label.size = text_size
-
-func _set_panel_color(color: Color):
-	if prompt_panel:
-		var style_box = prompt_panel.get_theme_stylebox("panel").duplicate()
-		style_box.bg_color = color
-		prompt_panel.add_theme_stylebox_override("panel", style_box)
+func _set_label_color(color: Color):
+	if prompt_label:
+		prompt_label.add_theme_color_override("font_color", color)
 
 func _hide_feedback():
-	# This could restore the original prompt if an interactable is still targeted
-	# For now, just hide the prompt
-	hide_interaction_prompt()
+	# If we still have an interactable, restore its prompt based on distance
+	if current_interactable:
+		var action_text = current_interactable.interaction_text
+		var key_text = current_interactable.interaction_key
+		prompt_label.text = "[%s] %s" % [key_text, action_text]
+		
+		# Only show if close enough
+		if current_distance <= text_show_distance:
+			_fade_in()
+		else:
+			_fade_out()
+	else:
+		hide_interaction_prompt()
 
 # Public interface
-func set_prompt_style(text_color: Color, bg_color: Color):
+func set_prompt_style(text_color: Color):
 	prompt_color = text_color
-	prompt_bg_color = bg_color
-	
 	if prompt_label:
 		prompt_label.add_theme_color_override("font_color", text_color)
-	
-	if prompt_panel:
-		_set_panel_color(bg_color)
 
 func set_pulse_enabled(enabled: bool):
 	pulse_enabled = enabled
 	if not enabled and prompt_label:
 		prompt_label.modulate.a = 1.0
+
+func set_crosshair_offset(offset: Vector2):
+	crosshair_offset = offset
+
+func set_text_show_distance(distance: float):
+	text_show_distance = distance

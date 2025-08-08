@@ -1,56 +1,43 @@
-# CrosshairUI.gd - Fixed crosshair positioning
+# CrosshairUI.gd - Single dot crosshair with proximity-based opacity
 class_name CrosshairUI
 extends Control
 
 # Crosshair settings
 @export_group("Crosshair Style")
-@export var crosshair_size: float = 20.0
-@export var crosshair_thickness: float = 2.0
-@export var crosshair_gap: float = 8.0
-@export var crosshair_color: Color = Color.WHITE
-@export var crosshair_outline: bool = true
+@export var dot_radius: float = 1.0
+@export var dot_color: Color = Color.WHITE
+@export var dot_outline: bool = true
 @export var outline_color: Color = Color.BLACK
 @export var outline_thickness: float = 1.0
 
-@export_group("Dynamic Behavior")
-@export var enable_dynamic_crosshair: bool = true
-@export var movement_spread: float = 5.0
-@export var jump_spread: float = 8.0
-@export var crouch_reduction: float = 0.7
+@export_group("Interaction Behavior")
+@export var max_interaction_distance: float = 2.0
+@export var min_opacity: float = 0.0  # Hidden when no interactable
+@export var max_opacity: float = 1.0  # Full opacity when very close
 
 # Internal state
-var base_gap: float
-var current_spread: float = 0.0
-var target_spread: float = 0.0
+var current_opacity: float = 0.0
+var target_opacity: float = 0.0
+var current_distance: float = 0.0
+var has_interactable: bool = false
 
 # References
 var player_ref: CharacterBody3D
 
 func _ready():
-	# Set up the crosshair positioning FIRST
-	base_gap = crosshair_gap
-	
-	# Setup immediately - no need to wait since we're going directly to CanvasLayer
 	_setup_crosshair()
-	
-	# Find player reference
 	_find_player_reference()
-	
-	# Make sure we're always on top
-	z_index = 100
+	z_index = 50
 
 func _setup_crosshair():
-	# Set the control to fill the entire screen
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	
-	# Explicitly ensure we fill the entire viewport
 	set_size(get_viewport().get_visible_rect().size)
-	
-	# Set mouse filter so we don't block input
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	# Start hidden
+	modulate.a = 0.0
 
 func _find_player_reference():
-	# Try to find player in scene
 	var scene_root = get_tree().current_scene
 	player_ref = _find_node_by_class(scene_root, CharacterBody3D)
 
@@ -66,90 +53,45 @@ func _find_node_by_class(node: Node, target_class) -> Node:
 	return null
 
 func _process(delta):
-	if enable_dynamic_crosshair and player_ref:
-		_update_dynamic_crosshair(delta)
+	# Smooth opacity transition
+	current_opacity = lerp(current_opacity, target_opacity, delta * 10.0)
+	modulate.a = current_opacity
 	
 	queue_redraw()
 
-func _update_dynamic_crosshair(delta: float):
-	var new_target_spread = 0.0
-	
-	# Check player state and velocity
-	var velocity_magnitude = Vector2(player_ref.velocity.x, player_ref.velocity.z).length()
-	var is_moving = velocity_magnitude > 0.1
-	var is_on_floor = player_ref.is_on_floor()
-	
-	# Get player state if available
-	var player_script = player_ref.get_script()
-	if player_script and player_ref.has_method("get_current_state"):
-		var player_state = player_ref.current_state
-		
-		# Adjust spread based on player state
-		match player_state:
-			0: # NORMAL
-				if is_moving:
-					new_target_spread = movement_spread * (velocity_magnitude / 8.0)
-			1: # CROUCHING  
-				new_target_spread = (movement_spread * (velocity_magnitude / 3.0)) * crouch_reduction
-			2: # RUNNING
-				if is_moving:
-					new_target_spread = movement_spread * 1.5 * (velocity_magnitude / 10.0)
-	
-	# Add jump spread
-	if not is_on_floor:
-		new_target_spread += jump_spread
-	
-	# Smooth transition
-	target_spread = new_target_spread
-	current_spread = lerp(current_spread, target_spread, delta * 10.0)
-
 func _draw():
-	# Get the actual center of the screen
 	var screen_center = size / 2
-	var gap = base_gap + current_spread
-	var half_size = crosshair_size / 2
 	
-	# Draw crosshair lines
-	if crosshair_outline:
-		_draw_crosshair_line(screen_center, gap, half_size, outline_color, crosshair_thickness + outline_thickness * 2)
+	# Only draw if we have some opacity
+	if current_opacity > 0.01:
+		# Draw outline first if enabled
+		if dot_outline:
+			draw_circle(screen_center, dot_radius + outline_thickness, outline_color)
+		
+		# Draw main dot
+		var dot_color_with_alpha = dot_color
+		dot_color_with_alpha.a = current_opacity
+		draw_circle(screen_center, dot_radius, dot_color_with_alpha)
+
+func set_interaction_state(can_interact: bool, distance: float = 0.0):
+	has_interactable = can_interact
+	current_distance = distance
 	
-	_draw_crosshair_line(screen_center, gap, half_size, crosshair_color, crosshair_thickness)
-
-func _draw_crosshair_line(center: Vector2, gap: float, half_length: float, color: Color, thickness: float):
-	# Horizontal line (left and right)
-	draw_line(
-		Vector2(center.x - gap - half_length, center.y),
-		Vector2(center.x - gap, center.y),
-		color, thickness
-	)
-	draw_line(
-		Vector2(center.x + gap, center.y),
-		Vector2(center.x + gap + half_length, center.y),
-		color, thickness
-	)
-	
-	# Vertical line (up and down)
-	draw_line(
-		Vector2(center.x, center.y - gap - half_length),
-		Vector2(center.x, center.y - gap),
-		color, thickness
-	)
-	draw_line(
-		Vector2(center.x, center.y + gap),
-		Vector2(center.x, center.y + gap + half_length),
-		color, thickness
-	)
-
-func set_crosshair_size(new_size: float):
-	crosshair_size = new_size
-	_setup_crosshair()
-
-func set_dynamic_enabled(enabled: bool):
-	enable_dynamic_crosshair = enabled
-
-func set_interaction_state(can_interact: bool):
-	# Change crosshair color when interaction is available
 	if can_interact:
-		crosshair_color = Color.CYAN
+		# Calculate opacity based on distance (closer = more opaque)
+		var normalized_distance = clamp(distance / max_interaction_distance, 0.0, 1.0)
+		# Invert so closer objects give higher opacity
+		var proximity_factor = 1.0 - normalized_distance
+		target_opacity = lerp(min_opacity, max_opacity, proximity_factor)
 	else:
-		crosshair_color = Color.WHITE
+		target_opacity = min_opacity
+
+# Legacy method for backward compatibility
+func set_interaction_state_simple(can_interact: bool):
+	set_interaction_state(can_interact, current_distance)
+
+func set_dot_size(new_radius: float):
+	dot_radius = new_radius
+
+func set_dot_color(new_color: Color):
+	dot_color = new_color

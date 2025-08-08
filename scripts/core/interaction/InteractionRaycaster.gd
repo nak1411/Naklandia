@@ -1,4 +1,4 @@
-# InteractionRaycaster.gd - Clean production version
+# InteractionRaycaster.gd - Enhanced with distance tracking
 extends Node
 
 # Raycast settings
@@ -9,9 +9,10 @@ var raycast_layer: int = 2
 var camera: Camera3D
 var space_state: PhysicsDirectSpaceState3D
 var current_interactable: Interactable
+var current_distance: float = 0.0
 
 # Signals
-signal interactable_detected(interactable: Interactable)
+signal interactable_detected(interactable: Interactable, distance: float)
 signal interactable_lost()
 
 func _ready():
@@ -52,7 +53,7 @@ func update_raycast():
 	query.exclude = exclude_objects
 	
 	var result = space_state.intersect_ray(query)
-	_process_raycast_result(result)
+	_process_raycast_result(result, from)
 
 func _find_and_exclude_floors(node: Node, exclude_list: Array):
 	# Exclude any StaticBody3D that might be floor/walls
@@ -62,13 +63,16 @@ func _find_and_exclude_floors(node: Node, exclude_list: Array):
 	for child in node.get_children():
 		_find_and_exclude_floors(child, exclude_list)
 
-func _process_raycast_result(result: Dictionary):
+func _process_raycast_result(result: Dictionary, ray_origin: Vector3):
 	var hit_interactable: Interactable = null
+	var hit_distance: float = 0.0
 	
 	if result.has("collider"):
 		var collider = result.collider
 		if collider is Node:
 			hit_interactable = _find_interactable_in_hierarchy(collider)
+			if hit_interactable and result.has("position"):
+				hit_distance = ray_origin.distance_to(result.position)
 	
 	if hit_interactable != current_interactable:
 		if current_interactable:
@@ -76,11 +80,17 @@ func _process_raycast_result(result: Dictionary):
 			interactable_lost.emit()
 		
 		current_interactable = hit_interactable
+		current_distance = hit_distance
+		
 		if current_interactable and current_interactable.can_interact():
 			current_interactable.start_hover()
-			interactable_detected.emit(current_interactable)
+			interactable_detected.emit(current_interactable, hit_distance)
 		else:
 			current_interactable = null
+			current_distance = 0.0
+	elif current_interactable:
+		# Update distance for existing interactable
+		current_distance = hit_distance
 
 func _find_interactable_in_hierarchy(node: Node) -> Interactable:
 	if node is Interactable:
@@ -106,8 +116,12 @@ func set_raycast_layer(layer: int):
 func get_current_interactable() -> Interactable:
 	return current_interactable
 
+func get_current_distance() -> float:
+	return current_distance
+
 func force_clear_interactable():
 	if current_interactable:
 		current_interactable.end_hover()
 		current_interactable = null
+		current_distance = 0.0
 		interactable_lost.emit()
