@@ -334,7 +334,7 @@ func _setup_mass_info_bar(parent: Control):
 	var mass_bar_container = MarginContainer.new()
 	parent.add_child(mass_bar_container)
 	
-	mass_bar_container.add_theme_constant_override("margin_right", 8)
+	mass_bar_container.add_theme_constant_override("margin_right", 0)
 	
 	mass_info_bar = Panel.new()
 	mass_info_bar.name = "MassInfoBar"

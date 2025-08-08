@@ -42,20 +42,23 @@ var sort_items = [
 var current_sort_index = 0
 
 func _ready():
-	custom_minimum_size.y = 35  # Reduced height to not overlap title bar
+	custom_minimum_size.y = 24  
 	_setup_controls()
 	_connect_signals()
 	_remove_default_outlines()
 	_apply_custom_theme()
-	# Force styling after everything is set up
+	# Style buttons AFTER removing default outlines
+	_style_custom_filter_button()
+	_style_custom_sort_button()
+	_style_display_mode_button()
 	call_deferred("_force_button_styling")
 
 func _setup_controls():	
 	var filter_container = MarginContainer.new()
 	add_child(filter_container)
 	
-	filter_container.add_theme_constant_override("margin_left", 4)
-	filter_container.add_theme_constant_override("margin_top", 4)
+	filter_container.add_theme_constant_override("margin_left", 0)
+	filter_container.add_theme_constant_override("margin_top", 2)
 	filter_container.add_theme_constant_override("margin_right", 2)
 	filter_container.add_theme_constant_override("margin_bottom", 2)
 	
@@ -64,17 +67,17 @@ func _setup_controls():
 	filter_options.name = "FilterButton"
 	filter_options.text = "All Items ▼"
 	filter_options.custom_minimum_size.x = 100  # Reduced from 120
+	filter_options.custom_minimum_size.y = 100  # Reduced from 120
 	filter_options.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
 	filter_options.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	filter_options.clip_contents = true  # Prevent text overflow
-	_style_custom_filter_button()
 	filter_container.add_child(filter_options)
 	
 	var sort_container = MarginContainer.new()
 	add_child(sort_container)
 	
-	sort_container.add_theme_constant_override("margin_left", 4)
-	sort_container.add_theme_constant_override("margin_top", 4)
+	sort_container.add_theme_constant_override("margin_left", 2)
+	sort_container.add_theme_constant_override("margin_top", 2)
 	sort_container.add_theme_constant_override("margin_right", 2)
 	sort_container.add_theme_constant_override("margin_bottom", 2)
 	
@@ -86,7 +89,6 @@ func _setup_controls():
 	sort_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
 	sort_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sort_button.clip_contents = true  # Prevent text overflow
-	_style_custom_sort_button()
 	sort_container.add_child(sort_button)
 	
 	# Spacer to push search field to the right
@@ -100,7 +102,7 @@ func _setup_controls():
 	add_child(search_container)
 	
 	search_container.add_theme_constant_override("margin_left", 4)
-	search_container.add_theme_constant_override("margin_top", 4)
+	search_container.add_theme_constant_override("margin_top", 2)
 	search_container.add_theme_constant_override("margin_bottom", 2)
 	
 	search_field = LineEdit.new()
@@ -116,20 +118,19 @@ func _setup_controls():
 	add_child(display_container)
 
 	display_container.add_theme_constant_override("margin_left", 4)
-	display_container.add_theme_constant_override("margin_top", 4)
-	display_container.add_theme_constant_override("margin_right", 8)
+	display_container.add_theme_constant_override("margin_top", 2)
+	display_container.add_theme_constant_override("margin_right", 0)
 	display_container.add_theme_constant_override("margin_bottom", 2)
 
 	display_mode_button = Button.new()
 	display_mode_button.name = "DisplayModeButton"
 	display_mode_button.text = "⊞"
-	display_mode_button.custom_minimum_size = Vector2(32, 32)  # Reduced from 60
+	display_mode_button.custom_minimum_size = Vector2(26, 26)  # Reduced from 60
 	display_mode_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
 	display_mode_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	display_mode_button.clip_contents = true  # Prevent text overflow
 	display_mode_button.flat = false
 
-	_style_display_mode_button()
 	display_container.add_child(display_mode_button)
 	
 	# Create dropdown menus (don't add as children initially)
@@ -141,12 +142,12 @@ func _style_display_mode_button():
 	
 	# Create normal style
 	var normal_style = StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
+	normal_style.bg_color = Color(0.2, 0.2, 0.2, 1.0)
 	normal_style.border_width_left = 1
 	normal_style.border_width_right = 1
 	normal_style.border_width_top = 1
 	normal_style.border_width_bottom = 1
-	normal_style.border_color = Color(0.5, 0.5, 0.5, 1.0)
+	normal_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
 	
 	# Create hover style
 	var hover_style = normal_style.duplicate()
@@ -162,7 +163,7 @@ func _style_display_mode_button():
 	
 	# Set font properties
 	display_mode_button.add_theme_color_override("font_color", Color.WHITE)
-	display_mode_button.add_theme_font_size_override("font_size", 14)
+	display_mode_button.add_theme_font_size_override("font_size", 24)
 	
 func _style_custom_display_button():
 	var style_normal = StyleBoxFlat.new()
@@ -172,10 +173,6 @@ func _style_custom_display_button():
 	style_normal.border_width_top = 1
 	style_normal.border_width_bottom = 1
 	style_normal.border_color = Color(0.6, 0.6, 0.6, 1.0)
-	style_normal.content_margin_left = 12
-	style_normal.content_margin_right = 12
-	style_normal.content_margin_top = 6
-	style_normal.content_margin_bottom = 6
 	
 	var style_hover = StyleBoxFlat.new()
 	style_hover.bg_color = Color(0.5, 0.5, 0.5, 1.0)
@@ -186,8 +183,8 @@ func _style_custom_display_button():
 	style_hover.border_color = Color(0.7, 0.7, 0.7, 1.0)
 	style_hover.content_margin_left = 12
 	style_hover.content_margin_right = 12
-	style_hover.content_margin_top = 6
-	style_hover.content_margin_bottom = 6
+	style_hover.content_margin_top = 0
+	style_hover.content_margin_bottom = 0
 	
 	display_mode_button.add_theme_stylebox_override("normal", style_normal)
 	display_mode_button.add_theme_stylebox_override("hover", style_hover)
@@ -246,77 +243,74 @@ func _setup_sort_dropdown():
 		sort_dropdown.tree_exiting.connect(_on_sort_dropdown_closed)
 
 func _style_custom_filter_button():	
-	# Make the button NOT flat so it can show styling
+	# Copy display mode button approach exactly
 	filter_options.flat = false
+	filter_options.focus_mode = Control.FOCUS_NONE  # Add this line
 	
-	# Create normal style
-	var style_normal = StyleBoxFlat.new()
-	style_normal.bg_color = Color(0.9, 0.4, 0.4, 1.0)
-	style_normal.border_width_left = 2
-	style_normal.border_width_right = 2
-	style_normal.border_width_top = 2
-	style_normal.border_width_bottom = 2
-	style_normal.border_color = Color(0.9, 0.6, 0.6, 1.0)
-	style_normal.content_margin_left = 12
-	style_normal.content_margin_right = 12
-	style_normal.content_margin_top = 6
-	style_normal.content_margin_bottom = 6
+	# Create normal style - exactly like display mode button
+	var normal_style = StyleBoxFlat.new()
+	normal_style.bg_color = Color(0.2, 0.2, 0.2, 1.0)
+	normal_style.border_width_left = 1
+	normal_style.border_width_right = 1
+	normal_style.border_width_top = 1
+	normal_style.border_width_bottom = 1
+	normal_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
 	
 	# Create hover style
-	var style_hover = StyleBoxFlat.new()
-	style_hover.bg_color = Color(0.5, 0.5, 0.5, 1.0)
-	style_hover.border_width_left = 1
-	style_hover.border_width_right = 1
-	style_hover.border_width_top = 1
-	style_hover.border_width_bottom = 1
-	style_hover.border_color = Color(0.7, 0.7, 0.7, 1.0)
-	style_hover.content_margin_left = 12
-	style_hover.content_margin_right = 12
-	style_hover.content_margin_top = 6
-	style_hover.content_margin_bottom = 6
+	var hover_style = normal_style.duplicate()
+	hover_style.bg_color = Color(0.5, 0.5, 0.5, 1.0)
 	
-	# Apply styles
-	filter_options.add_theme_stylebox_override("normal", style_normal)
-	filter_options.add_theme_stylebox_override("hover", style_hover)
-	filter_options.add_theme_stylebox_override("pressed", style_hover)
-	filter_options.add_theme_stylebox_override("focus", style_normal)
+	# Create pressed style
+	var pressed_style = normal_style.duplicate()
+	pressed_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
+	
+	# Apply styles exactly like display mode button
+	filter_options.add_theme_stylebox_override("normal", normal_style)
+	filter_options.add_theme_stylebox_override("hover", hover_style)
+	filter_options.add_theme_stylebox_override("pressed", pressed_style)
+	
+	# Set font properties exactly like display mode button
 	filter_options.add_theme_color_override("font_color", Color.WHITE)
+	filter_options.add_theme_font_size_override("font_size", 14)
 
 func _style_custom_sort_button():	
-	# Make the button NOT flat so it can show styling
+	# Disable focus to prevent focus styling
+	sort_button.focus_mode = Control.FOCUS_NONE
 	sort_button.flat = false
 	
 	# Create normal style
 	var style_normal = StyleBoxFlat.new()
-	style_normal.bg_color = Color(0.4, 0.4, 0.4, 1.0)
+	style_normal.bg_color = Color(0.2, 0.2, 0.2, 1.0)
 	style_normal.border_width_left = 1
 	style_normal.border_width_right = 1
 	style_normal.border_width_top = 1
 	style_normal.border_width_bottom = 1
-	style_normal.border_color = Color(0.6, 0.6, 0.6, 1.0)
+	style_normal.border_color = Color(0.4, 0.4, 0.4, 1.0)
 	style_normal.content_margin_left = 12
 	style_normal.content_margin_right = 12
 	style_normal.content_margin_top = 6
 	style_normal.content_margin_bottom = 6
+	# Force corner radius to 0
+	style_normal.set_corner_radius_all(0)
 	
 	# Create hover style
-	var style_hover = StyleBoxFlat.new()
+	var style_hover = style_normal.duplicate()
 	style_hover.bg_color = Color(0.5, 0.5, 0.5, 1.0)
-	style_hover.border_width_left = 1
-	style_hover.border_width_right = 1
-	style_hover.border_width_top = 1
-	style_hover.border_width_bottom = 1
 	style_hover.border_color = Color(0.7, 0.7, 0.7, 1.0)
-	style_hover.content_margin_left = 12
-	style_hover.content_margin_right = 12
-	style_hover.content_margin_top = 6
-	style_hover.content_margin_bottom = 6
+	style_hover.set_corner_radius_all(0)
 	
-	# Apply styles
+	# Create pressed style
+	var style_pressed = style_normal.duplicate()
+	style_pressed.bg_color = Color(0.3, 0.3, 0.3, 1.0)
+	style_pressed.border_color = Color(0.5, 0.5, 0.5, 1.0)
+	style_pressed.set_corner_radius_all(0)
+	
+	# Apply ALL button state styles
 	sort_button.add_theme_stylebox_override("normal", style_normal)
 	sort_button.add_theme_stylebox_override("hover", style_hover)
-	sort_button.add_theme_stylebox_override("pressed", style_hover)
+	sort_button.add_theme_stylebox_override("pressed", style_pressed)
 	sort_button.add_theme_stylebox_override("focus", style_normal)
+	sort_button.add_theme_stylebox_override("disabled", style_normal)
 	sort_button.add_theme_color_override("font_color", Color.WHITE)
 
 func _connect_signals():	
