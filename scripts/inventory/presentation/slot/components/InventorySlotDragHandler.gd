@@ -41,9 +41,17 @@ func handle_mouse_motion(event: InputEventMouseMotion):
 	
 	var current_position = event.global_position
 	var distance = drag_start_position.distance_to(current_position)
+	var inventory_window = _find_inventory_window()
 	
 	# Start drag preview if we've moved far enough
 	if distance > drag_threshold and not drag_preview_created:
+		# Check if shift is held and item can be split
+		if Input.is_key_pressed(KEY_SHIFT) and slot.get_item().quantity > 1:
+			inventory_window.item_actions.show_split_stack_dialog(slot.get_item(), slot)
+			is_dragging = false
+			drag_preview_created = false
+			return
+		
 		_create_drag_preview()
 		drag_preview_created = true
 		
@@ -277,6 +285,15 @@ func _find_inventory_content():
 	var current = slot.get_parent()
 	while current:
 		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowContent":
+			return current
+		current = current.get_parent()
+	return null
+
+func _find_inventory_window():
+	"""Find the InventoryWindow in the scene tree"""
+	var current = slot.get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindow":
 			return current
 		current = current.get_parent()
 	return null

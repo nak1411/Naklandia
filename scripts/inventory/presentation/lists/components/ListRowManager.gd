@@ -499,6 +499,19 @@ func _on_overlay_input(event: InputEvent):
 		if not is_dragging and drag_start_position != Vector2.ZERO:
 			var distance = event.global_position.distance_to(drag_start_position)
 			if distance > drag_threshold:
+				# Check if shift is held and item can be split
+				if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
+					var inventory_window = _find_inventory_window()
+					if inventory_window and inventory_window.item_actions:
+						# Create a temporary slot for compatibility with the dialog
+						var temp_slot = InventorySlot.new()
+						temp_slot.set_item(item)
+						temp_slot.set_container_id(_get_container_id())
+						inventory_window.item_actions.show_split_stack_dialog(item, temp_slot)
+						is_dragging = false
+						drag_preview_created = false
+						drag_start_position = Vector2.ZERO
+					return
 				_start_drag()
 
 # Add these drag and drop methods
@@ -837,6 +850,15 @@ func _get_container_id() -> String:
 	if list_view:
 		return list_view.container_id
 	return ""
+
+func _find_inventory_window():
+	"""Find the InventoryWindow in the scene tree"""
+	var current = get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindow":
+			return current
+		current = current.get_parent()
+	return null
 
 func _get_inventory_manager() -> InventoryManager:
 	var scene_root = get_tree().current_scene
