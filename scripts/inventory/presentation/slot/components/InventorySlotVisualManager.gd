@@ -58,17 +58,16 @@ func _create_background_panel():
 	style_box.border_width_top = 0
 	style_box.border_width_bottom = 0
 	background_panel.add_theme_stylebox_override("panel", style_box)
-
+	
 func _create_content_container():
-	"""Create content container with proper MarginContainer padding"""
-	var content_container = MarginContainer.new()
+	"""Create content container - icon fills entire slot, spacing comes from grid"""
+	var content_container = Control.new()
 	content_container.name = "ContentContainer"
 	content_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	
 	slot.add_child(content_container)
 	
-	# Item icon fills the MarginContainer's content area (respects margins)
+	# Item icon fills the ENTIRE 64x64 slot - no internal padding
 	item_icon = TextureRect.new()
 	item_icon.name = "ItemIcon"
 	item_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -110,7 +109,7 @@ func _create_item_display_components():
 	item_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	item_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	item_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	item_name_label.add_theme_font_size_override("font_size", 10)
+	item_name_label.add_theme_font_size_override("font_size", 12)
 	item_name_label.add_theme_color_override("font_color", Color.WHITE)
 	item_name_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	item_name_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -122,7 +121,7 @@ func _create_item_display_components():
 	item_name_label.clip_contents = true
 
 	# Position at the bottom of the slot with proper padding consideration
-	item_name_label.position = Vector2(2, slot_size.y - 12)  # 2px from left, 12px from bottom
+	item_name_label.position = Vector2(2, slot_size.y + 2)  # 2px from left, 2px from bottom
 	item_name_label.size = Vector2(slot_size.x - 4, 10) 
 
 	slot.add_child(item_name_label)
@@ -197,10 +196,10 @@ func _auto_scale_quantity_label():
 	var needed_width = max(10, text_size.x + padding)  # Minimum 10px wide
 	
 	# Update background size and position
-	quantity_bg.size = Vector2(needed_width, 14)  # Height stays constant
+	quantity_bg.size = Vector2(needed_width, 14)
 	quantity_bg.position = Vector2(
-	slot.size.x - needed_width - 3,  # 3px from right edge
-	slot.size.y - 14 - 3  # 3px from bottom edge
+	slot.size.x - needed_width,
+	slot.size.y - 14
 )
 	
 	# Update label to fill the background

@@ -4,8 +4,8 @@ extends Control
 
 # Grid properties
 @export var slot_size: Vector2 = Vector2(64, 64)
-@export var slot_spacing: int = 2
-@export var slot_x_spacing_reduction: int = 0
+@export var slot_spacing: int = 20
+@export var slot_spacing_bottom: int = 24
 @export var min_grid_width: int = 10  # Minimum grid width
 @export var min_grid_height: int = 10  # Minimum grid height
 @export var slots_per_row_expansion: int = 2  # How many columns to add when expanding
@@ -266,7 +266,7 @@ func _render_virtual_items():
 			# Create the slot
 			var slot = InventorySlot.new()
 			slot.slot_size = slot_size
-			slot.position = Vector2(col * (slot_size.x), row * slot_size.y)
+			slot.position = Vector2(col * (slot_size.x + slot_spacing), row * (slot_size.y + slot_spacing + slot_spacing_bottom))
 			slot.mouse_filter = Control.MOUSE_FILTER_PASS
 			
 			# Set grid position
