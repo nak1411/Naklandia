@@ -52,7 +52,7 @@ func _create_background_panel():
 	
 	# Style the background to match grid background
 	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color(0.1, 0.1, 0.1, 1.0)
+	style_box.bg_color = Color(0.1, 0.1, 0.1, 0.0)
 	style_box.border_width_left = 0
 	style_box.border_width_right = 0
 	style_box.border_width_top = 0
