@@ -4,8 +4,8 @@ extends Control
 
 # Grid properties
 @export var slot_size: Vector2 = Vector2(64, 64)
-@export var slot_spacing: int = 0
-@export var slot_x_spacing_reduction: int = 12
+@export var slot_spacing: int = 2
+@export var slot_x_spacing_reduction: int = 0
 @export var min_grid_width: int = 10  # Minimum grid width
 @export var min_grid_height: int = 10  # Minimum grid height
 @export var slots_per_row_expansion: int = 2  # How many columns to add when expanding
@@ -266,7 +266,7 @@ func _render_virtual_items():
 			# Create the slot
 			var slot = InventorySlot.new()
 			slot.slot_size = slot_size
-			slot.position = Vector2(col * (slot_size.x - slot_x_spacing_reduction), row * slot_size.y)
+			slot.position = Vector2(col * (slot_size.x), row * slot_size.y)
 			slot.mouse_filter = Control.MOUSE_FILTER_PASS
 			
 			# Set grid position
@@ -582,8 +582,8 @@ func _setup_grid():
 	grid_container = GridContainer.new()
 	grid_container.name = "GridContainer"
 	grid_container.columns = current_grid_width
-	grid_container.add_theme_constant_override("h_separation", 0)
-	grid_container.add_theme_constant_override("v_separation", 0)
+	grid_container.add_theme_constant_override("h_separation", slot_spacing)
+	grid_container.add_theme_constant_override("v_separation", slot_spacing)
 	grid_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	background_panel.add_child(grid_container)
 	
@@ -614,8 +614,8 @@ func _create_virtual_slot(item: InventoryItem_Base, virtual_index: int) -> Inven
 	var col = virtual_index % virtual_items_per_row
 	slot.set_grid_position(Vector2i(col, row))
 
-	var x_pos = col * (slot_size.x - slot_x_spacing_reduction)
-	var y_pos = row * slot_size.y
+	var x_pos = col * (slot_size.x + slot_spacing)  # Add spacing instead of reducing
+	var y_pos = row * (slot_size.y + slot_spacing)  # Add spacing for both axes
 	slot.position = Vector2(x_pos, y_pos)
 	slot.size = slot_size
 	

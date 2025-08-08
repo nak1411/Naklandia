@@ -7,9 +7,6 @@ extends Control
 var item: InventoryItem_Base
 var grid_position: Vector2i
 var container_id: String
-var slot_padding: int = 8
-
-
 
 # Component systems
 var visuals: InventorySlotVisualManager

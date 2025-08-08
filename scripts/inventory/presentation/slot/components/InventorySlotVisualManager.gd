@@ -60,25 +60,18 @@ func _create_background_panel():
 	background_panel.add_theme_stylebox_override("panel", style_box)
 
 func _create_content_container():
-	"""Create content container with proper padding"""
+	"""Create content container with proper MarginContainer padding"""
 	var content_container = MarginContainer.new()
 	content_container.name = "ContentContainer"
 	content_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
-	# Set margins proportionally - increase bottom padding
-	var padding = max(4, int(slot_size.x * 0.08))  # 8% of slot size, minimum 4
-	var bottom_padding = max(8, int(slot_size.x * 0.12))  # 12% for bottom, minimum 8
-	
-	content_container.add_theme_constant_override("margin_left", padding)
-	content_container.add_theme_constant_override("margin_right", padding)
-	content_container.add_theme_constant_override("margin_top", padding)
-	content_container.add_theme_constant_override("margin_bottom", bottom_padding)  # Increased bottom padding
 	slot.add_child(content_container)
 	
-	# Item icon
+	# Item icon fills the MarginContainer's content area (respects margins)
 	item_icon = TextureRect.new()
 	item_icon.name = "ItemIcon"
+	item_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	item_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	item_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	item_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -129,9 +122,8 @@ func _create_item_display_components():
 	item_name_label.clip_contents = true
 
 	# Position at the bottom of the slot with proper padding consideration
-	var padding = max(4, int(slot_size.x * 0.08))  # Same padding calculation as content
-	item_name_label.position = Vector2(padding, slot_size.y - 40)
-	item_name_label.size = Vector2(slot_size.x - (padding * 2), 18)  # Account for left and right padding
+	item_name_label.position = Vector2(2, slot_size.y - 12)  # 2px from left, 12px from bottom
+	item_name_label.size = Vector2(slot_size.x - 4, 10) 
 
 	slot.add_child(item_name_label)
 
@@ -204,15 +196,12 @@ func _auto_scale_quantity_label():
 	var padding = 6  # 3px padding on each side
 	var needed_width = max(10, text_size.x + padding)  # Minimum 10px wide
 	
-	# Account for the icon padding (8% of slot size, minimum 4px)
-	var icon_padding = max(4, int(slot_size.x * 0.08))
-	
-	# Update background size and position - position within the padded content area
+	# Update background size and position
 	quantity_bg.size = Vector2(needed_width, 14)  # Height stays constant
 	quantity_bg.position = Vector2(
-		slot.size.x - needed_width - 17 - icon_padding,  # Right edge minus padding
-		slot.size.y - 47 - icon_padding  # Bottom edge minus padding
-	)
+	slot.size.x - needed_width - 3,  # 3px from right edge
+	slot.size.y - 14 - 3  # 3px from bottom edge
+)
 	
 	# Update label to fill the background
 	quantity_label.size = quantity_bg.size

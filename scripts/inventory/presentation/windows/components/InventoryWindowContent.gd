@@ -321,8 +321,8 @@ func _setup_right_panel():
 	
 	# SET PROPERTIES BEFORE ADDING TO SCENE
 	inventory_grid.enable_virtual_scrolling = true
-	inventory_grid.slot_size = Vector2(96, 96)  # Correct property name
-	inventory_grid.virtual_item_height = 96
+	inventory_grid.slot_size = Vector2(64, 64)  # Correct property name
+	inventory_grid.virtual_item_height = 64
 	grid_container.add_child(inventory_grid)
 	
 	# Connect signals
