@@ -14,6 +14,8 @@ var resume_button: Button
 var settings_button: Button
 var exit_button: Button
 
+var settings_menu: SettingsMenu
+
 func _ready():
 	# Set up the canvas layer to render above everything
 	layer = 100  # Very high layer to ensure it's above inventory
@@ -25,6 +27,7 @@ func _ready():
 	
 	# Create the UI hierarchy programmatically
 	_setup_menu_ui()
+	_setup_settings_menu()
 	
 	# Connect button signals
 	resume_button.pressed.connect(_on_resume_pressed)
@@ -166,6 +169,18 @@ func _setup_menu_ui():
 	exit_button.custom_minimum_size.y = 50
 	button_container.add_child(exit_button)
 
+func _setup_settings_menu():
+	settings_menu = SettingsMenu.new()
+	settings_menu.name = "SettingsMenu"
+	settings_menu.visible = false
+	settings_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	# Connect settings signals
+	settings_menu.settings_closed.connect(_on_settings_closed)
+	
+	# Add to the pause canvas
+	add_child(settings_menu)
+
 func _input(event):
 	if event.is_action_pressed("ui_cancel") and not event.is_echo():
 		
@@ -232,8 +247,12 @@ func _on_resume_pressed():
 	toggle_pause()
 
 func _on_settings_pressed():
-	# Add your settings menu logic here
-	print("Settings menu would open here")
+	pause_menu_control.visible = false
+	settings_menu.show_settings()
+
+func _on_settings_closed():
+	settings_menu.hide_settings()
+	pause_menu_control.visible = true
 
 func _on_exit_pressed():
 	# Exit the game

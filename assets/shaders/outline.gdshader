@@ -36,7 +36,7 @@ void fragment() {
     vec3 normal2 = texture(normal_roughness_texture, bottom_right_uv).rgb;
     vec3 normal3 = texture(normal_roughness_texture, top_left_uv).rgb;
 
-    // Depth 
+    // Depth
     float depth0 = texture(DEPTH_TEXTURE, bottom_left_uv).r;
     float depth1 = texture(DEPTH_TEXTURE, top_right_uv).r;
     float depth2 = texture(DEPTH_TEXTURE, bottom_right_uv).r;
@@ -76,7 +76,7 @@ void fragment() {
 	    vec2(0.0, texel_size.y),
 	    vec2(0.0, -texel_size.y)
 	);
-	
+
 	float thickness = outline_spread;
 	for (int i = 0; i < 4; i++) {
 	    vec2 offset_uv = SCREEN_UV + offsets[i] * thickness;
@@ -84,8 +84,8 @@ void fragment() {
 	    float depth_n = texture(DEPTH_TEXTURE, offset_uv).r;
 	    vec3 normal_n = texture(normal_roughness_texture, offset_uv).rgb;
 
-	    float depth_diff = depth_n - depth0; 
-	    vec3 normal_diff = normal_n - normal0; 
+	    float depth_diff = depth_n - depth0;
+	    vec3 normal_diff = normal_n - normal0;
 
 	    float edge_depth_n = (sqrt(depth_diff * depth_diff) * 100.0 > _DepthThreshold) ? 1.0 : 0.0;
 	    float edge_normal_n = (length(normal_diff) > _NormalThreshold) ? 1.0 : 0.0;
