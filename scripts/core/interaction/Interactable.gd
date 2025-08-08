@@ -1,4 +1,4 @@
-# Interactable.gd - Base class for all interactable objects
+# Interactable.gd - Using proper outline material resource
 class_name Interactable
 extends Area3D
 
@@ -12,14 +12,20 @@ extends Area3D
 
 @export_group("Visual Feedback")
 @export var highlight_on_hover: bool = true
-@export var highlight_color: Color = Color.YELLOW
-@export var outline_enabled: bool = false
+@export var outline_enabled: bool = true
+@export var outline_material: ShaderMaterial
+@export var outline_color: Color = Color.YELLOW
+@export var outline_width: float = 0.01
+@export var outline_pulse: bool = false
+@export var pulse_speed: float = 2.0
 
 # Internal state
 var has_been_used: bool = false
 var cooldown_timer: float = 0.0
-var original_materials: Array[Material] = []
 var is_highlighted: bool = false
+var outline_nodes: Array[MeshInstance3D] = []
+var original_meshes: Array[MeshInstance3D] = []
+var pulse_timer: float = 0.0
 
 # Signals
 signal interacted(player: Node)
@@ -33,8 +39,13 @@ func _ready():
 	set_collision_layer(2)  # Interaction layer
 	set_collision_mask(0)   # Don't collide with anything
 	
-	# Store original materials for highlighting
-	_store_original_materials()
+	# Load default outline material if none assigned
+	if not outline_material:
+		outline_material = load("res://assets/materials/OutlineMaterial.tres")
+	
+	# Setup outline system
+	if outline_enabled and outline_material:
+		_setup_outline_system()
 	
 	# Connect signals
 	body_entered.connect(_on_body_entered)
@@ -46,25 +57,108 @@ func _process(delta):
 		cooldown_timer -= delta
 		if cooldown_timer <= 0:
 			_enable_interaction()
+	
+	# Handle outline pulsing
+	if outline_pulse and is_highlighted and outline_material:
+		pulse_timer += delta
+		var pulse_factor = (sin(pulse_timer * pulse_speed) + 1.0) * 0.5
+		var current_color = outline_color
+		current_color.a = outline_color.a * (0.5 + pulse_factor * 0.5)
+		outline_material.set_shader_parameter("outline_color", current_color)
+
+func _setup_outline_system():
+	original_meshes = _get_all_mesh_instances()
+	outline_nodes.clear()
+	
+	for mesh_instance in original_meshes:
+		_create_outline_node(mesh_instance)
+
+func _create_outline_node(mesh_instance: MeshInstance3D):
+	# Create outline duplicate
+	var outline_node = MeshInstance3D.new()
+	outline_node.name = mesh_instance.name + "_Outline"
+	outline_node.mesh = mesh_instance.mesh
+	outline_node.skeleton = mesh_instance.skeleton
+	outline_node.material_override = outline_material.duplicate()
+	outline_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	outline_node.visible = false
+	
+	# Set shader parameters
+	var material = outline_node.material_override as ShaderMaterial
+	material.set_shader_parameter("outline_color", outline_color)
+	material.set_shader_parameter("outline_width", outline_width)
+	
+	# Add to scene tree
+	mesh_instance.add_child(outline_node)
+	outline_nodes.append(outline_node)
+
+func start_hover():
+	if not is_highlighted and highlight_on_hover:
+		is_highlighted = true
+		_show_outline()
+		hover_started.emit()
+
+func end_hover():
+	if is_highlighted:
+		is_highlighted = false
+		_hide_outline()
+		hover_ended.emit()
+
+func _show_outline():
+	if outline_enabled:
+		for outline_node in outline_nodes:
+			if outline_node and is_instance_valid(outline_node):
+				outline_node.visible = true
+		
+		if outline_pulse:
+			pulse_timer = 0.0
+
+func _hide_outline():
+	for outline_node in outline_nodes:
+		if outline_node and is_instance_valid(outline_node):
+			outline_node.visible = false
+
+# Public methods for customizing outline
+func set_outline_color(color: Color):
+	outline_color = color
+	for outline_node in outline_nodes:
+		if outline_node and is_instance_valid(outline_node):
+			var material = outline_node.material_override as ShaderMaterial
+			if material:
+				material.set_shader_parameter("outline_color", color)
+
+func set_outline_width(width: float):
+	outline_width = width
+	for outline_node in outline_nodes:
+		if outline_node and is_instance_valid(outline_node):
+			var material = outline_node.material_override as ShaderMaterial
+			if material:
+				material.set_shader_parameter("outline_width", width)
+
+func set_outline_pulse(enable: bool, speed: float = 2.0):
+	outline_pulse = enable
+	pulse_speed = speed
+
+# Cleanup
+func _exit_tree():
+	for outline_node in outline_nodes:
+		if outline_node and is_instance_valid(outline_node):
+			outline_node.queue_free()
+	outline_nodes.clear()
 
 # Main interaction method - override in derived classes
 func interact() -> bool:
 	if not can_interact():
 		return false
 	
-	# Perform interaction
 	var success = _perform_interaction()
 	
 	if success:
-		# Handle post-interaction state
 		_handle_interaction_performed()
-		
-		# Emit signal
 		interacted.emit(get_player_reference())
 	
 	return success
 
-# Override this method in derived classes
 func _perform_interaction() -> bool:
 	print("Interacting with: ", name)
 	return true
@@ -75,7 +169,6 @@ func can_interact() -> bool:
 func _handle_interaction_performed():
 	has_been_used = true
 	
-	# Start cooldown if specified
 	if interaction_cooldown > 0:
 		cooldown_timer = interaction_cooldown
 		_disable_interaction()
@@ -87,50 +180,6 @@ func _enable_interaction():
 func _disable_interaction():
 	is_enabled = false
 	interaction_disabled.emit()
-
-# Visual feedback methods
-func start_hover():
-	if not is_highlighted and highlight_on_hover:
-		is_highlighted = true
-		_apply_highlight()
-		hover_started.emit()
-
-func end_hover():
-	if is_highlighted:
-		is_highlighted = false
-		_remove_highlight()
-		hover_ended.emit()
-
-func _apply_highlight():
-	if highlight_on_hover:
-		var mesh_instances = _get_all_mesh_instances()
-		for mesh_instance in mesh_instances:
-			if mesh_instance.material_override:
-				var material = mesh_instance.material_override.duplicate()
-				if material is StandardMaterial3D:
-					material.emission = highlight_color
-					material.emission_energy = 0.3
-			else:
-				var highlight_material = StandardMaterial3D.new()
-				highlight_material.albedo_color = highlight_color
-				highlight_material.emission = highlight_color
-				highlight_material.emission_energy = 0.5
-				mesh_instance.material_overlay = highlight_material
-
-func _remove_highlight():
-	var mesh_instances = _get_all_mesh_instances()
-	for mesh_instance in mesh_instances:
-		mesh_instance.material_overlay = null
-		# Restore original material if we modified material_override
-		var index = mesh_instances.find(mesh_instance)
-		if index < original_materials.size() and original_materials[index]:
-			mesh_instance.material_override = original_materials[index]
-
-func _store_original_materials():
-	var mesh_instances = _get_all_mesh_instances()
-	original_materials.clear()
-	for mesh_instance in mesh_instances:
-		original_materials.append(mesh_instance.material_override)
 
 func _get_all_mesh_instances() -> Array[MeshInstance3D]:
 	var mesh_instances: Array[MeshInstance3D] = []
@@ -144,9 +193,7 @@ func _find_mesh_instances_recursive(node: Node, mesh_list: Array[MeshInstance3D]
 	for child in node.get_children():
 		_find_mesh_instances_recursive(child, mesh_list)
 
-# Utility methods
 func get_player_reference() -> Node:
-	# Try to find player in scene
 	var scene_root = get_tree().current_scene
 	return _find_player_recursive(scene_root)
 
@@ -161,16 +208,12 @@ func _find_player_recursive(node: Node) -> Node:
 	
 	return null
 
-# Event handlers
 func _on_body_entered(_body):
-	# Optional: Handle when player enters area
 	pass
 
 func _on_body_exited(_body):
-	# Optional: Handle when player exits area
 	pass
 
-# Public interface
 func set_interaction_text(text: String):
 	interaction_text = text
 

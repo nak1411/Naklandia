@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://joa0lliuby6k"]
+
+[ext_resource type="Shader" uid="uid://c4jejc21dcswe" path="res://assets/shaders/outline.gdshader" id="1_bodis"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_bodis")
+shader_parameter/scale = 3.0
+shader_parameter/outline_spread = 3.0
+shader_parameter/_Color = Color(1, 0.541176, 0, 1)
+shader_parameter/_DepthNormalThreshold = 0.1
+shader_parameter/_DepthNormalThresholdScale = 3.0
+shader_parameter/_DepthThreshold = 5.0
+shader_parameter/_NormalThreshold = 2.0
