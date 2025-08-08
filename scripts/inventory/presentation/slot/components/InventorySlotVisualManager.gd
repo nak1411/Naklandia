@@ -111,9 +111,6 @@ func _create_item_display_components():
 	quantity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	quantity_bg.add_child(quantity_label)
 	
-	# Create the label
-	print("Creating item name label for slot: ", slot.name if slot else "null slot")
-	
 	# Create canvas layer as direct child of slot
 	label_canvas = CanvasLayer.new()
 	label_canvas.name = "ItemNameCanvas"
@@ -148,11 +145,22 @@ func _check_slot_positioning():
 			if item and item.item_name:
 				item_name_label.text = item.item_name
 				item_name_label.visible = true
-				_position_label_correctly()
+				_update_label_position()
 
 func _update_item_name_label(item: InventoryItem_Base):
 	"""Update the item name label text and position"""
 	if not item_name_label:
+		return
+	
+	# Check if inventory window is actually visible before showing label
+	if slot and slot.is_inside_tree():
+		# Try to find inventory window through the canvas layer
+		var inventory_window = _find_inventory_window_in_tree()
+		if not inventory_window or not inventory_window.visible:
+			item_name_label.visible = false
+			return
+	else:
+		item_name_label.visible = false
 		return
 	
 	# Check if slot is properly positioned (not at origin and has valid size)
@@ -161,31 +169,17 @@ func _update_item_name_label(item: InventoryItem_Base):
 	if item and item.item_name and is_slot_positioned:
 		item_name_label.text = item.item_name
 		item_name_label.visible = true
-		_position_label_correctly()
+		_update_label_position()
 	else:
 		item_name_label.visible = false
 
 func _update_label_position():
 	"""Update label position to follow the slot"""
-	if not item_name_label or not item_name_label.visible:
+	if not item_name_label or not item_name_label.visible or not is_slot_positioned:
 		return
 
 	# Set size and position
 	item_name_label.size = Vector2(slot.size.x, 18)
-	item_name_label.position = Vector2(
-		slot.global_position.x,
-		slot.global_position.y + slot.size.y + 2
-	)
-
-func _position_label_correctly():
-	"""Position the label correctly relative to the slot"""
-	if not item_name_label or not item_name_label.visible or not is_slot_positioned:
-		return
-	
-	# Set size first
-	item_name_label.size = Vector2(slot.size.x, 18)
-	
-	# Position using the slot's global position (screen coordinates for CanvasLayer)
 	item_name_label.position = Vector2(
 		slot.global_position.x,
 		slot.global_position.y + slot.size.y + 2
@@ -316,6 +310,23 @@ func force_visual_refresh():
 	"""Force a complete visual refresh"""
 	slot.queue_redraw()
 	update_item_display()
+
+func _find_inventory_window_in_tree() -> Control:
+	"""Find the inventory window by traversing up to find the InventoryLayer"""
+	if not slot or not slot.is_inside_tree():
+		return null
+	
+	# Look for InventoryLayer in the scene
+	var scene_root = slot.get_tree().current_scene
+	var inventory_layer = scene_root.get_node_or_null("InventoryLayer")
+	
+	if inventory_layer:
+		# Look for InventoryWindow in the layer
+		for child in inventory_layer.get_children():
+			if child.get_script() and child.get_script().get_global_name() == "InventoryWindow":
+				return child
+	
+	return null
 
 func cleanup():
 	"""Clean up visual components"""
