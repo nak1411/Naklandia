@@ -17,7 +17,6 @@ var slot_size: Vector2
 var border_color: Color = Color(0.2, 0.2, 0.2, 1.0)
 var highlight_color: Color = Color.YELLOW
 var selection_color: Color = Color.CYAN
-var slot_padding: int = 8
 
 func _init(inventory_slot: InventorySlot):
 	slot = inventory_slot
@@ -69,7 +68,7 @@ func _create_content_container():
 	
 	# Set margins proportionally - increase bottom padding
 	var padding = max(4, int(slot_size.x * 0.08))  # 8% of slot size, minimum 4
-	var bottom_padding = max(20, int(slot_size.x * 0.12))  # 12% for bottom, minimum 8
+	var bottom_padding = max(8, int(slot_size.x * 0.12))  # 12% for bottom, minimum 8
 	
 	content_container.add_theme_constant_override("margin_left", padding)
 	content_container.add_theme_constant_override("margin_right", padding)
@@ -125,9 +124,14 @@ func _create_item_display_components():
 	item_name_label.add_theme_constant_override("shadow_offset_y", 1)
 	item_name_label.visible = false
 
-	# Position at the bottom of the slot
-	item_name_label.position = Vector2(0, slot_size.y - 20)  # 18 pixels from bottom
-	item_name_label.size = Vector2(slot_size.x, 18)
+	# Enable text wrapping
+	item_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	item_name_label.clip_contents = true
+
+	# Position at the bottom of the slot with proper padding consideration
+	var padding = max(4, int(slot_size.x * 0.08))  # Same padding calculation as content
+	item_name_label.position = Vector2(padding, slot_size.y - 40)
+	item_name_label.size = Vector2(slot_size.x - (padding * 2), 18)  # Account for left and right padding
 
 	slot.add_child(item_name_label)
 
@@ -204,10 +208,10 @@ func _auto_scale_quantity_label():
 	var icon_padding = max(4, int(slot_size.x * 0.08))
 	
 	# Update background size and position - position within the padded content area
-	quantity_bg.size = Vector2(needed_width, 22)  # Height stays constant
+	quantity_bg.size = Vector2(needed_width, 14)  # Height stays constant
 	quantity_bg.position = Vector2(
-		slot.size.x - needed_width - 7 - icon_padding,  # Right edge minus padding
-		slot.size.y - 35 - icon_padding  # Bottom edge minus padding
+		slot.size.x - needed_width - 17 - icon_padding,  # Right edge minus padding
+		slot.size.y - 47 - icon_padding  # Bottom edge minus padding
 	)
 	
 	# Update label to fill the background

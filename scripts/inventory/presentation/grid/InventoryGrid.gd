@@ -5,11 +5,12 @@ extends Control
 # Grid properties
 @export var slot_size: Vector2 = Vector2(64, 64)
 @export var slot_spacing: int = 0
+@export var slot_x_spacing_reduction: int = 12
 @export var min_grid_width: int = 10  # Minimum grid width
 @export var min_grid_height: int = 10  # Minimum grid height
 @export var slots_per_row_expansion: int = 2  # How many columns to add when expanding
 @export var enable_virtual_scrolling: bool = false
-@export var virtual_item_height: int = 96  # Match your slot_size.y
+@export var virtual_item_height: int = 64  # Match your slot_size.y
 @export var virtual_buffer_items: int = 3  # Extra items to render outside viewport
 
 # Visual properties
@@ -265,7 +266,7 @@ func _render_virtual_items():
 			# Create the slot
 			var slot = InventorySlot.new()
 			slot.slot_size = slot_size
-			slot.position = Vector2(col * slot_size.x, row * slot_size.y)
+			slot.position = Vector2(col * (slot_size.x - slot_x_spacing_reduction), row * slot_size.y)
 			slot.mouse_filter = Control.MOUSE_FILTER_PASS
 			
 			# Set grid position
@@ -612,6 +613,11 @@ func _create_virtual_slot(item: InventoryItem_Base, virtual_index: int) -> Inven
 	var row = virtual_index / virtual_items_per_row
 	var col = virtual_index % virtual_items_per_row
 	slot.set_grid_position(Vector2i(col, row))
+
+	var x_pos = col * (slot_size.x - slot_x_spacing_reduction)
+	var y_pos = row * slot_size.y
+	slot.position = Vector2(x_pos, y_pos)
+	slot.size = slot_size
 	
 	# Connect all necessary signals
 	slot.slot_clicked.connect(_on_slot_clicked)
@@ -619,13 +625,6 @@ func _create_virtual_slot(item: InventoryItem_Base, virtual_index: int) -> Inven
 	slot.item_drag_started.connect(_on_item_drag_started)
 	slot.item_drag_ended.connect(_on_item_drag_ended)
 	slot.item_dropped_on_slot.connect(_on_item_dropped_on_slot)
-	
-	# CRITICAL: Calculate and set the position manually for virtual slots
-	# FIX: use slot_size.x and slot_size.y
-	var x_pos = col * slot_size.x
-	var y_pos = row * slot_size.y
-	slot.position = Vector2(x_pos, y_pos)
-	slot.size = slot_size  # This is fine since slot.size expects Vector2
 	
 	return slot
 			

@@ -77,7 +77,7 @@ func _create_drag_preview() -> Control:
 	preview.name = "DragPreview"
 	
 	# Make the preview smaller
-	var scale_factor = 0.8
+	var scale_factor = 1.0
 	preview.size = slot.size * scale_factor
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
@@ -86,7 +86,7 @@ func _create_drag_preview() -> Control:
 	preview_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	if slot.visuals and slot.visuals.background_panel:
 		preview_bg.add_theme_stylebox_override("panel", slot.visuals.background_panel.get_theme_stylebox("panel"))
-	preview_bg.modulate.a = 0.8
+	preview_bg.modulate.a = 1.0
 	preview.add_child(preview_bg)
 	
 	var item = slot.get_item()

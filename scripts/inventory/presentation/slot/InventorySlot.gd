@@ -3,7 +3,7 @@ class_name InventorySlot
 extends Control
 
 # Core properties
-@export var slot_size: Vector2 = Vector2(96, 96)
+@export var slot_size: Vector2 = Vector2(64, 64)
 var item: InventoryItem_Base
 var grid_position: Vector2i
 var container_id: String
