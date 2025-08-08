@@ -2,7 +2,7 @@
 class_name AmmoPickup
 extends PickupableItem
 
-@export var ammo_name: String = "Pickupable Ammo"
+@export var ammo_name: String = "Hybrid Charges"
 
 func _configure_item_properties():
 	# Set consistent properties for all ammo pickups
@@ -13,7 +13,7 @@ func _configure_item_properties():
 	item_volume_override = 0.025
 	item_mass_override = 0.01
 	item_value_override = 1000.0
-	item_quantity = 10
+	item_quantity = 100
 	icon_path_override = "res://assets/textures/ui/icons/ammo.png"
 
 func _generate_item_data():

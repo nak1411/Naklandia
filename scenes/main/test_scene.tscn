@@ -128,9 +128,11 @@ layer = 50
 [node name="ItemSpawner" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.79922, 0.836777, -6.16311)
 script = ExtResource("6_1swwb")
+spawn_mode = 1
 spawn_interval = 1.0
 auto_spawn = true
 max_spawned_items = 5
+designated_item_types = Array[String](["AmmoPickup"])
 spawn_height = 1.0
 
 [node name="InventoryIntegration" type="Node" parent="."]

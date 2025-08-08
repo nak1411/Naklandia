@@ -80,12 +80,11 @@ func _create_content_container():
 
 func _create_item_display_components():
 	"""Create quantity display components"""
-	# Quantity background panel
+	# Quantity background panel - will grow horizontally as needed
 	quantity_bg = Panel.new()
 	quantity_bg.name = "QuantityBackground"
 	quantity_bg.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	quantity_bg.position = Vector2(-22, -22)
-	quantity_bg.size = Vector2(22, 22)
+	quantity_bg.size = Vector2(10, 10)  # Starting size
 	quantity_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	quantity_bg.visible = false
 
@@ -94,21 +93,18 @@ func _create_item_display_components():
 	quantity_bg.add_theme_stylebox_override("panel", quantity_bg_style)
 	slot.add_child(quantity_bg)
 	
-	# Quantity label
+	# Quantity label - fixed font size, centers in growing background
 	quantity_label = Label.new()
 	quantity_label.name = "QuantityLabel"
-	quantity_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	quantity_label.position = Vector2(-28, -22)
-	quantity_label.size = Vector2(24, 20)
-	quantity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	quantity_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	quantity_label.add_theme_font_size_override("font_size", 16)
+	quantity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	quantity_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	quantity_label.add_theme_font_size_override("font_size", 10)  # Fixed size like EVE
 	quantity_label.add_theme_color_override("font_color", Color.WHITE)
 	quantity_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	quantity_label.add_theme_constant_override("shadow_offset_x", 1)
 	quantity_label.add_theme_constant_override("shadow_offset_y", 1)
 	quantity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	slot.add_child(quantity_label)
+	quantity_bg.add_child(quantity_label)
 
 func update_item_display():
 	"""Update the visual display for the current item"""
@@ -139,14 +135,45 @@ func update_item_display():
 		push_warning("SlotVisualManager: quantity components not initialized")
 		return
 	
-	# Update quantity display
-	if item.quantity > 1:
+	# Update quantity display with auto-scaling
+	if item.quantity > 0:
 		quantity_label.text = str(item.quantity)
+		_auto_scale_quantity_label()
 		quantity_label.visible = true
 		quantity_bg.visible = true
 	else:
 		quantity_label.visible = false
 		quantity_bg.visible = false
+
+func _auto_scale_quantity_label():
+	"""Resize background to fit quantity text at fixed font size like EVE Online"""
+	if not quantity_label or not quantity_bg:
+		return
+	
+	var item = slot.get_item()
+	if not item:
+		return
+	
+	# Get the font and calculate text size at fixed font size
+	var font = quantity_label.get_theme_font("font")
+	if not font:
+		font = ThemeDB.fallback_font
+	
+	var font_size = 10  # Fixed font size like EVE
+	var text = str(item.quantity)
+	
+	# Calculate required width for the text
+	var text_size = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	var padding = 6  # 3px padding on each side
+	var needed_width = max(10, text_size.x + padding)  # Minimum 10px wide
+	
+	# Update background size and position
+	quantity_bg.size = Vector2(needed_width, 22)  # Height stays constant
+	quantity_bg.position = Vector2(slot.size.x - needed_width, slot.size.y - 22)  # Anchor to bottom-right
+	
+	# Update label to fill the background
+	quantity_label.size = quantity_bg.size
+	quantity_label.position = Vector2.ZERO
 
 func _clear_item_display():
 	"""Clear all item-related visuals"""
