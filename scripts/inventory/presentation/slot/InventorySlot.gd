@@ -106,8 +106,6 @@ func _connect_signals():
 func _process(delta):
 	"""Process component updates"""
 	tooltip_manager.process_tooltip_timer(delta)
-	if visuals and visuals.item_name_label and visuals.item_name_label.visible:
-		visuals._update_label_position()
 
 func _on_gui_input(event: InputEvent):
 	"""Handle input events - delegate to appropriate handlers"""
