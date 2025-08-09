@@ -2,12 +2,12 @@
 class_name EVEStylePixelPerfectBorder
 extends StyleBoxFlat
 
-var bloom_material: EVEBloomMaterial
+var bloom_material: BloomMaterial
 var edge_shader: Shader
 
 func _init():
 	_setup_eve_style()
-	bloom_material = EVEBloomMaterial.new()
+	bloom_material = BloomMaterial.new()
 	_load_edge_shader()
 
 func _setup_eve_style():

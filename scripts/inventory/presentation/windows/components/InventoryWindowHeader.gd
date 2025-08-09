@@ -1,17 +1,17 @@
 # InventoryWindowHeader.gd - Updated with debugging and proper integration
 class_name InventoryWindowHeader
-extends HBoxContainer
+extends Control
 
 # UI Components
 var search_field: LineEdit
-var filter_options: Button
-var sort_button: Button
+var filter_options: Panel
+var sort_button: Panel
 var filter_dropdown: DropDownMenu_Base
 var sort_dropdown: DropDownMenu_Base
 var original_header_styles: Dictionary = {}
 var header_transparency_init: bool = false
 var is_search_focused: bool = false
-var display_mode_button: Button
+var display_mode_button: Panel
 var current_display_mode: InventoryDisplayMode.Mode = InventoryDisplayMode.Mode.GRID
 
 # References
@@ -42,99 +42,135 @@ var sort_items = [
 var current_sort_index = 0
 
 func _ready():
-	custom_minimum_size.y = 24  
+	custom_minimum_size.y = 30  # 16px buttons + 4px margin (2px top + 2px bottom)
 	_setup_controls()
 	_connect_signals()
-	_remove_default_outlines()
-	_apply_custom_theme()
-	# Style buttons AFTER removing default outlines
-	_style_custom_filter_button()
-	_style_custom_sort_button()
-	_style_display_mode_button()
-	call_deferred("_force_button_styling")
 
-func _setup_controls():	
-	var filter_container = MarginContainer.new()
-	add_child(filter_container)
+func _setup_controls():
+	var current_x = 0
+	var button_height = 24  # Our target height
+	var margin = 4
+	var bottom_padding = 4
+	var top_padding = 2
 	
-	filter_container.add_theme_constant_override("margin_left", 0)
-	filter_container.add_theme_constant_override("margin_top", 2)
-	filter_container.add_theme_constant_override("margin_right", 2)
-	filter_container.add_theme_constant_override("margin_bottom", 2)
-	
-	# Create filter button (regular Button) - Make it more responsive
-	filter_options = Button.new()
+	# Filter "button" using Panel + Label
+	filter_options = _create_label_button("All Items ▼", Vector2(100, button_height))
 	filter_options.name = "FilterButton"
-	filter_options.text = "All Items ▼"
-	filter_options.custom_minimum_size.x = 100  # Reduced from 120
-	filter_options.custom_minimum_size.y = 100  # Reduced from 120
-	filter_options.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
-	filter_options.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	filter_options.clip_contents = true  # Prevent text overflow
-	filter_container.add_child(filter_options)
+	filter_options.position = Vector2(current_x, bottom_padding)
+	add_child(filter_options)
+	current_x += 100 + margin
 	
-	var sort_container = MarginContainer.new()
-	add_child(sort_container)
-	
-	sort_container.add_theme_constant_override("margin_left", 2)
-	sort_container.add_theme_constant_override("margin_top", 2)
-	sort_container.add_theme_constant_override("margin_right", 2)
-	sort_container.add_theme_constant_override("margin_bottom", 2)
-	
-	# Sort button (regular Button) - Make it more responsive
-	sort_button = Button.new()
+	# Sort "button" using Panel + Label
+	sort_button = _create_label_button("Sort ▼", Vector2(60, button_height))
 	sort_button.name = "SortButton"
-	sort_button.text = "Sort ▼"
-	sort_button.custom_minimum_size.x = 60  # Reduced from 80
-	sort_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
-	sort_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sort_button.clip_contents = true  # Prevent text overflow
-	sort_container.add_child(sort_button)
+	sort_button.position = Vector2(current_x, bottom_padding)
+	add_child(sort_button)
+	current_x += 60 + margin
 	
-	# Spacer to push search field to the right
-	var spacer = Control.new()
-	spacer.name = "Spacer"
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	add_child(spacer)
-	
-	# Search field - now on the right side, make it responsive
-	var search_container = MarginContainer.new()
-	add_child(search_container)
-	
-	search_container.add_theme_constant_override("margin_left", 4)
-	search_container.add_theme_constant_override("margin_top", 2)
-	search_container.add_theme_constant_override("margin_bottom", 2)
-	
+	# Search field
 	search_field = LineEdit.new()
 	search_field.name = "SearchField"
-	search_field.placeholder_text = "Search..."  # Shorter placeholder
-	search_field.custom_minimum_size.x = 100  # Reduced from 150
-	search_field.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
-	search_field.focus_mode = Control.FOCUS_ALL
-	search_container.add_child(search_field)
+	search_field.placeholder_text = "Search..."
+	search_field.size = Vector2(100, button_height)
+	search_field.custom_minimum_size = Vector2(100, button_height)
 	
-	# Display mode toggle button - Make it more responsive
-	var display_container = MarginContainer.new()
-	add_child(display_container)
+	# Style the search field to match the fake buttons
+	_style_search_field()
 
-	display_container.add_theme_constant_override("margin_left", 4)
-	display_container.add_theme_constant_override("margin_top", 2)
-	display_container.add_theme_constant_override("margin_right", 0)
-	display_container.add_theme_constant_override("margin_bottom", 2)
-
-	display_mode_button = Button.new()
+	add_child(search_field)
+	
+	# Display mode "button" using Panel + Label
+	display_mode_button = _create_label_button("⊞", Vector2(button_height, button_height))
 	display_mode_button.name = "DisplayModeButton"
-	display_mode_button.text = "⊞"
-	display_mode_button.custom_minimum_size = Vector2(26, 26)  # Reduced from 60
-	display_mode_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER  # Allow shrinking
-	display_mode_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	display_mode_button.clip_contents = true  # Prevent text overflow
-	display_mode_button.flat = false
-
-	display_container.add_child(display_mode_button)
+	add_child(display_mode_button)
 	
-	# Create dropdown menus (don't add as children initially)
+	# Position right-aligned elements
+	_position_right_elements()
+	
+	# Create dropdown menus
 	_create_dropdown_menus()
+
+func _create_label_button(text: String, button_size: Vector2) -> Panel:
+	"""Create a fake button using Panel + Label"""
+	var panel = Panel.new()
+	panel.size = button_size
+	panel.custom_minimum_size = button_size
+	
+	# Style the panel like a button
+	var normal_style = StyleBoxFlat.new()
+	normal_style.bg_color = Color(0.2, 0.2, 0.2, 1.0)
+	normal_style.border_width_left = 1
+	normal_style.border_width_right = 1
+	normal_style.border_width_top = 1
+	normal_style.border_width_bottom = 1
+	normal_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	panel.add_theme_stylebox_override("panel", normal_style)
+	
+	# Add label for text
+	var label = Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_font_size_override("font_size", 12)
+	panel.add_child(label)
+	
+	# Add mouse interaction
+	panel.mouse_filter = Control.MOUSE_FILTER_PASS
+	panel.mouse_entered.connect(_on_fake_button_hover.bind(panel, true))
+	panel.mouse_exited.connect(_on_fake_button_hover.bind(panel, false))
+	panel.gui_input.connect(_on_fake_button_input.bind(panel))
+	
+	return panel
+
+func _on_fake_button_hover(panel: Panel, is_hovering: bool):
+	var style = StyleBoxFlat.new()
+	if is_hovering:
+		style.bg_color = Color(0.5, 0.5, 0.5, 1.0)  # Hover color
+	else:
+		style.bg_color = Color(0.2, 0.2, 0.2, 1.0)  # Normal color
+	
+	style.border_width_left = 1
+	style.border_width_right = 1
+	style.border_width_top = 1
+	style.border_width_bottom = 1
+	style.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	panel.add_theme_stylebox_override("panel", style)
+
+func _on_fake_button_input(event: InputEvent, panel: Panel):
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			# Handle click based on button name
+			match panel.name:
+				"FilterButton":
+					_on_filter_button_pressed()
+				"SortButton":
+					_on_sort_button_pressed()
+				"DisplayModeButton":
+					_on_display_mode_toggled()
+
+func _position_right_elements():
+	"""Position search field and display button from the right edge"""
+	var container_width = size.x
+	var button_height = 16
+	var margin = 2
+	var top_padding = 4
+	var right_padding = 8  # Add right padding
+	
+	# Position display button at far right (minus right padding)
+	if display_mode_button:
+		display_mode_button.position = Vector2(container_width - button_height - right_padding, top_padding)
+	
+	# Position search field to the left of display button
+	if search_field:
+		search_field.position = Vector2(container_width - button_height - 100 - margin - (right_padding + 2), top_padding)
+
+# Override _notification to handle resizing
+func _notification(what):
+	if what == NOTIFICATION_RESIZED:
+		_position_right_elements()
 
 func _style_display_mode_button():
 	if not display_mode_button:
@@ -192,14 +228,45 @@ func _style_custom_display_button():
 	display_mode_button.add_theme_stylebox_override("focus", style_normal)
 	display_mode_button.add_theme_color_override("font_color", Color.WHITE)
 
+func _style_search_field():
+	"""Style the search field to match the fake buttons"""
+	var style_normal = StyleBoxFlat.new()
+	style_normal.bg_color = Color(0.2, 0.2, 0.2, 1.0)
+	style_normal.border_width_left = 1
+	style_normal.border_width_right = 1
+	style_normal.border_width_top = 1
+	style_normal.border_width_bottom = 1
+	style_normal.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	style_normal.content_margin_left = 6
+	style_normal.content_margin_right = 6
+	style_normal.content_margin_top = 1
+	style_normal.content_margin_bottom = 1
+	style_normal.set_corner_radius_all(0)  # Remove rounded corners
+	
+	var style_focus = style_normal.duplicate()
+	style_focus.border_color = Color(0.6, 0.6, 0.8, 1.0)  # Slightly brighter border when focused
+	
+	search_field.add_theme_stylebox_override("normal", style_normal)
+	search_field.add_theme_stylebox_override("focus", style_focus)
+	
+	# Set font color to white to match the buttons
+	search_field.add_theme_color_override("font_color", Color.WHITE)
+	search_field.add_theme_color_override("font_placeholder_color", Color(0.7, 0.7, 0.7, 1.0))
+
+func set_fake_button_text(panel: Panel, text: String):
+	"""Helper function to set text on fake button panels"""
+	var label = panel.get_child(0) as Label
+	if label:
+		label.text = text
+
 func _on_display_mode_toggled():
 	match current_display_mode:
 		InventoryDisplayMode.Mode.GRID:
 			current_display_mode = InventoryDisplayMode.Mode.LIST
-			display_mode_button.text = "☰"
+			set_fake_button_text(display_mode_button, "☰")  # Changed
 		InventoryDisplayMode.Mode.LIST:
 			current_display_mode = InventoryDisplayMode.Mode.GRID
-			display_mode_button.text = "⊞"
+			set_fake_button_text(display_mode_button, "⊞")  # Changed
 	
 	display_mode_changed.emit(current_display_mode)
 
@@ -243,11 +310,10 @@ func _setup_sort_dropdown():
 		sort_dropdown.tree_exiting.connect(_on_sort_dropdown_closed)
 
 func _style_custom_filter_button():	
-	# Copy display mode button approach exactly
 	filter_options.flat = false
-	filter_options.focus_mode = Control.FOCUS_NONE  # Add this line
+	filter_options.focus_mode = Control.FOCUS_NONE
 	
-	# Create normal style - exactly like display mode button
+	# Create normal style with reduced padding
 	var normal_style = StyleBoxFlat.new()
 	normal_style.bg_color = Color(0.2, 0.2, 0.2, 1.0)
 	normal_style.border_width_left = 1
@@ -255,6 +321,11 @@ func _style_custom_filter_button():
 	normal_style.border_width_top = 1
 	normal_style.border_width_bottom = 1
 	normal_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	# Reduce content margins to make button shorter
+	normal_style.content_margin_left = 8
+	normal_style.content_margin_right = 8
+	normal_style.content_margin_top = 2  # Reduced from 6 to 2
+	normal_style.content_margin_bottom = 2  # Reduced from 6 to 2
 	
 	# Create hover style
 	var hover_style = normal_style.duplicate()
@@ -264,21 +335,18 @@ func _style_custom_filter_button():
 	var pressed_style = normal_style.duplicate()
 	pressed_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
 	
-	# Apply styles exactly like display mode button
 	filter_options.add_theme_stylebox_override("normal", normal_style)
 	filter_options.add_theme_stylebox_override("hover", hover_style)
 	filter_options.add_theme_stylebox_override("pressed", pressed_style)
 	
-	# Set font properties exactly like display mode button
 	filter_options.add_theme_color_override("font_color", Color.WHITE)
-	filter_options.add_theme_font_size_override("font_size", 14)
+	filter_options.add_theme_font_size_override("font_size", 12)
 
 func _style_custom_sort_button():	
-	# Disable focus to prevent focus styling
 	sort_button.focus_mode = Control.FOCUS_NONE
 	sort_button.flat = false
 	
-	# Create normal style
+	# Create normal style with reduced padding
 	var style_normal = StyleBoxFlat.new()
 	style_normal.bg_color = Color(0.2, 0.2, 0.2, 1.0)
 	style_normal.border_width_left = 1
@@ -286,47 +354,33 @@ func _style_custom_sort_button():
 	style_normal.border_width_top = 1
 	style_normal.border_width_bottom = 1
 	style_normal.border_color = Color(0.4, 0.4, 0.4, 1.0)
-	style_normal.content_margin_left = 12
-	style_normal.content_margin_right = 12
-	style_normal.content_margin_top = 6
-	style_normal.content_margin_bottom = 6
-	# Force corner radius to 0
+	# Reduce content margins to make button shorter
+	style_normal.content_margin_left = 8
+	style_normal.content_margin_right = 8
+	style_normal.content_margin_top = 2  # Reduced from 6 to 2
+	style_normal.content_margin_bottom = 2  # Reduced from 6 to 2
 	style_normal.set_corner_radius_all(0)
 	
 	# Create hover style
 	var style_hover = style_normal.duplicate()
 	style_hover.bg_color = Color(0.5, 0.5, 0.5, 1.0)
-	style_hover.border_color = Color(0.7, 0.7, 0.7, 1.0)
-	style_hover.set_corner_radius_all(0)
 	
 	# Create pressed style
 	var style_pressed = style_normal.duplicate()
 	style_pressed.bg_color = Color(0.3, 0.3, 0.3, 1.0)
-	style_pressed.border_color = Color(0.5, 0.5, 0.5, 1.0)
-	style_pressed.set_corner_radius_all(0)
 	
-	# Apply ALL button state styles
 	sort_button.add_theme_stylebox_override("normal", style_normal)
 	sort_button.add_theme_stylebox_override("hover", style_hover)
 	sort_button.add_theme_stylebox_override("pressed", style_pressed)
-	sort_button.add_theme_stylebox_override("focus", style_normal)
-	sort_button.add_theme_stylebox_override("disabled", style_normal)
+	
 	sort_button.add_theme_color_override("font_color", Color.WHITE)
+	sort_button.add_theme_font_size_override("font_size", 12)
 
 func _connect_signals():	
 	if search_field:
 		search_field.text_changed.connect(_on_search_text_changed)
 		search_field.focus_entered.connect(_on_search_focus_entered)
 		search_field.focus_exited.connect(_on_search_focus_exited)
-	
-	if filter_options:
-		filter_options.pressed.connect(_on_filter_button_pressed)
-	
-	if sort_button:
-		sort_button.pressed.connect(_on_sort_button_pressed)
-		
-	if display_mode_button:
-		display_mode_button.pressed.connect(_on_display_mode_toggled)
 		
 func _on_search_focus_entered():
 	is_search_focused = true
@@ -360,8 +414,7 @@ func _input(event: InputEvent):
 	if event is InputEventKey and event.pressed:
 		pass
 
-func _remove_default_outlines():	
-	# Remove any default focus outlines and borders from all controls
+func _remove_default_outlines():
 	var controls = [search_field, filter_options, sort_button]
 	
 	for control in controls:
@@ -373,7 +426,7 @@ func _remove_default_outlines():
 			control.remove_theme_stylebox_override("hover")
 			control.remove_theme_stylebox_override("disabled")
 			
-			# Style LineEdit specifically
+			# Style LineEdit specifically with reduced padding
 			if control is LineEdit:
 				var style_normal = StyleBoxFlat.new()
 				style_normal.bg_color = Color(0.2, 0.2, 0.2, 0.8)
@@ -382,8 +435,11 @@ func _remove_default_outlines():
 				style_normal.border_width_top = 1
 				style_normal.border_width_bottom = 1
 				style_normal.border_color = Color(0.4, 0.4, 0.4, 1.0)
-				style_normal.content_margin_left = 8
-				style_normal.content_margin_right = 8
+				# Reduce content margins for shorter height
+				style_normal.content_margin_left = 6
+				style_normal.content_margin_right = 6
+				style_normal.content_margin_top = 2  # Reduced padding
+				style_normal.content_margin_bottom = 2  # Reduced padding
 				
 				control.add_theme_stylebox_override("normal", style_normal)
 				control.add_theme_stylebox_override("focus", style_normal)
@@ -426,13 +482,12 @@ func _on_filter_button_pressed():
 		filter_dropdown.show_menu(dropdown_pos)
 
 func _on_filter_dropdown_selected(item_id: String, _item_data: Dictionary):	
-	# Extract index from item_id (format: "filter_0", "filter_1", etc.)
 	var index_str = item_id.replace("filter_", "")
 	var index = int(index_str)
 	
 	if index >= 0 and index < filter_items.size():
 		current_filter_index = index
-		filter_options.text = filter_items[index] + " ▼"
+		set_fake_button_text(filter_options, filter_items[index] + " ▼")  # Changed
 		filter_changed.emit(index)
 
 func _on_sort_button_pressed():	
@@ -457,9 +512,8 @@ func _on_sort_dropdown_selected(item_id: String, _item_data: Dictionary):
 	
 	if index >= 0 and index < sort_items.size():
 		current_sort_index = index
-		sort_button.text = sort_items[index] + " ▼"
+		set_fake_button_text(sort_button, sort_items[index] + " ▼")  # Changed
 		
-		# Convert to InventorySortType.Type
 		var sort_type = index as InventorySortType.Type
 		sort_requested.emit(sort_type)
 

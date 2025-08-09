@@ -80,7 +80,7 @@ enum ResizeMode {
 }
 
 # Window styling
-var title_bar_height: float = 32.0
+var title_bar_height: float = 50.0
 var border_width: float = 2.0
 var title_bar_color: Color = Color(0.1, 0.1, 0.1, 1.0)
 var border_color: Color = Color(0.4, 0.4, 0.4, 1.0)
@@ -103,6 +103,8 @@ func _init():
 	
 	# Enable input handling
 	mouse_filter = Control.MOUSE_FILTER_PASS
+	var font = SystemFont.new()
+	font.msdf_pixel_range = 8
 
 func _ready():
 	_setup_window_ui()
@@ -163,7 +165,7 @@ func _get_resize_area_at_position(global_pos: Vector2) -> ResizeMode:
 	if size.x < min_window_size.x + 20 or size.y < min_window_size.y + 20:
 		return ResizeMode.NONE
 	
-	# Adjust resize border and corner sizes based on window size
+	# Rest of your existing resize detection logic...
 	var effective_border_width = min(resize_border_width, size.x * 0.1, size.y * 0.1)
 	var effective_corner_size = min(resize_corner_size, size.x * 0.15, size.y * 0.15)
 	
@@ -272,122 +274,450 @@ func _setup_window_ui():
 	main_container.add_child(content_area)
 
 func _setup_window_buttons():
-	var button_size = Vector2(title_bar_height - 8, title_bar_height - 8)  # Leave more margin
+	var button_size = Vector2(title_bar_height - 18, title_bar_height - 18)  # Now 42x42 buttons
 	var button_margin = 2.0
-	var current_x = -button_margin
+	var button_offset = 0.0  # Move buttons 15 pixels to the left
+	var current_x = button_offset - button_margin  # Start position with offset
+	var icon_size = 12  # Increase icon size for larger buttons
 	
 	# Close button
 	if can_close:
+		var button_left = current_x - button_size.x
+		var button_top = (title_bar_height - button_size.y) / 2  # Centers in 50px height = 4px from top
+		var button_right = current_x
+		var button_bottom = button_top + button_size.y
+		
+		# Create bloom effect FIRST with much lower z-index
+		var close_bloom = _create_backbuffer_bloom_effect(button_size, "close")
+		close_bloom.anchor_left = 1.0
+		close_bloom.anchor_top = 0.0
+		close_bloom.anchor_right = 1.0
+		close_bloom.anchor_bottom = 0.0
+		close_bloom.offset_left = button_left
+		close_bloom.offset_top = button_top
+		close_bloom.offset_right = button_right
+		close_bloom.offset_bottom = button_bottom
+		close_bloom.z_index = 100  # Much lower z-index
+		close_bloom.visible = false
+		title_bar.add_child(close_bloom)
+		
+		# Create the button with high z-index
 		close_button = Button.new()
 		close_button.name = "CloseButton"
-		close_button.text = "×"
+		close_button.icon = _create_close_icon(icon_size - 3)
+		close_button.flat = true
 		close_button.size = button_size
 		close_button.anchor_left = 1.0
 		close_button.anchor_top = 0.0
 		close_button.anchor_right = 1.0
 		close_button.anchor_bottom = 0.0
-		close_button.offset_left = current_x - button_size.x
-		close_button.offset_top = (title_bar_height - button_size.y) / 2
-		close_button.offset_right = current_x
-		close_button.offset_bottom = (title_bar_height - button_size.y) / 2 + button_size.y
-		close_button.flat = false  # Changed to false
+		close_button.offset_left = button_left
+		close_button.offset_top = button_top
+		close_button.offset_right = button_right
+		close_button.offset_bottom = button_bottom
 		close_button.focus_mode = Control.FOCUS_NONE
+		close_button.z_index = 100  # High z-index for proper layering
 		close_button.pressed.connect(_on_close_pressed)
 		_style_title_bar_button(close_button, "close")
 		title_bar.add_child(close_button)
+		
+		# Connect bloom effects
+		close_button.mouse_entered.connect(_on_button_bloom_entered.bind(close_bloom, "close"))
+		close_button.mouse_exited.connect(_on_button_bloom_exited.bind(close_bloom, "close"))
+		
 		current_x -= button_size.x + button_margin
 	
 	# Maximize button
 	if can_maximize:
+		var button_left = current_x - button_size.x
+		var button_top = (title_bar_height - button_size.y) / 2
+		var button_right = current_x
+		var button_bottom = button_top + button_size.y
+		
+		# Create bloom effect FIRST
+		var maximize_bloom = _create_backbuffer_bloom_effect(button_size, "maximize")
+		maximize_bloom.anchor_left = 1.0
+		maximize_bloom.anchor_top = 0.0
+		maximize_bloom.anchor_right = 1.0
+		maximize_bloom.anchor_bottom = 0.0
+		maximize_bloom.offset_left = button_left
+		maximize_bloom.offset_top = button_top
+		maximize_bloom.offset_right = button_right
+		maximize_bloom.offset_bottom = button_bottom
+		maximize_bloom.z_index = 100
+		maximize_bloom.visible = false
+		title_bar.add_child(maximize_bloom)
+		
+		# Create the button
 		maximize_button = Button.new()
 		maximize_button.name = "MaximizeButton"
-		maximize_button.text = "□"
+		maximize_button.icon = _create_maximize_icon(icon_size)
+		maximize_button.flat = true
 		maximize_button.size = button_size
 		maximize_button.anchor_left = 1.0
 		maximize_button.anchor_top = 0.0
 		maximize_button.anchor_right = 1.0
 		maximize_button.anchor_bottom = 0.0
-		maximize_button.offset_left = current_x - button_size.x
-		maximize_button.offset_top = (title_bar_height - button_size.y) / 2
-		maximize_button.offset_right = current_x
-		maximize_button.offset_bottom = (title_bar_height - button_size.y) / 2 + button_size.y
-		maximize_button.flat = false  # Changed to false
+		maximize_button.offset_left = button_left
+		maximize_button.offset_top = button_top
+		maximize_button.offset_right = button_right
+		maximize_button.offset_bottom = button_bottom
 		maximize_button.focus_mode = Control.FOCUS_NONE
+		maximize_button.z_index = 100
 		maximize_button.pressed.connect(_on_maximize_pressed)
 		_style_title_bar_button(maximize_button)
 		title_bar.add_child(maximize_button)
+		
+		# Connect bloom effects
+		maximize_button.mouse_entered.connect(_on_button_bloom_entered.bind(maximize_bloom, "maximize"))
+		maximize_button.mouse_exited.connect(_on_button_bloom_exited.bind(maximize_bloom, "maximize"))
+		
 		current_x -= button_size.x + button_margin
 	
 	# Minimize button
 	if can_minimize:
+		var button_left = current_x - button_size.x
+		var button_top = (title_bar_height - button_size.y) / 2
+		var button_right = current_x
+		var button_bottom = button_top + button_size.y
+		
+		# Create bloom effect FIRST
+		var minimize_bloom = _create_backbuffer_bloom_effect(button_size, "minimize")
+		minimize_bloom.anchor_left = 1.0
+		minimize_bloom.anchor_top = 0.0
+		minimize_bloom.anchor_right = 1.0
+		minimize_bloom.anchor_bottom = 0.0
+		minimize_bloom.offset_left = button_left
+		minimize_bloom.offset_top = button_top
+		minimize_bloom.offset_right = button_right
+		minimize_bloom.offset_bottom = button_bottom
+		minimize_bloom.z_index = 100
+		minimize_bloom.visible = false
+		title_bar.add_child(minimize_bloom)
+		
+		# Create the button
 		minimize_button = Button.new()
 		minimize_button.name = "MinimizeButton"
-		minimize_button.text = "−"
+		#minimize_button.icon = _create_minimize_icon(icon_size)
+		minimize_button.flat = true
 		minimize_button.size = button_size
 		minimize_button.anchor_left = 1.0
 		minimize_button.anchor_top = 0.0
 		minimize_button.anchor_right = 1.0
 		minimize_button.anchor_bottom = 0.0
-		minimize_button.offset_left = current_x - button_size.x
-		minimize_button.offset_top = (title_bar_height - button_size.y) / 2
-		minimize_button.offset_right = current_x
-		minimize_button.offset_bottom = (title_bar_height - button_size.y) / 2 + button_size.y
-		minimize_button.flat = false  # Changed to false
+		minimize_button.offset_left = button_left
+		minimize_button.offset_top = button_top
+		minimize_button.offset_right = button_right
+		minimize_button.offset_bottom = button_bottom
 		minimize_button.focus_mode = Control.FOCUS_NONE
+		minimize_button.z_index = 100
 		minimize_button.pressed.connect(_on_minimize_pressed)
 		_style_title_bar_button(minimize_button)
 		title_bar.add_child(minimize_button)
+		
+		# Connect bloom effects
+		minimize_button.mouse_entered.connect(_on_button_bloom_entered.bind(minimize_bloom, "minimize"))
+		minimize_button.mouse_exited.connect(_on_button_bloom_exited.bind(minimize_bloom, "minimize"))
+		
 		current_x -= button_size.x + button_margin
 	
 	# Options button (leftmost)
+	var button_left = current_x - button_size.x
+	var button_top = (title_bar_height - button_size.y) / 2
+	var button_right = current_x
+	var button_bottom = button_top + button_size.y
+	
+	# Create bloom effect FIRST
+	var options_bloom = _create_backbuffer_bloom_effect(button_size, "options")
+	options_bloom.anchor_left = 1.0
+	options_bloom.anchor_top = 0.0
+	options_bloom.anchor_right = 1.0
+	options_bloom.anchor_bottom = 0.0
+	options_bloom.offset_left = button_left
+	options_bloom.offset_top = button_top
+	options_bloom.offset_right = button_right
+	options_bloom.offset_bottom = button_bottom
+	options_bloom.z_index = 100
+	options_bloom.visible = false
+	title_bar.add_child(options_bloom)
+	
+	# Create the button
 	options_button = Button.new()
 	options_button.name = "OptionsButton"
-	options_button.text = "⋯"
+	options_button.icon = _create_options_icon(icon_size)
+	options_button.flat = true
 	options_button.size = button_size
 	options_button.anchor_left = 1.0
 	options_button.anchor_top = 0.0
 	options_button.anchor_right = 1.0
 	options_button.anchor_bottom = 0.0
-	options_button.offset_left = current_x - button_size.x
-	options_button.offset_top = (title_bar_height - button_size.y) / 2
-	options_button.offset_right = current_x
-	options_button.offset_bottom = (title_bar_height - button_size.y) / 2 + button_size.y
-	options_button.flat = false  # Changed to false
+	options_button.offset_left = button_left
+	options_button.offset_top = button_top
+	options_button.offset_right = button_right
+	options_button.offset_bottom = button_bottom
 	options_button.focus_mode = Control.FOCUS_NONE
+	options_button.z_index = 100
 	options_button.pressed.connect(_on_options_pressed)
 	_style_title_bar_button(options_button)
 	title_bar.add_child(options_button)
+	
+	# Connect bloom effects
+	options_button.mouse_entered.connect(_on_button_bloom_entered.bind(options_bloom, "options"))
+	options_button.mouse_exited.connect(_on_button_bloom_exited.bind(options_bloom, "options"))
+
+func _create_backbuffer_bloom_effect(button_size: Vector2, button_type: String) -> Control:
+	"""Create bloom effect using multiple blurred copies"""
+	var bloom_container = Control.new()
+	bloom_container.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Critical
+	bloom_container.z_index = 100  # Relative to its parent's z-index
+	
+	# Create the icon for blooming
+	var icon_texture = null
+	var icon_size = 8  # Larger icons for 50px title bar
+	match button_type:
+		"close":
+			icon_texture = _create_close_icon(icon_size)
+		"maximize":
+			icon_texture = _create_maximize_icon(icon_size)
+		"options":
+			icon_texture = _create_options_icon(icon_size)
+		_:
+			icon_texture = _create_options_icon(icon_size)
+	
+	# Adjust bloom for larger buttons
+	var bloom_layers = [
+		{"offset": 1, "alpha": 0.4, "scale": 1.0},
+		{"offset": 2, "alpha": 0.25, "scale": 1.1},
+		{"offset": 3, "alpha": 0.15, "scale": 1.2},
+		{"offset": 4, "alpha": 0.08, "scale": 1.3}
+	]
+	
+	var bloom_color: Color
+	if button_type == "close":
+		bloom_color = Color(1.0, 0.3, 0.3, 1.0)
+	else:
+		bloom_color = Color(0.4, 0.7, 1.0, 1.0)
+	
+	# Calculate center of button for proper bloom positioning
+	var button_center = button_size / 2
+	
+	# Create each bloom layer
+	for layer in bloom_layers:
+		var blur_container = Control.new()
+		blur_container.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Critical
+		# Center the bloom at the button center (adjust for larger icon)
+		blur_container.position = button_center - Vector2(14, 8)  # Half of 16px icon
+		
+		# Create multiple offset copies for blur effect
+		var offsets = []
+		var offset_range = layer.offset
+		for x in range(-offset_range, offset_range + 1):
+			for y in range(-offset_range, offset_range + 1):
+				if x != 0 or y != 0:  # Skip center
+					offsets.append(Vector2(x, y))
+		
+		# Add the blurred copies
+		for offset in offsets:
+			var blur_icon = TextureRect.new()
+			blur_icon.texture = icon_texture
+			blur_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+			blur_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			blur_icon.position = offset * 0.5  # Small offset for blur
+			blur_icon.size = Vector2(12, 12) * layer.scale  # Larger icon size
+			blur_icon.modulate = Color(bloom_color.r, bloom_color.g, bloom_color.b, layer.alpha * 0.6)
+			blur_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Critical
+			blur_container.add_child(blur_icon)
+		
+		bloom_container.add_child(blur_container)
+	
+	return bloom_container
 
 func _style_title_bar_button(button: Button, button_type: String = "default"):
-	"""Style title bar buttons with subtle hover and click indicators"""
+	"""Style title bar buttons - make them bright for bloom effect"""
 	button.focus_mode = Control.FOCUS_NONE
+	button.flat = true
 	
-	# Normal state - transparent
-	var normal_style = StyleBoxFlat.new()
-	normal_style.bg_color = Color.TRANSPARENT
-	
-	var hover_color = Color(1.0, 1.0, 1.0, 0.15)  # Default white
-	var pressed_color = Color(1.0, 1.0, 1.0, 0.25)
-	
-	# Special styling for close button
+	# Make icons bright so they'll bloom
 	if button_type == "close":
-		hover_color = Color(0.8, 0.2, 0.2, 0.6)  # Red tint for close
-		pressed_color = Color(1.0, 0.2, 0.2, 0.8)
+		button.add_theme_color_override("icon_normal_color", Color(1.2, 0.8, 0.8, 1.0))
+	else:
+		button.add_theme_color_override("icon_normal_color", Color(0.8, 1.0, 1.3, 1.0))
+
+func _create_glow_icon_layer(button: Button, button_type: String) -> Control:
+	"""Create a glow layer behind the icon using multiple TextureRect copies"""
+	var glow_container = Control.new()
+	glow_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glow_container.z_index = 100
+	glow_container.visible = false
 	
-	var hover_style = StyleBoxFlat.new()
-	hover_style.bg_color = hover_color
+	# Position exactly behind the button
+	glow_container.anchor_left = button.anchor_left
+	glow_container.anchor_top = button.anchor_top
+	glow_container.anchor_right = button.anchor_right
+	glow_container.anchor_bottom = button.anchor_bottom
+	glow_container.offset_left = button.offset_left
+	glow_container.offset_top = button.offset_top
+	glow_container.offset_right = button.offset_right
+	glow_container.offset_bottom = button.offset_bottom
 	
-	var pressed_style = StyleBoxFlat.new()
-	pressed_style.bg_color = pressed_color
+	# Create multiple copies of the icon for glow effect
+	var glow_offsets = [
+		Vector2(-1, -1), Vector2(0, -1), Vector2(1, -1),
+		Vector2(-1, 0),                   Vector2(1, 0),
+		Vector2(-1, 1),  Vector2(0, 1),  Vector2(1, 1),
+		Vector2(-2, 0),  Vector2(2, 0),  Vector2(0, -2), Vector2(0, 2)
+	]
 	
-	# Apply all styles
-	button.add_theme_stylebox_override("normal", normal_style)
-	button.add_theme_stylebox_override("hover", hover_style)
-	button.add_theme_stylebox_override("pressed", pressed_style)
-	button.add_theme_stylebox_override("focus", normal_style)
+	var glow_color: Color
+	if button_type == "close":
+		glow_color = Color(1.0, 0.3, 0.3, 0.4)
+	else:
+		glow_color = Color(0.4, 0.7, 1.0, 0.3)
 	
-	# Make sure text is white and visible
-	button.add_theme_color_override("font_color", Color.WHITE)
+	# Create glow layers
+	for i in range(glow_offsets.size()):
+		var glow_rect = TextureRect.new()
+		glow_rect.texture = button.icon
+		glow_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		glow_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		glow_rect.position = Vector2(button.size.x / 2 - 28, button.size.y / 2 - 6) + glow_offsets[i]
+		glow_rect.size = Vector2(12, 12)
+		glow_rect.modulate = glow_color
+		glow_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		
+		# Fade outer layers
+		if i >= 8:  # Outer ring
+			glow_rect.modulate.a *= 0.5
+		
+		glow_container.add_child(glow_rect)
+	
+	# Add to title bar behind the button
+	title_bar.add_child(glow_container)
+	return glow_container
+
+func _on_button_bloom_entered(bloom_container: Control, button_type: String):
+	"""Start the bloom effect"""
+	if bloom_container:
+		bloom_container.visible = true
+		bloom_container.modulate.a = 0.0
+		
+		# Animate bloom appearance
+		var tween = create_tween()
+		tween.tween_property(bloom_container, "modulate:a", 1.0, 0.2)
+
+func _on_button_bloom_exited(bloom_container: Control, button_type: String):
+	"""End the bloom effect"""
+	if bloom_container:
+		# Animate bloom disappearance
+		var tween = create_tween()
+		tween.tween_property(bloom_container, "modulate:a", 0.0, 0.3)
+		tween.tween_callback(func(): bloom_container.visible = false)
+
+func _create_close_icon(size: int) -> ImageTexture:
+	"""Create a close (X) icon programmatically"""
+	var image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	
+	# Draw X lines
+	var color = Color.WHITE
+	var thickness = 1
+	
+	# Draw diagonal lines for X
+	for i in range(thickness):
+		for j in range(size):
+			# Top-left to bottom-right diagonal
+			if j + i < size and j - i >= 0:
+				image.set_pixel(j + i, j, color)
+			if j - i >= 0 and j + i < size:
+				image.set_pixel(j, j + i, color)
+			
+			# Top-right to bottom-left diagonal  
+			if size - 1 - j + i < size and j - i >= 0:
+				image.set_pixel(size - 1 - j + i, j, color)
+			if j - i >= 0 and size - 1 - j + i < size:
+				image.set_pixel(size - 1 - j, j + i, color)
+	
+	var texture = ImageTexture.new()
+	texture.set_image(image)
+	return texture
+
+func _create_maximize_icon(size: int) -> ImageTexture:
+	"""Create a maximize (square) icon programmatically"""
+	var image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	
+	var color = Color.WHITE
+	var border_thickness = 1
+	var margin = 2
+	
+	# Draw rectangle border
+	var rect = Rect2i(margin, margin, size - margin * 2, size - margin * 2)
+	
+	# Top and bottom borders
+	for x in range(rect.position.x, rect.position.x + rect.size.x):
+		for t in range(border_thickness):
+			image.set_pixel(x, rect.position.y + t, color)  # Top
+			image.set_pixel(x, rect.position.y + rect.size.y - 1 - t, color)  # Bottom
+	
+	# Left and right borders
+	for y in range(rect.position.y, rect.position.y + rect.size.y):
+		for t in range(border_thickness):
+			image.set_pixel(rect.position.x + t, y, color)  # Left
+			image.set_pixel(rect.position.x + rect.size.x - 1 - t, y, color)  # Right
+	
+	var texture = ImageTexture.new()
+	texture.set_image(image)
+	return texture
+
+func _create_options_icon(size: int) -> ImageTexture:
+	"""Create a three-dot menu icon programmatically"""
+	var image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	
+	var color = Color.WHITE
+	var dot_size = 1
+	var spacing = 2
+	
+	# Calculate positions for three dots
+	var center_x = size / 2
+	var start_y = (size - (3 * dot_size + 2 * spacing)) / 2
+	
+	# Draw three dots vertically
+	for dot in range(3):
+		var dot_y = start_y + dot * (dot_size + spacing)
+		for x in range(center_x - dot_size/2, center_x + dot_size/2 + 1):
+			for y in range(dot_y, dot_y + dot_size):
+				if x >= 0 and x < size and y >= 0 and y < size:
+					image.set_pixel(x, y, color)
+	
+	var texture = ImageTexture.new()
+	texture.set_image(image)
+	return texture
+
+func _create_glowing_icon(base_icon_func: Callable, size: int, glow_color: Color) -> ImageTexture:
+	"""Create an icon with built-in glow effect"""
+	var base_image = base_icon_func.call(size)
+	var glow_image = Image.create(size + 8, size + 8, false, Image.FORMAT_RGBA8)
+	glow_image.fill(Color.TRANSPARENT)
+	
+	# Create glow by drawing the icon multiple times with offset and transparency
+	var glow_offsets = [
+		Vector2(-1, -1), Vector2(0, -1), Vector2(1, -1),
+		Vector2(-1, 0),                   Vector2(1, 0),
+		Vector2(-1, 1),  Vector2(0, 1),  Vector2(1, 1)
+	]
+	
+	# Draw glow layers
+	for offset in glow_offsets:
+		glow_image.blit_rect(base_image, Rect2i(Vector2i.ZERO, base_image.get_size()), 
+							Vector2i(4, 4) + Vector2i(offset))
+	
+	# Draw the main icon on top
+	glow_image.blit_rect(base_image, Rect2i(Vector2i.ZERO, base_image.get_size()), Vector2i(4, 4))
+	
+	var texture = ImageTexture.new()
+	texture.set_image(glow_image)
+	return texture
 
 func _setup_resize_overlay():
 	if not can_resize:
@@ -729,15 +1059,13 @@ func _on_resize_area_entered(mode: ResizeMode):
 		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
 			mouse_default_cursor_shape = Control.CURSOR_BDIAGSIZE
 	
-	# Show border glow and edge bloom together
-	#_update_border_visuals(mode)
+	# Show edge bloom
 	_show_edge_bloom(mode)
 
 func _on_resize_area_exited(mode: ResizeMode):
 	"""Handle mouse exiting a resize area"""
 	if not is_resizing:
 		mouse_default_cursor_shape = Control.CURSOR_ARROW
-		#_hide_all_border_visuals()
 		_hide_edge_bloom()
 
 func _show_edge_bloom(mode: ResizeMode):
@@ -820,57 +1148,6 @@ func _get_current_top_alpha() -> float:
 
 func _get_current_bottom_alpha() -> float:
 	return edge_bloom_material.get_shader_parameter("bottom_edge_alpha")
-		
-# func _update_border_visuals(resize_mode: ResizeMode):
-# 	"""Update border glow visuals based on resize mode"""
-# 	# Hide all borders first
-# 	for line in border_lines:
-# 		_animate_border_visibility(line, false)
-# 	for corner in corner_indicators:
-# 		_animate_border_visibility(corner, false)
-	
-# 	# Show only the relevant border/corner
-# 	match resize_mode:
-# 		ResizeMode.LEFT:
-# 			if border_lines.size() > 0:
-# 				_animate_border_visibility(border_lines[0], true)  # Left border
-# 		ResizeMode.RIGHT:
-# 			if border_lines.size() > 1:
-# 				_animate_border_visibility(border_lines[1], true)  # Right border
-# 		ResizeMode.TOP:
-# 			if border_lines.size() > 2:
-# 				_animate_border_visibility(border_lines[2], true)  # Top border
-# 		ResizeMode.BOTTOM:
-# 			if border_lines.size() > 3:
-# 				_animate_border_visibility(border_lines[3], true)  # Bottom border
-# 		ResizeMode.TOP_LEFT:
-# 			if corner_indicators.size() > 0:
-# 				_animate_border_visibility(corner_indicators[0], true)  # Top-left corner
-# 		ResizeMode.TOP_RIGHT:
-# 			if corner_indicators.size() > 1:
-# 				_animate_border_visibility(corner_indicators[1], true)  # Top-right corner
-# 		ResizeMode.BOTTOM_LEFT:
-# 			if corner_indicators.size() > 2:
-# 				_animate_border_visibility(corner_indicators[2], true)  # Bottom-left corner
-# 		ResizeMode.BOTTOM_RIGHT:
-# 			if corner_indicators.size() > 3:
-# 				_animate_border_visibility(corner_indicators[3], true)  # Bottom-right corner
-
-# func _hide_all_border_visuals():
-# 	"""Hide all border visual indicators"""
-# 	for line in border_lines:
-# 		_animate_border_visibility(line, false)
-# 	for corner in corner_indicators:
-# 		_animate_border_visibility(corner, false)
-
-# func _animate_border_visibility(element: ColorRect, show: bool):
-# 	"""Animate border visibility with smooth transition"""
-# 	var current_color = element.color
-# 	var target_alpha = 1.0 if show else 0.0
-# 	var target_color = Color(current_color.r, current_color.g, current_color.b, target_alpha)
-	
-# 	var tween = create_tween()
-# 	tween.tween_property(element, "color", target_color, 0.15)
 
 func _start_resize(mode: ResizeMode, mouse_pos: Vector2):
 	is_resizing = true
@@ -1298,6 +1575,9 @@ func _disable_resize_visuals():
 			area.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _setup_edge_bloom():
+	if not can_resize:
+		return
+
 	edge_bloom_overlay = ColorRect.new()
 	edge_bloom_overlay.name = "EdgeBloomOverlay"
 	edge_bloom_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE

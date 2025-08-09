@@ -338,7 +338,7 @@ func _setup_mass_info_bar(parent: Control):
 	
 	mass_info_bar = Panel.new()
 	mass_info_bar.name = "MassInfoBar"
-	mass_info_bar.custom_minimum_size.y = 35
+	mass_info_bar.custom_minimum_size.y = 24
 	mass_info_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	
 	mass_bar_container.add_child(mass_info_bar)

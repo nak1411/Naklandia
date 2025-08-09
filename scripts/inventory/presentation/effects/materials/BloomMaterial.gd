@@ -1,5 +1,5 @@
 # EVEBloomMaterial.gd - EVE Online bloom material
-class_name EVEBloomMaterial
+class_name BloomMaterial
 extends ShaderMaterial
 
 func _init():
