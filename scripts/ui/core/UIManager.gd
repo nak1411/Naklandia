@@ -7,6 +7,7 @@ extends Node
 @onready var menu_ui_canvas: CanvasLayer      # Layer 20 - Menus and overlays
 @onready var inventory_canvas: CanvasLayer    # Layer 50 - Inventory window
 @onready var pause_canvas: CanvasLayer        # Layer 100 - Pause menu (top layer)
+@onready var ui_debugger: CanvasLayer 
 
 # Containers within the canvas layers
 @onready var hud_container: Control
@@ -20,6 +21,14 @@ func _ready():
 	setup_canvas_layers()
 	setup_ui_containers()
 	setup_default_ui_elements()  # Add this to create crosshair
+	setup_ui_debugger()  # Initialize UI debugger
+
+func setup_ui_debugger():
+	"""Set up the UI debugger"""
+	ui_debugger = CanvasLayer.new()
+	ui_debugger.name = "UIDebugger"
+	ui_debugger.layer = 200  # Higher than pause layer for visibility
+	add_child(ui_debugger)
 
 func setup_canvas_layers():
 	# Create game UI canvas layer (HUD, health bars, etc.)

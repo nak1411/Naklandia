@@ -43,7 +43,6 @@ var audio_settings: Array[Dictionary] = [
 var gameplay_settings: Array[Dictionary] = [
 	{"id": "mouse_sensitivity", "name": "Mouse Sensitivity", "type": "slider", "min": 0.1, "max": 3.0, "default": 1.0},
 	{"id": "auto_save", "name": "Auto Save", "type": "checkbox", "default": true},
-	{"id": "difficulty", "name": "Difficulty", "type": "dropdown", "options": ["Easy", "Normal", "Hard"], "default": "Normal"}
 ]
 
 # Signals
@@ -197,14 +196,6 @@ func _build_gameplay_settings():
 		"name": "Auto Save",
 		"type": "checkbox",
 		"default": gameplay_manager.default_settings.get("auto_save", true)
-	})
-	
-	gameplay_settings.append({
-		"id": "difficulty",
-		"name": "Difficulty",
-		"type": "dropdown",
-		"options": gameplay_manager.get_available_difficulties(),
-		"default": gameplay_manager.default_settings.get("difficulty", "Normal")
 	})
 
 func _create_ui():
@@ -994,7 +985,7 @@ func get_setting_value(setting_id: String, default_value):
 		return graphics_manager.get_current_setting(setting_id, default_value)
 	elif audio_manager and setting_id in ["master_volume", "music_volume", "sfx_volume"]:
 		return audio_manager.get_current_setting(setting_id, default_value)
-	elif gameplay_manager and setting_id in ["mouse_sensitivity", "auto_save", "difficulty"]:
+	elif gameplay_manager and setting_id in ["mouse_sensitivity", "auto_save"]:
 		return gameplay_manager.get_current_setting(setting_id, default_value)
 	else:
 		return settings_data.get(setting_id, default_value)
@@ -1005,7 +996,7 @@ func set_setting_value(setting_id: String, value):
 		graphics_manager.current_settings[setting_id] = value
 	elif audio_manager and setting_id in ["master_volume", "music_volume", "sfx_volume"]:
 		audio_manager.current_settings[setting_id] = value
-	elif gameplay_manager and setting_id in ["mouse_sensitivity", "auto_save", "difficulty"]:
+	elif gameplay_manager and setting_id in ["mouse_sensitivity", "auto_save"]:
 		gameplay_manager.current_settings[setting_id] = value
 	else:
 		settings_data[setting_id] = value

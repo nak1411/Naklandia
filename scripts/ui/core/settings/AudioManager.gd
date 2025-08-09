@@ -23,6 +23,15 @@ signal settings_changed(setting_name: String, value)
 
 func _ready():
 	add_to_group("audio_manager")
+
+	if AudioServer.get_bus_index("SFX") == -1:
+		AudioServer.add_bus(1)
+		AudioServer.set_bus_name(1, "SFX")
+	
+	if AudioServer.get_bus_index("Music") == -1:
+		AudioServer.add_bus(2) 
+		AudioServer.set_bus_name(2, "Music")
+		
 	_load_settings()
 
 func apply_master_volume(volume: float):
