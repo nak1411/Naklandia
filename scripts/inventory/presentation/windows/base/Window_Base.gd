@@ -274,34 +274,19 @@ func _setup_window_ui():
 	main_container.add_child(content_area)
 
 func _setup_window_buttons():
-	var button_size = Vector2(title_bar_height - 18, title_bar_height - 18)  # Now 42x42 buttons
-	var button_margin = 2.0
-	var button_offset = 0.0  # Move buttons 15 pixels to the left
+	var button_size = Vector2(title_bar_height - 24, title_bar_height - 24)  # Now 42x42 buttons
+	var button_margin = 0  # Reduced from 2.0 to 0.0 for tighter spacing
+	var button_offset = -10.0  # Move buttons 15 pixels to the left
 	var current_x = button_offset - button_margin  # Start position with offset
-	var icon_size = 12  # Increase icon size for larger buttons
+	var icon_size = 16  # Increase icon size for larger buttons
 	
 	# Close button
 	if can_close:
 		var button_left = current_x - button_size.x
-		var button_top = (title_bar_height - button_size.y) / 2  # Centers in 50px height = 4px from top
+		var button_top = (title_bar_height - button_size.y) / 2
 		var button_right = current_x
 		var button_bottom = button_top + button_size.y
 		
-		# Create bloom effect FIRST with much lower z-index
-		var close_bloom = _create_backbuffer_bloom_effect(button_size, "close")
-		close_bloom.anchor_left = 1.0
-		close_bloom.anchor_top = 0.0
-		close_bloom.anchor_right = 1.0
-		close_bloom.anchor_bottom = 0.0
-		close_bloom.offset_left = button_left
-		close_bloom.offset_top = button_top
-		close_bloom.offset_right = button_right
-		close_bloom.offset_bottom = button_bottom
-		close_bloom.z_index = 100  # Much lower z-index
-		close_bloom.visible = false
-		title_bar.add_child(close_bloom)
-		
-		# Create the button with high z-index
 		close_button = Button.new()
 		close_button.name = "CloseButton"
 		close_button.icon = _create_close_icon(icon_size - 3)
@@ -316,14 +301,9 @@ func _setup_window_buttons():
 		close_button.offset_right = button_right
 		close_button.offset_bottom = button_bottom
 		close_button.focus_mode = Control.FOCUS_NONE
-		close_button.z_index = 100  # High z-index for proper layering
 		close_button.pressed.connect(_on_close_pressed)
 		_style_title_bar_button(close_button, "close")
 		title_bar.add_child(close_button)
-		
-		# Connect bloom effects
-		close_button.mouse_entered.connect(_on_button_bloom_entered.bind(close_bloom, "close"))
-		close_button.mouse_exited.connect(_on_button_bloom_exited.bind(close_bloom, "close"))
 		
 		current_x -= button_size.x + button_margin
 	
@@ -334,21 +314,6 @@ func _setup_window_buttons():
 		var button_right = current_x
 		var button_bottom = button_top + button_size.y
 		
-		# Create bloom effect FIRST
-		var maximize_bloom = _create_backbuffer_bloom_effect(button_size, "maximize")
-		maximize_bloom.anchor_left = 1.0
-		maximize_bloom.anchor_top = 0.0
-		maximize_bloom.anchor_right = 1.0
-		maximize_bloom.anchor_bottom = 0.0
-		maximize_bloom.offset_left = button_left
-		maximize_bloom.offset_top = button_top
-		maximize_bloom.offset_right = button_right
-		maximize_bloom.offset_bottom = button_bottom
-		maximize_bloom.z_index = 100
-		maximize_bloom.visible = false
-		title_bar.add_child(maximize_bloom)
-		
-		# Create the button
 		maximize_button = Button.new()
 		maximize_button.name = "MaximizeButton"
 		maximize_button.icon = _create_maximize_icon(icon_size)
@@ -359,18 +324,13 @@ func _setup_window_buttons():
 		maximize_button.anchor_right = 1.0
 		maximize_button.anchor_bottom = 0.0
 		maximize_button.offset_left = button_left
-		maximize_button.offset_top = button_top
+		maximize_button.offset_top = button_top - 1
 		maximize_button.offset_right = button_right
 		maximize_button.offset_bottom = button_bottom
 		maximize_button.focus_mode = Control.FOCUS_NONE
-		maximize_button.z_index = 100
 		maximize_button.pressed.connect(_on_maximize_pressed)
 		_style_title_bar_button(maximize_button)
 		title_bar.add_child(maximize_button)
-		
-		# Connect bloom effects
-		maximize_button.mouse_entered.connect(_on_button_bloom_entered.bind(maximize_bloom, "maximize"))
-		maximize_button.mouse_exited.connect(_on_button_bloom_exited.bind(maximize_bloom, "maximize"))
 		
 		current_x -= button_size.x + button_margin
 	
@@ -381,21 +341,6 @@ func _setup_window_buttons():
 		var button_right = current_x
 		var button_bottom = button_top + button_size.y
 		
-		# Create bloom effect FIRST
-		var minimize_bloom = _create_backbuffer_bloom_effect(button_size, "minimize")
-		minimize_bloom.anchor_left = 1.0
-		minimize_bloom.anchor_top = 0.0
-		minimize_bloom.anchor_right = 1.0
-		minimize_bloom.anchor_bottom = 0.0
-		minimize_bloom.offset_left = button_left
-		minimize_bloom.offset_top = button_top
-		minimize_bloom.offset_right = button_right
-		minimize_bloom.offset_bottom = button_bottom
-		minimize_bloom.z_index = 100
-		minimize_bloom.visible = false
-		title_bar.add_child(minimize_bloom)
-		
-		# Create the button
 		minimize_button = Button.new()
 		minimize_button.name = "MinimizeButton"
 		#minimize_button.icon = _create_minimize_icon(icon_size)
@@ -410,14 +355,9 @@ func _setup_window_buttons():
 		minimize_button.offset_right = button_right
 		minimize_button.offset_bottom = button_bottom
 		minimize_button.focus_mode = Control.FOCUS_NONE
-		minimize_button.z_index = 100
 		minimize_button.pressed.connect(_on_minimize_pressed)
 		_style_title_bar_button(minimize_button)
 		title_bar.add_child(minimize_button)
-		
-		# Connect bloom effects
-		minimize_button.mouse_entered.connect(_on_button_bloom_entered.bind(minimize_bloom, "minimize"))
-		minimize_button.mouse_exited.connect(_on_button_bloom_exited.bind(minimize_bloom, "minimize"))
 		
 		current_x -= button_size.x + button_margin
 	
@@ -427,21 +367,6 @@ func _setup_window_buttons():
 	var button_right = current_x
 	var button_bottom = button_top + button_size.y
 	
-	# Create bloom effect FIRST
-	var options_bloom = _create_backbuffer_bloom_effect(button_size, "options")
-	options_bloom.anchor_left = 1.0
-	options_bloom.anchor_top = 0.0
-	options_bloom.anchor_right = 1.0
-	options_bloom.anchor_bottom = 0.0
-	options_bloom.offset_left = button_left
-	options_bloom.offset_top = button_top
-	options_bloom.offset_right = button_right
-	options_bloom.offset_bottom = button_bottom
-	options_bloom.z_index = 100
-	options_bloom.visible = false
-	title_bar.add_child(options_bloom)
-	
-	# Create the button
 	options_button = Button.new()
 	options_button.name = "OptionsButton"
 	options_button.icon = _create_options_icon(icon_size)
@@ -451,19 +376,31 @@ func _setup_window_buttons():
 	options_button.anchor_top = 0.0
 	options_button.anchor_right = 1.0
 	options_button.anchor_bottom = 0.0
-	options_button.offset_left = button_left
-	options_button.offset_top = button_top
+	options_button.offset_left = button_left + 4
+	options_button.offset_top = button_top - 1
 	options_button.offset_right = button_right
 	options_button.offset_bottom = button_bottom
 	options_button.focus_mode = Control.FOCUS_NONE
-	options_button.z_index = 100
 	options_button.pressed.connect(_on_options_pressed)
 	_style_title_bar_button(options_button)
 	title_bar.add_child(options_button)
+
+func _style_title_bar_button(button: Button, button_type: String = "default"):
+	"""Style title bar buttons with bright icon glow on hover"""
+	button.focus_mode = Control.FOCUS_NONE
+	button.flat = true
 	
-	# Connect bloom effects
-	options_button.mouse_entered.connect(_on_button_bloom_entered.bind(options_bloom, "options"))
-	options_button.mouse_exited.connect(_on_button_bloom_exited.bind(options_bloom, "options"))
+	# Normal state - dimmed icons
+	button.add_theme_color_override("icon_normal_color", Color(0.6, 0.6, 0.6, 1.0))
+	
+	# Hover state - bright glowing icons
+	if button_type == "close":
+		button.add_theme_color_override("icon_hover_color", Color(1.5, 0.8, 0.8, 1.0))  # Bright red
+	else:
+		button.add_theme_color_override("icon_hover_color", Color(0.8, 1.2, 1.6, 1.0))  # Bright blue-white
+	
+	# Pressed state
+	button.add_theme_color_override("icon_pressed_color", Color(1.0, 1.0, 1.0, 1.0))
 
 func _create_backbuffer_bloom_effect(button_size: Vector2, button_type: String) -> Control:
 	"""Create bloom effect using multiple blurred copies"""
@@ -531,17 +468,6 @@ func _create_backbuffer_bloom_effect(button_size: Vector2, button_type: String) 
 		bloom_container.add_child(blur_container)
 	
 	return bloom_container
-
-func _style_title_bar_button(button: Button, button_type: String = "default"):
-	"""Style title bar buttons - make them bright for bloom effect"""
-	button.focus_mode = Control.FOCUS_NONE
-	button.flat = true
-	
-	# Make icons bright so they'll bloom
-	if button_type == "close":
-		button.add_theme_color_override("icon_normal_color", Color(1.2, 0.8, 0.8, 1.0))
-	else:
-		button.add_theme_color_override("icon_normal_color", Color(0.8, 1.0, 1.3, 1.0))
 
 func _create_glow_icon_layer(button: Button, button_type: String) -> Control:
 	"""Create a glow layer behind the icon using multiple TextureRect copies"""
@@ -641,6 +567,75 @@ func _create_close_icon(size: int) -> ImageTexture:
 	texture.set_image(image)
 	return texture
 
+func _create_restore_icon(size: int) -> ImageTexture:
+	"""Create restore icon (two overlapping squares)"""
+	var image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	
+	var icon_color = Color.WHITE
+	var line_width = 1
+	var square_size = size - 4
+	
+	# Draw back square (offset up and left)
+	var back_offset = 8
+	var back_rect = Rect2i(back_offset, back_offset, square_size - back_offset, square_size - back_offset)
+	
+	# Top border of back square
+	for x in range(back_rect.position.x, back_rect.position.x + back_rect.size.x):
+		for y in range(back_rect.position.y, back_rect.position.y + line_width):
+			if x < size and y < size and x >= 0 and y >= 0:
+				image.set_pixel(x, y, icon_color)
+	
+	# Bottom border of back square
+	for x in range(back_rect.position.x, back_rect.position.x + back_rect.size.x):
+		for y in range(back_rect.position.y + back_rect.size.y - line_width, back_rect.position.y + back_rect.size.y):
+			if x < size and y < size and x >= 0 and y >= 0:
+				image.set_pixel(x, y, icon_color)
+	
+	# Left border of back square
+	for y in range(back_rect.position.y, back_rect.position.y + back_rect.size.y):
+		for x in range(back_rect.position.x, back_rect.position.x + line_width):
+			if x < size and y < size and x >= 0 and y >= 0:
+				image.set_pixel(x, y, icon_color)
+	
+	# Right border of back square
+	for y in range(back_rect.position.y, back_rect.position.y + back_rect.size.y):
+		for x in range(back_rect.position.x + back_rect.size.x - line_width, back_rect.position.x + back_rect.size.x):
+			if x < size and y < size and x >= 0 and y >= 0:
+				image.set_pixel(x, y, icon_color)
+	
+	# Draw front square (offset down and right)
+	var front_offset = 0
+	var front_rect = Rect2i(front_offset + 2, front_offset + 2, square_size - 2, square_size - 2)
+	
+	# Top border of front square
+	for x in range(front_rect.position.x, front_rect.position.x + front_rect.size.x):
+		for y in range(front_rect.position.y, front_rect.position.y + line_width):
+			if x < size and y < size and x >= 0 and y >= 0:
+				image.set_pixel(x, y, icon_color)
+	
+	# Bottom border of front square
+	for x in range(front_rect.position.x, front_rect.position.x + front_rect.size.x):
+		for y in range(front_rect.position.y + front_rect.size.y - line_width, front_rect.position.y + front_rect.size.y):
+			if x < size and y < size and x >= 0 and y >= 0:
+				image.set_pixel(x, y, icon_color)
+	
+	# Left border of front square
+	for y in range(front_rect.position.y, front_rect.position.y + front_rect.size.y):
+		for x in range(front_rect.position.x, front_rect.position.x + line_width):
+			if x < size and y < size and x >= 0 and y >= 0:
+				image.set_pixel(x, y, icon_color)
+	
+	# Right border of front square
+	for y in range(front_rect.position.y, front_rect.position.y + front_rect.size.y):
+		for x in range(front_rect.position.x + front_rect.size.x - line_width, front_rect.position.x + front_rect.size.x):
+			if x < size and y < size and x >= 0 and y >= 0:
+				image.set_pixel(x, y, icon_color)
+	
+	var texture = ImageTexture.new()
+	texture.set_image(image)
+	return texture
+
 func _create_maximize_icon(size: int) -> ImageTexture:
 	"""Create a maximize (square) icon programmatically"""
 	var image = Image.create(size, size, false, Image.FORMAT_RGBA8)
@@ -676,7 +671,7 @@ func _create_options_icon(size: int) -> ImageTexture:
 	
 	var color = Color.WHITE
 	var dot_size = 1
-	var spacing = 2
+	var spacing = 4
 	
 	# Calculate positions for three dots
 	var center_x = size / 2
@@ -1251,9 +1246,7 @@ func _maximize_window():
 		size = screen_size
 	
 	if maximize_button:
-		maximize_button.text = "❐"
-	
-	window_maximized.emit()
+		maximize_button.icon = _create_restore_icon(18)
 
 func _restore_window():
 	if not is_maximized:
@@ -1264,7 +1257,7 @@ func _restore_window():
 	is_maximized = false
 	
 	if maximize_button:
-		maximize_button.text = "□"
+		maximize_button.icon = _create_maximize_icon(16)
 	
 	window_restored.emit()
 
