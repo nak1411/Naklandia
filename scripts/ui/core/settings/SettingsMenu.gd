@@ -8,6 +8,8 @@ var category_list: VBoxContainer
 var content_panel: Panel
 var content_container: VBoxContainer
 var graphics_manager: GraphicsManager
+var audio_manager: AudioManager
+var gameplay_manager: GameplayManager
 
 # Category management
 var current_category: String = "graphics"
@@ -30,12 +32,7 @@ var categories: Array[Dictionary] = [
 ]
 
 # Settings definitions
-var graphics_settings: Array[Dictionary] = [
-	{"id": "resolution", "name": "Resolution", "type": "dropdown", "options": ["1920x1080", "1600x900", "1366x768", "1280x720"], "default": "1920x1080"},
-	{"id": "fullscreen", "name": "Fullscreen", "type": "checkbox", "default": true},
-	{"id": "vsync", "name": "V-Sync", "type": "checkbox", "default": true},
-	{"id": "quality", "name": "Graphics Quality", "type": "dropdown", "options": ["Low", "Medium", "High", "Ultra"], "default": "High"}
-]
+var graphics_settings: Array[Dictionary] = []
 
 var audio_settings: Array[Dictionary] = [
 	{"id": "master_volume", "name": "Master Volume", "type": "slider", "min": 0.0, "max": 1.0, "default": 0.8},
@@ -55,16 +52,160 @@ signal settings_applied()
 signal settings_closed()
 
 func _ready():
-	_setup_graphics_manager()
+	_setup_managers()
 	_load_settings()
 	_create_ui()
 	_populate_categories()
 	_select_category("graphics")
 
-func _setup_graphics_manager():
+func _setup_managers():
+	# Setup Graphics Manager
 	graphics_manager = GraphicsManager.new()
 	add_child(graphics_manager)
 	graphics_manager.settings_changed.connect(_on_graphics_setting_changed)
+	
+	# Setup Audio Manager
+	audio_manager = AudioManager.new()
+	add_child(audio_manager)
+	audio_manager.settings_changed.connect(_on_audio_setting_changed)
+	
+	# Setup Gameplay Manager
+	gameplay_manager = GameplayManager.new()
+	add_child(gameplay_manager)
+	gameplay_manager.settings_changed.connect(_on_gameplay_setting_changed)
+	
+	# Build settings from managers after they're ready
+	_build_all_settings()
+
+func _build_all_settings():
+	"""Build all settings dynamically from managers"""
+	_build_graphics_settings()
+	_build_audio_settings()
+	_build_gameplay_settings()
+
+func _build_graphics_settings():
+	"""Build graphics settings dynamically from GraphicsManager"""
+	graphics_settings.clear()
+	
+	# Resolution setting
+	graphics_settings.append({
+		"id": "resolution",
+		"name": "Resolution",
+		"type": "dropdown",
+		"options": graphics_manager.get_available_resolutions(),
+		"default": graphics_manager.default_settings.get("resolution", "1920x1080")
+	})
+	
+	# Window mode setting
+	graphics_settings.append({
+		"id": "window_mode",
+		"name": "Window Mode",
+		"type": "dropdown",
+		"options": graphics_manager.get_available_window_modes(),
+		"default": graphics_manager.default_settings.get("window_mode", "Windowed")
+	})
+	
+	# VSync setting
+	graphics_settings.append({
+		"id": "vsync_mode",
+		"name": "V-Sync",
+		"type": "dropdown",
+		"options": graphics_manager.get_available_vsync_modes(),
+		"default": graphics_manager.default_settings.get("vsync_mode", "Enabled")
+	})
+	
+	# Quality preset setting
+	graphics_settings.append({
+		"id": "quality_preset",
+		"name": "Graphics Quality",
+		"type": "dropdown",
+		"options": graphics_manager.get_available_quality_presets(),
+		"default": graphics_manager.default_settings.get("quality_preset", "High")
+	})
+	
+	# Render scale setting
+	graphics_settings.append({
+		"id": "render_scale",
+		"name": "Render Scale",
+		"type": "slider",
+		"min": 0.25,
+		"max": 2.0,
+		"default": graphics_manager.default_settings.get("render_scale", 1.0),
+		"format": "percentage"
+	})
+	
+	# Max FPS setting
+	var fps_options = ["30", "60", "120", "144", "Unlimited"]
+	graphics_settings.append({
+		"id": "max_fps",
+		"name": "Max FPS",
+		"type": "dropdown",
+		"options": fps_options,
+		"default": graphics_manager.default_settings.get("max_fps", 0)
+	})
+
+func _build_audio_settings():
+	"""Build audio settings dynamically from AudioManager"""
+	audio_settings.clear()
+	
+	audio_settings.append({
+		"id": "master_volume",
+		"name": "Master Volume",
+		"type": "slider",
+		"min": 0.0,
+		"max": 1.0,
+		"default": audio_manager.default_settings.get("master_volume", 0.8),
+		"format": "percentage"
+	})
+	
+	audio_settings.append({
+		"id": "music_volume",
+		"name": "Music Volume",
+		"type": "slider",
+		"min": 0.0,
+		"max": 1.0,
+		"default": audio_manager.default_settings.get("music_volume", 0.6),
+		"format": "percentage"
+	})
+	
+	audio_settings.append({
+		"id": "sfx_volume",
+		"name": "Sound Effects",
+		"type": "slider",
+		"min": 0.0,
+		"max": 1.0,
+		"default": audio_manager.default_settings.get("sfx_volume", 0.8),
+		"format": "percentage"
+	})
+
+func _build_gameplay_settings():
+	"""Build gameplay settings dynamically from GameplayManager"""
+	gameplay_settings.clear()
+	
+	gameplay_settings.append({
+		"id": "mouse_sensitivity",
+		"name": "Mouse Sensitivity",
+		"type": "slider",
+		"min": 0.1,
+		"max": 5.0,
+		"default": gameplay_manager.default_settings.get("mouse_sensitivity", 1.0),
+		"format": "decimal"
+	})
+	
+	gameplay_settings.append({
+		"id": "auto_save",
+		"name": "Auto Save",
+		"type": "checkbox",
+		"default": gameplay_manager.default_settings.get("auto_save", true)
+	})
+	
+	gameplay_settings.append({
+		"id": "difficulty",
+		"name": "Difficulty",
+		"type": "dropdown",
+		"options": gameplay_manager.get_available_difficulties(),
+		"default": gameplay_manager.default_settings.get("difficulty", "Normal")
+	})
 
 func _create_ui():
 	# Create a background panel to center the settings window
@@ -320,9 +461,12 @@ func _update_category_buttons():
 			button.button_pressed = false
 
 func _populate_content(category_id: String):
-	# Clear existing content
+	# Clear existing content AND control references
 	for child in content_container.get_children():
 		child.queue_free()
+	
+	# Clear the controls dictionary to prevent accessing freed instances
+	settings_controls.clear()
 	
 	# Add category title with padding
 	var title = Label.new()
@@ -354,7 +498,7 @@ func _create_setting_control(setting: Dictionary) -> Control:
 	var container = HBoxContainer.new()
 	container.name = setting.id + "_container"
 	container.add_theme_constant_override("separation", 25)
-	container.custom_minimum_size.y = 35  # Ensure minimum height for padding
+	container.custom_minimum_size.y = 35
 	
 	# Setting label with padding
 	var label = Label.new()
@@ -369,16 +513,21 @@ func _create_setting_control(setting: Dictionary) -> Control:
 	match setting.type:
 		"checkbox":
 			control = _create_checkbox_control(setting)
+			settings_controls[setting.id] = control  # Store checkbox directly
 		"slider":
 			control = _create_slider_control(setting)
+			# FIXED: Store the actual slider, not the container
+			var slider = control.get_child(0) as HSlider  # First child is the slider
+			settings_controls[setting.id] = slider
 		"dropdown":
 			control = _create_dropdown_control(setting)
+			settings_controls[setting.id] = control  # Store dropdown directly
 		_:
 			control = Label.new()
 			control.text = "Unknown setting type"
+			settings_controls[setting.id] = control
 	
 	container.add_child(control)
-	settings_controls[setting.id] = control
 	
 	outer_container.add_child(container)
 	
@@ -396,9 +545,92 @@ func _create_setting_control(setting: Dictionary) -> Control:
 func _create_checkbox_control(setting: Dictionary) -> CheckBox:
 	var checkbox = CheckBox.new()
 	checkbox.button_pressed = get_setting_value(setting.id, setting.default)
-	checkbox.custom_minimum_size.y = 30
+	checkbox.custom_minimum_size.y = 10
+	checkbox.custom_minimum_size.x = 20
+	
+	# Create custom checkbox styles for better visibility
+	_apply_checkbox_styling(checkbox)
+	
 	checkbox.toggled.connect(_on_checkbox_toggled.bind(setting.id))
 	return checkbox
+
+func _apply_checkbox_styling(checkbox: CheckBox):
+	"""Apply custom styling to make checkboxes more visible"""
+	
+	# Create normal (unchecked) style
+	var normal_style = StyleBoxFlat.new()
+	normal_style.bg_color = Color(0.2, 0.2, 0.2, 0.9)
+	normal_style.border_width_left = 2
+	normal_style.border_width_right = 2
+	normal_style.border_width_top = 2
+	normal_style.border_width_bottom = 2
+	normal_style.border_color = Color(0.5, 0.5, 0.5, 1.0)
+
+	
+	# Create checked style
+	var checked_style = StyleBoxFlat.new()
+	checked_style.bg_color = Color(0.3, 0.6, 0.9, 1.0)  # Blue background when checked
+	checked_style.border_width_left = 2
+	checked_style.border_width_right = 2
+	checked_style.border_width_top = 2
+	checked_style.border_width_bottom = 2
+	checked_style.border_color = Color(0.4, 0.7, 1.0, 1.0)  # Brighter blue border
+
+	
+	# Create hover style
+	var hover_style = StyleBoxFlat.new()
+	hover_style.bg_color = Color(0.3, 0.3, 0.3, 0.9)
+	hover_style.border_width_left = 2
+	hover_style.border_width_right = 2
+	hover_style.border_width_top = 2
+	hover_style.border_width_bottom = 2
+	hover_style.border_color = Color(0.7, 0.7, 0.7, 1.0)
+
+	
+	# Apply the styles
+	checkbox.add_theme_stylebox_override("normal", normal_style)
+	checkbox.add_theme_stylebox_override("pressed", checked_style)
+	checkbox.add_theme_stylebox_override("hover", hover_style)
+	checkbox.add_theme_stylebox_override("hover_pressed", checked_style)
+	
+	# Create custom checkmark icon for better visibility
+	var checkmark_texture = _create_checkmark_texture()
+	if checkmark_texture:
+		checkbox.add_theme_icon_override("checked", checkmark_texture)
+	
+	# Set text color
+	checkbox.add_theme_color_override("font_color", Color.WHITE)
+	checkbox.add_theme_color_override("font_hover_color", Color.WHITE)
+	checkbox.add_theme_color_override("font_pressed_color", Color.WHITE)
+
+func _create_checkmark_texture() -> ImageTexture:
+	"""Create a custom checkmark texture for better visibility"""
+	var image = Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	
+	# Draw a simple checkmark
+	var checkmark_color = Color.WHITE
+	
+	# Simple checkmark pattern (you can make this more sophisticated)
+	var checkmark_pixels = [
+		Vector2i(3, 8), Vector2i(4, 9), Vector2i(5, 10),
+		Vector2i(6, 9), Vector2i(7, 8), Vector2i(8, 7),
+		Vector2i(9, 6), Vector2i(10, 5), Vector2i(11, 4),
+		Vector2i(12, 3)
+	]
+	
+	for pixel in checkmark_pixels:
+		if pixel.x >= 0 and pixel.x < 16 and pixel.y >= 0 and pixel.y < 16:
+			image.set_pixel(pixel.x, pixel.y, checkmark_color)
+			# Make it a bit thicker
+			if pixel.x + 1 < 16:
+				image.set_pixel(pixel.x + 1, pixel.y, checkmark_color)
+			if pixel.y + 1 < 16:
+				image.set_pixel(pixel.x, pixel.y + 1, checkmark_color)
+	
+	var texture = ImageTexture.new()
+	texture.set_image(image)
+	return texture
 
 func _create_slider_control(setting: Dictionary) -> HBoxContainer:
 	var container = HBoxContainer.new()
@@ -432,6 +664,7 @@ func _create_slider_control(setting: Dictionary) -> HBoxContainer:
 	container.add_child(slider)
 	container.add_child(value_label)
 	
+	# FIXED: Store the slider directly, not the container
 	return container
 
 func _create_dropdown_control(setting: Dictionary) -> OptionButton:
@@ -537,8 +770,23 @@ func _on_dropdown_selected(index: int, setting_id: String):
 	settings_changed.emit(setting_id, value)
 
 func _on_apply_pressed():
-	_save_settings()
+	# Apply graphics settings
+	if graphics_manager:
+		graphics_manager.apply_all_settings()
+		graphics_manager.save_settings()
+	
+	# Apply audio settings
+	if audio_manager:
+		audio_manager.apply_all_settings()
+		audio_manager.save_settings()
+	
+	# Apply gameplay settings
+	if gameplay_manager:
+		gameplay_manager.apply_all_settings()
+		gameplay_manager.save_settings()
+	
 	settings_applied.emit()
+	print("All settings applied successfully")
 
 func _on_reset_pressed():
 	_reset_to_defaults()
@@ -556,6 +804,45 @@ func _on_graphics_setting_changed(setting_id: String, value):
 	# Handle graphics manager setting changes
 	if setting_id in settings_controls:
 		var control = settings_controls[setting_id]
+		
+		# Check if control is still valid
+		if not is_instance_valid(control):
+			settings_controls.erase(setting_id)
+			return
+			
+		if control is CheckBox:
+			control.button_pressed = value
+		elif control is HSlider:
+			control.value = value
+		elif control is OptionButton:
+			for i in control.get_item_count():
+				if control.get_item_text(i) == str(value):
+					control.selected = i
+					break
+
+func _on_audio_setting_changed(setting_id: String, value):
+	# Handle audio manager setting changes
+	if setting_id in settings_controls:
+		var control = settings_controls[setting_id]
+		
+		# Check if control is still valid
+		if not is_instance_valid(control):
+			settings_controls.erase(setting_id)
+			return
+			
+		if control is HSlider:
+			control.value = value
+
+func _on_gameplay_setting_changed(setting_id: String, value):
+	# Handle gameplay manager setting changes
+	if setting_id in settings_controls:
+		var control = settings_controls[setting_id]
+		
+		# Check if control is still valid
+		if not is_instance_valid(control):
+			settings_controls.erase(setting_id)
+			return
+			
 		if control is CheckBox:
 			control.button_pressed = value
 		elif control is HSlider:
@@ -570,7 +857,7 @@ func _on_graphics_setting_changed(setting_id: String, value):
 func _save_settings():
 	var config = ConfigFile.new()
 	
-	# Only save NON-graphics settings (audio and gameplay)
+	# Save audio and gameplay settings
 	for setting in audio_settings:
 		if settings_data.has(setting.id):
 			config.set_value("audio", setting.id, settings_data[setting.id])
@@ -579,7 +866,10 @@ func _save_settings():
 		if settings_data.has(setting.id):
 			config.set_value("gameplay", setting.id, settings_data[setting.id])
 	
-	# Graphics settings are handled by GraphicsManager
+	# Let GraphicsManager handle saving its own settings
+	if graphics_manager:
+		graphics_manager.save_settings()
+	
 	config.save("user://settings.cfg")
 
 func _load_settings():
@@ -598,33 +888,93 @@ func _load_settings():
 			settings_data[setting.id] = setting.default
 
 func _reset_to_defaults():
+	# Clear local settings data
 	settings_data.clear()
 	
-	# Reset to defaults
+	# Reset all managers to their defaults
+	if graphics_manager:
+		graphics_manager.reset_to_defaults()
+	
+	if audio_manager:
+		audio_manager.reset_to_defaults()
+	
+	if gameplay_manager:
+		gameplay_manager.reset_to_defaults()
+	
+	# Reset local settings data for any remaining settings
 	for setting in graphics_settings + audio_settings + gameplay_settings:
 		settings_data[setting.id] = setting.default
 	
-	# Reset graphics manager if available
-	if graphics_manager:
-		graphics_manager.reset_to_defaults()
+	print("Settings reset to defaults")
 
 func _refresh_controls():
 	# Refresh all setting controls with current values
+	var controls_to_remove = []
+	
 	for setting_id in settings_controls.keys():
 		var control = settings_controls[setting_id]
+		
+		# Check if control is still valid
+		if not is_instance_valid(control):
+			controls_to_remove.append(setting_id)
+			continue
+		
 		var value = get_setting_value(setting_id, null)
 		
 		if value != null:
 			if control is CheckBox:
 				control.button_pressed = value
 			elif control is HSlider:
+				# Now this will work because we're storing the actual slider
 				control.value = value
+				# Update the value label
+				_update_slider_value_label(setting_id, control, value)
 			elif control is OptionButton:
 				# Find the option and select it
 				for i in control.get_item_count():
 					if control.get_item_text(i) == str(value):
 						control.selected = i
 						break
+	
+	# Clean up invalid controls
+	for setting_id in controls_to_remove:
+		settings_controls.erase(setting_id)
+
+func _update_slider_value_label(setting_id: String, slider: HSlider, value: float):
+	"""Update the value label next to a slider"""
+	# Find the slider's parent container
+	var container = slider.get_parent()
+	if not container:
+		return
+	
+	# Find the value label (should be the next child after the slider)
+	var slider_index = -1
+	for i in container.get_child_count():
+		if container.get_child(i) == slider:
+			slider_index = i
+			break
+	
+	if slider_index >= 0 and slider_index + 1 < container.get_child_count():
+		var value_label = container.get_child(slider_index + 1)
+		if value_label is Label:
+			# Determine format from setting definition
+			var format = "percentage"  # default
+			
+			# Find the setting to get its format
+			var all_settings = graphics_settings + audio_settings + gameplay_settings
+			for setting in all_settings:
+				if setting.id == setting_id:
+					format = setting.get("format", "percentage")
+					break
+			
+			# Update label text based on format
+			match format:
+				"percentage":
+					value_label.text = str(int(value * 100)) + "%"
+				"decimal":
+					value_label.text = "%.2f" % value
+				_:
+					value_label.text = str(value)
 
 # Handle window resize to keep settings centered
 func _notification(what):
@@ -639,15 +989,23 @@ func hide_settings():
 	visible = false
 
 func get_setting_value(setting_id: String, default_value):
-	"""Get setting value from graphics manager or settings data"""
+	"""Get setting value from appropriate manager"""
 	if graphics_manager and setting_id in ["resolution", "window_mode", "vsync_mode", "quality_preset", "render_scale", "max_fps"]:
 		return graphics_manager.get_current_setting(setting_id, default_value)
+	elif audio_manager and setting_id in ["master_volume", "music_volume", "sfx_volume"]:
+		return audio_manager.get_current_setting(setting_id, default_value)
+	elif gameplay_manager and setting_id in ["mouse_sensitivity", "auto_save", "difficulty"]:
+		return gameplay_manager.get_current_setting(setting_id, default_value)
 	else:
 		return settings_data.get(setting_id, default_value)
 
 func set_setting_value(setting_id: String, value):
-	"""Set setting value in graphics manager or settings data"""
+	"""Set setting value in appropriate manager"""
 	if graphics_manager and setting_id in ["resolution", "window_mode", "vsync_mode", "quality_preset", "render_scale", "max_fps"]:
 		graphics_manager.current_settings[setting_id] = value
+	elif audio_manager and setting_id in ["master_volume", "music_volume", "sfx_volume"]:
+		audio_manager.current_settings[setting_id] = value
+	elif gameplay_manager and setting_id in ["mouse_sensitivity", "auto_save", "difficulty"]:
+		gameplay_manager.current_settings[setting_id] = value
 	else:
 		settings_data[setting_id] = value

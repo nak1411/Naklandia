@@ -438,37 +438,15 @@ func apply_all_settings():
 	apply_render_scale(current_settings.get("render_scale", default_settings["render_scale"]))
 	apply_max_fps(current_settings.get("max_fps", default_settings["max_fps"]))
 	
-	# Handle display settings
+	# Handle display settings with force apply
 	var target_mode = current_settings.get("window_mode", default_settings["window_mode"])
 	var target_resolution = current_settings.get("resolution", default_settings["resolution"])
 	
-	# Apply window mode and resolution together
-	match target_mode:
-		"Windowed":
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-			
-			# Immediately apply resolution for windowed mode
-			var parts = target_resolution.split("x")
-			if parts.size() == 2:
-				var width = int(parts[0])
-				var height = int(parts[1])
-				var new_size = Vector2i(width, height)
-				DisplayServer.window_set_size(new_size)
-				
-				# Center on primary screen
-				var primary_screen = DisplayServer.get_primary_screen()
-				var screen_size = DisplayServer.screen_get_size(primary_screen)
-				var screen_position = DisplayServer.screen_get_position(primary_screen)
-				var window_pos = screen_position + (screen_size - new_size) / 2
-				DisplayServer.window_set_position(window_pos)
-		"Fullscreen":
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-		"Exclusive Fullscreen":
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+	# Apply window mode first
+	apply_window_mode(target_mode)
 	
-	# Update stored settings
-	current_settings["window_mode"] = target_mode
-	current_settings["resolution"] = target_resolution
+	# Force apply resolution
+	apply_resolution(target_resolution, true)  # Add force_apply = true here
 	
 	_applying_settings = false
 	settings_applied.emit()
