@@ -1,4 +1,4 @@
-# ListRowTooltipManager.gd - Tooltip manager for list rows with debug
+# ListRowTooltipManager.gd - Exact copy of slot tooltip pattern
 class_name ListRowTooltipManager
 extends RefCounted
 
@@ -18,27 +18,25 @@ var tooltip_delay: float = 0.2
 
 func _init(list_row: ListRowManager):
 	row = list_row
-	print("ListRowTooltipManager created for row")
 
 func setup_tooltip():
-	"""Initialize the tooltip system"""
-	print("Setting up tooltip...")
-	var inventory_canvas_layer = _find_inventory_canvas_layer()
-	if not inventory_canvas_layer:
-		print("ERROR: Could not find inventory canvas layer")
+	"""Initialize the tooltip system - exact copy of slot version"""
+	var inventory_window = _find_inventory_window()
+	if not inventory_window:
+		print("ListRowTooltipManager: Could not find inventory window")
 		return
 	
-	print("Found canvas layer: ", inventory_canvas_layer.name)
+	print("ListRowTooltipManager: Found inventory window: ", inventory_window.name)
 	
-	# Create tooltip panel
+	# Create tooltip panel - exact copy
 	tooltip = PanelContainer.new()
 	tooltip.name = "ItemTooltip"
 	tooltip.visible = false
 	tooltip.z_index = 1000
 	
-	# Style the tooltip panel
+	# Style the tooltip panel - exact copy
 	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color(0.1, 0.1, 0.1, 0.95)
+	style_box.bg_color = Color(0.1, 0.1, 0.1, 0.75)
 	style_box.border_width_left = 1
 	style_box.border_width_right = 1
 	style_box.border_width_top = 1
@@ -50,7 +48,7 @@ func setup_tooltip():
 	style_box.content_margin_bottom = 6
 	tooltip.add_theme_stylebox_override("panel", style_box)
 	
-	# Create tooltip label
+	# Create tooltip label - exact copy
 	tooltip_label = RichTextLabel.new()
 	tooltip_label.bbcode_enabled = true
 	tooltip_label.fit_content = true
@@ -58,88 +56,96 @@ func setup_tooltip():
 	tooltip_label.custom_minimum_size = Vector2(200, 0)
 	tooltip.add_child(tooltip_label)
 	
-	# Add to inventory canvas layer
-	inventory_canvas_layer.add_child(tooltip)
-	print("Tooltip setup complete")
+	# Add to inventory window - exact copy
+	inventory_window.add_child(tooltip)
+	print("ListRowTooltipManager: Tooltip added to inventory window")
 
 func process_tooltip_timer(delta: float):
-	"""Process tooltip delay timer"""
+	"""Process tooltip delay timer - exact copy"""
 	if tooltip_timer > 0:
 		tooltip_timer -= delta
 		if tooltip_timer <= 0 and row.item and not is_showing_tooltip:
-			print("Timer expired, showing tooltip")
 			show_tooltip()
 
 func show_tooltip():
-	"""Show the tooltip with fade in animation"""
+	"""Show the tooltip - exact copy of slot logic"""
 	var item = row.item
 	if not item or is_showing_tooltip or not tooltip:
-		print("Cannot show tooltip - item:", item, " showing:", is_showing_tooltip, " tooltip:", tooltip)
+		print("ListRowTooltipManager: Cannot show - item: ", item, " showing: ", is_showing_tooltip, " tooltip: ", tooltip)
 		return
 	
-	print("Showing tooltip for item: ", item.item_name)
+	print("ListRowTooltipManager: Showing tooltip for: ", item.item_name)
 	
-	# Kill any existing tween first
+	# Kill any existing tween first - exact copy
 	if tooltip_tween:
 		tooltip_tween.kill()
 		tooltip_tween = null
 	
-	# Mark as showing immediately to prevent multiple calls
+	# Mark as showing immediately to prevent multiple calls - exact copy
 	is_showing_tooltip = true
 	
-	# Update tooltip content
+	# Update tooltip content - exact copy
 	tooltip_label.text = _get_tooltip_text(item)
 	
-	# Wait for tooltip to calculate its size
-	await row.get_tree().process_frame
-	
-	# Get the inventory canvas layer for proper coordinate space
-	var inventory_canvas_layer = _find_inventory_canvas_layer()
-	if not inventory_canvas_layer:
-		print("ERROR: Canvas layer not found during show")
+	# Get the inventory window to use as reference - exact copy
+	var inventory_window = _find_inventory_window()
+	if not inventory_window:
 		is_showing_tooltip = false
 		return
 	
-	# Convert row's global position to canvas layer's local space
+	# Convert row's global position to inventory window's local space - SAME as slot logic
 	var row_global_pos = row.global_position
-	var canvas_global_pos = inventory_canvas_layer.global_position
-	var row_local_to_canvas = row_global_pos - canvas_global_pos
+	var window_global_pos = inventory_window.global_position
+	var row_local_to_window = row_global_pos - window_global_pos
 	
-	# Calculate tooltip position - centered horizontally, positioned below the row
-	var tooltip_pos = row_local_to_canvas + Vector2(
+	# Calculate tooltip position below the row - adapted from slot logic
+	var tooltip_pos = row_local_to_window + Vector2(
 		(row.size.x - tooltip.size.x) / 2,  # Center horizontally with the row
-		row.size.y + 5  # Position below the row with 5px gap
+		row.size.y + 5  # Position below with 5px gap
 	)
 	
-	print("Tooltip position: ", tooltip_pos)
-	print("Row size: ", row.size)
-	print("Tooltip size: ", tooltip.size)
+	# Ensure tooltip stays within window bounds - exact copy of slot logic
+	var window_rect = Rect2(Vector2.ZERO, inventory_window.size)
+	var tooltip_rect = Rect2(tooltip_pos, tooltip.size)
+	
+	# Adjust horizontal position if tooltip goes outside window - exact copy
+	if tooltip_rect.position.x < 0:
+		tooltip_pos.x = 0
+	elif tooltip_rect.end.x > window_rect.size.x:
+		tooltip_pos.x = window_rect.size.x - tooltip.size.x
+	
+	# Adjust vertical position if tooltip goes outside window - exact copy
+	if tooltip_rect.end.y > window_rect.size.y:
+		# Position above the row instead
+		tooltip_pos.y = row_local_to_window.y - tooltip.size.y - 5
+	
+	# Ensure tooltip doesn't go above window top - exact copy
+	if tooltip_pos.y < 0:
+		tooltip_pos.y = row_local_to_window.y + row.size.y + 5
 	
 	tooltip.position = tooltip_pos
 	tooltip.visible = true
+	print("ListRowTooltipManager: Tooltip positioned at: ", tooltip_pos)
 	
-	# Start fully transparent and fade in
+	# Start fully transparent and fade in - exact copy
 	tooltip.modulate.a = 0.0
 	tooltip_tween = row.create_tween()
 	tooltip_tween.tween_property(tooltip, "modulate:a", 1.0, tooltip_fade_duration)
-	
-	print("Tooltip should now be visible")
 
 func hide_tooltip():
-	"""Hide the tooltip with fade out animation"""
-	print("Hiding tooltip")
+	"""Hide the tooltip - exact copy"""
 	# Always reset the timer when hiding
 	tooltip_timer = 0.0
 	
 	if not tooltip or not is_showing_tooltip:
 		return
 	
-	# Kill any existing tween first
+	# Kill any existing tween first - exact copy
 	if tooltip_tween:
 		tooltip_tween.kill()
 		tooltip_tween = null
 	
-	# Fade out and then hide
+	# Fade out and then hide - exact copy
 	tooltip_tween = row.create_tween()
 	tooltip_tween.tween_property(tooltip, "modulate:a", 0.0, tooltip_fade_duration)
 	tooltip_tween.tween_callback(func(): 
@@ -149,16 +155,16 @@ func hide_tooltip():
 	)
 
 func start_tooltip_timer():
-	"""Start the tooltip delay timer"""
+	"""Start the tooltip delay timer - exact copy"""
 	var item = row.item
 	if item and not is_showing_tooltip:
 		tooltip_timer = tooltip_delay
-		print("Started tooltip timer for: ", item.item_name)
+		print("ListRowTooltipManager: Timer started for: ", item.item_name)
 	else:
 		tooltip_timer = 0.0
 
 func _get_tooltip_text(item: InventoryItem_Base) -> String:
-	"""Generate tooltip text for an item"""
+	"""Generate tooltip text - exact copy of slot version"""
 	if not item:
 		return ""
 	
@@ -177,27 +183,17 @@ func _get_tooltip_text(item: InventoryItem_Base) -> String:
 	
 	return tooltip_text
 
-func _find_inventory_canvas_layer() -> CanvasLayer:
-	"""Find the inventory canvas layer in the scene"""
-	# Look for InventoryLayer in the scene
-	var scene_root = row.get_tree().current_scene
-	var inventory_layer = scene_root.get_node_or_null("InventoryLayer")
-	if inventory_layer and inventory_layer is CanvasLayer:
-		return inventory_layer
-	
-	# Alternative approach: traverse up from the row to find the CanvasLayer
+func _find_inventory_window() -> Control:
+	"""Find the inventory window - exact copy of slot version"""
 	var current = row.get_parent()
 	while current:
-		if current is CanvasLayer:
+		if current.get_script() and current.get_script().get_global_name() == "InventoryWindow":
 			return current
 		current = current.get_parent()
-	
-	print("Could not find canvas layer")
 	return null
 
 func cleanup():
-	"""Clean up tooltip components"""
-	print("Cleaning up tooltip")
+	"""Clean up tooltip components - exact copy"""
 	# Clear timer and state first
 	tooltip_timer = 0.0
 	is_showing_tooltip = false

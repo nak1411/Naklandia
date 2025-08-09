@@ -37,7 +37,6 @@ signal item_drag_ended(row: ListRowManager, success: bool)
 func _ready():
 	custom_minimum_size.y = row_height
 	mouse_filter = Control.MOUSE_FILTER_PASS
-	_setup_components()
 	set_process(true)
 
 func setup(new_item: InventoryItem_Base, new_columns: Array[Dictionary], new_row_height: int):
@@ -47,9 +46,10 @@ func setup(new_item: InventoryItem_Base, new_columns: Array[Dictionary], new_row
 	
 	_setup_ui()
 	_populate_cells()
+	call_deferred("_setup_tooltip_manager")
 
-func _setup_components():
-	"""Initialize component systems"""
+func _setup_tooltip_manager():
+	"""Setup tooltip manager after row is fully in scene tree"""
 	tooltip_manager = ListRowTooltipManager.new(self)
 	if tooltip_manager:
 		tooltip_manager.setup_tooltip()
@@ -1003,6 +1003,11 @@ func _cleanup_drag_preview():
 	for canvas in drag_canvases:
 		if is_instance_valid(canvas):
 			canvas.queue_free()
+
+func _deferred_tooltip_setup():
+	"""Deferred tooltip setup for when row is in scene tree"""
+	if tooltip_manager:
+		tooltip_manager._perform_setup()
 
 func cleanup():
 	"""Clean up components"""
