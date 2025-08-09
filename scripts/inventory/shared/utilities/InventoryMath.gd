@@ -55,6 +55,6 @@ static func format_currency(value: float) -> String:
 		count += 1
 	
 	if cents != "00":
-		return result + "." + cents + " cr"
+		return result + "." + cents + " cr "
 	else:
-		return result + " cr"
+		return result + " cr "

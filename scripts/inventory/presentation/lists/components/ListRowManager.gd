@@ -179,10 +179,10 @@ func _create_cell(column: Dictionary) -> Control:
 		# Rest of columns remain the same...
 		"quantity":
 			var label = Label.new()
-			label.text = str(item.quantity)
+			label.text = str(item.quantity) + " "
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			label.add_theme_font_size_override("font_size", 12)
 			cell.add_child(label)
 			
@@ -202,7 +202,7 @@ func _create_cell(column: Dictionary) -> Control:
 		"volume":
 			var label = Label.new()
 			var total_volume = item.volume * item.quantity
-			label.text = "%.1f" % total_volume
+			label.text = "%.1f " % total_volume
 			label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
