@@ -298,10 +298,16 @@ func _update_background():
 func _mouse_entered():
 	is_hovered = true
 	_animate_hover_in()
+	if item and tooltip_manager:
+		print("Starting tooltip timer")
+		tooltip_manager.start_tooltip_timer()
 
 func _mouse_exited():
 	is_hovered = false
 	_animate_hover_out()
+	if tooltip_manager:
+		print("Hiding tooltip")
+		tooltip_manager.hide_tooltip()
 	
 func _update_background_color(color: Color):
 	if not background:
