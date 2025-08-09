@@ -12,12 +12,7 @@ var drag_start_position: Vector2
 var drag_threshold: float = 5.0
 var drag_preview_created: bool = false
 
-var tooltip: PanelContainer
-var tooltip_label: RichTextLabel
-var is_showing_tooltip: bool = false
-var tooltip_timer: float = 0.0
-var tooltip_delay: float = 0.2
-
+var tooltip_manager: ListRowTooltipManager
 
 var background: Panel
 var content_container: GridContainer
@@ -42,6 +37,7 @@ signal item_drag_ended(row: ListRowManager, success: bool)
 func _ready():
 	custom_minimum_size.y = row_height
 	mouse_filter = Control.MOUSE_FILTER_PASS
+	_setup_components()
 	set_process(true)
 
 func setup(new_item: InventoryItem_Base, new_columns: Array[Dictionary], new_row_height: int):
@@ -52,12 +48,16 @@ func setup(new_item: InventoryItem_Base, new_columns: Array[Dictionary], new_row
 	_setup_ui()
 	_populate_cells()
 
+func _setup_components():
+	"""Initialize component systems"""
+	tooltip_manager = ListRowTooltipManager.new(self)
+	if tooltip_manager:
+		tooltip_manager.setup_tooltip()
+
 func _process(delta):
 	# Handle tooltip delay
-	if tooltip_timer > 0:
-		tooltip_timer -= delta
-		if tooltip_timer <= 0 and item and not is_showing_tooltip:
-			_show_tooltip()
+	if tooltip_manager:
+		tooltip_manager.process_tooltip_timer(delta)
 
 func _setup_ui():
 	# Background panel
@@ -91,109 +91,6 @@ func _setup_ui():
 	click_overlay.mouse_entered.connect(_mouse_entered)
 	click_overlay.mouse_exited.connect(_mouse_exited)
 	add_child(click_overlay)
-
-func _setup_tooltip():
-	# Get the inventory canvas layer
-	var inventory_canvas_layer = _find_inventory_canvas_layer()
-	if not inventory_canvas_layer:
-		return
-	
-	# Create tooltip panel
-	tooltip = PanelContainer.new()
-	tooltip.name = "ItemTooltip"
-	tooltip.visible = false
-	tooltip.z_index = 1000
-	
-	# Style the tooltip panel
-	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color(0.1, 0.1, 0.1, 0.75)
-	style_box.border_width_left = 1
-	style_box.border_width_right = 1
-	style_box.border_width_top = 1
-	style_box.border_width_bottom = 1
-	style_box.border_color = Color(0.5, 0.5, 0.5, 1.0)
-	style_box.content_margin_left = 8
-	style_box.content_margin_right = 8
-	style_box.content_margin_top = 6
-	style_box.content_margin_bottom = 6
-	tooltip.add_theme_stylebox_override("panel", style_box)
-	
-	# Create tooltip label
-	tooltip_label = RichTextLabel.new()
-	tooltip_label.bbcode_enabled = true
-	tooltip_label.fit_content = true
-	tooltip_label.add_theme_font_size_override("normal_font_size", 12)
-	tooltip_label.custom_minimum_size = Vector2(200, 0)
-	tooltip.add_child(tooltip_label)
-	
-	# Add to inventory canvas layer
-	inventory_canvas_layer.add_child(tooltip)
-
-func _get_tooltip_text() -> String:
-	if not item:
-		return ""
-	
-	var tooltip = "[b]%s[/b]\n" % item.item_name
-
-	var type_name = ItemTypes.get_type_name(item.item_type)
-
-	tooltip += "Type: %s\n" % type_name
-	tooltip += "Quantity: %d\n" % item.quantity
-	tooltip += "Volume: %.2f m³ (%.2f m³ total)\n" % [item.volume, item.get_total_volume()]
-	tooltip += "Mass: %.2f t (%.2f t total)\n" % [item.mass, item.get_total_mass()]
-	tooltip += "Value: %.2f cr (%.2f cr total)" % [item.base_value, item.get_total_value()]
-	
-	if not item.description.is_empty():
-		tooltip += "\n\n[i]%s[/i]" % item.description
-	
-	return tooltip
-
-func _show_tooltip():
-	if not item or is_showing_tooltip:
-		return
-	
-	if not tooltip:
-		_setup_tooltip()
-	
-	if not tooltip:
-		return
-	
-	# Update tooltip content
-	tooltip_label.text = _get_tooltip_text()
-	
-	# Wait for tooltip to calculate its size
-	await get_tree().process_frame
-	
-	# Position centered horizontally with the row and underneath it
-	var tooltip_pos = global_position + Vector2(
-		(size.x / 2) - (tooltip.size.x / 2),  # Center horizontally
-		size.y + 5  # Position underneath with 5px gap
-	)
-	
-	tooltip.position = tooltip_pos
-	tooltip.visible = true
-	is_showing_tooltip = true
-
-func _hide_tooltip():
-	if tooltip and tooltip.visible:
-		tooltip.visible = false
-	is_showing_tooltip = false
-
-func _find_inventory_canvas_layer() -> CanvasLayer:
-	# Look for InventoryLayer in the scene
-	var scene_root = get_tree().current_scene
-	var inventory_layer = scene_root.get_node_or_null("InventoryLayer")
-	if inventory_layer and inventory_layer is CanvasLayer:
-		return inventory_layer
-	
-	# Alternative approach: traverse up from the row to find the CanvasLayer
-	var current = get_parent()
-	while current:
-		if current is CanvasLayer:
-			return current
-		current = current.get_parent()
-	
-	return null
 
 func _populate_cells():
 	# Clear existing cells
@@ -401,14 +298,10 @@ func _update_background():
 func _mouse_entered():
 	is_hovered = true
 	_animate_hover_in()
-	if item:
-		tooltip_timer = tooltip_delay
 
 func _mouse_exited():
 	is_hovered = false
 	_animate_hover_out()
-	tooltip_timer = 0.0
-	_hide_tooltip()
 	
 func _update_background_color(color: Color):
 	if not background:
@@ -1110,6 +1003,11 @@ func _cleanup_drag_preview():
 	for canvas in drag_canvases:
 		if is_instance_valid(canvas):
 			canvas.queue_free()
+
+func cleanup():
+	"""Clean up components"""
+	if tooltip_manager:
+		tooltip_manager.cleanup()
 			
 func _exit_tree():
 	if hover_tween:
@@ -1118,6 +1016,5 @@ func _exit_tree():
 	if hover_overlay:
 		hover_overlay.queue_free()
 		hover_overlay = null
-	if tooltip and is_instance_valid(tooltip):
-		tooltip.queue_free()
-	tooltip = null
+	cleanup()
+
