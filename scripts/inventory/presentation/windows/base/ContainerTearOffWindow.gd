@@ -33,7 +33,7 @@ func _init(tear_container: InventoryContainer_Base, parent_inv_window: Inventory
 	else:
 		window_title = "Container"
 		
-	default_size = Vector2(600, 500)
+	default_size = Vector2(600, 400)
 	min_window_size = Vector2(400, 300)
 	max_window_size = Vector2(1200, 800)
 
