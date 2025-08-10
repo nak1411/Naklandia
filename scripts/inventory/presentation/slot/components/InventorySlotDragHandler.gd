@@ -158,12 +158,28 @@ func _update_preview_position(preview: Control):
 	if source_slot != slot:
 		return
 	
-	# Keep the original positioning logic - don't change the preview size/position calculation
+	# Keep the original positioning logic
 	var mouse_pos = slot.get_global_mouse_position()
-	preview.global_position = mouse_pos - preview.size / 2  # This was the original logic
+	preview.global_position = mouse_pos - preview.size / 2
 	
-	# Real-time slot detection and highlighting (new feature, but don't change preview)
-	_update_drop_target_highlighting(mouse_pos)
+	# Use bounding box detection instead of mouse position
+	_update_drop_target_highlighting_with_bounds()
+
+func _update_drop_target_highlighting_with_bounds():
+	"""Update highlighting using bounding box detection instead of mouse position"""
+	var target_slot = _find_best_drop_slot(Vector2.ZERO)  # Mouse pos not needed anymore
+	
+	# Clear previous highlighting
+	if currently_highlighted_slot and currently_highlighted_slot != target_slot:
+		currently_highlighted_slot.set_highlighted(false)
+		currently_highlighted_slot = null
+	
+	# Highlight new target slot
+	if target_slot and target_slot != slot:
+		# Check if this is a valid drop target
+		if _is_valid_drop_target(target_slot):
+			target_slot.set_highlighted(true)
+			currently_highlighted_slot = target_slot
 
 func _update_drop_target_highlighting(mouse_pos: Vector2):
 	"""Update highlighting for the slot under the mouse cursor"""
@@ -182,83 +198,96 @@ func _update_drop_target_highlighting(mouse_pos: Vector2):
 			currently_highlighted_slot = target_slot
 
 func _find_best_drop_slot(mouse_pos: Vector2) -> InventorySlot:
-	"""Find the best slot to drop on based on mouse position"""
+	"""Find the best slot to drop on based on bounding box detection"""
 	var grid = _get_inventory_grid()
 	if not grid:
 		return null
 	
-	# Check if we're over the grid area
-	var grid_rect = Rect2(grid.global_position, grid.size)
-	if not grid_rect.has_point(mouse_pos):
+	# Get the drag preview for bounding box calculations
+	var drag_preview = _get_current_drag_preview()
+	if not drag_preview:
 		return null
+	
+	# Create bounding box for the dragged item
+	var preview_rect = Rect2(drag_preview.global_position, drag_preview.size)
 	
 	if grid.enable_virtual_scrolling:
-		return _find_best_virtual_slot(mouse_pos, grid)
+		return _find_best_virtual_slot_with_bounds(preview_rect, grid)
 	else:
-		return _find_best_traditional_slot(mouse_pos, grid)
+		return _find_best_traditional_slot_with_bounds(preview_rect, grid)
 
-func _find_best_virtual_slot(mouse_pos: Vector2, grid: InventoryGrid) -> InventorySlot:
-	"""Find best slot in virtual scrolling mode"""
-	if not grid.virtual_content:
+func _find_best_virtual_slot_with_bounds(preview_rect: Rect2, grid: InventoryGrid) -> InventorySlot:
+	"""Find best slot in virtual scrolling mode using bounding box detection"""
+	if not grid.virtual_rendered_slots:
 		return null
 	
-	# Convert to local position relative to virtual content
-	var local_pos = mouse_pos - grid.virtual_content.global_position
+	var best_slot = null
+	var max_overlap_area = 0.0
 	
-	# Calculate which grid cell this position falls into
-	# Account for spacing in BOTH X and Y directions, including slot_spacing_bottom
-	var total_slot_width = grid.slot_size.x + grid.slot_spacing
-	var total_slot_height = grid.slot_size.y + grid.slot_spacing + grid.slot_spacing_bottom
-	
-	var grid_col = int(local_pos.x / total_slot_width)
-	var grid_row = int(local_pos.y / total_slot_height)
-	
-	# Clamp to valid bounds
-	grid_col = clamp(grid_col, 0, grid.virtual_items_per_row - 1)
-	grid_row = max(0, grid_row)
-	
-	# First, check for exact slot hits
+	# Check each rendered slot for bounding box overlap
 	for slot_check in grid.virtual_rendered_slots:
-		if slot_check and slot_check.grid_position == Vector2i(grid_col, grid_row):
-			return slot_check
+		if not slot_check or slot_check == slot:
+			continue
+		
+		var slot_rect = Rect2(slot_check.global_position, slot_check.size)
+		
+		# Check if bounding boxes intersect
+		if preview_rect.intersects(slot_rect):
+			# Calculate overlap area to find the best match
+			var intersection = preview_rect.intersection(slot_rect)
+			var overlap_area = intersection.get_area()
+			
+			if overlap_area > max_overlap_area:
+				max_overlap_area = overlap_area
+				best_slot = slot_check
 	
-	# If no exact hit, find the closest empty slot or best drop position
-	return _find_closest_virtual_drop_position(grid_col, grid_row, grid)
+	return best_slot
 
-func _find_best_traditional_slot(mouse_pos: Vector2, grid: InventoryGrid) -> InventorySlot:
-	"""Find best slot in traditional grid mode"""
-	# First, check for direct hits on slots
+func _find_best_traditional_slot_with_bounds(preview_rect: Rect2, grid: InventoryGrid) -> InventorySlot:
+	"""Find best slot in traditional grid mode using bounding box detection"""
+	var best_slot = null
+	var max_overlap_area = 0.0
+	
+	# Check all slots for bounding box overlap
 	for y in grid.current_grid_height:
 		for x in grid.current_grid_width:
 			if y < grid.slots.size() and x < grid.slots[y].size():
 				var slot_check = grid.slots[y][x]
-				if not slot_check:
+				if not slot_check or slot_check == slot:
 					continue
 				
 				var slot_rect = Rect2(slot_check.global_position, slot_check.size)
-				if slot_rect.has_point(mouse_pos):
-					return slot_check
+				
+				# Check if bounding boxes intersect
+				if preview_rect.intersects(slot_rect):
+					# Calculate overlap area to find the best match
+					var intersection = preview_rect.intersection(slot_rect)
+					var overlap_area = intersection.get_area()
+					
+					if overlap_area > max_overlap_area:
+						max_overlap_area = overlap_area
+						best_slot = slot_check
 	
-	# If no direct hit, calculate grid position including spacing
-	if grid.grid_container:
-		var local_pos = mouse_pos - grid.grid_container.global_position
-		
-		# Account for slot spacing
-		var total_slot_width = grid.slot_size.x + grid.slot_spacing
-		var total_slot_height = grid.slot_size.y + grid.slot_spacing
-		
-		var grid_col = int(local_pos.x / total_slot_width)
-		var grid_row = int(local_pos.y / total_slot_height)
-		
-		# Clamp to valid bounds
-		grid_col = clamp(grid_col, 0, grid.current_grid_width - 1)
-		grid_row = clamp(grid_row, 0, grid.current_grid_height - 1)
-		
-		# Return the slot at this position
-		if grid_row < grid.slots.size() and grid_col < grid.slots[grid_row].size():
-			return grid.slots[grid_row][grid_col]
+	return best_slot
+
+func _get_current_drag_preview() -> Control:
+	"""Get the current drag preview control"""
+	var viewport = slot.get_viewport()
+	if not viewport:
+		return null
 	
-	return null
+	# Look for the drag canvas
+	var drag_canvas = viewport.get_children().filter(func(child): return child.name == "DragCanvas")
+	if drag_canvas.is_empty():
+		return null
+	
+	# Get the preview from the drag canvas
+	var canvas = drag_canvas[0]
+	var preview_children = canvas.get_children().filter(func(child): return child.name == "DragPreview")
+	if preview_children.is_empty():
+		return null
+	
+	return preview_children[0]
 
 func _find_closest_virtual_drop_position(target_col: int, target_row: int, grid: InventoryGrid) -> InventorySlot:
 	"""Find the closest valid drop position in virtual mode"""
