@@ -6,6 +6,13 @@ var main_window: InventoryWindow
 var tearoff_windows: Dictionary = {}  # container_id -> ContainerTearOffWindow
 var drag_threshold: float = 15.0
 
+# Drag state tracking
+var drag_start_position: Vector2
+var drag_start_time: float
+var dragging_container_index: int = -1
+var is_potential_tearoff: bool = false
+var is_drag_active: bool = false  # New flag to track active drag state
+
 func _init(window: InventoryWindow):
 	main_window = window
 
@@ -32,11 +39,6 @@ func _on_container_list_input(event: InputEvent):
 	elif mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
 		_check_tearoff_completion(mouse_event.global_position)
 
-var drag_start_position: Vector2
-var drag_start_time: float
-var dragging_container_index: int = -1
-var is_potential_tearoff: bool = false
-
 func _start_potential_tearoff(position: Vector2):
 	"""Start monitoring for potential tearoff"""
 	var container_list = main_window.content.container_list
@@ -52,6 +54,7 @@ func _start_potential_tearoff(position: Vector2):
 		drag_start_time = Time.get_time_dict_from_system().second
 		dragging_container_index = item_index
 		is_potential_tearoff = true
+		is_drag_active = false
 		
 		# Start monitoring mouse movement
 		_start_drag_monitoring()
@@ -78,24 +81,43 @@ func _monitor_tearoff_drag():
 	var current_position = main_window.get_global_mouse_position()
 	var distance = current_position.distance_to(drag_start_position)
 	
-	if distance > drag_threshold:
-		_execute_tearoff()
-		_stop_drag_monitoring()
+	# Once threshold exceeded, mark as active drag but don't create window yet
+	if distance > drag_threshold and not is_drag_active:
+		is_drag_active = true
+		
+		# Visual feedback - could change cursor or show drag preview
+		_show_drag_feedback()
+
+func _show_drag_feedback():
+	"""Provide visual feedback that tearoff is ready"""
+	# You could change the cursor or add visual feedback here
+	# For now, just set the cursor to indicate dragging
+	if main_window:
+		main_window.mouse_default_cursor_shape = Control.CURSOR_MOVE
 
 func _stop_drag_monitoring():
 	"""Stop monitoring drag movement"""
 	is_potential_tearoff = false
+	is_drag_active = false
 	dragging_container_index = -1
+	
+	# Reset cursor
+	if main_window:
+		main_window.mouse_default_cursor_shape = Control.CURSOR_ARROW
 	
 	if main_window and main_window.get_tree().process_frame.is_connected(_monitor_tearoff_drag):
 		main_window.get_tree().process_frame.disconnect(_monitor_tearoff_drag)
 
 func _check_tearoff_completion(position: Vector2):
 	"""Check if tearoff should be completed on mouse release"""
+	if is_drag_active:
+		# Only create window on drop if we were actively dragging
+		_execute_tearoff_on_drop(position)
+	
 	_stop_drag_monitoring()
 
-func _execute_tearoff():
-	"""Execute the container tearoff"""
+func _execute_tearoff_on_drop(drop_position: Vector2):
+	"""Execute the container tearoff when mouse is released after dragging"""
 	if dragging_container_index < 0 or dragging_container_index >= main_window.content.open_containers.size():
 		return
 		
@@ -106,18 +128,20 @@ func _execute_tearoff():
 	# Check if already torn off
 	if container.container_id in tearoff_windows:
 		# Focus existing window
-		var existing_window = tearoff_windows[container.container_id]
-		if is_instance_valid(existing_window):
-			existing_window.move_to_front()
-			return
-		else:
-			# Clean up invalid reference
-			tearoff_windows.erase(container.container_id)
+		var existing_data = tearoff_windows[container.container_id]
+		if existing_data.has("window"):
+			var existing_window = existing_data["window"]
+			if is_instance_valid(existing_window):
+				existing_window.move_to_front()
+				return
+			else:
+				# Clean up invalid reference
+				tearoff_windows.erase(container.container_id)
 	
-	# Create new tearoff window
-	_create_tearoff_window(container)
+	# Create new tearoff window at drop position
+	_create_tearoff_window(container, drop_position)
 
-func _create_tearoff_window(container: InventoryContainer_Base):
+func _create_tearoff_window(container: InventoryContainer_Base, drop_position: Vector2 = Vector2.ZERO):
 	"""Create a new tearoff window for the container"""
 	var tearoff_window = ContainerTearOffWindow.new(container, main_window)
 	
@@ -128,9 +152,15 @@ func _create_tearoff_window(container: InventoryContainer_Base):
 	main_window.get_tree().current_scene.add_child(tearoff_canvas)
 	tearoff_canvas.add_child(tearoff_window)
 	
-	# Position near mouse
-	var mouse_pos = main_window.get_global_mouse_position()
-	tearoff_window.position = mouse_pos - Vector2(100, 50)
+	# Position at drop location or near mouse
+	var position_for_window: Vector2
+	if drop_position != Vector2.ZERO:
+		position_for_window = drop_position - Vector2(100, 50)
+	else:
+		var mouse_pos = main_window.get_global_mouse_position()
+		position_for_window = mouse_pos - Vector2(100, 50)
+	
+	tearoff_window.position = position_for_window
 	
 	# Ensure it's on screen
 	_ensure_window_on_screen(tearoff_window)
@@ -139,9 +169,6 @@ func _create_tearoff_window(container: InventoryContainer_Base):
 	tearoff_window.show_window()
 	tearoff_window.move_to_front()
 	tearoff_window.grab_focus()
-	
-	# Transfer any active drag state to the new window
-	_transfer_active_drag_to_window(tearoff_window)
 	
 	# Store reference (store both window and its canvas)
 	tearoff_windows[container.container_id] = {
@@ -158,28 +185,6 @@ func _create_tearoff_window(container: InventoryContainer_Base):
 	
 	# Emit torn off signal
 	tearoff_window.window_torn_off.emit(container, tearoff_window)
-
-func _transfer_active_drag_to_window(tearoff_window: ContainerTearOffWindow):
-	"""Transfer any active drag operations to the new tearoff window"""
-	var viewport = main_window.get_viewport()
-	if not viewport:
-		return
-	
-	# Check for active drag data
-	if viewport.has_meta("current_drag_data"):
-		var drag_data = viewport.get_meta("current_drag_data")
-		
-		# Force the viewport to recognize the new window as the input target
-		tearoff_window.grab_focus()
-		
-		# Create a synthetic mouse motion event to continue the drag in the new window
-		var current_mouse_pos = tearoff_window.get_global_mouse_position()
-		var synthetic_event = InputEventMouseMotion.new()
-		synthetic_event.global_position = current_mouse_pos
-		synthetic_event.position = tearoff_window.to_local(current_mouse_pos)
-		
-		# Send the event to the new window
-		tearoff_window._gui_input(synthetic_event)
 
 func _ensure_window_on_screen(window: ContainerTearOffWindow):
 	"""Ensure tearoff window is positioned on screen"""
@@ -247,7 +252,12 @@ func _on_window_reattached(container: InventoryContainer_Base):
 
 func _on_tearoff_window_closed(container_id: String):
 	"""Handle tearoff window being closed"""
-	tearoff_windows.erase(container_id)
+	var tearoff_data = tearoff_windows.get(container_id)
+	if tearoff_data:
+		# Clean up canvas layer
+		if tearoff_data.has("canvas") and is_instance_valid(tearoff_data["canvas"]):
+			tearoff_data["canvas"].queue_free()
+		tearoff_windows.erase(container_id)
 
 # Public interface
 func is_container_torn_off(container: InventoryContainer_Base) -> bool:
@@ -256,14 +266,19 @@ func is_container_torn_off(container: InventoryContainer_Base) -> bool:
 
 func get_tearoff_window(container: InventoryContainer_Base) -> ContainerTearOffWindow:
 	"""Get the tearoff window for a container"""
-	return tearoff_windows.get(container.container_id)
+	var tearoff_data = tearoff_windows.get(container.container_id)
+	if tearoff_data and tearoff_data.has("window"):
+		return tearoff_data["window"]
+	return null
 
 func close_all_tearoff_windows():
 	"""Close all tearoff windows"""
-	for window in tearoff_windows.values():
-		if is_instance_valid(window):
-			window.hide_window()
-			window.queue_free()
+	for tearoff_data in tearoff_windows.values():
+		if tearoff_data.has("window") and is_instance_valid(tearoff_data["window"]):
+			tearoff_data["window"].hide_window()
+			tearoff_data["window"].queue_free()
+		if tearoff_data.has("canvas") and is_instance_valid(tearoff_data["canvas"]):
+			tearoff_data["canvas"].queue_free()
 	tearoff_windows.clear()
 
 func cleanup():
