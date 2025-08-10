@@ -157,6 +157,9 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 	window.set_meta("window_canvas", canvas)
 	window.set_meta("window_type", window_type)
 	
+	# CRITICAL: Ensure window blocks input
+	window.mouse_filter = Control.MOUSE_FILTER_STOP
+	
 	# Add window to canvas
 	canvas.add_child(window)
 	

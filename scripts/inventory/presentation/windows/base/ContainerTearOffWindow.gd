@@ -40,6 +40,7 @@ func _init(tear_container: InventoryContainer_Base, parent_inv_window: Inventory
 func _ready():
 	super._ready()
 	
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	# Same resize handling as main window
 	window_resized.connect(_on_window_resized_for_grid)
 	# Ensure this window is properly registered with UIManager
@@ -242,6 +243,14 @@ func get_original_container() -> InventoryContainer_Base:
 
 func reattach_to_parent():
 	"""Reattach this container to the parent window"""
+	# Check if parent window still exists
+	if not parent_window or not is_instance_valid(parent_window):
+		print("ContainerTearOffWindow: Cannot reattach - parent window no longer exists")
+		# Just close this window since there's nowhere to reattach to
+		hide_window()
+		queue_free()
+		return
+	
 	window_reattached.emit(container)  # Emit original container, not view
 	hide_window()
 	queue_free()
@@ -270,8 +279,48 @@ func _on_window_closed():
 		item_actions.close_all_dialogs()
 		item_actions.cleanup()
 	
-	# Emit reattach signal when window is closed (use original container)
-	reattach_to_parent()
+	# Check if this is the last UI window before restoring game input
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		var ui_manager = ui_managers[0]
+		if ui_manager.has_method("get_all_windows"):
+			var remaining_windows = ui_manager.get_all_windows()
+			# Filter out this window since it's closing
+			var other_windows = remaining_windows.filter(func(w): return w != self and is_instance_valid(w))
+			
+			if other_windows.size() == 0:
+				# This is the last UI window - emit inventory_closed to restore game input
+				print("ContainerTearOffWindow: Last UI window closing, emitting inventory_closed")
+				var integration = _find_inventory_integration(get_tree().current_scene)
+				if integration:
+					integration._set_player_input_enabled(true)
+					integration.inventory_toggled.emit(false)
+					if integration.event_bus:
+						integration.event_bus.emit_inventory_closed()
+				else:
+					Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			else:
+				print("ContainerTearOffWindow: %d UI windows remaining, keeping UI input active" % other_windows.size())
+	
+	# Only try to reattach if parent window still exists
+	if parent_window and is_instance_valid(parent_window):
+		# Emit reattach signal when window is closed (use original container)
+		reattach_to_parent()
+	else:
+		# Parent window is gone, just clean up
+		print("ContainerTearOffWindow: Parent window gone, cleaning up independently")
+		queue_free()
+
+func _find_inventory_integration(node: Node) -> InventoryIntegration:
+	"""Find the inventory integration in the scene tree"""
+	if node is InventoryIntegration:
+		return node
+	
+	for child in node.get_children():
+		var result = _find_inventory_integration(child)
+		if result:
+			return result
+	return null
 
 # PUBLIC INTERFACE - SAME AS MAIN WINDOW WITH VIEW AWARENESS
 func set_inventory_manager(manager: InventoryManager):

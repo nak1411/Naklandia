@@ -247,6 +247,24 @@ func _restore_container_to_main_list(container: InventoryContainer_Base):
 		container_list.set_item_disabled(container_index, false)
 		container_list.set_item_custom_fg_color(container_index, Color.WHITE)
 
+func detach_from_main_window():
+	"""Detach tearoff windows from main window so they can exist independently"""
+	print("ContainerTearOffManager: Detaching tearoff windows from main window")
+	
+	# Stop drag monitoring since main window is closing
+	_stop_drag_monitoring()
+	
+	# Clear our reference to main window to prevent tearoff windows from trying to reattach
+	for tearoff_data in tearoff_windows.values():
+		if tearoff_data.has("window") and is_instance_valid(tearoff_data["window"]):
+			var tearoff_window = tearoff_data["window"]
+			# Clear the parent window reference so reattach becomes impossible
+			tearoff_window.parent_window = null
+			print("ContainerTearOffManager: Detached window %s" % tearoff_window.window_title)
+	
+	# Don't close the windows - just clear our references
+	main_window = null
+
 func _on_window_reattached(container: InventoryContainer_Base):
 	"""Handle container reattachment"""
 	if not container:

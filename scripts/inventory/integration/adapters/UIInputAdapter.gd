@@ -103,10 +103,26 @@ func _on_inventory_opened():
 		connected_ui_manager.show_inventory_layer()
 
 func _on_inventory_closed():
-	"""Handle inventory closing"""
-	set_input_mode("game")
+	"""Handle inventory closing - but check if other UI windows are still open"""
+	# Check if there are any UI windows still open before switching to game mode
+	var should_switch_to_game = true
 	
-	# Hide inventory UI layer
+	if connected_ui_manager and connected_ui_manager.has_method("get_all_windows"):
+		var remaining_windows = connected_ui_manager.get_all_windows()
+		# Filter out any invalid windows
+		var valid_windows = remaining_windows.filter(func(w): return is_instance_valid(w) and w.visible)
+		
+		if valid_windows.size() > 0:
+			should_switch_to_game = false
+			print("UIInputAdapter: Keeping inventory input mode - %d UI windows still open" % valid_windows.size())
+	
+	if should_switch_to_game:
+		print("UIInputAdapter: Switching to game input mode - no UI windows remaining")
+		set_input_mode("game")
+	else:
+		print("UIInputAdapter: Staying in inventory input mode")
+	
+	# Hide inventory UI layer (this is safe even if tearoffs are open)
 	if connected_ui_manager:
 		connected_ui_manager.hide_inventory_layer()
 

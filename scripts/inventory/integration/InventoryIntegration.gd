@@ -309,6 +309,10 @@ func _on_container_switched(_container: InventoryContainer_Base):
 
 func _on_window_closed():
 	"""Handle window being closed"""
+	print("InventoryIntegration: Main inventory window closed")
+
+func close_inventory_session():
+	"""Close the entire inventory session including tearoffs"""
 	if event_bus:
 		event_bus.emit_inventory_closed()
 
