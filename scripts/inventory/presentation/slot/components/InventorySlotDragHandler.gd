@@ -10,6 +10,7 @@ var is_dragging: bool = false
 var drag_start_position: Vector2
 var drag_threshold: float = 5.0
 var drag_preview_created: bool = false
+var currently_highlighted_slot: InventorySlot = null
 
 # Signals
 signal drag_started(slot: InventorySlot, item: InventoryItem_Base)
@@ -73,12 +74,14 @@ func _create_drag_preview() -> Control:
 	var ui_adapter = _get_ui_input_adapter()
 	if ui_adapter:
 		ui_adapter.set_drag_in_progress(true)
+		
 	var preview = Control.new()
 	preview.name = "DragPreview"
 	
-	# Make the preview smaller
-	var scale_factor = 1.0
-	preview.size = slot.size * scale_factor
+	# Make the preview use the ICON SIZE only, not the full slot size
+	var scale_factor = 1.0  # Make it slightly smaller while dragging
+	var icon_size = Vector2(64, 64)  # Only the icon part, not the full 64x96 slot
+	preview.size = icon_size * scale_factor
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
 	# Copy visual elements
@@ -139,13 +142,15 @@ func _create_drag_preview() -> Control:
 	return preview
 
 func _update_preview_position(preview: Control):
-	"""Update drag preview position to follow mouse"""
+	"""Update drag preview position to follow mouse and highlight target slot"""
 	if not is_instance_valid(preview) or not is_dragging:
 		# Clean up the timer if dragging stopped
 		var timer = preview.get_meta("position_timer", null) if preview else null
 		if timer and is_instance_valid(timer):
 			timer.stop()
 			timer.queue_free()
+		# Clear any highlighting when drag ends
+		_clear_slot_highlighting()
 		return
 	
 	# Check if this preview belongs to this slot
@@ -153,8 +158,172 @@ func _update_preview_position(preview: Control):
 	if source_slot != slot:
 		return
 	
+	# Keep the original positioning logic - don't change the preview size/position calculation
 	var mouse_pos = slot.get_global_mouse_position()
-	preview.global_position = mouse_pos - preview.size / 2
+	preview.global_position = mouse_pos - preview.size / 2  # This was the original logic
+	
+	# Real-time slot detection and highlighting (new feature, but don't change preview)
+	_update_drop_target_highlighting(mouse_pos)
+
+func _update_drop_target_highlighting(mouse_pos: Vector2):
+	"""Update highlighting for the slot under the mouse cursor"""
+	var target_slot = _find_best_drop_slot(mouse_pos)
+	
+	# Clear previous highlighting
+	if currently_highlighted_slot and currently_highlighted_slot != target_slot:
+		currently_highlighted_slot.set_highlighted(false)
+		currently_highlighted_slot = null
+	
+	# Highlight new target slot
+	if target_slot and target_slot != slot:
+		# Check if this is a valid drop target
+		if _is_valid_drop_target(target_slot):
+			target_slot.set_highlighted(true)
+			currently_highlighted_slot = target_slot
+
+func _find_best_drop_slot(mouse_pos: Vector2) -> InventorySlot:
+	"""Find the best slot to drop on based on mouse position"""
+	var grid = _get_inventory_grid()
+	if not grid:
+		return null
+	
+	# Check if we're over the grid area
+	var grid_rect = Rect2(grid.global_position, grid.size)
+	if not grid_rect.has_point(mouse_pos):
+		return null
+	
+	if grid.enable_virtual_scrolling:
+		return _find_best_virtual_slot(mouse_pos, grid)
+	else:
+		return _find_best_traditional_slot(mouse_pos, grid)
+
+func _find_best_virtual_slot(mouse_pos: Vector2, grid: InventoryGrid) -> InventorySlot:
+	"""Find best slot in virtual scrolling mode"""
+	if not grid.virtual_content:
+		return null
+	
+	# Convert to local position relative to virtual content
+	var local_pos = mouse_pos - grid.virtual_content.global_position
+	
+	# Calculate which grid cell this position falls into
+	var grid_col = int(local_pos.x / grid.slot_size.x)
+	var grid_row = int(local_pos.y / grid.virtual_item_height)
+	
+	# Clamp to valid bounds
+	grid_col = clamp(grid_col, 0, grid.virtual_items_per_row - 1)
+	grid_row = max(0, grid_row)
+	
+	# First, check for exact slot hits
+	for slot_check in grid.virtual_rendered_slots:
+		if slot_check and slot_check.grid_position == Vector2i(grid_col, grid_row):
+			return slot_check
+	
+	# If no exact hit, find the closest empty slot or best drop position
+	return _find_closest_virtual_drop_position(grid_col, grid_row, grid)
+
+func _find_best_traditional_slot(mouse_pos: Vector2, grid: InventoryGrid) -> InventorySlot:
+	"""Find best slot in traditional grid mode"""
+	# First, check for direct hits on slots
+	for y in grid.current_grid_height:
+		for x in grid.current_grid_width:
+			if y < grid.slots.size() and x < grid.slots[y].size():
+				var slot_check = grid.slots[y][x]
+				if not slot_check:
+					continue
+				
+				var slot_rect = Rect2(slot_check.global_position, slot_check.size)
+				if slot_rect.has_point(mouse_pos):
+					return slot_check
+	
+	# If no direct hit, calculate grid position including spacing
+	if grid.grid_container:
+		var local_pos = mouse_pos - grid.grid_container.global_position
+		
+		# Account for slot spacing
+		var total_slot_width = grid.slot_size.x + grid.slot_spacing
+		var total_slot_height = grid.slot_size.y + grid.slot_spacing
+		
+		var grid_col = int(local_pos.x / total_slot_width)
+		var grid_row = int(local_pos.y / total_slot_height)
+		
+		# Clamp to valid bounds
+		grid_col = clamp(grid_col, 0, grid.current_grid_width - 1)
+		grid_row = clamp(grid_row, 0, grid.current_grid_height - 1)
+		
+		# Return the slot at this position
+		if grid_row < grid.slots.size() and grid_col < grid.slots[grid_row].size():
+			return grid.slots[grid_row][grid_col]
+	
+	return null
+
+func _find_closest_virtual_drop_position(target_col: int, target_row: int, grid: InventoryGrid) -> InventorySlot:
+	"""Find the closest valid drop position in virtual mode"""
+	# Search in expanding spiral from target position
+	var search_radius = 0
+	while search_radius < 10:  # Reasonable search limit
+		for dy in range(-search_radius, search_radius + 1):
+			for dx in range(-search_radius, search_radius + 1):
+				if abs(dx) != search_radius and abs(dy) != search_radius:
+					continue  # Only check perimeter of current radius
+				
+				var check_col = target_col + dx
+				var check_row = target_row + dy
+				
+				if check_col >= 0 and check_col < grid.virtual_items_per_row and check_row >= 0:
+					# Check if there's a slot at this position
+					for slot_check in grid.virtual_rendered_slots:
+						if slot_check and slot_check.grid_position == Vector2i(check_col, check_row):
+							return slot_check
+		search_radius += 1
+	
+	# If no rendered slot found, we might need to create one or find next available
+	return null
+
+func _is_valid_drop_target(target_slot: InventorySlot) -> bool:
+	"""Check if a slot is a valid drop target"""
+	if not target_slot or target_slot == slot:
+		return false
+	
+	var source_item = slot.get_item()
+	if not source_item:
+		return false
+	
+	# Empty slot is always valid
+	if not target_slot.has_item():
+		return true
+	
+	var target_item = target_slot.get_item()
+	
+	# Same container - check if items can stack
+	if slot.container_id == target_slot.container_id:
+		return source_item.can_stack_with(target_item)
+	
+	# Different containers - check volume and stacking
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	var target_container = inventory_manager.get_container(target_slot.container_id)
+	if not target_container:
+		return false
+	
+	# Check if there's volume for the item
+	var available_volume = target_container.get_available_volume()
+	var required_volume = source_item.volume * source_item.quantity
+	
+	if target_item and source_item.can_stack_with(target_item):
+		# For stacking, only need volume for the additional quantity
+		var stack_space = target_item.max_stack_size - target_item.quantity
+		var transfer_amount = min(source_item.quantity, stack_space)
+		required_volume = source_item.volume * transfer_amount
+	
+	return required_volume <= available_volume
+
+func _clear_slot_highlighting():
+	"""Clear highlighting from any currently highlighted slot"""
+	if currently_highlighted_slot:
+		currently_highlighted_slot.set_highlighted(false)
+		currently_highlighted_slot = null
 
 func _handle_drag_end(end_position: Vector2):
 	"""Handle the end of a drag operation"""
@@ -168,11 +337,15 @@ func _handle_drag_end(end_position: Vector2):
 	slot.mouse_filter = Control.MOUSE_FILTER_PASS
 	
 	_cleanup_all_drag_previews()
+	_clear_slot_highlighting()  # Clear highlighting when drag ends
 	
 	var drop_successful = false
 	
-	# Find target slot first
-	var target_slot = _find_slot_at_position(end_position)
+	# Use the currently highlighted slot if available (this is the most accurate)
+	var target_slot = currently_highlighted_slot
+	if not target_slot:
+		# Fallback to position-based detection
+		target_slot = _find_best_drop_slot(end_position)
 	
 	if target_slot and target_slot != slot:
 		drop_successful = _attempt_drop_on_slot(target_slot)

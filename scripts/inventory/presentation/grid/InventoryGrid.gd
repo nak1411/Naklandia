@@ -3,15 +3,15 @@ class_name InventoryGrid
 extends Control
 
 # Grid properties
-@export var slot_size: Vector2 = Vector2(64, 64)
+@export var slot_size: Vector2 = Vector2(64, 96)
 @export var slot_spacing: int = 20
-@export var slot_spacing_bottom: int = 24
+@export var slot_spacing_bottom: int = 32
 @export var min_grid_width: int = 10  # Minimum grid width
 @export var min_grid_height: int = 10  # Minimum grid height
 @export var slots_per_row_expansion: int = 2  # How many columns to add when expanding
 @export var enable_virtual_scrolling: bool = false
-@export var virtual_item_height: int = 64  # Match your slot_size.y
-@export var virtual_buffer_items: int = 3  # Extra items to render outside viewport
+@export var virtual_item_height: int = 96  # Match your slot_size.y
+@export var virtual_buffer_items: int = 2  # Extra items to render outside viewport
 
 # Visual properties
 @export var background_color: Color = Color(0.1, 0.1, 0.1, 1.0)
@@ -144,40 +144,90 @@ func _on_virtual_content_input(event: InputEvent):
 					_handle_drop_on_empty_area(source_slot, mouse_event.global_position)
 					
 func _handle_drop_on_empty_area(source_slot: InventorySlot, drop_position: Vector2) -> bool:
-	"""Handle dropping an item at a specific position in the virtual grid"""	
+	"""Handle dropping an item at a specific position in the grid"""	
 	if not source_slot or not source_slot.has_item():
+		return false
+	
+	# Find the nearest slot to the drop position
+	var target_slot = get_slot_at_position(drop_position)
+	if not target_slot:
 		return false
 	
 	var source_item = source_slot.get_item()
 	
-	# Calculate which grid position was dropped on
-	var local_pos = drop_position - virtual_content.global_position
-	var grid_col = int(local_pos.x / slot_size.x)
-	var grid_row = int(local_pos.y / virtual_item_height)
-	var target_grid_pos = Vector2i(grid_col, grid_row)
-		
-	# Same container - move item to specific position
+	# Same container - try to place item at target slot
 	if source_slot.container_id == container_id:
+		# If target slot is empty, move there
+		if not target_slot.has_item():
+			# Handle the move using existing slot drop logic
+			_on_item_dropped_on_slot(source_slot, target_slot)
+			return true
+		# If target slot has item, try to stack or swap
+		elif target_slot.has_item():
+			var target_item = target_slot.get_item()
+			if source_item.can_stack_with(target_item):
+				# Stack the items
+				_on_item_dropped_on_slot(source_slot, target_slot)
+				return true
+			else:
+				# Find nearest empty slot
+				var empty_slot = _find_nearest_empty_slot(target_slot.grid_position)
+				if empty_slot:
+					_on_item_dropped_on_slot(source_slot, empty_slot)
+					return true
 		
-		# Clear the source slot visually
-		source_slot.clear_item()
-		
-		# Store the item's new position (we'll need to implement position persistence)
-		# For now, just refresh and the item will appear in the dropped area
-		call_deferred("_refresh_virtual_display")
-		return true
+		return false
 	else:
-		# Cross-container transfer to specific position
+		# Cross-container transfer to nearest slot
 		var inventory_manager = _get_inventory_manager()
 		if not inventory_manager:
 			return false
 		
-		var success = inventory_manager.transfer_item(source_item, source_slot.container_id, container_id)
+		var success = inventory_manager.transfer_item(
+			source_item, 
+			source_slot.container_id, 
+			container_id, 
+			target_slot.grid_position
+		)
 		if success:
-			call_deferred("_refresh_virtual_display")
-			return true
+			call_deferred("_refresh_virtual_display" if enable_virtual_scrolling else "_update_available_slots")
+		return success
+
+func _find_nearest_empty_slot(start_position: Vector2i) -> InventorySlot:
+	"""Find the nearest empty slot to a given position"""
+	if enable_virtual_scrolling:
+		# In virtual mode, find first available position
+		for i in range(virtual_items.size(), virtual_items_per_row * 50):  # Check reasonable range
+			var row = i / virtual_items_per_row
+			var col = i % virtual_items_per_row
+			var pos = Vector2i(col, row)
+			var slot = _get_virtual_slot_at_grid_position(pos)
+			if slot and not slot.has_item():
+				return slot
+	else:
+		# Traditional mode - search in expanding spiral from start position
+		var search_radius = 1
+		while search_radius < max(current_grid_width, current_grid_height):
+			for dy in range(-search_radius, search_radius + 1):
+				for dx in range(-search_radius, search_radius + 1):
+					var check_pos = start_position + Vector2i(dx, dy)
+					if check_pos.x >= 0 and check_pos.x < current_grid_width and check_pos.y >= 0 and check_pos.y < current_grid_height:
+						if check_pos.y < slots.size() and check_pos.x < slots[check_pos.y].size():
+							var slot = slots[check_pos.y][check_pos.x]
+							if slot and not slot.has_item():
+								return slot
+			search_radius += 1
 	
-	return false
+	return null
+
+func _get_virtual_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlot:
+	"""Get or create a virtual slot at the given grid position"""
+	for slot in virtual_rendered_slots:
+		if slot and slot.grid_position == grid_pos:
+			return slot
+	
+	# Create temporary slot for this position if needed
+	return null
 	
 func _on_virtual_container_resized():
 	"""Handle virtual scroll container resize - recalculate grid to fill new space"""	
@@ -1997,15 +2047,31 @@ func _is_valid_position(pos: Vector2i) -> bool:
 
 func get_slot_at_position(global_pos: Vector2) -> InventorySlot:
 	if enable_virtual_scrolling:
-		# Check virtual rendered slots
+		# Check virtual rendered slots first
 		for slot in virtual_rendered_slots:
 			if slot and is_instance_valid(slot):
 				var slot_rect = Rect2(slot.global_position, slot.size)
 				if slot_rect.has_point(global_pos):
 					return slot
+		
+		# If not on a slot, find nearest slot in virtual mode
+		if virtual_content:
+			var local_pos = global_pos - virtual_content.global_position
+			var grid_col = int(local_pos.x / slot_size.x)
+			var grid_row = int(local_pos.y / virtual_item_height)
+			
+			# Clamp to valid bounds
+			grid_col = clamp(grid_col, 0, virtual_items_per_row - 1)
+			grid_row = max(0, grid_row)
+			
+			# Find the slot at this grid position
+			for slot in virtual_rendered_slots:
+				if slot and slot.grid_position == Vector2i(grid_col, grid_row):
+					return slot
+		
 		return null
 	else:
-		# Traditional grid lookup
+		# Traditional grid lookup - first check exact hits
 		for y in current_grid_height:
 			for x in current_grid_width:
 				if y < slots.size() and x < slots[y].size():
@@ -2016,6 +2082,27 @@ func get_slot_at_position(global_pos: Vector2) -> InventorySlot:
 					var slot_rect = Rect2(slot.global_position, slot.size)
 					if slot_rect.has_point(global_pos):
 						return slot
+		
+		# If no exact hit, find nearest slot using grid container positioning
+		if grid_container:
+			var local_pos = global_pos - grid_container.global_position
+			
+			# Calculate which grid cell this position corresponds to
+			# GridContainer automatically handles spacing, so we need to account for it
+			var total_slot_width = slot_size.x + slot_spacing
+			var total_slot_height = slot_size.y + slot_spacing
+			
+			var grid_col = int(local_pos.x / total_slot_width)
+			var grid_row = int(local_pos.y / total_slot_height)
+			
+			# Clamp to valid grid bounds
+			grid_col = clamp(grid_col, 0, current_grid_width - 1)
+			grid_row = clamp(grid_row, 0, current_grid_height - 1)
+			
+			# Return the slot at this calculated position
+			if grid_row < slots.size() and grid_col < slots[grid_row].size():
+				return slots[grid_row][grid_col]
+		
 		return null
 
 func get_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlot:

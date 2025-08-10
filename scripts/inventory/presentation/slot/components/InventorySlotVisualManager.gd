@@ -60,17 +60,18 @@ func _create_background_panel():
 	background_panel.add_theme_stylebox_override("panel", style_box)
 	
 func _create_content_container():
-	"""Create content container - icon fills entire slot, spacing comes from grid"""
+	"""Create content container with separate areas for icon and name"""
 	var content_container = Control.new()
 	content_container.name = "ContentContainer"
 	content_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	slot.add_child(content_container)
 	
-	# Item icon fills the ENTIRE 64x64 slot - no internal padding
+	# Item icon takes the top square area (64x64)
 	item_icon = TextureRect.new()
 	item_icon.name = "ItemIcon"
-	item_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	item_icon.position = Vector2(0, 0)
+	item_icon.size = Vector2(64, 64)  # Square icon area
 	item_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	item_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	item_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -78,10 +79,10 @@ func _create_content_container():
 
 func _create_item_display_components():
 	"""Create quantity display components and item name label"""
-	# Quantity background panel - will grow horizontally as needed
+	# Quantity background panel - positioned over the icon area
 	quantity_bg = Panel.new()
 	quantity_bg.name = "QuantityBackground"
-	quantity_bg.size = Vector2(10, 10)  # Starting size
+	quantity_bg.size = Vector2(10, 10)
 	quantity_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	quantity_bg.visible = false
 
@@ -90,12 +91,12 @@ func _create_item_display_components():
 	quantity_bg.add_theme_stylebox_override("panel", quantity_bg_style)
 	slot.add_child(quantity_bg)
 	
-	# Quantity label - fixed font size, centers in growing background
+	# Quantity label - positioned in bottom right of icon area
 	quantity_label = Label.new()
 	quantity_label.name = "QuantityLabel"
 	quantity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	quantity_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	quantity_label.add_theme_font_size_override("font_size", 10)
+	quantity_label.add_theme_font_size_override("font_size", 12)
 	quantity_label.add_theme_color_override("font_color", Color.WHITE)
 	quantity_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	quantity_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -103,26 +104,24 @@ func _create_item_display_components():
 	quantity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	quantity_bg.add_child(quantity_label)
 	
-	# Item name label - positioned below the slot using absolute positioning
+	# Item name label - positioned in the bottom area (64x32)
 	item_name_label = Label.new()
 	item_name_label.name = "ItemNameLabel"
+	item_name_label.position = Vector2(2, 68)  # Start below icon area with small margin
+	item_name_label.size = Vector2(60, 30)     # Use remaining slot area with margins
 	item_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	item_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	item_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	item_name_label.add_theme_font_size_override("font_size", 12)
+	item_name_label.add_theme_font_size_override("font_size", 12)  # Bigger font size
 	item_name_label.add_theme_color_override("font_color", Color.WHITE)
 	item_name_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	item_name_label.add_theme_constant_override("shadow_offset_x", 1)
 	item_name_label.add_theme_constant_override("shadow_offset_y", 1)
 	item_name_label.visible = false
 
-	# Enable text wrapping
+	# Enable text wrapping and clipping for the name area
 	item_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	item_name_label.clip_contents = true
-
-	# Position at the bottom of the slot with proper padding consideration
-	item_name_label.position = Vector2(2, slot_size.y + 2)  # 2px from left, 2px from bottom
-	item_name_label.size = Vector2(slot_size.x - 4, 10) 
 
 	slot.add_child(item_name_label)
 
@@ -174,7 +173,7 @@ func update_item_display():
 			item_name_label.visible = false
 
 func _auto_scale_quantity_label():
-	"""Resize background to fit quantity text at fixed font size like EVE Online"""
+	"""Resize background to fit quantity text at fixed font size"""
 	if not quantity_label or not quantity_bg:
 		return
 	
@@ -182,27 +181,24 @@ func _auto_scale_quantity_label():
 	if not item:
 		return
 	
-	# Get the font and calculate text size at fixed font size
 	var font = quantity_label.get_theme_font("font")
 	if not font:
 		font = ThemeDB.fallback_font
 	
-	var font_size = 10
+	var font_size = 12
 	var text = str(item.quantity)
 	
-	# Calculate required width for the text
 	var text_size = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-	var padding = 6  # 3px padding on each side
-	var needed_width = max(10, text_size.x + padding)  # Minimum 10px wide
+	var padding = 6
+	var needed_width = max(10, text_size.x + padding)
 	
-	# Update background size and position
+	# Position quantity in bottom right of icon area (not full slot)
 	quantity_bg.size = Vector2(needed_width, 14)
 	quantity_bg.position = Vector2(
-	slot.size.x - needed_width,
-	slot.size.y - 14
-)
+		64 - needed_width,  # Right edge of icon area
+		64 - 14             # Bottom edge of icon area
+	)
 	
-	# Update label to fill the background
 	quantity_label.size = quantity_bg.size
 	quantity_label.position = Vector2.ZERO
 
@@ -219,7 +215,7 @@ func _clear_item_display():
 
 func _create_fallback_icon(item: InventoryItem_Base):
 	"""Create a fallback icon when no icon texture is available"""
-	var image = Image.create(64, 64, false, Image.FORMAT_RGB8)
+	var image = Image.create(64, 96, false, Image.FORMAT_RGB8)
 	var type_color = item.get_type_color()
 	image.fill(type_color)
 	
