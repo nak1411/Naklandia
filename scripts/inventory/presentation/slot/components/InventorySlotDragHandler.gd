@@ -206,8 +206,12 @@ func _find_best_virtual_slot(mouse_pos: Vector2, grid: InventoryGrid) -> Invento
 	var local_pos = mouse_pos - grid.virtual_content.global_position
 	
 	# Calculate which grid cell this position falls into
-	var grid_col = int(local_pos.x / grid.slot_size.x)
-	var grid_row = int(local_pos.y / grid.virtual_item_height)
+	# Account for spacing in BOTH X and Y directions, including slot_spacing_bottom
+	var total_slot_width = grid.slot_size.x + grid.slot_spacing
+	var total_slot_height = grid.slot_size.y + grid.slot_spacing + grid.slot_spacing_bottom
+	
+	var grid_col = int(local_pos.x / total_slot_width)
+	var grid_row = int(local_pos.y / total_slot_height)
 	
 	# Clamp to valid bounds
 	grid_col = clamp(grid_col, 0, grid.virtual_items_per_row - 1)
