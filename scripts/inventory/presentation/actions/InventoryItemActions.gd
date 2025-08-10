@@ -412,14 +412,18 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	# Create dialog using the base class
 	var dialog_window = DialogWindow_Base.new("Split Stack", Vector2(300, 180))
 	
-	# Add to the highest canvas layer
-	var ui_manager = window_parent.get_tree().get_first_node_in_group("ui_manager")
-	if ui_manager and ui_manager.has_method("get_pause_canvas"):
-		var pause_canvas = ui_manager.get_pause_canvas()
-		pause_canvas.add_child(dialog_window)
+	# Get UIManager and add dialog
+	var ui_managers = window_parent.get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0 and ui_managers[0].has_method("add_dialog_window"):
+		ui_managers[0].add_dialog_window(dialog_window)
 	else:
-		# Fallback to adding to current scene
-		window_parent.get_tree().current_scene.add_child(dialog_window)
+		# Fallback to pause canvas
+		var ui_manager = window_parent.get_tree().get_first_node_in_group("ui_manager")
+		if ui_manager and ui_manager.has_method("get_pause_canvas"):
+			var pause_canvas = ui_manager.get_pause_canvas()
+			pause_canvas.add_child(dialog_window)
+		else:
+			window_parent.get_tree().current_scene.add_child(dialog_window)
 	
 	# Wait for dialog to be fully ready
 	if not dialog_window.is_node_ready():

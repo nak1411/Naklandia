@@ -117,11 +117,13 @@ func _create_drag_preview() -> Control:
 			preview_quantity.add_theme_font_size_override("font_size", int(18 * scale_factor))
 			preview.add_child(preview_quantity)
 	
-	# Add to a high-level canvas layer
+	# FIXED: Add to the scene tree root via slot reference
 	var drag_canvas = CanvasLayer.new()
 	drag_canvas.name = "DragCanvas"
-	drag_canvas.layer = 100
-	slot.get_viewport().add_child(drag_canvas)
+	drag_canvas.layer = 200  # Very high layer to appear above everything
+	
+	# CRITICAL FIX: Use slot.get_tree().root instead of get_tree().root
+	slot.get_tree().root.add_child(drag_canvas)
 	drag_canvas.add_child(preview)
 	
 	# Store references for cleanup
@@ -271,13 +273,13 @@ func _find_best_traditional_slot_with_bounds(preview_rect: Rect2, grid: Inventor
 	return best_slot
 
 func _get_current_drag_preview() -> Control:
-	"""Get the current drag preview control"""
-	var viewport = slot.get_viewport()
-	if not viewport:
+	"""Get the current drag preview control - FIXED to use root"""
+	var root = slot.get_tree().root
+	if not root:
 		return null
 	
-	# Look for the drag canvas
-	var drag_canvas = viewport.get_children().filter(func(child): return child.name == "DragCanvas")
+	# Look for the drag canvas in root instead of viewport
+	var drag_canvas = root.get_children().filter(func(child): return child is CanvasLayer and child.name == "DragCanvas")
 	if drag_canvas.is_empty():
 		return null
 	
@@ -403,15 +405,19 @@ func _handle_drag_end(end_position: Vector2):
 	drag_ended.emit(slot, drop_successful)
 
 func _cleanup_all_drag_previews():
-	"""Clean up all drag preview elements"""
-	var viewport = slot.get_viewport()
-	if not viewport:
-		return
+	"""Clean up all drag preview elements - FIXED to match ListRowManager pattern"""
+	var root = slot.get_tree().root
+	var drag_canvases = []
 	
-	# Find and clean up drag canvases
-	for child in viewport.get_children():
+	# Find all DragCanvas nodes - same pattern as ListRowManager
+	for child in root.get_children():
 		if child is CanvasLayer and child.name == "DragCanvas":
-			child.queue_free()
+			drag_canvases.append(child)
+	
+	# Clean them up
+	for canvas in drag_canvases:
+		if is_instance_valid(canvas):
+			canvas.queue_free()
 
 func _find_slot_at_position(global_pos: Vector2) -> InventorySlot:
 	"""Find an inventory slot at the given global position"""

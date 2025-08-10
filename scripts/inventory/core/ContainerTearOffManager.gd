@@ -145,14 +145,24 @@ func _create_tearoff_window(container: InventoryContainer_Base, drop_position: V
 	"""Create a new tearoff window for the container"""
 	var tearoff_window = ContainerTearOffWindow.new(container, main_window)
 	
-	# Create a high-priority canvas layer for the tearoff window
-	var tearoff_canvas = CanvasLayer.new()
-	tearoff_canvas.name = "TearoffWindowLayer"
-	tearoff_canvas.layer = 100  # Higher than inventory canvas layer (50)
-	main_window.get_tree().current_scene.add_child(tearoff_canvas)
-	tearoff_canvas.add_child(tearoff_window)
+	# Get UI Manager and register the window
+	var ui_managers = main_window.get_tree().get_nodes_in_group("ui_manager")
+	var ui_manager: UIManager = null
+	if ui_managers.size() > 0:
+		ui_manager = ui_managers[0]
 	
-	# Position at drop location or near mouse
+	if ui_manager and ui_manager.has_method("add_tearoff_window"):
+		# Let UIManager handle canvas creation and layering
+		ui_manager.add_tearoff_window(tearoff_window)
+	else:
+		# Fallback to old method
+		var tearoff_canvas = CanvasLayer.new()
+		tearoff_canvas.name = "TearoffWindowLayer"
+		tearoff_canvas.layer = 100
+		main_window.get_tree().current_scene.add_child(tearoff_canvas)
+		tearoff_canvas.add_child(tearoff_window)
+	
+	# Position and show window
 	var position_for_window: Vector2
 	if drop_position != Vector2.ZERO:
 		position_for_window = drop_position - Vector2(100, 50)
@@ -161,30 +171,18 @@ func _create_tearoff_window(container: InventoryContainer_Base, drop_position: V
 		position_for_window = mouse_pos - Vector2(100, 50)
 	
 	tearoff_window.position = position_for_window
-	
-	# Ensure it's on screen
 	_ensure_window_on_screen(tearoff_window)
-	
-	# Show the window and bring it to the front
 	tearoff_window.show_window()
-	tearoff_window.move_to_front()
-	tearoff_window.grab_focus()
 	
-	# Store reference (store both window and its canvas)
+	# Store reference
 	tearoff_windows[container.container_id] = {
 		"window": tearoff_window,
-		"canvas": tearoff_canvas
+		"ui_manager": ui_manager
 	}
 	
-	# Connect to reattach signal
+	# Connect signals
 	tearoff_window.window_reattached.connect(_on_window_reattached)
 	tearoff_window.window_closed.connect(_on_tearoff_window_closed.bind(container.container_id))
-	
-	# Remove container from main window list (but keep it accessible)
-	_hide_container_from_main_list(container)
-	
-	# Emit torn off signal
-	tearoff_window.window_torn_off.emit(container, tearoff_window)
 
 func _ensure_window_on_screen(window: ContainerTearOffWindow):
 	"""Ensure tearoff window is positioned on screen"""

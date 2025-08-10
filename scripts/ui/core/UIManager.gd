@@ -1,4 +1,4 @@
-# UIManager.gd - Fixed with proper crosshair and canvas layer management
+# UIManager.gd - Extended with comprehensive window management
 class_name UIManager
 extends Node
 
@@ -16,12 +16,24 @@ extends Node
 # UI Elements
 var crosshair_ui: CrosshairUI
 
+# Window management properties
+var active_windows: Array[Window_Base] = []
+var focused_window: Window_Base = null
+var window_stack: Array[Window_Base] = []  # Z-order stack
+var next_tearoff_layer: int = 60  # Start tearoffs higher than inventory (50)
+
+# Window management signals
+signal window_focused(window: Window_Base)
+signal window_closed(window: Window_Base)
+signal layer_visibility_changed(layer_name: String, visible: bool)
+
 func _ready():
 	add_to_group("ui_manager")
 	setup_canvas_layers()
 	setup_ui_containers()
-	setup_default_ui_elements()  # Add this to create crosshair
-	setup_ui_debugger()  # Initialize UI debugger
+	setup_default_ui_elements()
+	setup_ui_debugger()
+	setup_window_management()
 
 func setup_ui_debugger():
 	"""Set up the UI debugger"""
@@ -75,8 +87,269 @@ func setup_default_ui_elements():
 	crosshair_ui = CrosshairUI.new()
 	crosshair_ui.name = "Crosshair"
 	add_hud_element(crosshair_ui)
+
+func setup_window_management():
+	"""Initialize window management system with periodic cleanup"""
+	print("UIManager: Window management initialized")
 	
-# Add UI elements to appropriate canvas layers
+	# Set up a timer for periodic cleanup of invalid windows
+	var cleanup_timer = Timer.new()
+	cleanup_timer.wait_time = 5.0  # Clean up every 5 seconds
+	cleanup_timer.timeout.connect(_cleanup_invalid_windows)
+	cleanup_timer.autostart = true
+	add_child(cleanup_timer)
+
+# Also add this helper method for immediate cleanup when needed
+func force_cleanup_windows():
+	"""Force immediate cleanup of all invalid windows"""
+	_cleanup_invalid_windows()
+	_update_window_layers()
+
+# WINDOW MANAGEMENT SYSTEM
+func register_window(window: Window_Base, window_type: String = "tearoff") -> CanvasLayer:
+	"""Register a window with the UI manager and return its canvas"""
+	if not is_instance_valid(window) or window in active_windows:
+		return window.get_meta("window_canvas", null) if is_instance_valid(window) else null
+	
+	active_windows.append(window)
+	window_stack.append(window)
+	
+	# Create appropriate canvas layer
+	var canvas_layer = _create_window_canvas(window, window_type)
+	
+	# Connect window signals with safety checks
+	if is_instance_valid(window):
+		# Disconnect first to avoid double connections
+		if window.window_closed.is_connected(_on_managed_window_closed):
+			window.window_closed.disconnect(_on_managed_window_closed)
+		window.window_closed.connect(_on_managed_window_closed.bind(window))
+		
+		# Set up input handling for focus
+		if not window.gui_input.is_connected(_on_window_input):
+			window.gui_input.connect(_on_window_input.bind(window))
+	
+	# Focus the new window
+	focus_window(window)
+	
+	return canvas_layer
+
+func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLayer:
+	"""Create appropriate canvas layer for window type"""
+	var canvas = CanvasLayer.new()
+	canvas.name = window.name + "_Canvas"
+	
+	match window_type:
+		"main_inventory":
+			canvas.layer = 50  # Use inventory layer
+			inventory_canvas.add_child(canvas)
+		"tearoff":
+			# Each tearoff gets incrementally higher layer
+			canvas.layer = next_tearoff_layer
+			next_tearoff_layer += 1
+			# Add directly to scene tree for tearoffs
+			get_tree().current_scene.add_child(canvas)
+		"dialog":
+			# Dialogs use the highest priority pause canvas
+			canvas.layer = 100 + active_windows.size()
+			pause_canvas.add_child(canvas)
+	
+	canvas.add_child(window)
+	window.set_meta("window_canvas", canvas)
+	window.set_meta("window_type", window_type)
+	return canvas
+
+func focus_window(window: Window_Base):
+	"""Focus a specific window and bring it to front with safety checks"""
+	if not is_instance_valid(window):
+		print("UIManager: Cannot focus invalid window")
+		return
+	
+	if window == focused_window:
+		print("UIManager: Window %s already focused" % window.name)
+		return
+	
+	print("UIManager: Focusing window %s (was: %s)" % [window.name, focused_window.name if focused_window else "none"])
+	
+	# Clean up invalid windows first
+	_cleanup_invalid_windows()
+	
+	# Update focus
+	var old_focused = focused_window
+	focused_window = window
+	
+	# Move to top of stack
+	if window in window_stack:
+		window_stack.erase(window)
+	window_stack.append(window)
+	
+	print("UIManager: Window stack now has %d windows, %s is at top" % [window_stack.size(), window.name])
+	
+	# Update canvas layer to be highest of its type
+	_update_window_layers()
+	
+	# Update visual focus states
+	if old_focused and is_instance_valid(old_focused):
+		_set_window_focus_state(old_focused, false)
+	_set_window_focus_state(window, true)
+	
+	# Emit signal
+	window_focused.emit(window)
+	
+	# Debug: Print current layers
+	_debug_print_window_layers()
+
+func _update_window_layers():
+	"""Update canvas layers to maintain proper z-order within each type"""
+	# Group windows by type with safety checks
+	var tearoff_windows: Array[Window_Base] = []
+	var dialog_windows: Array[Window_Base] = []
+	var inventory_windows: Array[Window_Base] = []
+	
+	# Clean up invalid windows first
+	_cleanup_invalid_windows()
+	
+	for window in window_stack:
+		if not is_instance_valid(window):
+			continue
+			
+		var window_type = window.get_meta("window_type", "tearoff")
+		match window_type:
+			"tearoff":
+				tearoff_windows.append(window)
+			"dialog":
+				dialog_windows.append(window)
+			"main_inventory":
+				inventory_windows.append(window)
+	
+	# Update layers within each type
+	_update_window_type_layers(tearoff_windows, 60)
+	_update_window_type_layers(dialog_windows, 100)
+	_update_window_type_layers(inventory_windows, 50)
+
+func _cleanup_invalid_windows():
+	"""Remove invalid windows from tracking arrays"""
+	# Clean up active_windows
+	for i in range(active_windows.size() - 1, -1, -1):
+		var window = active_windows[i]
+		if not is_instance_valid(window):
+			active_windows.remove_at(i)
+	
+	# Clean up window_stack
+	for i in range(window_stack.size() - 1, -1, -1):
+		var window = window_stack[i]
+		if not is_instance_valid(window):
+			window_stack.remove_at(i)
+	
+	# Clean up focused_window
+	if focused_window and not is_instance_valid(focused_window):
+		focused_window = null
+
+func _update_window_type_layers(windows: Array[Window_Base], base_layer: int):
+	"""Update layers for windows of the same type with safety checks"""
+	for i in range(windows.size()):
+		var window = windows[i]
+		if not is_instance_valid(window):
+			continue
+			
+		var canvas = window.get_meta("window_canvas", null) as CanvasLayer
+		if canvas and is_instance_valid(canvas):
+			canvas.layer = base_layer + i
+
+func _set_window_focus_state(window: Window_Base, has_focus: bool):
+	"""Update window visual focus state with safety checks"""
+	if not is_instance_valid(window):
+		return
+		
+	if has_focus:
+		# Add focus styling
+		window.modulate = Color(1.05, 1.05, 1.05, 1.0)  # Slightly brighter
+		if window.has_method("set_edge_bloom_state"):
+			window.set_edge_bloom_state(Window_Base.BloomState.ACTIVE)
+	else:
+		# Remove focus styling  
+		window.modulate = Color(0.95, 0.95, 0.95, 1.0)  # Slightly dimmer
+		if window.has_method("set_edge_bloom_state"):
+			window.set_edge_bloom_state(Window_Base.BloomState.SUBTLE)
+
+func _on_window_input(event: InputEvent, window: Window_Base):
+	"""Handle window input for focus management with safety checks"""
+	if not is_instance_valid(window):
+		return
+	
+	# Debug output
+	if event is InputEventMouseButton and event.pressed:
+		print("UIManager: Window input detected on %s, button: %d" % [window.name, event.button_index])
+	
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		print("UIManager: Focusing window: %s" % window.name)
+		focus_window(window)
+
+func _on_managed_window_closed(window: Window_Base):
+	"""Handle managed window being closed"""
+	unregister_window(window)
+
+func unregister_window(window: Window_Base):
+	"""Unregister a window from the UI manager with safety checks"""
+	if not is_instance_valid(window) or window not in active_windows:
+		# Even if window is invalid, try to clean up arrays
+		_cleanup_invalid_windows()
+		return
+	
+	active_windows.erase(window)
+	window_stack.erase(window)
+	
+	# Clean up canvas with safety check
+	var canvas = null
+	if is_instance_valid(window):
+		canvas = window.get_meta("window_canvas", null) as CanvasLayer
+	
+	if canvas and is_instance_valid(canvas):
+		canvas.queue_free()
+	
+	# Update focus
+	if window == focused_window:
+		focused_window = null
+		# Focus the topmost remaining window
+		_cleanup_invalid_windows()  # Clean up before checking stack
+		if window_stack.size() > 0:
+			focus_window(window_stack[-1])
+	
+	# Update layers
+	_update_window_layers()
+	
+	window_closed.emit(window)
+
+# PUBLIC WINDOW MANAGEMENT INTERFACE
+func get_focused_window() -> Window_Base:
+	return focused_window
+
+func get_all_windows() -> Array[Window_Base]:
+	return active_windows.duplicate()
+
+func close_all_windows():
+	"""Close all managed windows"""
+	for window in active_windows.duplicate():
+		if is_instance_valid(window):
+			window.hide_window()
+
+func bring_window_to_front(window: Window_Base):
+	"""Bring specific window to front"""
+	focus_window(window)
+
+# WINDOW TYPE-SPECIFIC METHODS
+func add_tearoff_window(window: Window_Base) -> CanvasLayer:
+	"""Add a tearoff window with proper layering"""
+	return register_window(window, "tearoff")
+
+func add_dialog_window(window: Window_Base) -> CanvasLayer:
+	"""Add a dialog window with highest priority"""
+	return register_window(window, "dialog")
+
+func add_main_inventory_window(window: Window_Base) -> CanvasLayer:
+	"""Add the main inventory window"""
+	return register_window(window, "main_inventory")
+
+# ORIGINAL UI ELEMENT METHODS
 func add_hud_element(ui_element: Control):
 	"""Add HUD elements like health bars, ammo counters, crosshair, etc."""
 	if hud_container:
@@ -103,30 +376,36 @@ func add_window(window_element: Window):
 	if inventory_canvas:
 		inventory_canvas.add_child(window_element)
 
-# Canvas layer visibility management
+# CANVAS LAYER VISIBILITY MANAGEMENT
 func show_menu_layer():
 	if menu_ui_canvas:
 		menu_ui_canvas.visible = true
+		layer_visibility_changed.emit("menu", true)
 
 func hide_menu_layer():
 	if menu_ui_canvas:
 		menu_ui_canvas.visible = false
+		layer_visibility_changed.emit("menu", false)
 
 func show_inventory_layer():
 	if inventory_canvas:
 		inventory_canvas.visible = true
+		layer_visibility_changed.emit("inventory", true)
 
 func hide_inventory_layer():
 	if inventory_canvas:
 		inventory_canvas.visible = false
+		layer_visibility_changed.emit("inventory", false)
 
 func show_pause_layer():
 	if pause_canvas:
 		pause_canvas.visible = true
+		layer_visibility_changed.emit("pause", true)
 
 func hide_pause_layer():
 	if pause_canvas:
 		pause_canvas.visible = false
+		layer_visibility_changed.emit("pause", false)
 
 # Show/hide menu overlay (legacy support)
 func show_menu():
@@ -139,7 +418,7 @@ func toggle_menu():
 	if menu_ui_canvas:
 		menu_ui_canvas.visible = !menu_ui_canvas.visible
 
-# Get references for other scripts
+# GET CANVAS REFERENCES
 func get_ui_canvas() -> CanvasLayer:
 	"""Returns the main game UI canvas for backwards compatibility"""
 	return game_ui_canvas
@@ -165,7 +444,7 @@ func get_menu_container() -> Control:
 func get_crosshair() -> CrosshairUI:
 	return crosshair_ui
 
-# Utility methods for layer management
+# UTILITY METHODS FOR LAYER MANAGEMENT
 func set_layer_priority(canvas: CanvasLayer, priority: int):
 	"""Dynamically adjust canvas layer priorities"""
 	if canvas:
@@ -197,3 +476,78 @@ func is_any_overlay_visible() -> bool:
 	return (menu_ui_canvas and menu_ui_canvas.visible) or \
 		   (inventory_canvas and inventory_canvas.visible) or \
 		   (pause_canvas and pause_canvas.visible)
+
+# WINDOW MANAGEMENT UTILITIES
+func get_window_count_by_type(window_type: String) -> int:
+	"""Get count of windows by type with safety checks"""
+	var count = 0
+	_cleanup_invalid_windows()
+	
+	for window in active_windows:
+		if not is_instance_valid(window):
+			continue
+		var w_type = window.get_meta("window_type", "")
+		if w_type == window_type:
+			count += 1
+	return count
+
+func get_windows_by_type(window_type: String) -> Array[Window_Base]:
+	"""Get all windows of a specific type with safety checks"""
+	var windows: Array[Window_Base] = []
+	_cleanup_invalid_windows()
+	
+	for window in active_windows:
+		if not is_instance_valid(window):
+			continue
+		var w_type = window.get_meta("window_type", "")
+		if w_type == window_type:
+			windows.append(window)
+	return windows
+
+func close_windows_by_type(window_type: String):
+	"""Close all windows of a specific type"""
+	var windows_to_close = get_windows_by_type(window_type)
+	for window in windows_to_close:
+		if is_instance_valid(window):
+			window.hide_window()
+
+# DEBUG METHODS
+func print_window_stack():
+	"""Debug method to print current window stack with safety checks"""
+	_cleanup_invalid_windows()
+	print("=== Window Stack (bottom to top) ===")
+	for i in range(window_stack.size()):
+		var window = window_stack[i]
+		if not is_instance_valid(window):
+			print("%d: [INVALID WINDOW]" % i)
+			continue
+			
+		var canvas = window.get_meta("window_canvas", null) as CanvasLayer
+		var layer = -1
+		if canvas and is_instance_valid(canvas):
+			layer = canvas.layer
+			
+		var focused = " [FOCUSED]" if window == focused_window else ""
+		print("%d: %s (Layer %d)%s" % [i, window.name, layer, focused])
+	print("=== End Window Stack ===")
+
+func _debug_print_window_layers():
+	"""Debug method to print current window layers"""
+	print("=== Current Window Layers ===")
+	for window in window_stack:
+		if not is_instance_valid(window):
+			continue
+		var canvas = window.get_meta("window_canvas", null) as CanvasLayer
+		var layer = canvas.layer if canvas and is_instance_valid(canvas) else -1
+		var focused = " [FOCUSED]" if window == focused_window else ""
+		print("  %s: Layer %d%s" % [window.name, layer, focused])
+	print("=== End Window Layers ===")
+
+func print_canvas_layers():
+	"""Debug method to print all canvas layers"""
+	print("=== Canvas Layers ===")
+	print("Game UI: Layer %d (Visible: %s)" % [game_ui_canvas.layer, game_ui_canvas.visible])
+	print("Menu UI: Layer %d (Visible: %s)" % [menu_ui_canvas.layer, menu_ui_canvas.visible])
+	print("Inventory: Layer %d (Visible: %s)" % [inventory_canvas.layer, inventory_canvas.visible])
+	print("Pause: Layer %d (Visible: %s)" % [pause_canvas.layer, pause_canvas.visible])
+	print("=== End Canvas Layers ===")

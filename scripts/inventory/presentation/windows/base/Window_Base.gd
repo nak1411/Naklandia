@@ -15,6 +15,8 @@ extends Control
 @export var resize_border_width: float = 8.0
 @export var resize_corner_size: float = 8.0
 
+var ui_manager: UIManager = null
+
 # Window state
 var is_maximized: bool = false
 var restore_position: Vector2
@@ -116,11 +118,25 @@ func _ready():
 	
 	# Call virtual method for child classes to override
 	call_deferred("_setup_window_content")
+	# Find and connect to UIManager
+	_connect_to_ui_manager()
+
+	mouse_entered.connect(_on_mouse_entered)
+	gui_input.connect(_on_window_gui_input)
 
 func _process(_delta):
 	if edge_bloom_overlay and size != last_known_size:
 		_update_edge_bloom_size()
 		last_known_size = size
+
+func _connect_to_ui_manager():
+	"""Connect to UIManager for focus management"""
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		ui_manager = ui_managers[0]
+		print("Window_Base: %s connected to UIManager" % name)
+	else:
+		print("Window_Base: No UIManager found for %s" % name)
 
 func _input(event: InputEvent):
 	if not visible or is_locked:
@@ -136,7 +152,25 @@ func _input(event: InputEvent):
 	elif event is InputEventMouseMotion and (is_dragging or is_resizing or mouse_pressed):
 		_handle_mouse_motion(event as InputEventMouseMotion)
 
+func _gui_input(event: InputEvent):
+	"""Handle input events for window interaction"""
+	
+	# FOCUS HANDLING - Add this at the start
+	if event is InputEventMouseButton and event.pressed:
+		print("Window_Base: Mouse pressed on %s, bringing to front" % name)
+		_bring_to_front()
+
+func _on_window_gui_input(event: InputEvent):
+	"""Handle any input on the window"""
+	if event is InputEventMouseButton and event.pressed:
+		print("Window_Base: Mouse pressed on %s" % name)
+		_bring_to_front()
+
 func _handle_mouse_press(global_pos: Vector2):
+	# FOCUS HANDLING - Add this first
+	print("Window_Base: Mouse pressed on %s, bringing to front" % name)
+	_bring_to_front()
+	
 	# Otherwise, handle as potential drag start (but title bar input will override this)
 	mouse_pressed = true
 	click_start_position = global_pos
@@ -1261,6 +1295,19 @@ func _restore_window():
 	
 	window_restored.emit()
 
+func _bring_to_front():
+	"""Bring this window to front through UIManager"""
+	if ui_manager and ui_manager.has_method("focus_window"):
+		print("Window_Base: %s requesting focus from UIManager" % name)
+		ui_manager.focus_window(self)
+	else:
+		print("Window_Base: No UIManager available for %s" % name)
+
+# Also add a public method for manual focus
+func bring_to_front():
+	"""Public method to bring window to front"""
+	_bring_to_front()
+
 func _on_window_close_requested():
 	# Virtual method - override in child classes
 	_on_window_closed()
@@ -1457,6 +1504,9 @@ func _on_title_bar_input(event: InputEvent):
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed:
+				print("Window_Base: Title bar clicked on %s, bringing to front" % name)
+				_bring_to_front()
 			# Handle double-click first, before any other logic
 			if mouse_event.double_click and can_maximize:
 				# Double-click to maximize/restore
@@ -1588,3 +1638,9 @@ func _setup_edge_bloom():
 	edge_bloom_overlay.material = edge_bloom_material
 	
 	add_child(edge_bloom_overlay)
+
+func _on_mouse_entered():
+	"""Handle mouse entering window area"""
+	# Optional: Could bring to front on hover
+	# _bring_to_front()
+	pass

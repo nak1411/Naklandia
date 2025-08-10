@@ -1,24 +1,23 @@
-# ContainerTearOffWindow.gd - Detached window for individual containers
+# ContainerTearOffWindow.gd - Identical to main inventory window but with independent container view
 class_name ContainerTearOffWindow
 extends Window_Base
 
-# References
+# Identical structure to InventoryWindow
 var inventory_manager: InventoryManager
-var container: InventoryContainer_Base
-var parent_window: InventoryWindow
-var content_grid: InventoryGrid
-var content_list: InventoryListView
-var mass_info_bar: Panel
-var mass_info_label: Label
-var current_display_mode: InventoryDisplayMode.Mode = InventoryDisplayMode.Mode.GRID
+var inventory_container: VBoxContainer
+var header: InventoryWindowHeader
+var content: InventoryWindowContent
 var item_actions: InventoryItemActions
 
-# Header components (same as main window)
-var header: InventoryWindowHeader
-var inventory_container: VBoxContainer
-var content_container: Control
+# Tearoff-specific properties
+var container: InventoryContainer_Base  # Original container reference
+var container_view: ContainerView       # Independent view of the container
+var parent_window: InventoryWindow
 
-# Signals
+# Same signals as main window
+signal container_switched(container: InventoryContainer_Base)
+
+# Tearoff-specific signals
 signal window_torn_off(container: InventoryContainer_Base, window: ContainerTearOffWindow)
 signal window_reattached(container: InventoryContainer_Base)
 
@@ -33,384 +32,331 @@ func _init(tear_container: InventoryContainer_Base, parent_inv_window: Inventory
 	else:
 		window_title = "Container"
 		
-	default_size = Vector2(600, 400)
+	# Same defaults as main inventory window
+	default_size = Vector2(800, 600)
 	min_window_size = Vector2(400, 300)
-	max_window_size = Vector2(1200, 800)
+	max_window_size = Vector2(1400, 1000)
+
+func _ready():
+	super._ready()
+	
+	# Same resize handling as main window
+	window_resized.connect(_on_window_resized_for_grid)
+	# Ensure this window is properly registered with UIManager
+	call_deferred("_ensure_ui_manager_registration")
+	
+	# Setup focus handling after content is ready
+	call_deferred("_setup_focus_handling")
+
+func _setup_focus_handling():
+	"""Setup focus handling for tearoff window"""
+	# Connect to any control that should trigger focus
+	if content_container:
+		content_container.gui_input.connect(_on_content_input)
+	
+	# Also connect to the main container
+	if inventory_container:
+		inventory_container.gui_input.connect(_on_content_input)
+
+func _on_content_input(event: InputEvent):
+	"""Handle input on content areas"""
+	if event is InputEventMouseButton and event.pressed:
+		bring_to_front()
 
 func _setup_window_content():
-	"""Override base method to add tearoff-specific content"""
-	_setup_tearoff_content()
+	"""Setup identical content to main inventory window"""
+	_setup_content()
 
-func _setup_tearoff_content():
-	"""Setup the torn-off container content with full functionality"""
-	if not container:
-		return
-		
+func _setup_content():
+	"""Setup inventory-specific content - IDENTICAL to InventoryWindow"""
 	# Get inventory manager from parent
 	if parent_window:
 		inventory_manager = parent_window.inventory_manager
-		
-	# Create main inventory container (same structure as main window)
+	
+	# Create main inventory container - SAME AS MAIN WINDOW
 	inventory_container = VBoxContainer.new()
 	inventory_container.name = "InventoryContainer"
 	inventory_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_content(inventory_container)
 	
-	# Create header with search, filter, sort, and display mode buttons
+	# Create the header (search, filter, sort) - SAME AS MAIN WINDOW
 	header = InventoryWindowHeader.new()
-	header.name = "TearoffHeader"
+	header.name = "InventoryHeader"
 	inventory_container.add_child(header)
 	
-	# Setup mass info bar at the top (after header)
-	_setup_mass_info_bar(inventory_container)
+	# Create main content using InventoryWindowContent - SAME AS MAIN WINDOW
+	content = InventoryWindowContent.new()
+	content.name = "InventoryContent"
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_container.add_child(content)
 	
-	# Create content area
-	content_container = Control.new()
-	content_container.name = "ContentContainer"
-	content_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content_container.clip_contents = true
-	inventory_container.add_child(content_container)
+	# Wait for content to be ready
+	await get_tree().process_frame
 	
-	# Setup grid display
-	_setup_grid_display(content_container)
-	
-	# Setup list display (initially hidden)
-	_setup_list_display(content_container)
-	
-	# Set initial display mode
-	_set_display_mode(current_display_mode)
-	
-	# Setup item actions
+	# Setup item actions BEFORE initializing inventory content - SAME AS MAIN WINDOW
 	_setup_item_actions()
 	
-	# Connect header signals
-	_connect_header_signals()
-	
-	# Connect to container signals
-	_connect_container_signals()
-	
-	# Set up header with inventory manager (skip window reference for now)
+	# Connect header signals AFTER both header and content are created - SAME AS MAIN WINDOW
 	if header:
-		header.set_inventory_manager(inventory_manager)
-		# Note: Skipping header.set_inventory_window() as it expects native Window type
+		if header.has_signal("search_changed"):
+			header.search_changed.connect(_on_search_changed)
+		if header.has_signal("filter_changed"):
+			header.filter_changed.connect(_on_filter_changed)
+		if header.has_signal("sort_requested"):
+			header.sort_requested.connect(_on_sort_requested)
+		if header.has_signal("display_mode_changed"):
+			header.display_mode_changed.connect(_on_display_mode_changed)
 	
-	# Initial display refresh
-	call_deferred("_refresh_and_compact_display")
-
-func _connect_header_signals():
-	"""Connect header control signals"""
-	if not header:
-		return
+	if content:
+		if content.has_signal("container_selected"):
+			content.container_selected.connect(_on_container_selected_from_content)
+		if content.has_signal("item_activated"):
+			content.item_activated.connect(_on_item_activated_from_content)
+		if content.has_signal("item_context_menu"):
+			content.item_context_menu.connect(_on_item_context_menu_from_content)
+		if content.has_signal("empty_area_context_menu"):
+			content.empty_area_context_menu.connect(_on_empty_area_context_menu_from_content)
 		
-	if header.has_signal("search_changed"):
-		header.search_changed.connect(_on_search_changed)
-	if header.has_signal("filter_changed"):
-		header.filter_changed.connect(_on_filter_changed)
-	if header.has_signal("sort_requested"):
-		header.sort_requested.connect(_on_sort_requested)
-	if header.has_signal("display_mode_changed"):
-		header.display_mode_changed.connect(_on_display_mode_changed)
-
-func _setup_mass_info_bar(parent_container: Control):
-	"""Setup mass/volume info bar at the top"""
-	mass_info_bar = Panel.new()
-	mass_info_bar.name = "MassInfoBar"
-	mass_info_bar.custom_minimum_size = Vector2(0, 24)
-	mass_info_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# Connect window resize to trigger grid reflow - SAME AS MAIN WINDOW
+		window_resized.connect(_on_window_resized_for_grid)
 	
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.1, 0.15, 0.9)
-	style.border_color = Color(0.4, 0.4, 0.4, 1.0)
-	style.border_width_left = 1
-	style.border_width_right = 1
-	style.border_width_top = 1
-	style.border_width_bottom = 1
-	mass_info_bar.add_theme_stylebox_override("panel", style)
-	
-	# Create a margin container for padding inside the mass info bar
-	var margin_container = MarginContainer.new()
-	margin_container.name = "MassInfoMargin"
-	margin_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin_container.add_theme_constant_override("margin_left", 8)
-	margin_container.add_theme_constant_override("margin_right", 8)
-	margin_container.add_theme_constant_override("margin_top", 4)
-	margin_container.add_theme_constant_override("margin_bottom", 4)
-	mass_info_bar.add_child(margin_container)
-	
-	mass_info_label = Label.new()
-	mass_info_label.name = "MassInfoLabel"
-	mass_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mass_info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	mass_info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mass_info_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	mass_info_label.add_theme_color_override("font_color", Color.WHITE)
-	mass_info_label.add_theme_color_override("font_shadow_color", Color.BLACK)
-	mass_info_label.add_theme_constant_override("shadow_offset_x", 1)
-	mass_info_label.add_theme_constant_override("shadow_offset_y", 1)
-	mass_info_label.add_theme_font_size_override("font_size", 12)
-	mass_info_label.clip_contents = true
-	mass_info_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	mass_info_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	
-	margin_container.add_child(mass_info_label)
-	parent_container.add_child(mass_info_bar)
-
-func _setup_grid_display(parent_container: Control):
-	"""Setup grid display for container with preserved layout"""
-	content_grid = InventoryGrid.new()
-	content_grid.name = "ContainerGrid"
-	content_grid.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	content_grid.mouse_filter = Control.MOUSE_FILTER_PASS
-	
-	# Configure grid properties to match main window
-	content_grid.slot_size = Vector2(64, 96)
-	content_grid.slot_spacing = 20
-	content_grid.min_grid_width = 5
-	content_grid.min_grid_height = 5
-	content_grid.enable_virtual_scrolling = false  # Use traditional grid for tearoff windows
-	
-	parent_container.add_child(content_grid)
-	
-	# CRITICAL: Copy item positions from parent grid before setting container
-	_copy_item_positions_from_parent()
-	
-	# Set container - this will preserve the copied positions
-	if container:
-		content_grid.set_container(container)
-	
-	# Connect signals
-	if content_grid.has_signal("item_activated"):
-		content_grid.item_activated.connect(_on_item_activated)
-	if content_grid.has_signal("item_context_menu"):
-		content_grid.item_context_menu.connect(_on_item_context_menu)
-	if content_grid.has_signal("empty_area_context_menu"):
-		content_grid.empty_area_context_menu.connect(_on_empty_area_context_menu)
-
-func _copy_item_positions_from_parent():
-	"""Copy item positions from the parent window's grid to maintain layout"""
-	if not parent_window or not parent_window.content or not parent_window.content.inventory_grid:
-		return
-		
-	var parent_grid = parent_window.content.inventory_grid
-	
-	# Copy the item_positions dictionary from parent grid
-	if parent_grid.has_method("get_item_positions"):
-		var parent_positions = parent_grid.get_item_positions()
-		if content_grid.has_method("set_item_positions"):
-			content_grid.set_item_positions(parent_positions)
-	else:
-		# Fallback: Access the item_positions member directly if available
-		if parent_grid.get("item_positions"):
-			var parent_positions = parent_grid.item_positions
-			if content_grid.get("item_positions"):
-				content_grid.item_positions = parent_positions.duplicate()
-	
-	# Also copy virtual_items order if using virtual scrolling
-	if parent_grid.get("virtual_items") and content_grid.get("virtual_items"):
-		content_grid.virtual_items = parent_grid.virtual_items.duplicate()
-
-func _setup_list_display(parent_container: Control):
-	"""Setup list display for container"""
-	content_list = InventoryListView.new()
-	content_list.name = "ContainerList"
-	content_list.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	content_list.visible = false  # Start hidden
-	parent_container.add_child(content_list)
-	
-	# Set container with both parameters
-	if container:
-		content_list.set_container(container, container.container_id)
-	
-	# Connect signals
-	if content_list.has_signal("item_activated"):
-		content_list.item_activated.connect(_on_item_activated)
-	if content_list.has_signal("item_context_menu"):
-		content_list.item_context_menu.connect(_on_item_context_menu)
+	# TEAROFF-SPECIFIC: Initialize with independent container view
+	if inventory_manager and container:
+		_initialize_tearoff_content()
 
 func _setup_item_actions():
-	"""Setup item actions for context menus and operations"""
-	if not parent_window or not parent_window.item_actions:
+	"""Initialize the item actions handler - SAME AS MAIN WINDOW"""
+	var scene_window = get_viewport()
+	if scene_window is Window:
+		item_actions = InventoryItemActions.new(scene_window)
+	else:
+		var parent_window_ref = _find_parent_window()
+		if parent_window_ref:
+			item_actions = InventoryItemActions.new(parent_window_ref)
+		else:
+			push_error("Could not find parent window for InventoryItemActions")
+			return
+	
+	# Set the inventory manager on item_actions - SAME AS MAIN WINDOW
+	if inventory_manager:
+		item_actions.set_inventory_manager(inventory_manager)
+	
+	# Connect to inventory manager updates - SAME AS MAIN WINDOW
+	if item_actions.has_signal("container_refreshed"):
+		item_actions.container_refreshed.connect(_on_container_refreshed)
+	if content and content.has_method("set_item_actions"):
+		content.set_item_actions(item_actions)
+
+func _find_parent_window() -> Window:
+	"""Find the parent window in the scene tree - SAME AS MAIN WINDOW"""
+	var current = get_parent()
+	while current:
+		if current is Window:
+			return current
+		current = current.get_parent()
+	return null
+
+func _initialize_tearoff_content():
+	"""Initialize content with independent container view - TEAROFF-SPECIFIC"""
+	if not content or not inventory_manager or not container:
 		return
-		
-	# Share the same item actions instance from parent window
-	item_actions = parent_window.item_actions
 	
-	# Set current container for actions
-	if item_actions.has_method("set_current_container"):
-		item_actions.set_current_container(container)
+	# CRITICAL: Create independent view instead of using container directly
+	container_view = ContainerView.new(container, "tearoff_" + container.container_id)
+	
+	# Set inventory manager on content - SAME AS MAIN WINDOW
+	if content.has_method("set_inventory_manager"):
+		content.set_inventory_manager(inventory_manager)
+	
+	# Create single container array with the VIEW, not the original container
+	var single_container_array: Array[InventoryContainer_Base] = [container_view]
+	
+	# Set current container on item_actions to use the VIEW
+	if item_actions and item_actions.has_method("set_current_container"):
+		item_actions.set_current_container(container_view)
+	
+	# Update containers list in content with the VIEW
+	if content.has_method("update_containers"):
+		content.update_containers(single_container_array)
+	
+	# Select the VIEW in the content
+	if content.has_method("select_container"):
+		content.select_container(container_view)
 
-func _set_display_mode(mode: InventoryDisplayMode.Mode):
-	"""Switch between grid and list display modes"""
-	if mode == current_display_mode:
-		return
-		
-	current_display_mode = mode
-	
-	match mode:
-		InventoryDisplayMode.Mode.GRID:
-			if content_grid:
-				content_grid.visible = true
-			if content_list:
-				content_list.visible = false
-		InventoryDisplayMode.Mode.LIST:
-			if content_grid:
-				content_grid.visible = false
-			if content_list:
-				content_list.visible = true
-	
-	# Update header button if it exists
-	if header and header.display_mode_button:
-		var button_text = "⊞" if mode == InventoryDisplayMode.Mode.GRID else "☰"
-		header.set_fake_button_text(header.display_mode_button, button_text)
-	
-	# Refresh current display
-	call_deferred("_refresh_display")
+# ALL THE SAME EVENT HANDLERS AS MAIN WINDOW BUT WORKING WITH VIEW
+func _on_search_changed(search_text: String):
+	"""Handle search text changes - TEAROFF-SPECIFIC (affects only this view)"""
+	if container_view:
+		container_view.set_search_filter(search_text)
 
-func _connect_container_signals():
-	"""Connect to container change signals"""
-	if not container:
-		return
-		
-	if container.has_signal("item_added"):
-		if not container.item_added.is_connected(_on_container_item_added):
-			container.item_added.connect(_on_container_item_added)
-	
-	if container.has_signal("item_removed"):
-		if not container.item_removed.is_connected(_on_container_item_removed):
-			container.item_removed.connect(_on_container_item_removed)
-	
-	if container.has_signal("container_changed"):
-		if not container.container_changed.is_connected(_on_container_changed):
-			container.container_changed.connect(_on_container_changed)
-
-# Header signal handlers (same as main window)
-func _on_search_changed(text: String):
-	"""Handle search text changes from header"""
-	# Apply to grid view
-	if content_grid and content_grid.has_method("apply_search"):
-		content_grid.apply_search(text)
-	
-	# Apply to list view
-	if content_list and content_list.has_method("apply_search"):
-		content_list.apply_search(text)
-
-func _on_filter_changed(filter_type: int):
-	"""Handle filter changes from header"""
-	# Apply to grid view
-	if content_grid and content_grid.has_method("apply_filter"):
-		content_grid.apply_filter(filter_type)
-	
-	# Apply to list view
-	if content_list and content_list.has_method("apply_filter"):
-		content_list.apply_filter(filter_type)
+func _on_filter_changed(filter_data: Dictionary):
+	"""Handle filter changes - TEAROFF-SPECIFIC (affects only this view)"""
+	if container_view and filter_data.has("type"):
+		container_view.set_type_filter(filter_data.type)
 
 func _on_sort_requested(sort_type: InventorySortType.Type):
-	"""Handle sort requests from header"""
-	if not inventory_manager or not container:
-		return
-		
-	# Sort the container
-	inventory_manager.sort_container(container.container_id, sort_type)
-	
-	# Force refresh after sort
-	await get_tree().process_frame  # Wait for sort to complete
-	_refresh_display()
+	"""Handle sort requests - TEAROFF-SPECIFIC (affects only this view)"""
+	if container_view:
+		container_view.set_sort(sort_type, true)
 
 func _on_display_mode_changed(mode: InventoryDisplayMode.Mode):
-	"""Handle display mode changes from header"""
-	_set_display_mode(mode)
-	call_deferred("_refresh_and_compact_display")
+	"""Handle display mode changes - SAME AS MAIN WINDOW"""
+	if content and content.has_method("set_display_mode"):
+		content.set_display_mode(mode)
 
-# Container signal handlers
-func _on_container_item_added(item: InventoryItem_Base, _position: Vector2i = Vector2i(-1, -1)):
-	"""Handle item added to container"""
-	_refresh_display()
-	_update_mass_info()
+func _on_container_selected_from_content(selected_container: InventoryContainer_Base):
+	"""Handle container selection - TEAROFF-SPECIFIC (should only be the view)"""
+	# In tearoff window, this should only ever be the container view
+	if selected_container == container_view:
+		if item_actions and item_actions.has_method("set_current_container"):
+			item_actions.set_current_container(container_view)
+		container_switched.emit(container_view)
 
-func _on_container_item_removed(item: InventoryItem_Base, _position: Vector2i = Vector2i(-1, -1)):
-	"""Handle item removed from container"""
-	_refresh_display()
-	_update_mass_info()
-
-func _on_container_changed(_item: InventoryItem_Base = null, _position: Vector2i = Vector2i(-1, -1)):
-	"""Handle general container changes"""
-	_refresh_display()
-	_update_mass_info()
-
-# Content signal handlers
-func _on_item_activated(item: InventoryItem_Base, slot: InventorySlot):
-	"""Handle item activation"""
+func _on_item_activated_from_content(item: InventoryItem_Base, slot: InventorySlot):
+	"""Handle item activation - SAME AS MAIN WINDOW"""
 	if item_actions and item_actions.has_method("handle_item_activation"):
 		item_actions.handle_item_activation(item, slot)
 
-func _on_item_context_menu(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
-	"""Handle item context menu"""
+func _on_item_context_menu_from_content(item: InventoryItem_Base, slot: InventorySlot, position: Vector2):
+	"""Handle item context menu - SAME AS MAIN WINDOW"""
 	if item_actions and item_actions.has_method("show_item_context_menu"):
 		item_actions.show_item_context_menu(item, slot, position)
 
-func _on_empty_area_context_menu(position: Vector2):
-	"""Handle empty area context menu"""
+func _on_empty_area_context_menu_from_content(global_position: Vector2):
+	"""Handle empty area context menu - SAME AS MAIN WINDOW"""
 	if item_actions and item_actions.has_method("show_empty_area_context_menu"):
-		item_actions.show_empty_area_context_menu(position)
+		item_actions.show_empty_area_context_menu(global_position)
 
-# Display management
-func _refresh_display():
-	"""Refresh the current display mode"""
-	if not container:
+func _on_window_resized_for_grid(_new_size: Vector2i):
+	"""Handle window resize for grid reflow - SAME AS MAIN WINDOW"""
+	if content:
+		call_deferred("_handle_content_resize")
+
+func _handle_content_resize():
+	"""Handle content resize - SAME AS MAIN WINDOW"""
+	if not content:
 		return
-		
-	match current_display_mode:
-		InventoryDisplayMode.Mode.GRID:
-			if content_grid and content_grid.visible:
-				content_grid.refresh_display()
-		InventoryDisplayMode.Mode.LIST:
-			if content_list and content_list.visible:
-				content_list.refresh_display()
 	
-	_update_mass_info()
+	# Let the content handle its own resize
+	if content.has_method("_handle_display_resize"):
+		content._handle_display_resize()
 
-func _refresh_and_compact_display():
-	"""Refresh display and trigger compacting for tearoff window"""
-	_refresh_display()
-	
-	# Trigger compact refresh on grid to reorganize items
-	if content_grid and content_grid.has_method("trigger_compact_refresh"):
-		content_grid.trigger_compact_refresh()
-	elif content_grid and content_grid.has_method("_trigger_compact_refresh"):
-		content_grid._trigger_compact_refresh()
+func _on_container_refreshed():
+	"""Handle container refresh from item actions - SAME AS MAIN WINDOW"""
+	# Refresh the display when items change
+	if content and content.has_method("refresh_display"):
+		content.refresh_display()
 
-func _update_mass_info():
-	"""Update mass/volume information display"""
-	if not mass_info_label or not container:
-		return
-		
-	var used_volume = container.get_used_volume()
-	var max_volume = container.max_volume
-	var item_count = container.get_item_count()
-	
-	var volume_text = "%.1f / %.1f m³" % [used_volume, max_volume]
-	var count_text = "%d items" % item_count
-	
-	mass_info_label.text = "%s | %s" % [volume_text, count_text]
-
-# Public interface
+# TEAROFF-SPECIFIC METHODS
 func get_container() -> InventoryContainer_Base:
-	"""Get the container this window represents"""
+	"""Get the container view this window represents"""
+	return container_view if container_view else container
+
+func get_original_container() -> InventoryContainer_Base:
+	"""Get the original container (not the view)"""
 	return container
 
 func reattach_to_parent():
 	"""Reattach this container to the parent window"""
-	window_reattached.emit(container)
+	window_reattached.emit(container)  # Emit original container, not view
 	hide_window()
 	queue_free()
 
-# Override Window_Base methods for proper cleanup
+# SAME CLEANUP AS MAIN WINDOW WITH VIEW CLEANUP
 func hide_window():
-	"""Override to ensure proper cleanup"""
+	"""Override to ensure proper cleanup - SAME AS MAIN WINDOW + VIEW CLEANUP"""
+	if item_actions:
+		item_actions.close_all_dialogs()
+	
+	# TEAROFF-SPECIFIC: Clean up the independent view
+	if container_view:
+		container_view.cleanup()
+		container_view = null
+	
 	super.hide_window()
 
 func _on_window_closed():
-	"""Override the Window_Base virtual method for close handling"""
-	# Emit reattach signal when window is closed
+	"""Override close handling - TEAROFF-SPECIFIC"""
+	# Clean up the independent view first
+	if container_view:
+		container_view.cleanup()
+		container_view = null
+	
+	if item_actions:
+		item_actions.close_all_dialogs()
+		item_actions.cleanup()
+	
+	# Emit reattach signal when window is closed (use original container)
 	reattach_to_parent()
+
+# PUBLIC INTERFACE - SAME AS MAIN WINDOW WITH VIEW AWARENESS
+func set_inventory_manager(manager: InventoryManager):
+	"""Set inventory manager - SAME AS MAIN WINDOW"""
+	inventory_manager = manager
+	
+	# Set up item actions now that we have inventory manager
+	if not item_actions:
+		_setup_item_actions()
+	
+	# Also set/update it on item_actions if it exists
+	if item_actions and item_actions.has_method("set_inventory_manager"):
+		item_actions.set_inventory_manager(inventory_manager)
+	
+	# Initialize content with inventory manager
+	if manager and container:
+		_initialize_tearoff_content()
+
+func get_current_container() -> InventoryContainer_Base:
+	"""Get current container - TEAROFF-SPECIFIC (returns the view)"""
+	return container_view if container_view else container
+
+func show_window():
+	"""Show window and register with UIManager"""
+	super.show_window()
+	
+	# Make sure we're registered with UIManager
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		var ui_manager = ui_managers[0]
+		if ui_manager.has_method("focus_window"):
+			ui_manager.focus_window(self)
+
+# TEAROFF-SPECIFIC VIEW CONTROL METHODS
+func set_view_search_filter(filter: String):
+	"""Set search filter for this tearoff view only"""
+	if container_view:
+		container_view.set_search_filter(filter)
+
+func set_view_type_filter(filter: ItemTypes.Type):
+	"""Set type filter for this tearoff view only"""
+	if container_view:
+		container_view.set_type_filter(filter)
+
+func set_view_sort(sort_type: InventorySortType.Type, ascending: bool = true):
+	"""Set sort for this tearoff view only"""
+	if container_view:
+		container_view.set_sort(sort_type, ascending)
+
+func get_view_state() -> Dictionary:
+	"""Get current view state for saving/restoring"""
+	if not container_view:
+		return {}
+	
+	return {
+		"search_filter": container_view.search_filter,
+		"type_filter": container_view.type_filter,
+		"sort_type": container_view.sort_type,
+		"sort_ascending": container_view.sort_ascending
+	}
+
+func restore_view_state(state: Dictionary):
+	"""Restore view state from saved data"""
+	if not container_view:
+		return
+	
+	if state.has("search_filter"):
+		container_view.set_search_filter(state.search_filter)
+	if state.has("type_filter"):
+		container_view.set_type_filter(state.type_filter)
+	if state.has("sort_type") and state.has("sort_ascending"):
+		container_view.set_sort(state.sort_type, state.sort_ascending)
