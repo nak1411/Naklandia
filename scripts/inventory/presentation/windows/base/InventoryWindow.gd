@@ -8,6 +8,7 @@ var inventory_container: VBoxContainer
 var header: InventoryWindowHeader
 var content: InventoryWindowContent
 var item_actions: InventoryItemActions
+var tearoff_manager: ContainerTearOffManager
 
 # Inventory-specific state
 var open_containers: Array[InventoryContainer_Base] = []
@@ -82,6 +83,13 @@ func _setup_content():
 	# Initialize content with inventory manager if available
 	if inventory_manager:
 		_initialize_inventory_content()
+
+	# Setup tearoff functionality
+	if not tearoff_manager:
+		tearoff_manager = ContainerTearOffManager.new(self)
+		tearoff_manager.setup_tearoff_functionality()
+
+
 
 func _on_empty_area_context_menu_from_content(_global_position: Vector2):
 	"""Handle empty area context menu from content"""
@@ -338,6 +346,10 @@ func _switch_container(container: InventoryContainer_Base):
 # Override base class close behavior
 func _on_window_closed():
 	"""Override from Window_Base - handle inventory window close"""
+	# Cleanup tearoff windows
+	if tearoff_manager:
+		tearoff_manager.cleanup()
+
 	# Find the inventory integration and close properly
 	var integration = _find_inventory_integration(get_tree().current_scene)
 	if integration:
@@ -381,6 +393,9 @@ func set_inventory_manager(manager: InventoryManager):
 
 func get_current_container() -> InventoryContainer_Base:
 	return current_container
+
+func get_tearoff_manager() -> ContainerTearOffManager:
+	return tearoff_manager
 	
 func show_window():
 	"""Show inventory window with grid layout fix"""
