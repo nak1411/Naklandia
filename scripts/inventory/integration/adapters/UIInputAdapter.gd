@@ -119,7 +119,12 @@ func _on_ui_focus_changed(has_focus: bool):
 func _on_layer_visibility_changed(layer_name: String, visible: bool):
 	"""Handle UI layer visibility changes"""
 	if event_bus:
-		event_bus.emit_signal("ui_layer_changed", layer_name, visible)
+		# Fix: Use a method call instead of emitting a non-existent signal
+		if event_bus.has_method("emit_ui_layer_changed"):
+			event_bus.emit_ui_layer_changed(layer_name, visible)
+		else:
+			# Just print for debugging if the method doesn't exist
+			print("UIInputAdapter: Layer %s visibility changed to %s" % [layer_name, visible])
 
 func set_drag_in_progress(dragging: bool):
 	"""Enable/disable input processing during drag operations"""

@@ -136,7 +136,20 @@ func _setup_original_inventory_system():
 	# Create inventory window
 	inventory_window = InventoryWindow.new()
 	inventory_window.name = "InventoryWindow"
-	inventory_canvas.add_child(inventory_window)
+
+	# Get UIManager and register the main inventory window
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		var ui_manager = ui_managers[0]
+		if ui_manager.has_method("add_main_inventory_window"):
+			print("InventoryIntegration: Registering main inventory window with UIManager")
+			ui_manager.add_main_inventory_window(inventory_window)
+		else:
+			# Fallback to inventory canvas
+			inventory_canvas.add_child(inventory_window)
+	else:
+		# Fallback to inventory canvas
+		inventory_canvas.add_child(inventory_window)
 	
 	# Wait for initialization
 	await get_tree().process_frame

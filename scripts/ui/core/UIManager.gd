@@ -153,9 +153,15 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 			canvas.layer = 100 + active_windows.size()
 			pause_canvas.add_child(canvas)
 	
-	canvas.add_child(window)
+	# CRITICAL: Set the metadata BEFORE adding the window to canvas
 	window.set_meta("window_canvas", canvas)
 	window.set_meta("window_type", window_type)
+	
+	# Add window to canvas
+	canvas.add_child(window)
+	
+	print("UIManager: Created canvas %s with layer %d for window %s" % [canvas.name, canvas.layer, window.name])
+	
 	return canvas
 
 func focus_window(window: Window_Base):
@@ -177,14 +183,15 @@ func focus_window(window: Window_Base):
 	var old_focused = focused_window
 	focused_window = window
 	
-	# Move to top of stack
+	# CRITICAL: Move to top of stack - this determines layer order
 	if window in window_stack:
 		window_stack.erase(window)
+		print("UIManager: Removed %s from stack position" % window.name)
+	
 	window_stack.append(window)
+	print("UIManager: Added %s to top of stack (position %d)" % [window.name, window_stack.size() - 1])
 	
-	print("UIManager: Window stack now has %d windows, %s is at top" % [window_stack.size(), window.name])
-	
-	# Update canvas layer to be highest of its type
+	# Update canvas layers based on new stack order
 	_update_window_layers()
 	
 	# Update visual focus states
@@ -195,36 +202,34 @@ func focus_window(window: Window_Base):
 	# Emit signal
 	window_focused.emit(window)
 	
-	# Debug: Print current layers
+	# Debug: Print current layers AFTER the update
 	_debug_print_window_layers()
 
 func _update_window_layers():
-	"""Update canvas layers to maintain proper z-order within each type"""
-	# Group windows by type with safety checks
-	var tearoff_windows: Array[Window_Base] = []
-	var dialog_windows: Array[Window_Base] = []
-	var inventory_windows: Array[Window_Base] = []
-	
+	"""Update canvas layers to maintain proper z-order based on focus order"""
 	# Clean up invalid windows first
 	_cleanup_invalid_windows()
 	
-	for window in window_stack:
+	print("UIManager: Updating window layers for %d windows" % window_stack.size())
+	
+	# Assign layers based on position in window_stack
+	# Earlier windows get lower layers, later windows get higher layers
+	var base_layer = 50  # Start from layer 50
+	
+	for i in range(window_stack.size()):
+		var window = window_stack[i]
 		if not is_instance_valid(window):
 			continue
 			
-		var window_type = window.get_meta("window_type", "tearoff")
-		match window_type:
-			"tearoff":
-				tearoff_windows.append(window)
-			"dialog":
-				dialog_windows.append(window)
-			"main_inventory":
-				inventory_windows.append(window)
+		var canvas = window.get_meta("window_canvas", null) as CanvasLayer
+		if canvas and is_instance_valid(canvas):
+			var new_layer = base_layer + i
+			print("UIManager: Setting %s canvas layer to %d (was %d) - position %d in stack" % [window.name, new_layer, canvas.layer, i])
+			canvas.layer = new_layer
+		else:
+			print("UIManager: WARNING - No valid canvas for window %s" % window.name)
 	
-	# Update layers within each type
-	_update_window_type_layers(tearoff_windows, 60)
-	_update_window_type_layers(dialog_windows, 100)
-	_update_window_type_layers(inventory_windows, 50)
+	print("UIManager: Layer update complete")
 
 func _cleanup_invalid_windows():
 	"""Remove invalid windows from tracking arrays"""
@@ -253,7 +258,11 @@ func _update_window_type_layers(windows: Array[Window_Base], base_layer: int):
 			
 		var canvas = window.get_meta("window_canvas", null) as CanvasLayer
 		if canvas and is_instance_valid(canvas):
-			canvas.layer = base_layer + i
+			var new_layer = base_layer + i
+			print("UIManager: Setting %s canvas layer to %d (was %d)" % [window.name, new_layer, canvas.layer])
+			canvas.layer = new_layer
+		else:
+			print("UIManager: WARNING - No valid canvas for window %s" % window.name)
 
 func _set_window_focus_state(window: Window_Base, has_focus: bool):
 	"""Update window visual focus state with safety checks"""
@@ -289,35 +298,41 @@ func _on_managed_window_closed(window: Window_Base):
 	unregister_window(window)
 
 func unregister_window(window: Window_Base):
-	"""Unregister a window from the UI manager with safety checks"""
-	if not is_instance_valid(window) or window not in active_windows:
-		# Even if window is invalid, try to clean up arrays
-		_cleanup_invalid_windows()
+	"""Unregister a window from the UI manager"""
+	if window not in active_windows:
 		return
+	
+	print("UIManager: Unregistering window %s" % window.name)
+	
+	# Don't automatically close other windows when main inventory closes
+	var window_type = window.get_meta("window_type", "")
+	var is_main_inventory = (window_type == "main_inventory")
 	
 	active_windows.erase(window)
 	window_stack.erase(window)
 	
-	# Clean up canvas with safety check
-	var canvas = null
-	if is_instance_valid(window):
-		canvas = window.get_meta("window_canvas", null) as CanvasLayer
-	
+	# Clean up canvas
+	var canvas = window.get_meta("window_canvas", null) as CanvasLayer
 	if canvas and is_instance_valid(canvas):
 		canvas.queue_free()
 	
-	# Update focus
+	# Update focus to remaining windows (but don't close them)
 	if window == focused_window:
 		focused_window = null
 		# Focus the topmost remaining window
-		_cleanup_invalid_windows()  # Clean up before checking stack
+		_cleanup_invalid_windows()
 		if window_stack.size() > 0:
-			focus_window(window_stack[-1])
+			var next_window = window_stack[-1]
+			# Only focus if it's not the main inventory closing
+			if not is_main_inventory or next_window.get_meta("window_type", "") != "tearoff":
+				focus_window(next_window)
 	
 	# Update layers
 	_update_window_layers()
 	
 	window_closed.emit(window)
+	
+	print("UIManager: Window %s unregistered, %d windows remaining" % [window.name, active_windows.size()])
 
 # PUBLIC WINDOW MANAGEMENT INTERFACE
 func get_focused_window() -> Window_Base:
@@ -327,9 +342,30 @@ func get_all_windows() -> Array[Window_Base]:
 	return active_windows.duplicate()
 
 func close_all_windows():
-	"""Close all managed windows"""
+	"""Close all managed windows except main inventory"""
+	print("UIManager: Closing all non-inventory windows")
 	for window in active_windows.duplicate():
 		if is_instance_valid(window):
+			var window_type = window.get_meta("window_type", "")
+			if window_type != "main_inventory":
+				print("UIManager: Closing window %s (type: %s)" % [window.name, window_type])
+				window.hide_window()
+
+func close_windows_by_type(window_type: String):
+	"""Close all windows of a specific type"""
+	print("UIManager: Closing all windows of type: %s" % window_type)
+	var windows_to_close = get_windows_by_type(window_type)
+	for window in windows_to_close:
+		if is_instance_valid(window):
+			print("UIManager: Closing window %s" % window.name)
+			window.hide_window()
+
+func close_all_windows_including_main():
+	"""Close ALL managed windows including main inventory"""
+	print("UIManager: Closing ALL windows")
+	for window in active_windows.duplicate():
+		if is_instance_valid(window):
+			print("UIManager: Closing window %s" % window.name)
 			window.hide_window()
 
 func bring_window_to_front(window: Window_Base):
@@ -504,13 +540,6 @@ func get_windows_by_type(window_type: String) -> Array[Window_Base]:
 			windows.append(window)
 	return windows
 
-func close_windows_by_type(window_type: String):
-	"""Close all windows of a specific type"""
-	var windows_to_close = get_windows_by_type(window_type)
-	for window in windows_to_close:
-		if is_instance_valid(window):
-			window.hide_window()
-
 # DEBUG METHODS
 func print_window_stack():
 	"""Debug method to print current window stack with safety checks"""
@@ -540,7 +569,8 @@ func _debug_print_window_layers():
 		var canvas = window.get_meta("window_canvas", null) as CanvasLayer
 		var layer = canvas.layer if canvas and is_instance_valid(canvas) else -1
 		var focused = " [FOCUSED]" if window == focused_window else ""
-		print("  %s: Layer %d%s" % [window.name, layer, focused])
+		var visible = " [VISIBLE]" if window.visible else " [HIDDEN]"
+		print("  %s: Layer %d%s%s" % [window.name, layer, focused, visible])
 	print("=== End Window Layers ===")
 
 func print_canvas_layers():

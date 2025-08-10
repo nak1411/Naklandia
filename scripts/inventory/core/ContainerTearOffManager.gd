@@ -145,24 +145,9 @@ func _create_tearoff_window(container: InventoryContainer_Base, drop_position: V
 	"""Create a new tearoff window for the container"""
 	var tearoff_window = ContainerTearOffWindow.new(container, main_window)
 	
-	# Get UI Manager and register the window
-	var ui_managers = main_window.get_tree().get_nodes_in_group("ui_manager")
-	var ui_manager: UIManager = null
-	if ui_managers.size() > 0:
-		ui_manager = ui_managers[0]
+	print("ContainerTearOffManager: Creating tearoff window for %s" % container.container_name)
 	
-	if ui_manager and ui_manager.has_method("add_tearoff_window"):
-		# Let UIManager handle canvas creation and layering
-		ui_manager.add_tearoff_window(tearoff_window)
-	else:
-		# Fallback to old method
-		var tearoff_canvas = CanvasLayer.new()
-		tearoff_canvas.name = "TearoffWindowLayer"
-		tearoff_canvas.layer = 100
-		main_window.get_tree().current_scene.add_child(tearoff_canvas)
-		tearoff_canvas.add_child(tearoff_window)
-	
-	# Position and show window
+	# Position the window first
 	var position_for_window: Vector2
 	if drop_position != Vector2.ZERO:
 		position_for_window = drop_position - Vector2(100, 50)
@@ -171,8 +156,38 @@ func _create_tearoff_window(container: InventoryContainer_Base, drop_position: V
 		position_for_window = mouse_pos - Vector2(100, 50)
 	
 	tearoff_window.position = position_for_window
+	print("ContainerTearOffManager: Positioned tearoff window at %s" % str(tearoff_window.position))
+	
+	# Try to use UIManager first
+	var ui_managers = main_window.get_tree().get_nodes_in_group("ui_manager")
+	var ui_manager: UIManager = null
+	if ui_managers.size() > 0:
+		ui_manager = ui_managers[0]
+		print("ContainerTearOffManager: Found UIManager")
+	else:
+		print("ContainerTearOffManager: No UIManager found")
+	
+	if ui_manager and ui_manager.has_method("add_tearoff_window"):
+		print("ContainerTearOffManager: Using UIManager for tearoff window")
+		# Let UIManager handle canvas creation and layering
+		var canvas = ui_manager.add_tearoff_window(tearoff_window)
+		print("ContainerTearOffManager: UIManager returned canvas with layer %d" % (canvas.layer if canvas else -1))
+	else:
+		print("ContainerTearOffManager: Falling back to manual canvas creation")
+		# Fallback to old method
+		var tearoff_canvas = CanvasLayer.new()
+		tearoff_canvas.name = "TearoffWindowLayer"
+		tearoff_canvas.layer = 100
+		main_window.get_tree().current_scene.add_child(tearoff_canvas)
+		tearoff_canvas.add_child(tearoff_window)
+		print("ContainerTearOffManager: Created manual canvas with layer %d" % tearoff_canvas.layer)
+	
+	# Ensure it's on screen
 	_ensure_window_on_screen(tearoff_window)
+	
+	# Show the window
 	tearoff_window.show_window()
+	print("ContainerTearOffManager: Showed tearoff window")
 	
 	# Store reference
 	tearoff_windows[container.container_id] = {
@@ -183,6 +198,8 @@ func _create_tearoff_window(container: InventoryContainer_Base, drop_position: V
 	# Connect signals
 	tearoff_window.window_reattached.connect(_on_window_reattached)
 	tearoff_window.window_closed.connect(_on_tearoff_window_closed.bind(container.container_id))
+	
+	print("ContainerTearOffManager: Tearoff window creation complete")
 
 func _ensure_window_on_screen(window: ContainerTearOffWindow):
 	"""Ensure tearoff window is positioned on screen"""

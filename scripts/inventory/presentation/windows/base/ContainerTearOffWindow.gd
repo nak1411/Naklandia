@@ -44,19 +44,6 @@ func _ready():
 	window_resized.connect(_on_window_resized_for_grid)
 	# Ensure this window is properly registered with UIManager
 	call_deferred("_ensure_ui_manager_registration")
-	
-	# Setup focus handling after content is ready
-	call_deferred("_setup_focus_handling")
-
-func _setup_focus_handling():
-	"""Setup focus handling for tearoff window"""
-	# Connect to any control that should trigger focus
-	if content_container:
-		content_container.gui_input.connect(_on_content_input)
-	
-	# Also connect to the main container
-	if inventory_container:
-		inventory_container.gui_input.connect(_on_content_input)
 
 func _on_content_input(event: InputEvent):
 	"""Handle input on content areas"""
@@ -116,9 +103,6 @@ func _setup_content():
 			content.item_context_menu.connect(_on_item_context_menu_from_content)
 		if content.has_signal("empty_area_context_menu"):
 			content.empty_area_context_menu.connect(_on_empty_area_context_menu_from_content)
-		
-		# Connect window resize to trigger grid reflow - SAME AS MAIN WINDOW
-		window_resized.connect(_on_window_resized_for_grid)
 	
 	# TEAROFF-SPECIFIC: Initialize with independent container view
 	if inventory_manager and container:
@@ -360,3 +344,16 @@ func restore_view_state(state: Dictionary):
 		container_view.set_type_filter(state.type_filter)
 	if state.has("sort_type") and state.has("sort_ascending"):
 		container_view.set_sort(state.sort_type, state.sort_ascending)
+
+func _ensure_ui_manager_registration():
+	"""Ensure this window is registered with UIManager"""
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		var ui_manager = ui_managers[0]
+		if ui_manager.has_method("register_window"):
+			print("ContainerTearOffWindow: Registering %s with UIManager" % name)
+			ui_manager.register_window(self, "tearoff")
+		else:
+			print("ContainerTearOffWindow: UIManager doesn't have register_window method")
+	else:
+		print("ContainerTearOffWindow: No UIManager found")
