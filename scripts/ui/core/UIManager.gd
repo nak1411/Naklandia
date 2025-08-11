@@ -142,11 +142,11 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 			canvas.layer = 50  # Use inventory layer
 			inventory_canvas.add_child(canvas)
 		"tearoff":
-			# Each tearoff gets incrementally higher layer
+			# FIXED: Add tearoff windows to inventory_canvas too, not scene tree
 			canvas.layer = next_tearoff_layer
 			next_tearoff_layer += 1
-			# Add directly to scene tree for tearoffs
-			get_tree().current_scene.add_child(canvas)
+			# Use inventory_canvas instead of scene tree for consistent behavior
+			inventory_canvas.add_child(canvas)
 		"dialog":
 			# Dialogs use the highest priority pause canvas
 			canvas.layer = 100 + active_windows.size()
@@ -193,6 +193,9 @@ func _on_input_blocker_input(event: InputEvent, window: Window_Base):
 
 func focus_window(window: Window_Base):
 	"""Focus a specific window and bring it to front with safety checks"""
+	print("\n=== FOCUS WINDOW DEBUG ===")
+	print("Attempting to focus: %s" % window.name)
+	
 	if not is_instance_valid(window):
 		print("UIManager: Cannot focus invalid window")
 		return
@@ -211,9 +214,10 @@ func focus_window(window: Window_Base):
 	focused_window = window
 	
 	# CRITICAL: Move to top of stack - this determines layer order
+	var old_position = window_stack.find(window)
 	if window in window_stack:
 		window_stack.erase(window)
-		print("UIManager: Removed %s from stack position" % window.name)
+		print("UIManager: Removed %s from stack position %d" % [window.name, old_position])
 	
 	window_stack.append(window)
 	print("UIManager: Added %s to top of stack (position %d)" % [window.name, window_stack.size() - 1])
@@ -230,7 +234,9 @@ func focus_window(window: Window_Base):
 	window_focused.emit(window)
 	
 	# Debug: Print current layers AFTER the update
-	_debug_print_window_layers()
+	print("=== POST-FOCUS LAYER STATE ===")
+	debug_print_all_window_info()
+	print("==============================")
 
 func _get_highest_layer_for_type(window_type: String) -> int:
 	"""Get the highest layer currently used by windows of the same type"""
@@ -369,6 +375,55 @@ func _debug_print_window_layers():
 			var canvas = window.get_meta("window_canvas", null) as CanvasLayer
 			if canvas and is_instance_valid(canvas):
 				print("  %s: layer %d" % [window.name, canvas.layer])
+
+func debug_print_all_window_info():
+	"""Print detailed info about all windows and their layers"""
+	print("\n=== WINDOW DEBUG INFO ===")
+	print("Focused window: %s" % (focused_window.name if focused_window else "none"))
+	print("Total active windows: %d" % active_windows.size())
+	print("Window stack order (bottom to top):")
+	
+	for i in range(window_stack.size()):
+		var window = window_stack[i]
+		if is_instance_valid(window):
+			var canvas = window.get_meta("window_canvas", null) as CanvasLayer
+			var window_type = window.get_meta("window_type", "unknown")
+			var layer = canvas.layer if canvas else -1
+			var visible = window.visible
+			var mouse_filter = _get_mouse_filter_name(window.mouse_filter)
+			print("  [%d] %s (type: %s, layer: %d, visible: %s, mouse_filter: %s)" % [i, window.name, window_type, layer, visible, mouse_filter])
+			
+			# Check canvas parent
+			if canvas:
+				var canvas_parent = canvas.get_parent()
+				print("      Canvas parent: %s" % (canvas_parent.name if canvas_parent else "none"))
+	
+	print("=========================\n")
+
+func _get_mouse_filter_name(filter: Control.MouseFilter) -> String:
+	match filter:
+		Control.MOUSE_FILTER_STOP:
+			return "STOP"
+		Control.MOUSE_FILTER_PASS:
+			return "PASS"
+		Control.MOUSE_FILTER_IGNORE:
+			return "IGNORE"
+		_:
+			return "UNKNOWN"
+
+func debug_window_click_test(window: Window_Base):
+	"""Debug what happens when a window should receive a click"""
+	print("\n=== CLICK TEST for %s ===" % window.name)
+	var canvas = window.get_meta("window_canvas", null) as CanvasLayer
+	print("Window visible: %s" % window.visible)
+	print("Window mouse_filter: %s" % _get_mouse_filter_name(window.mouse_filter))
+	print("Canvas layer: %d" % (canvas.layer if canvas else -1))
+	print("Canvas parent: %s" % (canvas.get_parent().name if canvas and canvas.get_parent() else "none"))
+	print("Window in active_windows: %s" % (window in active_windows))
+	print("Window in window_stack: %s" % (window in window_stack))
+	print("Window stack position: %d" % (window_stack.find(window) if window in window_stack else -1))
+	print("Is focused: %s" % (window == focused_window))
+	print("========================\n")
 
 # PUBLIC WINDOW MANAGEMENT INTERFACE
 func get_focused_window() -> Window_Base:

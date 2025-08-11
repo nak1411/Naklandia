@@ -43,8 +43,6 @@ func _ready():
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	# Same resize handling as main window
 	window_resized.connect(_on_window_resized_for_grid)
-	# Ensure this window is properly registered with UIManager
-	call_deferred("_ensure_ui_manager_registration")
 
 func _on_content_input(event: InputEvent):
 	"""Handle input on content areas"""

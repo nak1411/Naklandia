@@ -138,27 +138,40 @@ func _connect_to_ui_manager():
 	else:
 		print("Window_Base: No UIManager found for %s" % name)
 
-func _input(event: InputEvent):
-	if not visible or is_locked:
-		return
-		
-	if event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			if mouse_event.pressed:
-				_handle_mouse_press(mouse_event.global_position)
-			else:
-				_handle_mouse_release()
-	elif event is InputEventMouseMotion and (is_dragging or is_resizing or mouse_pressed):
-		_handle_mouse_motion(event as InputEventMouseMotion)
-
 func _gui_input(event: InputEvent):
 	"""Handle input events for window interaction"""
 	
-	# FOCUS HANDLING - Add this at the start
+	# FOCUS HANDLING - Add this at the start with debug
 	if event is InputEventMouseButton and event.pressed:
-		print("Window_Base: Mouse pressed on %s, bringing to front" % name)
+		print("=== WINDOW INPUT DEBUG ===")
+		print("Window_Base: Mouse pressed on %s" % name)
+		print("Event button: %d, position: %s" % [event.button_index, event.global_position])
+		print("Window mouse_filter: %s" % _get_mouse_filter_debug())
+		print("Window visible: %s" % visible)
+		print("Window position: %s, size: %s" % [global_position, size])
+		
+		# Check if click is actually within window bounds
+		var local_click = event.global_position - global_position
+		var is_within_bounds = Rect2(Vector2.ZERO, size).has_point(local_click)
+		print("Click within window bounds: %s (local: %s)" % [is_within_bounds, local_click])
+		
+		print("Bringing %s to front" % name)
 		_bring_to_front()
+		print("========================")
+		
+		# IMPORTANT: Accept the event to prevent propagation
+		get_viewport().set_input_as_handled()
+
+func _get_mouse_filter_debug() -> String:
+	match mouse_filter:
+		Control.MOUSE_FILTER_STOP:
+			return "STOP"
+		Control.MOUSE_FILTER_PASS:
+			return "PASS"
+		Control.MOUSE_FILTER_IGNORE:
+			return "IGNORE"
+		_:
+			return "UNKNOWN"
 
 func _on_window_gui_input(event: InputEvent):
 	"""Handle any input on the window"""
@@ -244,7 +257,7 @@ func _setup_window_ui():
 	main_container = Control.new()
 	main_container.name = "MainContainer"
 	main_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	main_container.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(main_container)
 	
 	# Background panel
@@ -304,7 +317,7 @@ func _setup_window_ui():
 	content_area.offset_top = title_bar_height + border_width
 	content_area.offset_right = -border_width
 	content_area.offset_bottom = -border_width
-	content_area.mouse_filter = Control.MOUSE_FILTER_PASS
+	content_area.mouse_filter = Control.MOUSE_FILTER_STOP
 	main_container.add_child(content_area)
 
 func _setup_window_buttons():
@@ -1644,3 +1657,30 @@ func _on_mouse_entered():
 	# Optional: Could bring to front on hover
 	# _bring_to_front()
 	pass
+
+func debug_child_mouse_filters():
+	"""Debug all child control mouse filters"""
+	print("=== CHILD MOUSE FILTERS for %s ===" % name)
+	_debug_control_tree(self, 0)
+	print("=====================================")
+
+func _debug_control_tree(control: Control, depth: int):
+	"""Recursively debug control tree mouse filters"""
+	var indent = "  ".repeat(depth)
+	var filter_name = _get_mouse_filter_debug_static(control.mouse_filter)
+	print("%s%s: %s (visible: %s)" % [indent, control.name, filter_name, control.visible])
+	
+	for child in control.get_children():
+		if child is Control:
+			_debug_control_tree(child, depth + 1)
+
+func _get_mouse_filter_debug_static(filter: Control.MouseFilter) -> String:
+	match filter:
+		Control.MOUSE_FILTER_STOP:
+			return "STOP"
+		Control.MOUSE_FILTER_PASS:
+			return "PASS"
+		Control.MOUSE_FILTER_IGNORE:
+			return "IGNORE"
+		_:
+			return "UNKNOWN"
