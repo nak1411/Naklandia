@@ -115,6 +115,10 @@ func _ready():
 
 	last_known_size = size
 	window_resized.connect(_on_window_resized)
+
+	set_process_unhandled_input(true)
+
+	_create_test_resize_area()
 	
 	# Call virtual method for child classes to override
 	call_deferred("_setup_window_content")
@@ -138,15 +142,123 @@ func _connect_to_ui_manager():
 	else:
 		print("Window_Base: No UIManager found for %s" % name)
 
+func _create_test_resize_area():
+	"""Create a simple test area to see if mouse events work at all"""
+	var test_area = ColorRect.new()
+	test_area.name = "TestResizeArea"
+	test_area.color = Color.RED
+	test_area.size = Vector2(50, 50)
+	test_area.position = Vector2(size.x - 50, size.y - 50)  # Bottom-right corner
+	test_area.mouse_filter = Control.MOUSE_FILTER_STOP
+	test_area.z_index = 1000  # Very high z-index
+	
+	# Connect directly to see if we get ANY events
+	test_area.gui_input.connect(_on_test_area_input)
+	test_area.mouse_entered.connect(func(): print("TEST: Mouse entered red area"))
+	test_area.mouse_exited.connect(func(): print("TEST: Mouse exited red area"))
+	
+	add_child(test_area)
+	print("Window_Base: Created test resize area")
+
+func _on_test_area_input(event: InputEvent):
+	"""Test if we get any input on the test area"""
+	print("TEST: Got input event: %s" % event)
+	if event is InputEventMouseButton:
+		print("TEST: Mouse button event - button: %d, pressed: %s" % [event.button_index, event.pressed])
+		if event.pressed:
+			print("TEST: MOUSE BUTTON PRESS DETECTED!")
+			_start_resize(ResizeMode.BOTTOM_RIGHT, event.global_position)
+			get_viewport().set_input_as_handled()
+		else:
+			print("TEST: MOUSE BUTTON RELEASE DETECTED!")
+			_end_resize()
+			get_viewport().set_input_as_handled()
+
+func _unhandled_input(event: InputEvent):
+	"""Handle unhandled input - catch resize motion that other systems missed"""
+	if not is_resizing:
+		return
+		
+	if event is InputEventMouseMotion:
+		print("Window: Unhandled motion during resize - %s" % event.global_position)
+		_handle_resize_motion(event.global_position)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and not event.pressed:
+		# Handle mouse release globally during resize
+		print("Window: Global mouse release during resize")
+		_end_resize()
+		get_viewport().set_input_as_handled()
+
 func _gui_input(event: InputEvent):
 	"""Handle input events for window interaction"""
+	
+	# CRITICAL: Handle resize motion events first
+	if is_resizing and event is InputEventMouseMotion:
+		print("Window: Processing resize motion - %s" % event.global_position)
+		_handle_resize_motion(event.global_position)
+		get_viewport().set_input_as_handled()
+		return
+	
+	# Handle focus for non-resize events
 	if event is InputEventMouseButton and event.pressed:
-		_bring_to_front()
+		if ui_manager and ui_manager.has_method("focus_window"):
+			ui_manager.focus_window(self)
+		else:
+			_bring_to_front()
 
 func _on_window_gui_input(event: InputEvent):
 	"""Handle any input on the window"""
 	if event is InputEventMouseButton and event.pressed:
 		_bring_to_front()
+
+func _handle_resize_input(event: InputEvent) -> bool:
+	"""Handle resize input directly - returns true if event was consumed"""
+	if not can_resize or is_locked or is_maximized:
+		return false
+	
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			var resize_mode = _get_resize_area_at_position(mouse_event.global_position)
+			
+			if resize_mode != ResizeMode.NONE:
+				if mouse_event.pressed:
+					print("Window_Base: Direct resize start - mode: %d" % resize_mode)
+					_start_resize(resize_mode, mouse_event.global_position)
+					get_viewport().set_input_as_handled()
+					return true
+				elif is_resizing:
+					print("Window_Base: Direct resize end")
+					_end_resize()
+					get_viewport().set_input_as_handled()
+					return true
+	
+	elif event is InputEventMouseMotion:
+		if is_resizing:
+			_handle_resize_motion(event.global_position)
+			get_viewport().set_input_as_handled()
+			return true
+		else:
+			# Update cursor for hover
+			var resize_mode = _get_resize_area_at_position(event.global_position)
+			if resize_mode != ResizeMode.NONE:
+				_set_resize_cursor(resize_mode)
+			else:
+				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	
+	return false
+
+func _set_resize_cursor(mode: ResizeMode):
+	"""Set cursor for resize mode"""
+	match mode:
+		ResizeMode.LEFT, ResizeMode.RIGHT:
+			Input.set_default_cursor_shape(Input.CURSOR_HSIZE)
+		ResizeMode.TOP, ResizeMode.BOTTOM:
+			Input.set_default_cursor_shape(Input.CURSOR_VSIZE)
+		ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_RIGHT:
+			Input.set_default_cursor_shape(Input.CURSOR_FDIAGSIZE)
+		ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT:
+			Input.set_default_cursor_shape(Input.CURSOR_BDIAGSIZE)
 
 func _handle_mouse_press(global_pos: Vector2):
 	# FOCUS HANDLING - Add this first
@@ -174,40 +286,40 @@ func _handle_mouse_motion(motion_event: InputEventMouseMotion):
 	
 func _get_resize_area_at_position(global_pos: Vector2) -> ResizeMode:
 	"""Check if global position is over a resize area"""
+	if not can_resize or is_locked or is_maximized:
+		return ResizeMode.NONE
+		
 	var local_pos = global_pos - global_position
 	
-	# If window is too small, disable resize detection to prevent conflicts
-	if size.x < min_window_size.x + 20 or size.y < min_window_size.y + 20:
+	# Bounds check
+	if local_pos.x < 0 or local_pos.y < 0 or local_pos.x > size.x or local_pos.y > size.y:
 		return ResizeMode.NONE
 	
-	# Rest of your existing resize detection logic...
-	var effective_border_width = min(resize_border_width, size.x * 0.1, size.y * 0.1)
-	var effective_corner_size = min(resize_corner_size, size.x * 0.15, size.y * 0.15)
+	var border = resize_border_width
+	var corner = resize_corner_size
 	
-	# Check if mouse is within resize borders
-	var in_left = local_pos.x <= effective_border_width
-	var in_right = local_pos.x >= size.x - effective_border_width
-	var in_top = local_pos.y <= effective_border_width
-	var in_bottom = local_pos.y >= size.y - effective_border_width
+	var in_left = local_pos.x <= border
+	var in_right = local_pos.x >= size.x - border
+	var in_top = local_pos.y <= border
+	var in_bottom = local_pos.y >= size.y - border
 	
-	# Check corners first (they take priority)
-	if in_top and in_left and local_pos.x <= effective_corner_size and local_pos.y <= effective_corner_size:
+	# Check corners first (higher priority)
+	if in_top and in_left:
 		return ResizeMode.TOP_LEFT
-	elif in_top and in_right and local_pos.x >= size.x - effective_corner_size and local_pos.y <= effective_corner_size:
+	elif in_top and in_right:
 		return ResizeMode.TOP_RIGHT
-	elif in_bottom and in_left and local_pos.x <= effective_corner_size and local_pos.y >= size.y - effective_corner_size:
+	elif in_bottom and in_left:
 		return ResizeMode.BOTTOM_LEFT
-	elif in_bottom and in_right and local_pos.x >= size.x - effective_corner_size and local_pos.y >= size.y - effective_corner_size:
+	elif in_bottom and in_right:
 		return ResizeMode.BOTTOM_RIGHT
-	
-	# Check edges - but exclude corner areas
-	elif in_left and not (local_pos.y <= effective_corner_size or local_pos.y >= size.y - effective_corner_size):
+	# Check edges
+	elif in_left:
 		return ResizeMode.LEFT
-	elif in_right and not (local_pos.y <= effective_corner_size or local_pos.y >= size.y - effective_corner_size):
+	elif in_right:
 		return ResizeMode.RIGHT
-	elif in_top and not (local_pos.x <= effective_corner_size or local_pos.x >= size.x - effective_corner_size):
+	elif in_top:
 		return ResizeMode.TOP
-	elif in_bottom and not (local_pos.x <= effective_corner_size or local_pos.x >= size.x - effective_corner_size):
+	elif in_bottom:
 		return ResizeMode.BOTTOM
 	
 	return ResizeMode.NONE
@@ -285,7 +397,7 @@ func _setup_window_ui():
 	content_area.offset_top = title_bar_height + border_width
 	content_area.offset_right = -border_width
 	content_area.offset_bottom = -border_width
-	content_area.mouse_filter = Control.MOUSE_FILTER_STOP
+	content_area.mouse_filter = Control.MOUSE_FILTER_PASS
 	main_container.add_child(content_area)
 
 func _setup_window_buttons():
@@ -1160,73 +1272,57 @@ func _get_current_bottom_alpha() -> float:
 	return edge_bloom_material.get_shader_parameter("bottom_edge_alpha")
 
 func _start_resize(mode: ResizeMode, mouse_pos: Vector2):
+	print("_start_resize called - mode: %d, mouse_pos: %s, current size: %s" % [mode, mouse_pos, size])
 	is_resizing = true
 	resize_mode = mode
 	resize_start_position = position
 	resize_start_size = size
 	resize_start_mouse = mouse_pos
+	print("_start_resize - is_resizing now: %s" % is_resizing)
 
 func _end_resize():
+	print("_end_resize called - was resizing: %s" % is_resizing)
 	if is_resizing:
 		is_resizing = false
 		resize_mode = ResizeMode.NONE
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+		print("_end_resize - is_resizing now: %s" % is_resizing)
 
 func _handle_resize_motion(mouse_pos: Vector2):
+	print("_handle_resize_motion called - is_resizing: %s, mouse_pos: %s" % [is_resizing, mouse_pos])
 	if not is_resizing:
+		print("_handle_resize_motion - not resizing, returning")
 		return
 	
 	var delta = mouse_pos - resize_start_mouse
+	print("_handle_resize_motion - delta: %s" % delta)
 	var new_position = resize_start_position
 	var new_size = resize_start_size
 	
 	match resize_mode:
-		ResizeMode.LEFT:
-			new_position.x += delta.x
-			new_size.x -= delta.x
 		ResizeMode.RIGHT:
 			new_size.x += delta.x
-		ResizeMode.TOP:
-			new_position.y += delta.y
-			new_size.y -= delta.y
+			print("_handle_resize_motion - RIGHT resize, new_size: %s" % new_size)
 		ResizeMode.BOTTOM:
 			new_size.y += delta.y
-		ResizeMode.TOP_LEFT:
-			new_position.x += delta.x
-			new_position.y += delta.y
-			new_size.x -= delta.x
-			new_size.y -= delta.y
-		ResizeMode.TOP_RIGHT:
-			new_position.y += delta.y
-			new_size.x += delta.x
-			new_size.y -= delta.y
-		ResizeMode.BOTTOM_LEFT:
-			new_position.x += delta.x
-			new_size.x -= delta.x
-			new_size.y += delta.y
+			print("_handle_resize_motion - BOTTOM resize, new_size: %s" % new_size)
 		ResizeMode.BOTTOM_RIGHT:
 			new_size.x += delta.x
 			new_size.y += delta.y
+			print("_handle_resize_motion - BOTTOM_RIGHT resize, new_size: %s" % new_size)
+		# Add other cases as needed
 	
-	# Apply size constraints BEFORE updating position and size
+	# Apply size constraints
 	var constrained_size = Vector2(
 		max(min_window_size.x, min(new_size.x, max_window_size.x)),
 		max(min_window_size.y, min(new_size.y, max_window_size.y))
 	)
-	
-	# If size was constrained, adjust position for top/left resizes
-	if resize_mode in [ResizeMode.LEFT, ResizeMode.TOP, ResizeMode.TOP_LEFT, ResizeMode.TOP_RIGHT, ResizeMode.BOTTOM_LEFT]:
-		if constrained_size.x != new_size.x and resize_mode in [ResizeMode.LEFT, ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_LEFT]:
-			# Size was constrained on X axis for left resize - adjust position
-			new_position.x = resize_start_position.x + (resize_start_size.x - constrained_size.x)
-		
-		if constrained_size.y != new_size.y and resize_mode in [ResizeMode.TOP, ResizeMode.TOP_LEFT, ResizeMode.TOP_RIGHT]:
-			# Size was constrained on Y axis for top resize - adjust position
-			new_position.y = resize_start_position.y + (resize_start_size.y - constrained_size.y)
+	print("_handle_resize_motion - constrained_size: %s" % constrained_size)
 	
 	# Update position and size
 	position = new_position
 	size = constrained_size
+	print("_handle_resize_motion - applied size: %s, position: %s" % [size, position])
 	
 	window_resized.emit(Vector2i(size))
 

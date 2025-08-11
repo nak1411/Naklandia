@@ -122,10 +122,6 @@ func register_window(window: Window_Base, window_type: String = "tearoff") -> Ca
 		if window.window_closed.is_connected(_on_managed_window_closed):
 			window.window_closed.disconnect(_on_managed_window_closed)
 		window.window_closed.connect(_on_managed_window_closed.bind(window))
-		
-		# Set up input handling for focus - connect to gui_input for all mouse events
-		if not window.gui_input.is_connected(_on_window_input):
-			window.gui_input.connect(_on_window_input.bind(window))
 	
 	# Focus the new window immediately
 	focus_window(window)
@@ -142,11 +138,11 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 			canvas.layer = 50  # Use inventory layer
 			inventory_canvas.add_child(canvas)
 		"tearoff":
-			# FIXED: Add tearoff windows to inventory_canvas too, not scene tree
+			# FIX: Add tearoff windows directly to scene tree with their own layer
 			canvas.layer = next_tearoff_layer
 			next_tearoff_layer += 1
-			# Use inventory_canvas instead of scene tree for consistent behavior
-			inventory_canvas.add_child(canvas)
+			# Add directly to scene tree, not nested in inventory_canvas
+			add_child(canvas)  # Changed from inventory_canvas.add_child(canvas)
 		"dialog":
 			# Dialogs use the highest priority pause canvas
 			canvas.layer = 100 + active_windows.size()
@@ -155,9 +151,6 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 	# Set the metadata BEFORE adding the window to canvas
 	window.set_meta("window_canvas", canvas)
 	window.set_meta("window_type", window_type)
-	
-	# Ensure window blocks input and is properly configured
-	window.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	# Add window to canvas
 	canvas.add_child(window)
@@ -174,20 +167,12 @@ func _on_window_input(event: InputEvent, window: Window_Base):
 	# Handle any mouse button click to bring window to focus
 	if event is InputEventMouseButton and event.pressed:
 		focus_window(window)
-	
-	# Handle any mouse button click to bring window to focus
-	if event is InputEventMouseButton and event.pressed:
-		focus_window(window)
-		# Accept the event to prevent it from propagating to windows below
-		get_viewport().set_input_as_handled()
 
 func _on_input_blocker_input(event: InputEvent, window: Window_Base):
 	"""Handle input on the input blocker - prevents click-through"""
 	if event is InputEventMouseButton and event.pressed:
 		# Focus the window when clicking on its background area
 		focus_window(window)
-	# Always accept input to prevent propagation
-	get_viewport().set_input_as_handled()
 
 func focus_window(window: Window_Base):
 	"""Focus a specific window and bring it to front with safety checks"""
