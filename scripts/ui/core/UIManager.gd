@@ -152,11 +152,11 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 			canvas.layer = 100 + active_windows.size()
 			pause_canvas.add_child(canvas)
 	
-	# CRITICAL: Set the metadata BEFORE adding the window to canvas
+	# Set the metadata BEFORE adding the window to canvas
 	window.set_meta("window_canvas", canvas)
 	window.set_meta("window_type", window_type)
 	
-	# CRITICAL: Ensure window blocks input and is properly configured
+	# Ensure window blocks input and is properly configured
 	window.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	# Add window to canvas
@@ -165,6 +165,31 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 	print("UIManager: Created canvas %s with layer %d for window %s" % [canvas.name, canvas.layer, window.name])
 	
 	return canvas
+
+func _on_window_input(event: InputEvent, window: Window_Base):
+	"""Handle window input for focus management with safety checks"""
+	if not is_instance_valid(window):
+		return
+	
+	# Handle any mouse button click to bring window to focus
+	if event is InputEventMouseButton and event.pressed:
+		print("UIManager: Window input detected on %s, button: %d" % [window.name, event.button_index])
+		focus_window(window)
+	
+	# Handle any mouse button click to bring window to focus
+	if event is InputEventMouseButton and event.pressed:
+		print("UIManager: Window input detected on %s, button: %d" % [window.name, event.button_index])
+		focus_window(window)
+		# Accept the event to prevent it from propagating to windows below
+		get_viewport().set_input_as_handled()
+
+func _on_input_blocker_input(event: InputEvent, window: Window_Base):
+	"""Handle input on the input blocker - prevents click-through"""
+	if event is InputEventMouseButton and event.pressed:
+		# Focus the window when clicking on its background area
+		focus_window(window)
+	# Always accept input to prevent propagation
+	get_viewport().set_input_as_handled()
 
 func focus_window(window: Window_Base):
 	"""Focus a specific window and bring it to front with safety checks"""
@@ -193,8 +218,8 @@ func focus_window(window: Window_Base):
 	window_stack.append(window)
 	print("UIManager: Added %s to top of stack (position %d)" % [window.name, window_stack.size() - 1])
 	
-	# Update canvas layers based on new stack order to ensure focused window is on top
-	_update_focused_window_layers()
+	# FIXED: Update ALL window layers based on stack position
+	_update_window_layers()
 	
 	# Update visual focus states
 	if old_focused and is_instance_valid(old_focused):
@@ -206,27 +231,6 @@ func focus_window(window: Window_Base):
 	
 	# Debug: Print current layers AFTER the update
 	_debug_print_window_layers()
-
-func _update_focused_window_layers():
-	"""Update layers to ensure the focused window is always on top within its type"""
-	if not focused_window or not is_instance_valid(focused_window):
-		return
-	
-	var focused_canvas = focused_window.get_meta("window_canvas", null) as CanvasLayer
-	if not focused_canvas or not is_instance_valid(focused_canvas):
-		return
-	
-	var window_type = focused_window.get_meta("window_type", "")
-	var highest_layer = _get_highest_layer_for_type(window_type)
-	
-	# Ensure the focused window has the highest layer for its type
-	if focused_canvas.layer <= highest_layer:
-		focused_canvas.layer = highest_layer + 1
-		print("UIManager: Updated focused window %s to layer %d" % [focused_window.name, focused_canvas.layer])
-	
-	# Update the next tearoff layer if needed
-	if window_type == "tearoff":
-		next_tearoff_layer = max(next_tearoff_layer, focused_canvas.layer + 1)
 
 func _get_highest_layer_for_type(window_type: String) -> int:
 	"""Get the highest layer currently used by windows of the same type"""
@@ -250,9 +254,9 @@ func _update_window_layers():
 	
 	print("UIManager: Updating window layers for %d windows" % window_stack.size())
 	
-	# Assign layers based on position in window_stack
-	# Earlier windows get lower layers, later windows get higher layers
-	var base_layer = 50  # Start from layer 50
+	# FIXED: Assign layers based on position in window_stack
+	# Windows later in the stack (more recently focused) get higher layers
+	var base_layer = 50
 	
 	for i in range(window_stack.size()):
 		var window = window_stack[i]
@@ -267,7 +271,20 @@ func _update_window_layers():
 		else:
 			print("UIManager: WARNING - No valid canvas for window %s" % window.name)
 	
-	print("UIManager: Layer update complete")
+	# FIXED: Update next_tearoff_layer to be higher than any current tearoff
+	var highest_tearoff_layer = base_layer
+	for window in window_stack:
+		if not is_instance_valid(window):
+			continue
+		var window_type = window.get_meta("window_type", "")
+		if window_type == "tearoff":
+			var canvas = window.get_meta("window_canvas", null) as CanvasLayer
+			if canvas and is_instance_valid(canvas):
+				highest_tearoff_layer = max(highest_tearoff_layer, canvas.layer)
+	
+	next_tearoff_layer = highest_tearoff_layer + 1
+	
+	print("UIManager: Layer update complete, next_tearoff_layer: %d" % next_tearoff_layer)
 
 func _cleanup_invalid_windows():
 	"""Remove invalid windows from tracking arrays"""
@@ -302,18 +319,6 @@ func _set_window_focus_state(window: Window_Base, has_focus: bool):
 		window.modulate = Color(0.95, 0.95, 0.95, 1.0)  # Slightly dimmer
 		if window.has_method("set_edge_bloom_state"):
 			window.set_edge_bloom_state(Window_Base.BloomState.SUBTLE)
-
-func _on_window_input(event: InputEvent, window: Window_Base):
-	"""Handle window input for focus management with safety checks"""
-	if not is_instance_valid(window):
-		return
-	
-	# Handle any mouse button click to bring window to focus
-	if event is InputEventMouseButton and event.pressed:
-		print("UIManager: Window input detected on %s, button: %d" % [window.name, event.button_index])
-		focus_window(window)
-		# Accept the event to prevent it from propagating to windows below
-		get_viewport().set_input_as_handled()
 
 func _on_managed_window_closed(window: Window_Base):
 	"""Handle managed window being closed"""
