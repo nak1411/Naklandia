@@ -140,48 +140,16 @@ func _connect_to_ui_manager():
 
 func _gui_input(event: InputEvent):
 	"""Handle input events for window interaction"""
-	
-	# FOCUS HANDLING - Add this at the start with debug
 	if event is InputEventMouseButton and event.pressed:
-		print("=== WINDOW INPUT DEBUG ===")
-		print("Window_Base: Mouse pressed on %s" % name)
-		print("Event button: %d, position: %s" % [event.button_index, event.global_position])
-		print("Window mouse_filter: %s" % _get_mouse_filter_debug())
-		print("Window visible: %s" % visible)
-		print("Window position: %s, size: %s" % [global_position, size])
-		
-		# Check if click is actually within window bounds
-		var local_click = event.global_position - global_position
-		var is_within_bounds = Rect2(Vector2.ZERO, size).has_point(local_click)
-		print("Click within window bounds: %s (local: %s)" % [is_within_bounds, local_click])
-		
-		print("Bringing %s to front" % name)
 		_bring_to_front()
-		print("========================")
-		
-		# IMPORTANT: Accept the event to prevent propagation
-		get_viewport().set_input_as_handled()
-
-func _get_mouse_filter_debug() -> String:
-	match mouse_filter:
-		Control.MOUSE_FILTER_STOP:
-			return "STOP"
-		Control.MOUSE_FILTER_PASS:
-			return "PASS"
-		Control.MOUSE_FILTER_IGNORE:
-			return "IGNORE"
-		_:
-			return "UNKNOWN"
 
 func _on_window_gui_input(event: InputEvent):
 	"""Handle any input on the window"""
 	if event is InputEventMouseButton and event.pressed:
-		print("Window_Base: Mouse pressed on %s" % name)
 		_bring_to_front()
 
 func _handle_mouse_press(global_pos: Vector2):
 	# FOCUS HANDLING - Add this first
-	print("Window_Base: Mouse pressed on %s, bringing to front" % name)
 	_bring_to_front()
 	
 	# Otherwise, handle as potential drag start (but title bar input will override this)
@@ -1311,10 +1279,7 @@ func _restore_window():
 func _bring_to_front():
 	"""Bring this window to front through UIManager"""
 	if ui_manager and ui_manager.has_method("focus_window"):
-		print("Window_Base: %s requesting focus from UIManager" % name)
 		ui_manager.focus_window(self)
-	else:
-		print("Window_Base: No UIManager available for %s" % name)
 
 # Also add a public method for manual focus
 func bring_to_front():
@@ -1657,30 +1622,3 @@ func _on_mouse_entered():
 	# Optional: Could bring to front on hover
 	# _bring_to_front()
 	pass
-
-func debug_child_mouse_filters():
-	"""Debug all child control mouse filters"""
-	print("=== CHILD MOUSE FILTERS for %s ===" % name)
-	_debug_control_tree(self, 0)
-	print("=====================================")
-
-func _debug_control_tree(control: Control, depth: int):
-	"""Recursively debug control tree mouse filters"""
-	var indent = "  ".repeat(depth)
-	var filter_name = _get_mouse_filter_debug_static(control.mouse_filter)
-	print("%s%s: %s (visible: %s)" % [indent, control.name, filter_name, control.visible])
-	
-	for child in control.get_children():
-		if child is Control:
-			_debug_control_tree(child, depth + 1)
-
-func _get_mouse_filter_debug_static(filter: Control.MouseFilter) -> String:
-	match filter:
-		Control.MOUSE_FILTER_STOP:
-			return "STOP"
-		Control.MOUSE_FILTER_PASS:
-			return "PASS"
-		Control.MOUSE_FILTER_IGNORE:
-			return "IGNORE"
-		_:
-			return "UNKNOWN"

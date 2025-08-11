@@ -144,9 +144,7 @@ func _execute_tearoff_on_drop(drop_position: Vector2):
 func _create_tearoff_window(container: InventoryContainer_Base, drop_position: Vector2 = Vector2.ZERO):
 	"""Create a new tearoff window for the container"""
 	var tearoff_window = ContainerTearOffWindow.new(container, main_window)
-	
-	print("ContainerTearOffManager: Creating tearoff window for %s" % container.container_name)
-	
+		
 	# Position the window first
 	var position_for_window: Vector2
 	if drop_position != Vector2.ZERO:
@@ -156,7 +154,6 @@ func _create_tearoff_window(container: InventoryContainer_Base, drop_position: V
 		position_for_window = mouse_pos - Vector2(100, 50)
 	
 	tearoff_window.position = position_for_window
-	print("ContainerTearOffManager: Positioned tearoff window at %s" % str(tearoff_window.position))
 	
 	# Try to use UIManager first
 	var ui_managers = main_window.get_tree().get_nodes_in_group("ui_manager")
@@ -249,7 +246,6 @@ func _restore_container_to_main_list(container: InventoryContainer_Base):
 
 func detach_from_main_window():
 	"""Detach tearoff windows from main window so they can exist independently"""
-	print("ContainerTearOffManager: Detaching tearoff windows from main window")
 	
 	# Stop drag monitoring since main window is closing
 	_stop_drag_monitoring()
@@ -260,7 +256,6 @@ func detach_from_main_window():
 			var tearoff_window = tearoff_data["window"]
 			# Clear the parent window reference so reattach becomes impossible
 			tearoff_window.parent_window = null
-			print("ContainerTearOffManager: Detached window %s" % tearoff_window.window_title)
 	
 	# Don't close the windows - just clear our references
 	main_window = null
