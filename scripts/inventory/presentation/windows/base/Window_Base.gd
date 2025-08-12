@@ -117,8 +117,6 @@ func _ready():
 	window_resized.connect(_on_window_resized)
 
 	set_process_unhandled_input(true)
-
-	_create_test_resize_area()
 	
 	# Call virtual method for child classes to override
 	call_deferred("_setup_window_content")
@@ -142,38 +140,6 @@ func _connect_to_ui_manager():
 	else:
 		print("Window_Base: No UIManager found for %s" % name)
 
-func _create_test_resize_area():
-	"""Create a simple test area to see if mouse events work at all"""
-	var test_area = ColorRect.new()
-	test_area.name = "TestResizeArea"
-	test_area.color = Color.RED
-	test_area.size = Vector2(50, 50)
-	test_area.position = Vector2(size.x - 50, size.y - 50)  # Bottom-right corner
-	test_area.mouse_filter = Control.MOUSE_FILTER_STOP
-	test_area.z_index = 1000  # Very high z-index
-	
-	# Connect directly to see if we get ANY events
-	test_area.gui_input.connect(_on_test_area_input)
-	test_area.mouse_entered.connect(func(): print("TEST: Mouse entered red area"))
-	test_area.mouse_exited.connect(func(): print("TEST: Mouse exited red area"))
-	
-	add_child(test_area)
-	print("Window_Base: Created test resize area")
-
-func _on_test_area_input(event: InputEvent):
-	"""Test if we get any input on the test area"""
-	print("TEST: Got input event: %s" % event)
-	if event is InputEventMouseButton:
-		print("TEST: Mouse button event - button: %d, pressed: %s" % [event.button_index, event.pressed])
-		if event.pressed:
-			print("TEST: MOUSE BUTTON PRESS DETECTED!")
-			_start_resize(ResizeMode.BOTTOM_RIGHT, event.global_position)
-			get_viewport().set_input_as_handled()
-		else:
-			print("TEST: MOUSE BUTTON RELEASE DETECTED!")
-			_end_resize()
-			get_viewport().set_input_as_handled()
-
 func _unhandled_input(event: InputEvent):
 	"""Handle unhandled input - catch resize motion that other systems missed"""
 	if not is_resizing:
@@ -192,19 +158,45 @@ func _unhandled_input(event: InputEvent):
 func _gui_input(event: InputEvent):
 	"""Handle input events for window interaction"""
 	
-	# CRITICAL: Handle resize motion events first
+	# CRITICAL: Check for resize FIRST before any focus handling
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			# Check if we're over a resize area FIRST
+			var resize_mode = _get_resize_area_at_position(mouse_event.global_position)
+			
+			if resize_mode != ResizeMode.NONE:
+				if mouse_event.pressed:
+					_start_resize(resize_mode, mouse_event.global_position)
+					get_viewport().set_input_as_handled()
+					return  # Stop processing - don't focus
+				elif is_resizing:
+					_end_resize()
+					get_viewport().set_input_as_handled()
+					return  # Stop processing
+			
+			# Only handle focus if NOT resizing
+			if mouse_event.pressed and not is_resizing:
+				if ui_manager and ui_manager.has_method("focus_window"):
+					ui_manager.focus_window(self)
+				else:
+					_bring_to_front()
+	
+	# Handle resize motion
 	if is_resizing and event is InputEventMouseMotion:
-		print("Window: Processing resize motion - %s" % event.global_position)
 		_handle_resize_motion(event.global_position)
 		get_viewport().set_input_as_handled()
 		return
 	
-	# Handle focus for non-resize events
-	if event is InputEventMouseButton and event.pressed:
-		if ui_manager and ui_manager.has_method("focus_window"):
-			ui_manager.focus_window(self)
+	# Update edge bloom based on current mouse position when not resizing
+	if not is_resizing and event is InputEventMouseMotion:
+		var resize_mode = _get_resize_area_at_position(event.global_position)
+		if resize_mode != ResizeMode.NONE and not is_locked and not is_maximized:
+			_show_edge_bloom(resize_mode)
+			_set_resize_cursor(resize_mode)
 		else:
-			_bring_to_front()
+			_hide_edge_bloom()
+			Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
 func _on_window_gui_input(event: InputEvent):
 	"""Handle any input on the window"""
@@ -849,8 +841,10 @@ func _setup_resize_overlay():
 	resize_overlay.name = "ResizeOverlay"
 	resize_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	resize_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	resize_overlay.z_index = 200
-	main_container.add_child(resize_overlay)
+	resize_overlay.z_index = 100
+	add_child(resize_overlay)
+
+	move_child(resize_overlay, get_child_count() - 1)
 	
 	# Create resize areas
 	_create_resize_areas()
@@ -1162,8 +1156,11 @@ func _on_resize_area_input(event: InputEvent, source_area: Control):
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
 				_start_resize(mode, mouse_event.global_position)
+				get_viewport().set_input_as_handled()
+				# Don't bring to front while resizing
 			else:
 				_end_resize()
+				get_viewport().set_input_as_handled()
 
 func _on_resize_area_entered(mode: ResizeMode):
 	"""Handle mouse entering a resize area"""
@@ -1193,33 +1190,46 @@ func _on_resize_area_exited(mode: ResizeMode):
 func _show_edge_bloom(mode: ResizeMode):
 	"""Show edge bloom for specific resize mode with fade in"""
 	if edge_bloom_material and edge_bloom_overlay:
+		# Kill any existing tween
+		if edge_bloom_tween:
+			edge_bloom_tween.kill()
+			edge_bloom_tween = null
+		
 		edge_bloom_material.show_edge(mode)
 		edge_bloom_overlay.visible = true
 		
-		# Animate fade in
-		if edge_bloom_tween:
-			edge_bloom_tween.kill()
+		# Get current intensity to fade from
+		var current_intensity = edge_bloom_material.current_intensity
 		
+		# Animate fade in
 		edge_bloom_tween = create_tween()
-		edge_bloom_tween.tween_method(_update_edge_bloom_intensity, 0.0, edge_bloom_material.base_intensity, 0.15)
+		edge_bloom_tween.tween_method(_update_edge_bloom_intensity, current_intensity, edge_bloom_material.base_intensity, 0.15)
 
 func _hide_edge_bloom():
 	"""Hide edge bloom with fade out"""
 	if edge_bloom_material and edge_bloom_overlay:
-		# Animate fade out
+		# Kill any existing tween
 		if edge_bloom_tween:
 			edge_bloom_tween.kill()
+			edge_bloom_tween = null
 		
+		# Get current intensity
+		var current_intensity = edge_bloom_material.current_intensity
+		
+		# Animate fade out
 		edge_bloom_tween = create_tween()
-		edge_bloom_tween.tween_method(_update_edge_bloom_intensity, edge_bloom_material.current_intensity, 0.0, 0.15)
-		edge_bloom_tween.tween_callback(func(): 
-			edge_bloom_material.hide_all_edges()
-			edge_bloom_overlay.visible = false
+		edge_bloom_tween.tween_method(_update_edge_bloom_intensity, current_intensity, 0.0, 0.15)
+		edge_bloom_tween.finished.connect(func(): 
+			if edge_bloom_overlay:
+				edge_bloom_overlay.visible = false
+			if edge_bloom_material:
+				edge_bloom_material.hide_all_edges()
 		)
 
 func _update_edge_bloom_intensity(intensity: float):
-	"""Update edge bloom intensity during animation"""
+	"""Update edge bloom intensity for animation"""
 	if edge_bloom_material:
+		# Use the set_intensity method that exists in WindowEdgeBloomMaterial
 		edge_bloom_material.set_intensity(intensity)
 
 func _animate_edge_alpha(mode: ResizeMode, from_alpha: float, to_alpha: float, duration: float):
@@ -1272,44 +1282,36 @@ func _get_current_bottom_alpha() -> float:
 	return edge_bloom_material.get_shader_parameter("bottom_edge_alpha")
 
 func _start_resize(mode: ResizeMode, mouse_pos: Vector2):
-	print("_start_resize called - mode: %d, mouse_pos: %s, current size: %s" % [mode, mouse_pos, size])
 	is_resizing = true
 	resize_mode = mode
 	resize_start_position = position
 	resize_start_size = size
 	resize_start_mouse = mouse_pos
-	print("_start_resize - is_resizing now: %s" % is_resizing)
 
 func _end_resize():
-	print("_end_resize called - was resizing: %s" % is_resizing)
 	if is_resizing:
 		is_resizing = false
 		resize_mode = ResizeMode.NONE
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-		print("_end_resize - is_resizing now: %s" % is_resizing)
+		# IMPORTANT: Always hide edge bloom when ending resize
+		_hide_edge_bloom()
 
 func _handle_resize_motion(mouse_pos: Vector2):
-	print("_handle_resize_motion called - is_resizing: %s, mouse_pos: %s" % [is_resizing, mouse_pos])
 	if not is_resizing:
-		print("_handle_resize_motion - not resizing, returning")
 		return
 	
 	var delta = mouse_pos - resize_start_mouse
-	print("_handle_resize_motion - delta: %s" % delta)
 	var new_position = resize_start_position
 	var new_size = resize_start_size
 	
 	match resize_mode:
 		ResizeMode.RIGHT:
 			new_size.x += delta.x
-			print("_handle_resize_motion - RIGHT resize, new_size: %s" % new_size)
 		ResizeMode.BOTTOM:
 			new_size.y += delta.y
-			print("_handle_resize_motion - BOTTOM resize, new_size: %s" % new_size)
 		ResizeMode.BOTTOM_RIGHT:
 			new_size.x += delta.x
 			new_size.y += delta.y
-			print("_handle_resize_motion - BOTTOM_RIGHT resize, new_size: %s" % new_size)
 		# Add other cases as needed
 	
 	# Apply size constraints
@@ -1317,12 +1319,10 @@ func _handle_resize_motion(mouse_pos: Vector2):
 		max(min_window_size.x, min(new_size.x, max_window_size.x)),
 		max(min_window_size.y, min(new_size.y, max_window_size.y))
 	)
-	print("_handle_resize_motion - constrained_size: %s" % constrained_size)
 	
 	# Update position and size
 	position = new_position
 	size = constrained_size
-	print("_handle_resize_motion - applied size: %s, position: %s" % [size, position])
 	
 	window_resized.emit(Vector2i(size))
 
@@ -1718,3 +1718,21 @@ func _on_mouse_entered():
 	# Optional: Could bring to front on hover
 	# _bring_to_front()
 	pass
+
+func _on_mouse_exited():
+	"""Handle mouse exiting window area"""
+	if not is_resizing:
+		_hide_edge_bloom()
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+func _notification(what):
+	if what == NOTIFICATION_MOUSE_EXIT:
+		# Mouse left the window entirely
+		if not is_resizing:
+			_hide_edge_bloom()
+			Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	elif what == NOTIFICATION_FOCUS_EXIT:
+		# Window lost focus
+		if not is_resizing:
+			_hide_edge_bloom()
+			Input.set_default_cursor_shape(Input.CURSOR_ARROW)

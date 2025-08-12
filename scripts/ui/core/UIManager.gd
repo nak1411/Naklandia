@@ -275,6 +275,10 @@ func _set_window_focus_state(window: Window_Base, has_focus: bool):
 	"""Update window visual focus state with safety checks"""
 	if not is_instance_valid(window):
 		return
+	
+	# Don't change visual state if window is being resized
+	if window.is_resizing:
+		return
 		
 	if has_focus:
 		# Add focus styling
