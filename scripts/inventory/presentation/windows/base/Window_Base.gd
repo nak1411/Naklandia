@@ -856,13 +856,16 @@ func _create_resize_areas():
 	resize_areas.clear()
 	
 	# Create EDGES first
-	# Left edge
+	# Left edge - FIXED
 	var left_area = _create_resize_area("LeftResize", ResizeMode.LEFT)
 	left_area.anchor_left = 0.0
 	left_area.anchor_right = 0.0
 	left_area.anchor_top = 0.0
 	left_area.anchor_bottom = 1.0
+	left_area.offset_left = 0.0  # Start from actual edge
 	left_area.offset_right = resize_border_width
+	left_area.offset_top = resize_corner_size
+	left_area.offset_bottom = -resize_corner_size
 	
 	# Right edge
 	var right_area = _create_resize_area("RightResize", ResizeMode.RIGHT)
@@ -871,13 +874,19 @@ func _create_resize_areas():
 	right_area.anchor_top = 0.0
 	right_area.anchor_bottom = 1.0
 	right_area.offset_left = -resize_border_width
+	right_area.offset_right = 0.0  # End at actual edge
+	right_area.offset_top = resize_corner_size
+	right_area.offset_bottom = -resize_corner_size
 	
-	# Top edge
+	# Top edge - FIXED
 	var top_area = _create_resize_area("TopResize", ResizeMode.TOP)
 	top_area.anchor_left = 0.0
 	top_area.anchor_right = 1.0
 	top_area.anchor_top = 0.0
 	top_area.anchor_bottom = 0.0
+	top_area.offset_left = resize_corner_size
+	top_area.offset_right = -resize_corner_size
+	top_area.offset_top = 0.0  # Start from actual edge
 	top_area.offset_bottom = resize_border_width
 	
 	# Bottom edge
@@ -886,7 +895,10 @@ func _create_resize_areas():
 	bottom_area.anchor_right = 1.0
 	bottom_area.anchor_top = 1.0
 	bottom_area.anchor_bottom = 1.0
+	bottom_area.offset_left = resize_corner_size
+	bottom_area.offset_right = -resize_corner_size
 	bottom_area.offset_top = -resize_border_width
+	bottom_area.offset_bottom = 0.0  # End at actual edge
 	
 	# Create CORNERS last (so they have higher priority in mouse detection)
 	
@@ -1305,20 +1317,47 @@ func _handle_resize_motion(mouse_pos: Vector2):
 	var new_size = resize_start_size
 	
 	match resize_mode:
+		ResizeMode.LEFT:
+			new_position.x += delta.x
+			new_size.x -= delta.x
 		ResizeMode.RIGHT:
 			new_size.x += delta.x
+		ResizeMode.TOP:
+			new_position.y += delta.y
+			new_size.y -= delta.y
 		ResizeMode.BOTTOM:
+			new_size.y += delta.y
+		ResizeMode.TOP_LEFT:
+			new_position.x += delta.x
+			new_position.y += delta.y
+			new_size.x -= delta.x
+			new_size.y -= delta.y
+		ResizeMode.TOP_RIGHT:
+			new_position.y += delta.y
+			new_size.x += delta.x
+			new_size.y -= delta.y
+		ResizeMode.BOTTOM_LEFT:
+			new_position.x += delta.x
+			new_size.x -= delta.x
 			new_size.y += delta.y
 		ResizeMode.BOTTOM_RIGHT:
 			new_size.x += delta.x
 			new_size.y += delta.y
-		# Add other cases as needed
 	
 	# Apply size constraints
 	var constrained_size = Vector2(
 		max(min_window_size.x, min(new_size.x, max_window_size.x)),
 		max(min_window_size.y, min(new_size.y, max_window_size.y))
 	)
+	
+	# Adjust position if size was constrained (for left/top resizing)
+	if resize_mode in [ResizeMode.LEFT, ResizeMode.TOP_LEFT, ResizeMode.BOTTOM_LEFT]:
+		if constrained_size.x != new_size.x:
+			new_position.x = resize_start_position.x + (resize_start_size.x - constrained_size.x)
+	
+	if resize_mode in [ResizeMode.TOP, ResizeMode.TOP_LEFT, ResizeMode.TOP_RIGHT]:
+		if constrained_size.y != new_size.y:
+			new_position.y = resize_start_position.y + (resize_start_size.y - constrained_size.y)
 	
 	# Update position and size
 	position = new_position
