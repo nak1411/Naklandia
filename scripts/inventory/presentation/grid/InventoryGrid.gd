@@ -787,7 +787,7 @@ func _perform_compact_reflow():
 	_ensure_adequate_slots()
 	
 	# OPTIMIZE: Don't wait for frame if not necessary
-	if grid_container and grid_container.get_child_count() > 0:i
+	if grid_container and grid_container.get_child_count() > 0:
 		await get_tree().process_frame
 	
 	# Clear and place items
