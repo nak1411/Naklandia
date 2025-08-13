@@ -429,9 +429,10 @@ func _check_and_fix_initial_layout():
 	
 func handle_resize_complete():
 	"""Called when window resize is complete"""
-	# Debounce rapid resize calls
+	# Even more aggressive debouncing during active resize
 	if _resize_complete_timer.time_left > 0:
 		_resize_complete_timer.stop()
+	_resize_complete_timer.wait_time = 0.3  # Increased to 300ms
 	_resize_complete_timer.start()
 	
 func _update_container_positions_from_visual():
@@ -474,29 +475,117 @@ func ensure_slots_for_items(item_count: int):
 			current_grid_height = new_height
 			_rebuild_grid()
 
+func _ensure_slots_available(width: int, height: int):
+	"""Ensure we have enough slots by reusing or adding, never destroying"""
+	if enable_virtual_scrolling:
+		return
+	
+	# Resize the slots array if needed
+	if slots.size() < height:
+		slots.resize(height)
+	
+	# Ensure each row has enough slots
+	for y in range(height):
+		if not slots[y]:
+			slots[y] = []
+		
+		# Resize row if needed
+		if slots[y].size() < width:
+			var old_size = slots[y].size()
+			slots[y].resize(width)
+			
+			# Create new slots only for missing positions
+			for x in range(old_size, width):
+				var slot = _create_or_get_cached_slot()
+				slot.set_grid_position(Vector2i(x, y))
+				slot.set_container_id(container_id)
+				slots[y][x] = slot
+				grid_container.add_child(slot)
+	
+	# Hide extra slots instead of destroying them
+	for y in range(height, slots.size()):
+		if slots[y]:
+			for x in range(slots[y].size()):
+				if slots[y][x]:
+					slots[y][x].visible = false
+	
+	for y in range(min(height, slots.size())):
+		if slots[y]:
+			for x in range(width, slots[y].size()):
+				if slots[y][x]:
+					slots[y][x].visible = false
+			# Make visible slots actually visible
+			for x in range(min(width, slots[y].size())):
+				if slots[y][x]:
+					slots[y][x].visible = true
+
+
+# ADD slot caching for reuse:
+var _slot_cache: Array[InventorySlot] = []
+
+func _create_or_get_cached_slot() -> InventorySlot:
+	"""Get a slot from cache or create new one"""
+	if _slot_cache.size() > 0:
+		return _slot_cache.pop_back()
+	
+	var slot = InventorySlot.new()
+	slot.slot_size = slot_size
+	
+	# Connect signals once
+	slot.slot_clicked.connect(_on_slot_clicked)
+	slot.slot_right_clicked.connect(_on_slot_right_clicked)
+	slot.item_drag_started.connect(_on_item_drag_started)
+	slot.item_drag_ended.connect(_on_item_drag_ended)
+	slot.item_dropped_on_slot.connect(_on_item_dropped_on_slot)
+	
+	return slot
+
+func _rearrange_items_in_existing_slots(items_to_place: Array[InventoryItem_Base]):
+	"""Rearrange items in existing slots without recreating them"""
+	# Clear all slots first (but don't destroy them)
+	for y in range(min(current_grid_height, slots.size())):
+		if not slots[y]:
+			continue
+		for x in range(min(current_grid_width, slots[y].size())):
+			if slots[y][x]:
+				slots[y][x].clear_item()
+	
+	# Reset available slots
+	available_slots.clear()
+	for y in range(current_grid_height):
+		for x in range(current_grid_width):
+			available_slots.append(Vector2i(x, y))
+	
+	item_positions.clear()
+	
+	# Place items in the new layout
+	var placed = 0
+	for y in range(current_grid_height):
+		if placed >= items_to_place.size():
+			break
+		if y >= slots.size() or not slots[y]:
+			break
+			
+		for x in range(current_grid_width):
+			if placed >= items_to_place.size():
+				break
+			if x >= slots[y].size() or not slots[y][x]:
+				break
+			
+			var item = items_to_place[placed]
+			slots[y][x].set_item(item)
+			item_positions[item] = Vector2i(x, y)
+			available_slots.erase(Vector2i(x, y))
+			placed += 1
+
+
 func _ensure_adequate_slots():
 	"""Ensure we have enough slots for the current dimensions"""
 	if enable_virtual_scrolling:
 		return
-	var needed_total = current_grid_width * current_grid_height
-	var current_total = 0
 	
-	for row in slots:
-		if row:
-			current_total += row.size()
-	
-	# Rebuild if dimensions changed or wrong number of children
-	var should_rebuild = false
-	
-	if slots.size() != current_grid_height:
-		should_rebuild = true
-	elif slots.size() > 0 and slots[0].size() != current_grid_width:
-		should_rebuild = true
-	elif grid_container and grid_container.get_child_count() != needed_total:
-		should_rebuild = true
-	
-	if should_rebuild:
-		_rebuild_slots_completely()
+	# Just ensure we have slots, don't rebuild
+	_ensure_slots_available(current_grid_width, current_grid_height)
 
 func _rebuild_slots_completely():
 	"""Completely rebuild the slots structure"""
@@ -733,23 +822,17 @@ func _create_initial_slots():
 
 func _perform_compact_reflow():
 	"""Perform a compact reflow of all items"""
-	if enable_virtual_scrolling:
-		return
-	if not container:
+	if enable_virtual_scrolling or not container:
 		return
 	
-	# ADD THIS CHECK to prevent redundant reflows
+	# Prevent redundant reflows
 	if _is_refreshing_display or _is_expanding_grid or _is_shrinking_grid:
 		return
 	
-	# Block all other refresh operations during compacting
 	_is_refreshing_display = true
 	_needs_reflow = false
-	_is_adapting_width = false
-	_is_expanding_grid = false
-	_is_shrinking_grid = false
 	
-	# Calculate new grid width based on current size
+	# Calculate new grid width
 	var available_width = _get_actual_available_width()
 	if available_width <= slot_size.x:
 		_is_refreshing_display = false
@@ -763,7 +846,7 @@ func _perform_compact_reflow():
 		_is_refreshing_display = false
 		return
 	
-	# Get all visible items
+	# Get items to place
 	var items_to_place: Array[InventoryItem_Base] = []
 	for item in container.items:
 		if _should_show_item(item):
@@ -773,41 +856,20 @@ func _perform_compact_reflow():
 	var required_rows = (items_to_place.size() + new_width - 1) / new_width if items_to_place.size() > 0 else min_grid_height
 	var new_height = max(min_grid_height, required_rows + 1)
 	
-	# Update dimensions
+	# Just update the grid container columns - DON'T destroy/recreate slots
 	current_grid_width = new_width
 	current_grid_height = new_height
 	
-	# Update GridContainer columns immediately
 	if grid_container:
 		grid_container.columns = current_grid_width
-		grid_container.queue_redraw()
-		grid_container.notification(NOTIFICATION_RESIZED)
 	
-	# Ensure we have enough slots
-	_ensure_adequate_slots()
+	# Ensure we have enough slots but REUSE existing ones
+	_ensure_slots_available(new_width, new_height)
 	
-	# OPTIMIZE: Don't wait for frame if not necessary
-	if grid_container and grid_container.get_child_count() > 0:
-		await get_tree().process_frame
-	
-	# Clear and place items
-	_clear_all_slots_completely()
-	_place_items_compactly(items_to_place)
-	
-	# OPTIMIZE: Batch visual updates instead of force_all_slots_refresh
-	for y in range(min(current_grid_height, slots.size())):
-		for x in range(min(current_grid_width, slots[y].size() if y < slots.size() else 0)):
-			if y < slots.size() and x < slots[y].size():
-				_queue_slot_visual_update(Vector2i(x, y))
-	
-	_process_batch_slot_updates()
-	
-	# Force layout update after placement
-	if grid_container:
-		grid_container.queue_redraw()
+	# Just rearrange items without recreating slots
+	_rearrange_items_in_existing_slots(items_to_place)
 	
 	_update_grid_size()
-	
 	_is_refreshing_display = false
 	
 func _get_actual_available_width() -> float:
@@ -1239,14 +1301,16 @@ func _disconnect_container_signals():
 func _rebuild_grid():
 	if enable_virtual_scrolling:
 		return
-	if grid_container:
-		grid_container.queue_free()
 	
-	_setup_grid()
+	# Don't actually destroy the grid, just ensure we have enough slots
+	_ensure_slots_available(current_grid_width, current_grid_height)
+	
+	if grid_container:
+		grid_container.columns = current_grid_width
 	
 	# Update all slot container IDs
-	for y in current_grid_height:
-		for x in current_grid_width:
+	for y in range(current_grid_height):
+		for x in range(current_grid_width):
 			if y < slots.size() and x < slots[y].size() and slots[y][x]:
 				slots[y][x].set_container_id(container_id)
 
@@ -1542,21 +1606,18 @@ func _place_item_in_grid(item: InventoryItem_Base, position: Vector2i):
 
 func force_all_slots_refresh():
 	if enable_virtual_scrolling:
-		# For virtual scrolling, only refresh visible slots
 		for slot in virtual_rendered_slots:
-			if slot and is_instance_valid(slot):
-				_queue_slot_visual_update(slot.grid_position)
-		_process_batch_slot_updates()
+			if slot and is_instance_valid(slot) and slot.visible:
+				slot.force_visual_refresh()
 	else:
-		# Traditional grid - batch refresh
-		for y in range(slots.size()):
+		# Only refresh visible slots
+		for y in range(min(current_grid_height, slots.size())):
 			if not slots[y]:
 				continue
-			for x in range(slots[y].size()):
+			for x in range(min(current_grid_width, slots[y].size())):
 				var slot = slots[y][x]
-				if slot and is_instance_valid(slot):
-					_queue_slot_visual_update(Vector2i(x, y))
-		_process_batch_slot_updates()
+				if slot and is_instance_valid(slot) and slot.visible:
+					slot.force_visual_refresh()
 
 # Input handling for focus management
 func _gui_input(event: InputEvent):
