@@ -51,6 +51,15 @@ var virtual_viewport_height: int = 0
 var virtual_items_per_row: int = 1
 var virtual_total_height: int = 0
 
+var _refresh_throttle_timer: Timer
+var _last_refresh_time: int = 0
+var _min_refresh_interval: int = 16  # 60 FPS max
+var _pending_refresh: bool = false
+var _last_item_count: int = -1
+var _cached_visible_items: Array[InventoryItem_Base] = []
+var _slots_needing_update: Array[Vector2i] = []
+var _batch_update_timer: Timer
+
 # UI components
 var background_panel: Panel
 var grid_container: GridContainer
@@ -67,6 +76,9 @@ signal empty_area_context_menu(position: Vector2)
 
 
 func _ready():
+
+	_setup_optimization_timers()
+
 	if enable_virtual_scrolling:
 		_setup_virtual_scrolling()
 	else:
@@ -87,6 +99,20 @@ func _ready():
 	
 	# Connect to visibility changes to fix initial layout
 	visibility_changed.connect(_on_visibility_changed)
+
+func _setup_optimization_timers():
+	"""Setup performance optimization timers"""
+	_refresh_throttle_timer = Timer.new()
+	_refresh_throttle_timer.wait_time = 0.016
+	_refresh_throttle_timer.one_shot = true
+	_refresh_throttle_timer.timeout.connect(_execute_pending_refresh)
+	add_child(_refresh_throttle_timer)
+	
+	_batch_update_timer = Timer.new()
+	_batch_update_timer.wait_time = 0.008
+	_batch_update_timer.one_shot = true
+	_batch_update_timer.timeout.connect(_process_batch_slot_updates)
+	add_child(_batch_update_timer)
 	
 func _setup_virtual_scrolling():
 	"""Setup virtual scrolling container"""	
@@ -403,6 +429,9 @@ func _check_and_fix_initial_layout():
 	
 func handle_resize_complete():
 	"""Called when window resize is complete"""
+	# Debounce rapid resize calls
+	if _resize_complete_timer.time_left > 0:
+		_resize_complete_timer.stop()
 	_resize_complete_timer.start()
 	
 func _update_container_positions_from_visual():
@@ -709,6 +738,10 @@ func _perform_compact_reflow():
 	if not container:
 		return
 	
+	# ADD THIS CHECK to prevent redundant reflows
+	if _is_refreshing_display or _is_expanding_grid or _is_shrinking_grid:
+		return
+	
 	# Block all other refresh operations during compacting
 	_is_refreshing_display = true
 	_needs_reflow = false
@@ -753,20 +786,27 @@ func _perform_compact_reflow():
 	# Ensure we have enough slots
 	_ensure_adequate_slots()
 	
-	# Wait a frame for the grid container to update
-	await get_tree().process_frame
+	# OPTIMIZE: Don't wait for frame if not necessary
+	if grid_container and grid_container.get_child_count() > 0:i
+		await get_tree().process_frame
 	
 	# Clear and place items
 	_clear_all_slots_completely()
 	_place_items_compactly(items_to_place)
 	
+	# OPTIMIZE: Batch visual updates instead of force_all_slots_refresh
+	for y in range(min(current_grid_height, slots.size())):
+		for x in range(min(current_grid_width, slots[y].size() if y < slots.size() else 0)):
+			if y < slots.size() and x < slots[y].size():
+				_queue_slot_visual_update(Vector2i(x, y))
+	
+	_process_batch_slot_updates()
+	
 	# Force layout update after placement
 	if grid_container:
 		grid_container.queue_redraw()
-		await get_tree().process_frame
 	
 	_update_grid_size()
-	force_all_slots_refresh()
 	
 	_is_refreshing_display = false
 	
@@ -1215,11 +1255,27 @@ func _rebuild_grid():
 func refresh_display():
 	if _suppress_auto_refresh:
 		return
-		
+	
+	# Throttle refresh calls
+	var current_time = Time.get_ticks_msec()
+	if current_time - _last_refresh_time < _min_refresh_interval:
+		# Queue the refresh for later
+		if not _pending_refresh:
+			_pending_refresh = true
+			_refresh_throttle_timer.start()
+		return
+	
+	_last_refresh_time = current_time
+	_execute_pending_refresh()
+
+func _execute_pending_refresh():
+	"""Execute the actual refresh"""
+	_pending_refresh = false
+	
 	if enable_virtual_scrolling:
 		_refresh_virtual_display()
 	else:
-		_refresh_traditional_display()
+		_refresh_traditional_display_optimized()
 
 func _refresh_traditional_display():
 	if enable_virtual_scrolling:
@@ -1256,6 +1312,122 @@ func _refresh_traditional_display():
 	
 	force_all_slots_refresh()
 	_is_refreshing_display = false
+
+func _refresh_traditional_display_optimized():
+	"""Optimized version of traditional display refresh"""
+	if enable_virtual_scrolling:
+		return
+		
+	# Block refresh during resize timer operations
+	if not container or _is_refreshing_display or _needs_reflow or _resize_complete_timer.time_left > 0.0:
+		if not container:
+			_clear_all_slots()
+		return
+	
+	# Quick check if anything actually changed
+	if container.items.size() == _last_item_count and _cached_visible_items.size() > 0:
+		# Check if items are the same
+		var items_changed = false
+		var visible_count = 0
+		for item in container.items:
+			if _should_show_item(item):
+				visible_count += 1
+				if not item in _cached_visible_items:
+					items_changed = true
+					break
+		
+		if not items_changed and visible_count == _cached_visible_items.size():
+			return  # Nothing changed, skip refresh
+	
+	_last_item_count = container.items.size()
+	
+	# If we haven't done initial sizing, do it now
+	if current_grid_width == 0 or current_grid_height == 0:
+		current_grid_width = min_grid_width
+		current_grid_height = min_grid_height
+		_setup_grid()
+	
+	_is_refreshing_display = true
+	
+	# Expand grid if needed
+	if not _is_expanding_grid:
+		_expand_grid_if_needed()
+	
+	# Smart refresh - only update changed slots
+	_smart_refresh_slots()
+	
+	_is_refreshing_display = false
+
+func _smart_refresh_slots():
+	"""Only refresh slots that actually changed"""
+	# Build a map of current slot contents
+	var current_slot_items = {}
+	for y in range(slots.size()):
+		for x in range(slots[y].size()):
+			var slot = slots[y][x]
+			if slot and slot.has_item():
+				current_slot_items[slot.get_item()] = Vector2i(x, y)
+	
+	# Clear cached visible items and rebuild
+	_cached_visible_items.clear()
+	for item in container.items:
+		if _should_show_item(item):
+			_cached_visible_items.append(item)
+	
+	# Determine which slots need updates
+	var slots_to_clear = []
+	var items_to_place = []
+	
+	# Find slots that need clearing
+	for item in current_slot_items:
+		if not item in _cached_visible_items:
+			var pos = current_slot_items[item]
+			if pos.y < slots.size() and pos.x < slots[pos.y].size():
+				slots_to_clear.append(slots[pos.y][pos.x])
+	
+	# Find items that need placing
+	for item in _cached_visible_items:
+		if not item in current_slot_items:
+			items_to_place.append(item)
+	
+	# Clear only necessary slots
+	for slot in slots_to_clear:
+		slot.clear_item()
+		available_slots.append(slot.grid_position)
+	
+	# Place only new items
+	for item in items_to_place:
+		var free_pos = _find_first_free_position()
+		if free_pos != Vector2i(-1, -1):
+			_place_item_in_grid(item, free_pos)
+			_queue_slot_visual_update(free_pos)
+	
+	# Process visual updates in batch
+	_process_batch_slot_updates()
+
+func _queue_slot_visual_update(position: Vector2i):
+	"""Queue a slot for visual update"""
+	if not position in _slots_needing_update:
+		_slots_needing_update.append(position)
+		if _batch_update_timer.is_stopped():
+			_batch_update_timer.start()
+
+func _process_batch_slot_updates():
+	"""Process visual updates for queued slots"""
+	var updates_per_frame = 15  # Process 15 slots per frame
+	var processed = 0
+	
+	while _slots_needing_update.size() > 0 and processed < updates_per_frame:
+		var pos = _slots_needing_update.pop_front()
+		if pos.y < slots.size() and pos.x < slots[pos.y].size():
+			var slot = slots[pos.y][pos.x]
+			if slot and slot.has_method("force_visual_refresh"):
+				slot.force_visual_refresh()
+		processed += 1
+	
+	# Continue if more updates remain
+	if _slots_needing_update.size() > 0:
+		_batch_update_timer.start()
 	
 func _refresh_virtual_display():
 	"""Optimized refresh - avoid unnecessary work"""
@@ -1370,22 +1542,21 @@ func _place_item_in_grid(item: InventoryItem_Base, position: Vector2i):
 
 func force_all_slots_refresh():
 	if enable_virtual_scrolling:
-		# For virtual scrolling, refresh the virtual rendered slots
+		# For virtual scrolling, only refresh visible slots
 		for slot in virtual_rendered_slots:
-			if slot and is_instance_valid(slot) and slot.has_method("force_visual_refresh"):
-				slot.force_visual_refresh()
+			if slot and is_instance_valid(slot):
+				_queue_slot_visual_update(slot.grid_position)
+		_process_batch_slot_updates()
 	else:
-		# Traditional grid refresh
-		if not slots or slots.size() == 0:
-			return
-			
+		# Traditional grid - batch refresh
 		for y in range(slots.size()):
 			if not slots[y]:
 				continue
 			for x in range(slots[y].size()):
 				var slot = slots[y][x]
-				if slot and slot.has_method("force_visual_refresh"):
-					slot.force_visual_refresh()
+				if slot and is_instance_valid(slot):
+					_queue_slot_visual_update(Vector2i(x, y))
+		_process_batch_slot_updates()
 
 # Input handling for focus management
 func _gui_input(event: InputEvent):
