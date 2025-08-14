@@ -325,8 +325,10 @@ func _initialize_tearoff_content():
 	# CRITICAL: Create independent view instead of using container directly
 	container_view = ContainerView.new(container, "tearoff_" + container.container_id)
 
-	# REGISTER THE CONTAINER VIEW WITH INVENTORY MANAGER
+	# REGISTER THE CONTAINER VIEW WITH INVENTORY MANAGER (needed for transactions)
+	# but mark it as a view so it can be filtered from main UI lists
 	if inventory_manager.has_method("add_container"):
+		container_view.set_meta("is_tearoff_view", true)  # Mark as tearoff view
 		inventory_manager.add_container(container_view)
 
 	# FORCE REFRESH ON ANY CONTAINER CHANGES
@@ -352,64 +354,64 @@ func _initialize_tearoff_content():
 	if content.has_method("select_container"):
 		content.select_container(container_view)
 
+	print("ContainerTearOffWindow: Independent view initialized for %s (registered but marked as tearoff view)" % container.container_name)
+
 
 func _on_view_changed():
-	"""Handle when the container view changes"""
-	if _suppress_auto_refresh:
-		return
-
+	"""Handle container view changes - TEAROFF-SPECIFIC"""
+	# Simple refresh when view changes
 	if content:
 		content.refresh_display()
 
 
 # ALL THE SAME EVENT HANDLERS AS MAIN WINDOW BUT WORKING WITH VIEW
 func _on_search_changed(search_text: String):
-	"""Handle search text changes - TEAROFF-SPECIFIC (affects only this view)"""
-	if not container_view:
+	"""Handle search text changes - TEAROFF-SPECIFIC"""
+	if not content:
 		return
 
-	# Temporarily suppress automatic refreshes to avoid lag
-	_suppress_auto_refresh = true
+	# Apply to grid view
+	if content.inventory_grid and content.inventory_grid.has_method("apply_search"):
+		content.inventory_grid.apply_search(search_text)
 
-	# Update search without triggering container_changed
-	container_view.search_filter = search_text
-	container_view._refresh_view()
-	container_view.items = container_view.view_items
-
-	# Re-enable refreshes and do ONE final refresh
-	_suppress_auto_refresh = false
-	if content:
-		content.refresh_display()
+	# Apply to list view using the same interface
+	if content.list_view and content.list_view.has_method("apply_search"):
+		content.list_view.apply_search(search_text)
 
 
 func _on_filter_changed(filter_type: int):
-	"""Handle filter changes - TEAROFF-SPECIFIC (affects only this view)"""
-	if container_view:
-		container_view.set_type_filter(filter_type)
+	"""Handle filter changes - TEAROFF-SPECIFIC"""
+	if not content:
+		return
+
+	# Apply to grid view
+	if content.inventory_grid and content.inventory_grid.has_method("apply_filter"):
+		content.inventory_grid.apply_filter(filter_type)
+
+	# Apply to list view using the same interface
+	if content.list_view and content.list_view.has_method("apply_filter"):
+		content.list_view.apply_filter(filter_type)
 
 
 func _on_sort_requested(sort_type: InventorySortType.Type):
-	"""Handle sort requests - TEAROFF-SPECIFIC (affects only this view)"""
+	"""Handle sort requests - TEAROFF-SPECIFIC"""
 	if not inventory_manager or not container_view:
 		return
 
-	# Temporarily suppress automatic refreshes to avoid lag
-	_suppress_auto_refresh = true
-
-	# FIRST: Sort the source container like the main window does
+	# Sort the source container (same as main window)
 	inventory_manager.sort_container(container_view.source_container.container_id, sort_type)
 
-	# SECOND: Update the view's sort settings (but don't emit container_changed)
-	container_view.sort_type = sort_type
-	container_view.sort_ascending = true
-	container_view._apply_current_sort()
-	container_view.items = container_view.view_items
+	# Force the ContainerView to refresh from the sorted source
+	container_view.force_refresh()
 
-	# THIRD: Re-enable refreshes and do ONE final refresh
-	_suppress_auto_refresh = false
-	if content and content.inventory_grid:
-		await get_tree().process_frame  # Wait for sort to complete
-		content.inventory_grid.refresh_display()
+	# Force refresh of the visible display after sort
+	await get_tree().process_frame  # Wait for sort to complete
+
+	if content:
+		if content.inventory_grid and content.inventory_grid.visible:
+			content.inventory_grid.refresh_display()
+		if content.list_view and content.list_view.visible:
+			content.list_view.refresh_display()
 
 
 func _on_display_mode_changed(mode: InventoryDisplayMode.Mode):
@@ -513,6 +515,11 @@ func _on_window_closed():
 	# Clean up the independent view first
 	if container_view:
 		container_view.cleanup()
+
+		# Remove the view from inventory manager
+		if inventory_manager and inventory_manager.has_method("remove_container"):
+			inventory_manager.remove_container(container_view.container_id)
+
 		container_view = null
 
 	if item_actions:

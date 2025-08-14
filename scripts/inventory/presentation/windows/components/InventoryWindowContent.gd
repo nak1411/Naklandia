@@ -471,7 +471,9 @@ func select_container(container: InventoryContainer_Base):
 		# Set container on list view - this already calls refresh_display internally
 		if list_view:
 			list_view.set_container(container, container.container_id)
-			# REMOVE THIS LINE: list_view.refresh_display()
+			# Force refresh if list view is visible
+			if list_view.visible:
+				list_view.refresh_display()
 	else:
 		# Clear both displays
 		if inventory_grid:
@@ -529,6 +531,15 @@ func _on_container_item_added(item: InventoryItem_Base, _position: Vector2i):
 
 	update_mass_info()
 
+	# FORCE IMMEDIATE REFRESH of both views to ensure item appears
+	await get_tree().process_frame  # Wait one frame for signals to propagate
+
+	if inventory_grid and inventory_grid.visible:
+		inventory_grid.refresh_display()
+
+	if list_view and list_view.visible:
+		list_view.refresh_display()
+
 
 func _on_container_item_removed(item: InventoryItem_Base, _position: Vector2i):
 	"""Handle item removed from current container - update mass info and disconnect from item signals"""
@@ -538,10 +549,28 @@ func _on_container_item_removed(item: InventoryItem_Base, _position: Vector2i):
 
 	update_mass_info()
 
+	# FORCE IMMEDIATE REFRESH of both views to ensure item disappears
+	await get_tree().process_frame  # Wait one frame for signals to propagate
+
+	if inventory_grid and inventory_grid.visible:
+		inventory_grid.refresh_display()
+
+	if list_view and list_view.visible:
+		list_view.refresh_display()
+
 
 func _on_container_item_moved(_item: InventoryItem_Base, _old_position: Vector2i, _new_position: Vector2i):
 	"""Handle item moved within current container - usually no mass change, but update for consistency"""
 	update_mass_info()
+
+	# FORCE IMMEDIATE REFRESH for position updates
+	await get_tree().process_frame  # Wait one frame for signals to propagate
+
+	if inventory_grid and inventory_grid.visible:
+		inventory_grid.refresh_display()
+
+	if list_view and list_view.visible:
+		list_view.refresh_display()
 
 
 func select_container_index(index: int):

@@ -173,6 +173,9 @@ func get_container(container_id: String) -> InventoryContainer_Base:
 func get_all_containers() -> Array[InventoryContainer_Base]:
 	var container_list: Array[InventoryContainer_Base] = []
 	for container in containers.values():
+		# Skip tearoff views - they shouldn't appear in main lists
+		if container.has_meta("is_tearoff_view"):
+			continue
 		container_list.append(container)
 	return container_list
 
@@ -181,6 +184,10 @@ func get_accessible_containers() -> Array[InventoryContainer_Base]:
 	var accessible: Array[InventoryContainer_Base] = []
 
 	for container in containers.values():
+		# Skip tearoff views - they shouldn't appear in main lists
+		if container.has_meta("is_tearoff_view"):
+			continue
+
 		if not container.requires_docking:
 			accessible.append(container)
 		# TODO: Add docking check for hangar containers when docking system is implemented

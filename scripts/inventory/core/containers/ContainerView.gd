@@ -61,8 +61,12 @@ func _refresh_view():
 		if _passes_filters(item):
 			view_items.append(item)
 
-	# Apply sorting
-	_apply_current_sort()
+	# CRITICAL FIX: Only apply view-specific sorting if it differs from source
+	# If no view-specific sort is set, preserve source container order
+	if sort_type != InventorySortType.Type.BY_NAME or not sort_ascending:
+		# View has specific sorting applied
+		_apply_current_sort()
+	# else: preserve the source container's order (which may have been sorted by InventoryManager)
 
 	# Sync with base class items array
 	items = view_items
@@ -130,25 +134,28 @@ func _on_source_item_moved(item: InventoryItem_Base, old_position: Vector2i, new
 # Public interface for view control
 func set_search_filter(filter: String):
 	"""Set search filter and refresh view"""
-	search_filter = filter
-	_refresh_view()
-	container_changed.emit()
+	if search_filter != filter:
+		search_filter = filter
+		_refresh_view()
+		container_changed.emit()
 
 
 func set_type_filter(filter: ItemTypes.Type):
 	"""Set type filter and refresh view"""
-	type_filter = filter
-	_refresh_view()
-	container_changed.emit()
+	if type_filter != filter:
+		type_filter = filter
+		_refresh_view()
+		container_changed.emit()
 
 
 func set_sort(type: InventorySortType.Type, ascending: bool = true):
 	"""Set sort type and refresh view"""
-	sort_type = type
-	sort_ascending = ascending
-	_apply_current_sort()
-	items = view_items  # Sync with base class
-	container_changed.emit()
+	if sort_type != type or sort_ascending != ascending:
+		sort_type = type
+		sort_ascending = ascending
+		_apply_current_sort()
+		items = view_items  # Sync with base class
+		container_changed.emit()
 
 
 # Override volume calculations to use view_items

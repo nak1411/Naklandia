@@ -205,6 +205,15 @@ func _show_inventory():
 		print("InventoryIntegration: Cannot show inventory - not ready")
 		return
 
+	# Update the main inventory with filtered containers (excluding tearoff views)
+	if inventory_window.content and inventory_window.content.has_method("update_containers"):
+		var filtered_containers = _get_filtered_containers_for_main_inventory()
+		inventory_window.content.update_containers(filtered_containers)
+
+		# Select first container if we have any and no current selection
+		if not inventory_window.content.current_container and filtered_containers.size() > 0:
+			inventory_window.content.select_container(filtered_containers[0])
+
 	is_inventory_open = true
 	inventory_window.visible = true
 	inventory_window.move_to_front()
@@ -217,6 +226,23 @@ func _show_inventory():
 
 	# Emit signal
 	inventory_toggled.emit(true)
+
+
+func _get_filtered_containers_for_main_inventory() -> Array[InventoryContainer_Base]:
+	"""Get containers for main inventory, excluding tearoff views"""
+	if not inventory_manager:
+		return []
+
+	var accessible_containers = inventory_manager.get_accessible_containers()
+	var filtered_containers: Array[InventoryContainer_Base] = []
+
+	for container in accessible_containers:
+		# Skip tearoff views in main inventory
+		if container.has_meta("is_tearoff_view"):
+			continue
+		filtered_containers.append(container)
+
+	return filtered_containers
 
 
 func _recreate_inventory_window():
@@ -245,6 +271,15 @@ func _recreate_inventory_window():
 	# Set inventory manager on the window
 	if inventory_window.has_method("set_inventory_manager"):
 		inventory_window.set_inventory_manager(inventory_manager)
+
+	# Update with filtered containers
+	if inventory_window.content and inventory_window.content.has_method("update_containers"):
+		var filtered_containers = _get_filtered_containers_for_main_inventory()
+		inventory_window.content.update_containers(filtered_containers)
+
+		# Select first container if we have any
+		if filtered_containers.size() > 0:
+			inventory_window.content.select_container(filtered_containers[0])
 
 	# Reconnect signals
 	_connect_window_signals()
