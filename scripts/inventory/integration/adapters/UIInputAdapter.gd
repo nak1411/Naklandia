@@ -37,7 +37,7 @@ func connect_to_ui_manager(ui_manager: UIManager):
 
 func _input(event):
 	"""Handle input events and route them appropriately"""
-	if not event is InputEventKey:
+	if not event is InputEventKey or not input_processing_enabled:
 		return
 
 	# Check if any LineEdit (like search field) has focus
@@ -46,13 +46,17 @@ func _input(event):
 		# Don't handle inventory toggle when text input is active
 		return
 
-	# ONLY handle inventory toggle - remove the interact fallback
+	# SIMPLIFIED: Just toggle inventory regardless of current mode
 	if event.is_action_pressed("toggle_inventory"):
 		if event_bus:
-			if input_mode == "game":
-				event_bus.emit_inventory_opened()
-			else:
+			# Check if main inventory window is currently open
+			var integration = _find_inventory_integration()
+			if integration and integration.is_inventory_window_open():
+				# Main inventory is open - close it
 				event_bus.emit_inventory_closed()
+			else:
+				# Main inventory is closed - open it
+				event_bus.emit_inventory_opened()
 		get_viewport().set_input_as_handled()
 
 
@@ -120,41 +124,27 @@ func _on_inventory_opened():
 
 
 func _on_inventory_closed():
-	"""Handle inventory closing - but check if other UI windows are still open"""
-	# Check if there are any UI windows still open before switching to game mode
+	"""Handle inventory closing - SIMPLIFIED"""
+	# Always check what UI windows remain after this close event
+	await get_tree().process_frame  # Wait for window cleanup to complete
+
 	var should_switch_to_game = true
 
 	if connected_ui_manager and connected_ui_manager.has_method("get_all_windows"):
 		var remaining_windows = connected_ui_manager.get_all_windows()
-		# Filter out any invalid windows and check for main inventory
 		var valid_windows = remaining_windows.filter(func(w): return is_instance_valid(w) and w.visible)
 
-		# CRITICAL FIX: Always check if main inventory is actually closed
-		var main_inventory_open = false
-		for window in valid_windows:
-			var window_type = window.get_meta("window_type", "")
-			if window_type == "main_inventory":
-				main_inventory_open = true
-				break
-
-		# Only stay in inventory mode if main inventory is actually open
-		if main_inventory_open:
+		if valid_windows.size() > 0:
 			should_switch_to_game = false
-			print("UIInputAdapter: Main inventory still open - staying in inventory mode")
-		elif valid_windows.size() > 0:
-			# Tearoff windows only - check if we should stay in inventory mode
-			var has_tearoffs = valid_windows.any(func(w): return w.get_meta("window_type", "") == "tearoff")
-			if has_tearoffs:
-				should_switch_to_game = false
-				print("UIInputAdapter: Tearoff windows open - staying in inventory mode")
+			print("UIInputAdapter: %d UI windows still open - staying in inventory mode" % valid_windows.size())
 
 	if should_switch_to_game:
-		print("UIInputAdapter: Switching to game input mode - no main inventory open")
+		print("UIInputAdapter: No UI windows remaining - switching to game mode")
 		set_input_mode("game")
 	else:
 		print("UIInputAdapter: Staying in inventory input mode")
 
-	# Hide inventory UI layer (this is safe even if tearoffs are open)
+	# Hide main inventory UI layer (tearoffs have their own layers)
 	if connected_ui_manager:
 		connected_ui_manager.hide_inventory_layer()
 
@@ -186,6 +176,23 @@ func set_input_processing_enabled(enabled: bool):
 	"""Enable/disable input processing"""
 	input_processing_enabled = enabled
 	set_process_unhandled_input(enabled)
+
+
+func _find_inventory_integration() -> InventoryIntegration:
+	"""Find the inventory integration in the scene"""
+	var scene_root = get_tree().current_scene
+	return _find_integration_recursive(scene_root)
+
+
+func _find_integration_recursive(node: Node) -> InventoryIntegration:
+	if node is InventoryIntegration:
+		return node
+
+	for child in node.get_children():
+		var result = _find_integration_recursive(child)
+		if result:
+			return result
+	return null
 
 
 # Public interface

@@ -182,29 +182,14 @@ func _setup_original_inventory_system():
 # Event handlers for integration layer
 func _on_inventory_opened_event():
 	"""Handle inventory opened event from integration system"""
+	print("InventoryIntegration: Received inventory_opened event")
 	if not is_inventory_open:
 		_show_inventory()
 
 
 func _on_inventory_closed_event():
 	"""Handle inventory closed event from integration system"""
-	# Only hide if the main inventory window should actually close
-	var should_hide = true
-
-	# Check if we have tearoff windows that should keep inventory "conceptually open"
-	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
-	if ui_managers.size() > 0:
-		var ui_manager = ui_managers[0]
-		if ui_manager.has_method("get_all_windows"):
-			var remaining_windows = ui_manager.get_all_windows()
-			var valid_windows = remaining_windows.filter(func(w): return is_instance_valid(w) and w.visible)
-
-			# Check if main inventory should stay open due to tearoffs
-			var has_tearoffs = valid_windows.any(func(w): return w.get_meta("window_type", "") == "tearoff")
-			if has_tearoffs and not is_inventory_open:
-				# Don't change anything - tearoffs are handling UI state
-				return
-
+	print("InventoryIntegration: Received inventory_closed event")
 	if is_inventory_open:
 		_hide_inventory()
 

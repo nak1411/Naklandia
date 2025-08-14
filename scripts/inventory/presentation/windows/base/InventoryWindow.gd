@@ -492,15 +492,16 @@ func _on_window_closed():
 
 			if tearoff_windows.size() > 0:
 				should_restore_input = false
-				print("InventoryWindow: Keeping UI input active - %d tearoff windows still open" % tearoff_windows.size())
+				print("InventoryWindow: %d tearoff windows remaining - keeping UI input active" % tearoff_windows.size())
 
 	# Find the inventory integration and close properly
 	var integration = _find_inventory_integration(get_tree().current_scene)
 	if integration:
 		# ALWAYS set inventory as closed when main window closes
 		integration.is_inventory_open = false
+		print("InventoryIntegration: Main inventory marked as closed")
 
-		# Only restore player input if no tearoff windows are open
+		# Handle input restoration based on tearoff windows
 		if should_restore_input:
 			integration._set_player_input_enabled(true)
 			integration.inventory_toggled.emit(false)
@@ -508,9 +509,8 @@ func _on_window_closed():
 				integration.event_bus.emit_inventory_closed()
 		else:
 			# Keep UI input active since tearoff windows are open
-			# But still allow inventory to be reopened since main window is closed
-			print("InventoryWindow: Main inventory closed but tearoff windows remain - inventory can be reopened")
-			# Don't emit inventory_closed since UI is still active
+			# But DON'T emit inventory_closed since that would confuse the input adapter
+			print("InventoryWindow: Preserving UI input mode for tearoff windows")
 
 		# Save position
 		integration._save_window_position()
