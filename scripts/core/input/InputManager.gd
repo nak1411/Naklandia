@@ -19,20 +19,23 @@ var jump_buffer_timer: float = 0.0
 var interact_buffer_time: float = 0.1
 var interact_buffer_timer: float = 0.0
 
+
 func _ready():
 	# Verify input actions exist
 	_verify_input_actions()
 
+
 func _process(delta):
 	# Update input buffers
 	_update_input_buffers(delta)
-	
+
 	# Handle toggle inputs
 	_handle_toggle_inputs()
 
+
 func get_movement_input() -> Vector2:
 	var input_vector = Vector2.ZERO
-	
+
 	# Get movement input
 	if Input.is_action_pressed(MOVE_FORWARD):
 		input_vector.y += 1
@@ -42,23 +45,28 @@ func get_movement_input() -> Vector2:
 		input_vector.x -= 1
 	if Input.is_action_pressed(MOVE_RIGHT):
 		input_vector.x += 1
-	
+
 	# Normalize diagonal movement
 	return input_vector.normalized() if input_vector.length() > 1 else input_vector
+
 
 func is_jump_pressed() -> bool:
 	# Check for fresh jump input or buffered jump
 	return Input.is_action_just_pressed(JUMP) or jump_buffer_timer > 0
 
+
 func is_run_pressed() -> bool:
 	return Input.is_action_pressed(RUN)
+
 
 func is_crouch_pressed() -> bool:
 	return Input.is_action_pressed(CROUCH)
 
+
 func is_interact_pressed() -> bool:
 	# Check for fresh interact input or buffered interact
 	return Input.is_action_just_pressed(INTERACT) or interact_buffer_timer > 0
+
 
 func _update_input_buffers(delta: float):
 	# Update jump buffer
@@ -68,7 +76,7 @@ func _update_input_buffers(delta: float):
 		jump_buffer_timer -= delta
 		if jump_buffer_timer <= 0:
 			jump_buffer_timer = 0
-	
+
 	# Update interact buffer
 	if Input.is_action_just_pressed(INTERACT):
 		interact_buffer_timer = interact_buffer_time
@@ -77,6 +85,7 @@ func _update_input_buffers(delta: float):
 		if interact_buffer_timer <= 0:
 			interact_buffer_timer = 0
 
+
 func _handle_toggle_inputs():
 	# Toggle mouse capture
 	if Input.is_action_just_pressed(TOGGLE_MOUSE):
@@ -84,20 +93,20 @@ func _handle_toggle_inputs():
 		if mouse_look:
 			mouse_look.toggle_mouse_capture()
 
+
 func _verify_input_actions():
 	# Check if all required actions exist in the Input Map
-	var required_actions = [
-		MOVE_FORWARD, MOVE_BACKWARD, MOVE_LEFT, MOVE_RIGHT,
-		JUMP, RUN, CROUCH, TOGGLE_MOUSE, INTERACT
-	]
-	
+	var required_actions = [MOVE_FORWARD, MOVE_BACKWARD, MOVE_LEFT, MOVE_RIGHT, JUMP, RUN, CROUCH, TOGGLE_MOUSE, INTERACT]
+
 	for action in required_actions:
 		if not InputMap.has_action(action):
 			print("Warning: Input action '%s' not found in Input Map!" % action)
 
+
 # Utility function to consume jump buffer (call when jump is used)
 func consume_jump_buffer():
 	jump_buffer_timer = 0
+
 
 # Utility function to consume interact buffer (call when interaction is used)
 func consume_interact_buffer():

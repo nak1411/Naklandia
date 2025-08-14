@@ -4,6 +4,7 @@ extends PickupableItem
 
 @export var blueprint_name: String = "Pickupable Module"
 
+
 func _configure_item_properties():
 	# Set consistent properties for all ammo pickups
 	item_id_override = "blueprint_hybrid_charges"
@@ -16,9 +17,10 @@ func _configure_item_properties():
 	item_quantity = 1
 	icon_path_override = "res://assets/textures/ui/icons/blueprint.png"
 
+
 func _generate_item_data():
 	"""Override to ensure blueprint has proper max_stack_size"""
 	super._generate_item_data()
-	
+
 	if item_data:
 		item_data.max_stack_size = 999999

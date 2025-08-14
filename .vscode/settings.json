@@ -4,5 +4,8 @@
 	"godotFormatterAndLinter.lintSeverityLevel": "Error",
 	"editor.formatOnPaste": true,
 	"editor.defaultFormatter": "EddieDover.gdscript-formatter-linter",
-	"editor.formatOnSave": true
+	"editor.formatOnSave": true,
+	"[gdscript]": {
+		"editor.defaultFormatter": "EddieDover.gdscript-formatter-linter"
+	}
 }

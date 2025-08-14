@@ -2,15 +2,17 @@
 class_name CircularGlowMaterial
 extends ShaderMaterial
 
+
 func _init():
 	_setup_circular_glow_shader()
+
 
 func _setup_circular_glow_shader():
 	# Load the circular glow shader
 	var glow_shader = load("res://scripts/inventory/presentation/effects/shaders/circular_glow.gdshader") as Shader
 	if glow_shader:
 		shader = glow_shader
-		
+
 		# Set default parameters for button hover
 		set_shader_parameter("glow_radius", 0.8)
 		set_shader_parameter("glow_intensity", 1.5)
@@ -21,6 +23,7 @@ func _setup_circular_glow_shader():
 		set_shader_parameter("pulse_speed", 2.0)
 	else:
 		push_error("Failed to load circular_glow.gdshader - check file path")
+
 
 func apply_button_hover_preset(button_type: String = "normal"):
 	"""Apply sunburst preset for button hover effects"""
@@ -39,6 +42,7 @@ func apply_button_hover_preset(button_type: String = "normal"):
 		set_shader_parameter("falloff_power", 3.8)  # Strong falloff
 		set_shader_parameter("softness", 1.0)  # Soft edges
 
+
 func apply_sunburst_preset():
 	"""Apply a dramatic sunburst effect"""
 	set_shader_parameter("glow_intensity", 0.8)
@@ -46,6 +50,7 @@ func apply_sunburst_preset():
 	set_shader_parameter("inner_radius", 0.01)  # Tiny inner hole
 	set_shader_parameter("falloff_power", 5.0)  # Very strong falloff
 	set_shader_parameter("softness", 1.5)  # Maximum softness
+
 
 func apply_subtle_sunburst():
 	"""Apply a very subtle sunburst effect"""

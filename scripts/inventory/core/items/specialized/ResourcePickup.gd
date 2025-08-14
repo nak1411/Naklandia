@@ -5,6 +5,7 @@ extends PickupableItem
 @export var resource_name: String = "Pickupable Resource"
 @export var resource_quantity: int = 500
 
+
 func _configure_item_properties():
 	# Set consistent properties for all ammo pickups
 	item_id_override = "resource_noxite"
@@ -17,9 +18,10 @@ func _configure_item_properties():
 	item_quantity = 1
 	icon_path_override = "res://assets/textures/ui/icons/resource.png"
 
+
 func _generate_item_data():
 	"""Override to ensure resource has proper max_stack_size"""
 	super._generate_item_data()
-	
+
 	if item_data:
 		item_data.max_stack_size = 999999

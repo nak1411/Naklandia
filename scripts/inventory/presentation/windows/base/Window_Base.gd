@@ -2,6 +2,17 @@
 class_name Window_Base
 extends Control
 
+# Signals
+signal window_closed
+signal window_minimized
+signal window_maximized
+signal window_restored
+signal window_resized(new_size: Vector2i)
+signal window_moved(new_position: Vector2i)
+
+enum BloomState { NONE, SUBTLE, ACTIVE, ALERT, CRITICAL }
+enum ResizeMode { NONE, LEFT, RIGHT, TOP, BOTTOM, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
+
 # Window properties
 @export var window_title: String = "Window"
 @export var default_size: Vector2 = Vector2(800, 600)
@@ -17,6 +28,32 @@ extends Control
 
 var ui_manager: UIManager = null
 var snapping_manager: WindowSnappingManager
+var options_dropdown: DropDownMenu_Base
+
+# UI Components
+var main_container: Control
+var title_bar: Panel
+var title_label: Label
+var close_button: Button
+var minimize_button: Button
+var maximize_button: Button
+var content_area: Control
+var background_panel: Panel
+var lock_indicator: Label
+var resize_border_visual: Control
+var border_lines: Array[ColorRect] = []
+var corner_indicators: Array[ColorRect] = []
+var options_button: Button
+
+var edge_bloom_material: WindowEdgeBloomMaterial
+var edge_bloom_overlay: Control
+var edge_bloom_tween: Tween
+var current_bloom_state: BloomState = BloomState.NONE
+var last_known_size: Vector2
+
+# Resize overlay
+var resize_overlay: Control
+var resize_areas: Array[Control] = []
 
 # Window state
 var is_maximized: bool = false
@@ -34,37 +71,6 @@ var resize_mode: ResizeMode = ResizeMode.NONE
 var resize_start_position: Vector2
 var resize_start_size: Vector2
 var resize_start_mouse: Vector2
-var _was_resizing: bool = false
-
-# UI Components
-var main_container: Control
-var title_bar: Panel
-var title_label: Label
-var close_button: Button
-var minimize_button: Button
-var maximize_button: Button
-var content_area: Control
-var background_panel: Panel
-var lock_indicator: Label
-var resize_border_visual: Control
-var border_lines: Array[ColorRect] = []
-var corner_indicators: Array[ColorRect] = []
-var options_button: Button
-var options_dropdown: DropDownMenu_Base
-
-var edge_bloom_material: WindowEdgeBloomMaterial
-var edge_bloom_overlay: Control
-var edge_bloom_tween: Tween
-var current_bloom_state: BloomState = BloomState.NONE
-var last_known_size: Vector2
-
-enum BloomState {NONE, SUBTLE, ACTIVE, ALERT, CRITICAL}
-
-# Resize overlay
-var resize_overlay: Control
-var resize_areas: Array[Control] = []
-
-enum ResizeMode {NONE, LEFT, RIGHT, TOP, BOTTOM, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT}
 
 # Window styling
 var title_bar_height: float = 50.0
@@ -73,15 +79,8 @@ var title_bar_color: Color = Color(0.1, 0.1, 0.1, 1.0)
 var border_color: Color = Color(0.4, 0.4, 0.4, 1.0)
 var background_color: Color = Color(0.15, 0.15, 0.15, 1.0)
 var _transparency_value: float = 1.0
+var _was_resizing: bool = false
 var _is_transparency_locked: bool = false
-
-# Signals
-signal window_closed
-signal window_minimized
-signal window_maximized
-signal window_restored
-signal window_resized(new_size: Vector2i)
-signal window_moved(new_position: Vector2i)
 
 
 func _init():
@@ -194,11 +193,11 @@ func _gui_input(event: InputEvent):
 				if mouse_event.pressed:
 					_start_resize(resize_mode, mouse_event.global_position)
 					get_viewport().set_input_as_handled()
-					return # Stop processing
-				elif is_resizing:
+					return  # Stop processing
+				if is_resizing:
 					_end_resize()
 					get_viewport().set_input_as_handled()
-					return # Stop processing
+					return  # Stop processing
 
 	# Handle resize motion
 	if is_resizing and event is InputEventMouseMotion:
@@ -239,7 +238,7 @@ func _handle_resize_input(event: InputEvent) -> bool:
 					_start_resize(resize_mode, mouse_event.global_position)
 					get_viewport().set_input_as_handled()
 					return true
-				elif is_resizing:
+				if is_resizing:
 					print("Window_Base: Direct resize end")
 					_end_resize()
 					get_viewport().set_input_as_handled()
@@ -250,13 +249,13 @@ func _handle_resize_input(event: InputEvent) -> bool:
 			_handle_resize_motion(event.global_position)
 			get_viewport().set_input_as_handled()
 			return true
+
+		# Update cursor for hover
+		var resize_mode = _get_resize_area_at_position(event.global_position)
+		if resize_mode != ResizeMode.NONE:
+			_set_resize_cursor(resize_mode)
 		else:
-			# Update cursor for hover
-			var resize_mode = _get_resize_area_at_position(event.global_position)
-			if resize_mode != ResizeMode.NONE:
-				_set_resize_cursor(resize_mode)
-			else:
-				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+			Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
 	return false
 
@@ -323,20 +322,20 @@ func _get_resize_area_at_position(global_pos: Vector2) -> ResizeMode:
 	# Check corners first (higher priority)
 	if in_top and in_left:
 		return ResizeMode.TOP_LEFT
-	elif in_top and in_right:
+	if in_top and in_right:
 		return ResizeMode.TOP_RIGHT
-	elif in_bottom and in_left:
+	if in_bottom and in_left:
 		return ResizeMode.BOTTOM_LEFT
-	elif in_bottom and in_right:
+	if in_bottom and in_right:
 		return ResizeMode.BOTTOM_RIGHT
 	# Check edges
-	elif in_left:
+	if in_left:
 		return ResizeMode.LEFT
-	elif in_right:
+	if in_right:
 		return ResizeMode.RIGHT
-	elif in_top:
+	if in_top:
 		return ResizeMode.TOP
-	elif in_bottom:
+	if in_bottom:
 		return ResizeMode.BOTTOM
 
 	return ResizeMode.NONE
@@ -357,7 +356,7 @@ func _setup_window_ui():
 	background_panel = Panel.new()
 	background_panel.name = "BackgroundPanel"
 	background_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	background_panel.mouse_filter = Control.MOUSE_FILTER_PASS # Allow clicks to pass through to main_container
+	background_panel.mouse_filter = Control.MOUSE_FILTER_PASS  # Allow clicks to pass through to main_container
 	main_container.add_child(background_panel)
 
 	# Style background
@@ -391,8 +390,8 @@ func _setup_window_ui():
 	title_label.anchor_top = 0.0
 	title_label.anchor_right = 1.0
 	title_label.anchor_bottom = 1.0
-	title_label.offset_left = 10 # Match original offset
-	title_label.offset_right = -100 # Leave space for buttons
+	title_label.offset_left = 10  # Match original offset
+	title_label.offset_right = -100  # Leave space for buttons
 	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title_bar.add_child(title_label)
@@ -409,18 +408,18 @@ func _setup_window_ui():
 	content_area.anchor_bottom = 1.0
 	content_area.offset_left = border_width
 	content_area.offset_top = title_bar_height + border_width
-	content_area.offset_right = - border_width
-	content_area.offset_bottom = - border_width
+	content_area.offset_right = -border_width
+	content_area.offset_bottom = -border_width
 	content_area.mouse_filter = Control.MOUSE_FILTER_PASS
 	main_container.add_child(content_area)
 
 
 func _setup_window_buttons():
-	var button_size = Vector2(title_bar_height - 24, title_bar_height - 24) # Now 42x42 buttons
-	var button_margin = 0 # Reduced from 2.0 to 0.0 for tighter spacing
-	var button_offset = -10.0 # Move buttons 15 pixels to the left
-	var current_x = button_offset - button_margin # Start position with offset
-	var icon_size = 16 # Increase icon size for larger buttons
+	var button_size = Vector2(title_bar_height - 24, title_bar_height - 24)  # Now 42x42 buttons
+	var button_margin = 0  # Reduced from 2.0 to 0.0 for tighter spacing
+	var button_offset = -10.0  # Move buttons 15 pixels to the left
+	var current_x = button_offset - button_margin  # Start position with offset
+	var icon_size = 16  # Increase icon size for larger buttons
 
 	# Close button
 	if can_close:
@@ -538,9 +537,9 @@ func _style_title_bar_button(button: Button, button_type: String = "default"):
 
 	# Hover state - bright glowing icons
 	if button_type == "close":
-		button.add_theme_color_override("icon_hover_color", Color(1.5, 0.8, 0.8, 1.0)) # Bright red
+		button.add_theme_color_override("icon_hover_color", Color(1.5, 0.8, 0.8, 1.0))  # Bright red
 	else:
-		button.add_theme_color_override("icon_hover_color", Color(0.8, 1.2, 1.6, 1.0)) # Bright blue-white
+		button.add_theme_color_override("icon_hover_color", Color(0.8, 1.2, 1.6, 1.0))  # Bright blue-white
 
 	# Pressed state
 	button.add_theme_color_override("icon_pressed_color", Color(1.0, 1.0, 1.0, 1.0))
@@ -622,12 +621,12 @@ func _on_child_focus_input(event: InputEvent):
 func _create_backbuffer_bloom_effect(button_size: Vector2, button_type: String) -> Control:
 	"""Create bloom effect using multiple blurred copies"""
 	var bloom_container = Control.new()
-	bloom_container.mouse_filter = Control.MOUSE_FILTER_IGNORE # Critical
-	bloom_container.z_index = 100 # Relative to its parent's z-index
+	bloom_container.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Critical
+	bloom_container.z_index = 100  # Relative to its parent's z-index
 
 	# Create the icon for blooming
 	var icon_texture = null
-	var icon_size = 8 # Larger icons for 50px title bar
+	var icon_size = 8  # Larger icons for 50px title bar
 	match button_type:
 		"close":
 			icon_texture = _create_close_icon(icon_size)
@@ -639,7 +638,7 @@ func _create_backbuffer_bloom_effect(button_size: Vector2, button_type: String) 
 			icon_texture = _create_options_icon(icon_size)
 
 	# Adjust bloom for larger buttons
-	var bloom_layers = [ {"offset": 1, "alpha": 0.4, "scale": 1.0}, {"offset": 2, "alpha": 0.25, "scale": 1.1}, {"offset": 3, "alpha": 0.15, "scale": 1.2}, {"offset": 4, "alpha": 0.08, "scale": 1.3}]
+	var bloom_layers = [{"offset": 1, "alpha": 0.4, "scale": 1.0}, {"offset": 2, "alpha": 0.25, "scale": 1.1}, {"offset": 3, "alpha": 0.15, "scale": 1.2}, {"offset": 4, "alpha": 0.08, "scale": 1.3}]
 
 	var bloom_color: Color
 	if button_type == "close":
@@ -653,16 +652,16 @@ func _create_backbuffer_bloom_effect(button_size: Vector2, button_type: String) 
 	# Create each bloom layer
 	for layer in bloom_layers:
 		var blur_container = Control.new()
-		blur_container.mouse_filter = Control.MOUSE_FILTER_IGNORE # Critical
+		blur_container.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Critical
 		# Center the bloom at the button center (adjust for larger icon)
-		blur_container.position = button_center - Vector2(14, 8) # Half of 16px icon
+		blur_container.position = button_center - Vector2(14, 8)  # Half of 16px icon
 
 		# Create multiple offset copies for blur effect
 		var offsets = []
 		var offset_range = layer.offset
 		for x in range(-offset_range, offset_range + 1):
 			for y in range(-offset_range, offset_range + 1):
-				if x != 0 or y != 0: # Skip center
+				if x != 0 or y != 0:  # Skip center
 					offsets.append(Vector2(x, y))
 
 		# Add the blurred copies
@@ -671,10 +670,10 @@ func _create_backbuffer_bloom_effect(button_size: Vector2, button_type: String) 
 			blur_icon.texture = icon_texture
 			blur_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 			blur_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			blur_icon.position = offset * 0.5 # Small offset for blur
-			blur_icon.size = Vector2(12, 12) * layer.scale # Larger icon size
+			blur_icon.position = offset * 0.5  # Small offset for blur
+			blur_icon.size = Vector2(12, 12) * layer.scale  # Larger icon size
 			blur_icon.modulate = Color(bloom_color.r, bloom_color.g, bloom_color.b, layer.alpha * 0.6)
-			blur_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE # Critical
+			blur_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Critical
 			blur_container.add_child(blur_icon)
 
 		bloom_container.add_child(blur_container)
@@ -722,7 +721,7 @@ func _create_glow_icon_layer(button: Button, button_type: String) -> Control:
 		glow_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		# Fade outer layers
-		if i >= 8: # Outer ring
+		if i >= 8:  # Outer ring
 			glow_rect.modulate.a *= 0.5
 
 		glow_container.add_child(glow_rect)
@@ -732,7 +731,7 @@ func _create_glow_icon_layer(button: Button, button_type: String) -> Control:
 	return glow_container
 
 
-func _on_button_bloom_entered(bloom_container: Control, button_type: String):
+func _on_button_bloom_entered(bloom_container: Control, _button_type: String):
 	"""Start the bloom effect"""
 	if bloom_container:
 		bloom_container.visible = true
@@ -743,7 +742,7 @@ func _on_button_bloom_entered(bloom_container: Control, button_type: String):
 		tween.tween_property(bloom_container, "modulate:a", 1.0, 0.2)
 
 
-func _on_button_bloom_exited(bloom_container: Control, button_type: String):
+func _on_button_bloom_exited(bloom_container: Control, _button_type: String):
 	"""End the bloom effect"""
 	if bloom_container:
 		# Animate bloom disappearance
@@ -866,14 +865,14 @@ func _create_maximize_icon(size: int) -> ImageTexture:
 	# Top and bottom borders
 	for x in range(rect.position.x, rect.position.x + rect.size.x):
 		for t in range(border_thickness):
-			image.set_pixel(x, rect.position.y + t, color) # Top
-			image.set_pixel(x, rect.position.y + rect.size.y - 1 - t, color) # Bottom
+			image.set_pixel(x, rect.position.y + t, color)  # Top
+			image.set_pixel(x, rect.position.y + rect.size.y - 1 - t, color)  # Bottom
 
 	# Left and right borders
 	for y in range(rect.position.y, rect.position.y + rect.size.y):
 		for t in range(border_thickness):
-			image.set_pixel(rect.position.x + t, y, color) # Left
-			image.set_pixel(rect.position.x + rect.size.x - 1 - t, y, color) # Right
+			image.set_pixel(rect.position.x + t, y, color)  # Left
+			image.set_pixel(rect.position.x + rect.size.x - 1 - t, y, color)  # Right
 
 	var texture = ImageTexture.new()
 	texture.set_image(image)
@@ -906,7 +905,7 @@ func _create_options_icon(size: int) -> ImageTexture:
 	return texture
 
 
-func _create_glowing_icon(base_icon_func: Callable, size: int, glow_color: Color) -> ImageTexture:
+func _create_glowing_icon(base_icon_func: Callable, size: int, _glow_color: Color) -> ImageTexture:
 	"""Create an icon with built-in glow effect"""
 	var base_image = base_icon_func.call(size)
 	var glow_image = Image.create(size + 8, size + 8, false, Image.FORMAT_RGBA8)
@@ -957,10 +956,10 @@ func _create_resize_areas():
 	left_area.anchor_right = 0.0
 	left_area.anchor_top = 0.0
 	left_area.anchor_bottom = 1.0
-	left_area.offset_left = 0.0 # Start from actual edge
+	left_area.offset_left = 0.0  # Start from actual edge
 	left_area.offset_right = resize_border_width
 	left_area.offset_top = resize_corner_size
-	left_area.offset_bottom = - resize_corner_size
+	left_area.offset_bottom = -resize_corner_size
 
 	# Right edge
 	var right_area = _create_resize_area("RightResize", ResizeMode.RIGHT)
@@ -968,10 +967,10 @@ func _create_resize_areas():
 	right_area.anchor_right = 1.0
 	right_area.anchor_top = 0.0
 	right_area.anchor_bottom = 1.0
-	right_area.offset_left = - resize_border_width
-	right_area.offset_right = 0.0 # End at actual edge
+	right_area.offset_left = -resize_border_width
+	right_area.offset_right = 0.0  # End at actual edge
 	right_area.offset_top = resize_corner_size
-	right_area.offset_bottom = - resize_corner_size
+	right_area.offset_bottom = -resize_corner_size
 
 	# Top edge - FIXED
 	var top_area = _create_resize_area("TopResize", ResizeMode.TOP)
@@ -980,8 +979,8 @@ func _create_resize_areas():
 	top_area.anchor_top = 0.0
 	top_area.anchor_bottom = 0.0
 	top_area.offset_left = resize_corner_size
-	top_area.offset_right = - resize_corner_size
-	top_area.offset_top = 0.0 # Start from actual edge
+	top_area.offset_right = -resize_corner_size
+	top_area.offset_top = 0.0  # Start from actual edge
 	top_area.offset_bottom = resize_border_width
 
 	# Bottom edge
@@ -991,9 +990,9 @@ func _create_resize_areas():
 	bottom_area.anchor_top = 1.0
 	bottom_area.anchor_bottom = 1.0
 	bottom_area.offset_left = resize_corner_size
-	bottom_area.offset_right = - resize_corner_size
-	bottom_area.offset_top = - resize_border_width
-	bottom_area.offset_bottom = 0.0 # End at actual edge
+	bottom_area.offset_right = -resize_corner_size
+	bottom_area.offset_top = -resize_border_width
+	bottom_area.offset_bottom = 0.0  # End at actual edge
 
 	# Create CORNERS last (so they have higher priority in mouse detection)
 
@@ -1012,7 +1011,7 @@ func _create_resize_areas():
 	tr_corner.anchor_right = 1.0
 	tr_corner.anchor_top = 0.0
 	tr_corner.anchor_bottom = 0.0
-	tr_corner.offset_left = - resize_corner_size
+	tr_corner.offset_left = -resize_corner_size
 	tr_corner.offset_bottom = resize_corner_size
 
 	# Bottom-left corner
@@ -1022,7 +1021,7 @@ func _create_resize_areas():
 	bl_corner.anchor_top = 1.0
 	bl_corner.anchor_bottom = 1.0
 	bl_corner.offset_right = resize_corner_size
-	bl_corner.offset_top = - resize_corner_size
+	bl_corner.offset_top = -resize_corner_size
 
 	# Bottom-right corner
 	var br_corner = _create_resize_area("BottomRightCorner", ResizeMode.BOTTOM_RIGHT)
@@ -1030,8 +1029,8 @@ func _create_resize_areas():
 	br_corner.anchor_right = 1.0
 	br_corner.anchor_top = 1.0
 	br_corner.anchor_bottom = 1.0
-	br_corner.offset_left = - resize_corner_size
-	br_corner.offset_top = - resize_corner_size
+	br_corner.offset_left = -resize_corner_size
+	br_corner.offset_top = -resize_corner_size
 
 
 func _create_resize_area(area_name: String, mode: ResizeMode) -> Control:
@@ -1060,13 +1059,13 @@ func _create_resize_border_visuals():
 	resize_border_visual.name = "ResizeBorderVisual"
 	resize_border_visual.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	resize_border_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	resize_border_visual.z_index = 199 # Below the resize areas
+	resize_border_visual.z_index = 199  # Below the resize areas
 	main_container.add_child(resize_border_visual)
 
 	# Left border
 	var left_line = ColorRect.new()
 	left_line.name = "LeftBorder"
-	left_line.color = Color(0.5, 0.8, 1.0, 0.0) # Start invisible
+	left_line.color = Color(0.5, 0.8, 1.0, 0.0)  # Start invisible
 	left_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	left_line.anchor_top = 0.0
 	left_line.anchor_bottom = 1.0
@@ -1079,7 +1078,7 @@ func _create_resize_border_visuals():
 	# Right border
 	var right_line = ColorRect.new()
 	right_line.name = "RightBorder"
-	right_line.color = Color(0.5, 0.8, 1.0, 0.0) # Start invisible
+	right_line.color = Color(0.5, 0.8, 1.0, 0.0)  # Start invisible
 	right_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	right_line.anchor_top = 0.0
 	right_line.anchor_bottom = 1.0
@@ -1092,7 +1091,7 @@ func _create_resize_border_visuals():
 	# Top border
 	var top_line = ColorRect.new()
 	top_line.name = "TopBorder"
-	top_line.color = Color(0.5, 0.8, 1.0, 0.0) # Start invisible
+	top_line.color = Color(0.5, 0.8, 1.0, 0.0)  # Start invisible
 	top_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_line.anchor_left = 0.0
 	top_line.anchor_right = 1.0
@@ -1105,7 +1104,7 @@ func _create_resize_border_visuals():
 	# Bottom border
 	var bottom_line = ColorRect.new()
 	bottom_line.name = "BottomBorder"
-	bottom_line.color = Color(0.5, 0.8, 1.0, 0.0) # Start invisible
+	bottom_line.color = Color(0.5, 0.8, 1.0, 0.0)  # Start invisible
 	bottom_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bottom_line.anchor_left = 0.0
 	bottom_line.anchor_right = 1.0
@@ -1120,7 +1119,7 @@ func _create_resize_border_visuals():
 
 
 func _create_corner_indicators():
-	var corner_color = Color(0.5, 0.8, 1.0, 0.0) # Start invisible
+	var corner_color = Color(0.5, 0.8, 1.0, 0.0)  # Start invisible
 
 	# Top-left corner
 	var tl_corner = ColorRect.new()
@@ -1145,7 +1144,7 @@ func _create_corner_indicators():
 	tr_corner.anchor_right = 1.0
 	tr_corner.anchor_top = 0.0
 	tr_corner.anchor_bottom = 0.0
-	tr_corner.offset_left = - resize_corner_size
+	tr_corner.offset_left = -resize_corner_size
 	tr_corner.offset_bottom = resize_corner_size
 	resize_border_visual.add_child(tr_corner)
 	corner_indicators.append(tr_corner)
@@ -1160,7 +1159,7 @@ func _create_corner_indicators():
 	bl_corner.anchor_top = 1.0
 	bl_corner.anchor_bottom = 1.0
 	bl_corner.offset_right = resize_corner_size
-	bl_corner.offset_top = - resize_corner_size
+	bl_corner.offset_top = -resize_corner_size
 	resize_border_visual.add_child(bl_corner)
 	corner_indicators.append(bl_corner)
 
@@ -1173,8 +1172,8 @@ func _create_corner_indicators():
 	br_corner.anchor_right = 1.0
 	br_corner.anchor_top = 1.0
 	br_corner.anchor_bottom = 1.0
-	br_corner.offset_left = - resize_corner_size
-	br_corner.offset_top = - resize_corner_size
+	br_corner.offset_left = -resize_corner_size
+	br_corner.offset_top = -resize_corner_size
 	resize_border_visual.add_child(br_corner)
 	corner_indicators.append(br_corner)
 
@@ -1191,22 +1190,22 @@ func _setup_resize_area_geometry(area: Control, mode: ResizeMode):
 			area.anchor_bottom = 1.0
 			area.offset_right = border
 			area.offset_top = corner
-			area.offset_bottom = - corner
+			area.offset_bottom = -corner
 		ResizeMode.RIGHT:
 			area.anchor_left = 1.0
 			area.anchor_top = 0.0
 			area.anchor_right = 1.0
 			area.anchor_bottom = 1.0
-			area.offset_left = - border
+			area.offset_left = -border
 			area.offset_top = corner
-			area.offset_bottom = - corner
+			area.offset_bottom = -corner
 		ResizeMode.TOP:
 			area.anchor_left = 0.0
 			area.anchor_top = 0.0
 			area.anchor_right = 1.0
 			area.anchor_bottom = 0.0
 			area.offset_left = corner
-			area.offset_right = - corner
+			area.offset_right = -corner
 			area.offset_bottom = border
 		ResizeMode.BOTTOM:
 			area.anchor_left = 0.0
@@ -1214,8 +1213,8 @@ func _setup_resize_area_geometry(area: Control, mode: ResizeMode):
 			area.anchor_right = 1.0
 			area.anchor_bottom = 1.0
 			area.offset_left = corner
-			area.offset_right = - corner
-			area.offset_top = - border
+			area.offset_right = -corner
+			area.offset_top = -border
 		ResizeMode.TOP_LEFT:
 			area.anchor_left = 0.0
 			area.anchor_top = 0.0
@@ -1228,7 +1227,7 @@ func _setup_resize_area_geometry(area: Control, mode: ResizeMode):
 			area.anchor_top = 0.0
 			area.anchor_right = 1.0
 			area.anchor_bottom = 0.0
-			area.offset_left = - corner
+			area.offset_left = -corner
 			area.offset_bottom = corner
 		ResizeMode.BOTTOM_LEFT:
 			area.anchor_left = 0.0
@@ -1236,23 +1235,23 @@ func _setup_resize_area_geometry(area: Control, mode: ResizeMode):
 			area.anchor_right = 0.0
 			area.anchor_bottom = 1.0
 			area.offset_right = corner
-			area.offset_top = - corner
+			area.offset_top = -corner
 		ResizeMode.BOTTOM_RIGHT:
 			area.anchor_left = 1.0
 			area.anchor_top = 1.0
 			area.anchor_right = 1.0
 			area.anchor_bottom = 1.0
-			area.offset_left = - corner
-			area.offset_top = - corner
+			area.offset_left = -corner
+			area.offset_top = -corner
 
 
-func _on_window_resized(new_size: Vector2i):
+func _on_window_resized(_new_size: Vector2i):
 	_update_edge_bloom_size()
 
 
 func _update_edge_bloom_size():
 	if edge_bloom_material and edge_bloom_overlay:
-		var bloom_extend = 60.0 # Shorter extend
+		var bloom_extend = 60.0  # Shorter extend
 		edge_bloom_material.set_window_size(size)
 		edge_bloom_material.set_bloom_extend(bloom_extend)
 		edge_bloom_overlay.position = Vector2(-bloom_extend, -bloom_extend)
@@ -1297,7 +1296,7 @@ func _on_resize_area_entered(mode: ResizeMode):
 	_show_edge_bloom(mode)
 
 
-func _on_resize_area_exited(mode: ResizeMode):
+func _on_resize_area_exited(_mode: ResizeMode):
 	"""Handle mouse exiting a resize area"""
 	if not is_resizing:
 		mouse_default_cursor_shape = Control.CURSOR_ARROW
@@ -1571,7 +1570,6 @@ func _on_window_close_requested():
 
 func _on_window_closed():
 	"""Override this method in child classes for custom close behavior"""
-	pass
 
 
 # Public interface methods
@@ -1665,7 +1663,6 @@ func _reset_window_size():
 # Virtual method for lock visual updates (override in child classes)
 func _update_lock_visual():
 	"""Update visual indicators for lock state - override in child classes"""
-	pass
 
 
 func _on_options_pressed():
@@ -1796,7 +1793,7 @@ func _on_title_bar_input(event: InputEvent):
 				is_dragging = false
 				drag_initiated = false
 				get_viewport().set_input_as_handled()
-				return # Exit early to prevent other logic
+				return  # Exit early to prevent other logic
 
 			if mouse_event.pressed:
 				# Store initial click position and state for dragging
@@ -1881,7 +1878,7 @@ func _enable_resize_visuals():
 
 	# Re-enable mouse detection on resize areas
 	if resize_overlay:
-		resize_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE # Keep overlay itself as ignore
+		resize_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Keep overlay itself as ignore
 
 	for area in resize_areas:
 		if area:
@@ -1910,10 +1907,10 @@ func _setup_edge_bloom():
 	edge_bloom_overlay.name = "EdgeBloomOverlay"
 	edge_bloom_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	edge_bloom_overlay.color = Color.TRANSPARENT
-	edge_bloom_overlay.visible = true # Keep visible, control with alpha
+	edge_bloom_overlay.visible = true  # Keep visible, control with alpha
 	edge_bloom_overlay.z_index = 10
 
-	var bloom_extend = 60.0 # Much smaller extend for shorter bloom
+	var bloom_extend = 60.0  # Much smaller extend for shorter bloom
 	edge_bloom_overlay.position = Vector2(-bloom_extend, -bloom_extend)
 	edge_bloom_overlay.size = size + Vector2(bloom_extend * 2, bloom_extend * 2)
 
@@ -1929,7 +1926,6 @@ func _on_mouse_entered():
 	"""Handle mouse entering window area"""
 	# Optional: Could bring to front on hover
 	# _bring_to_front()
-	pass
 
 
 func _on_mouse_exited():

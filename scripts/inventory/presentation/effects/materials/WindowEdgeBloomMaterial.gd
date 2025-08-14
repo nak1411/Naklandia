@@ -5,8 +5,10 @@ extends ShaderMaterial
 var base_intensity: float = 0.3
 var current_intensity: float = 0.0
 
+
 func _init():
 	_setup_edge_bloom_shader()
+
 
 func _setup_edge_bloom_shader():
 	var edge_shader = load("res://scripts/inventory/presentation/effects/shaders/pp_border.gdshader") as Shader
@@ -15,6 +17,7 @@ func _setup_edge_bloom_shader():
 		_set_default_parameters()
 	else:
 		push_error("Failed to load pp_border.gdshader")
+
 
 func _set_default_parameters():
 	set_shader_parameter("enable_window_edge_bloom", true)
@@ -29,24 +32,29 @@ func _set_default_parameters():
 	set_shader_parameter("show_top_edge", false)
 	set_shader_parameter("show_bottom_edge", false)
 
+
 func set_spear_length(length: float):
 	"""Set how gradually the bloom tapers at the ends (spear effect)"""
 	set_shader_parameter("spear_length", length)
 
+
 func set_window_size(size: Vector2):
 	set_shader_parameter("window_size", size)
 
+
 func set_bloom_extend(extend: float):
 	set_shader_parameter("bloom_extend", extend)
+
 
 func set_intensity(intensity: float):
 	current_intensity = intensity
 	set_shader_parameter("edge_bloom_intensity", intensity)
 
+
 func show_edge(resize_mode: Window_Base.ResizeMode):
 	# Hide all edges first
 	hide_all_edges()
-	
+
 	# Show the specified edge
 	match resize_mode:
 		Window_Base.ResizeMode.LEFT:
@@ -69,6 +77,7 @@ func show_edge(resize_mode: Window_Base.ResizeMode):
 		Window_Base.ResizeMode.BOTTOM_RIGHT:
 			set_shader_parameter("show_right_edge", true)
 			set_shader_parameter("show_bottom_edge", true)
+
 
 func hide_all_edges():
 	set_shader_parameter("show_left_edge", false)

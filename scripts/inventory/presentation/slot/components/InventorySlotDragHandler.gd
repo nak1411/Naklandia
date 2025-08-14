@@ -2,6 +2,11 @@
 class_name InventorySlotDragHandler
 extends RefCounted
 
+# Signals
+signal drag_started(slot: InventorySlot, item: InventoryItem_Base)
+signal drag_ended(slot: InventorySlot, success: bool)
+signal item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot)
+
 # References
 var slot: InventorySlot
 
@@ -12,13 +17,10 @@ var drag_threshold: float = 5.0
 var drag_preview_created: bool = false
 var currently_highlighted_slot: InventorySlot = null
 
-# Signals
-signal drag_started(slot: InventorySlot, item: InventoryItem_Base)
-signal drag_ended(slot: InventorySlot, success: bool)
-signal item_dropped_on_slot(source_slot: InventorySlot, target_slot: InventorySlot)
 
 func _init(inventory_slot: InventorySlot):
 	slot = inventory_slot
+
 
 func handle_mouse_button(event: InputEventMouseButton):
 	"""Handle mouse button events for drag initiation"""
@@ -35,15 +37,16 @@ func handle_mouse_button(event: InputEventMouseButton):
 				is_dragging = false
 				drag_preview_created = false
 
+
 func handle_mouse_motion(event: InputEventMouseMotion):
 	"""Handle mouse motion during drag operations"""
 	if not is_dragging or not slot.has_item():
 		return
-	
+
 	var current_position = event.global_position
 	var distance = drag_start_position.distance_to(current_position)
 	var inventory_window = _find_inventory_window()
-	
+
 	# Start drag preview if we've moved far enough
 	if distance > drag_threshold and not drag_preview_created:
 		# Check if shift is held and item can be split
@@ -52,21 +55,18 @@ func handle_mouse_motion(event: InputEventMouseMotion):
 			is_dragging = false
 			drag_preview_created = false
 			return
-		
+
 		_create_drag_preview()
 		drag_preview_created = true
-		
+
 		# Store drag data
 		var viewport = slot.get_viewport()
-		var drag_data = {
-			"source_slot": slot,
-			"item": slot.get_item(),
-			"drag_type": "inventory_item"
-		}
+		var drag_data = {"source_slot": slot, "item": slot.get_item(), "drag_type": "inventory_item"}
 		viewport.set_meta("current_drag_data", drag_data)
-		
+
 		# Emit drag started signal
 		drag_started.emit(slot, slot.get_item())
+
 
 func _create_drag_preview() -> Control:
 	"""Create a visual preview for the dragged item"""
@@ -74,16 +74,16 @@ func _create_drag_preview() -> Control:
 	var ui_adapter = _get_ui_input_adapter()
 	if ui_adapter:
 		ui_adapter.set_drag_in_progress(true)
-		
+
 	var preview = Control.new()
 	preview.name = "DragPreview"
-	
+
 	# Make the preview use the ICON SIZE only, not the full slot size
 	var scale_factor = 1.0  # Make it slightly smaller while dragging
 	var icon_size = Vector2(64, 64)  # Only the icon part, not the full 64x96 slot
 	preview.size = icon_size * scale_factor
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	
+
 	# Copy visual elements
 	var preview_bg = Panel.new()
 	preview_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -91,7 +91,7 @@ func _create_drag_preview() -> Control:
 		preview_bg.add_theme_stylebox_override("panel", slot.visuals.background_panel.get_theme_stylebox("panel"))
 	preview_bg.modulate.a = 1.0
 	preview.add_child(preview_bg)
-	
+
 	var item = slot.get_item()
 	if item and slot.visuals and slot.visuals.item_icon:
 		var preview_icon = TextureRect.new()
@@ -101,7 +101,7 @@ func _create_drag_preview() -> Control:
 		preview_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		preview_icon.modulate.a = 0.9
 		preview.add_child(preview_icon)
-		
+
 		# Add quantity label if needed
 		if item.quantity > 1:
 			var preview_quantity = Label.new()
@@ -116,32 +116,33 @@ func _create_drag_preview() -> Control:
 			preview_quantity.add_theme_constant_override("shadow_offset_y", 1)
 			preview_quantity.add_theme_font_size_override("font_size", int(18 * scale_factor))
 			preview.add_child(preview_quantity)
-	
+
 	# FIXED: Add to the scene tree root via slot reference
 	var drag_canvas = CanvasLayer.new()
 	drag_canvas.name = "DragCanvas"
 	drag_canvas.layer = 200  # Very high layer to appear above everything
-	
+
 	# CRITICAL FIX: Use slot.get_tree().root instead of get_tree().root
 	slot.get_tree().root.add_child(drag_canvas)
 	drag_canvas.add_child(preview)
-	
+
 	# Store references for cleanup
 	preview.set_meta("drag_canvas", drag_canvas)
 	preview.set_meta("source_slot", slot)
-	
+
 	# Start following mouse
 	_update_preview_position(preview)
-	
+
 	# Create timer for continuous position updates
 	var timer = Timer.new()
 	timer.wait_time = 0.016  # ~60 FPS
 	timer.timeout.connect(_update_preview_position.bind(preview))
 	drag_canvas.add_child(timer)
 	timer.start()
-	
+
 	preview.set_meta("position_timer", timer)
 	return preview
+
 
 func _update_preview_position(preview: Control):
 	"""Update drag preview position to follow mouse and highlight target slot"""
@@ -154,44 +155,46 @@ func _update_preview_position(preview: Control):
 		# Clear any highlighting when drag ends
 		_clear_slot_highlighting()
 		return
-	
+
 	# Check if this preview belongs to this slot
 	var source_slot = preview.get_meta("source_slot", null)
 	if source_slot != slot:
 		return
-	
+
 	# Keep the original positioning logic
 	var mouse_pos = slot.get_global_mouse_position()
 	preview.global_position = mouse_pos - preview.size / 2
-	
+
 	# Use bounding box detection instead of mouse position
 	_update_drop_target_highlighting_with_bounds()
+
 
 func _update_drop_target_highlighting_with_bounds():
 	"""Update highlighting using bounding box detection instead of mouse position"""
 	var target_slot = _find_best_drop_slot(Vector2.ZERO)  # Mouse pos not needed anymore
-	
+
 	# Clear previous highlighting
 	if currently_highlighted_slot and currently_highlighted_slot != target_slot:
 		currently_highlighted_slot.set_highlighted(false)
 		currently_highlighted_slot = null
-	
+
 	# Highlight new target slot
 	if target_slot and target_slot != slot:
 		# Check if this is a valid drop target
 		if _is_valid_drop_target(target_slot):
 			target_slot.set_highlighted(true)
 			currently_highlighted_slot = target_slot
+
 
 func _update_drop_target_highlighting(mouse_pos: Vector2):
 	"""Update highlighting for the slot under the mouse cursor"""
 	var target_slot = _find_best_drop_slot(mouse_pos)
-	
+
 	# Clear previous highlighting
 	if currently_highlighted_slot and currently_highlighted_slot != target_slot:
 		currently_highlighted_slot.set_highlighted(false)
 		currently_highlighted_slot = null
-	
+
 	# Highlight new target slot
 	if target_slot and target_slot != slot:
 		# Check if this is a valid drop target
@@ -199,57 +202,60 @@ func _update_drop_target_highlighting(mouse_pos: Vector2):
 			target_slot.set_highlighted(true)
 			currently_highlighted_slot = target_slot
 
-func _find_best_drop_slot(mouse_pos: Vector2) -> InventorySlot:
+
+func _find_best_drop_slot(_mouse_pos: Vector2) -> InventorySlot:
 	"""Find the best slot to drop on based on bounding box detection"""
 	var grid = _get_inventory_grid()
 	if not grid:
 		return null
-	
+
 	# Get the drag preview for bounding box calculations
 	var drag_preview = _get_current_drag_preview()
 	if not drag_preview:
 		return null
-	
+
 	# Create bounding box for the dragged item
 	var preview_rect = Rect2(drag_preview.global_position, drag_preview.size)
-	
+
 	if grid.enable_virtual_scrolling:
 		return _find_best_virtual_slot_with_bounds(preview_rect, grid)
-	else:
-		return _find_best_traditional_slot_with_bounds(preview_rect, grid)
+
+	return _find_best_traditional_slot_with_bounds(preview_rect, grid)
+
 
 func _find_best_virtual_slot_with_bounds(preview_rect: Rect2, grid: InventoryGrid) -> InventorySlot:
 	"""Find best slot in virtual scrolling mode using bounding box detection"""
 	if not grid.virtual_rendered_slots:
 		return null
-	
+
 	var best_slot = null
 	var max_overlap_area = 0.0
-	
+
 	# Check each rendered slot for bounding box overlap
 	for slot_check in grid.virtual_rendered_slots:
 		if not slot_check or slot_check == slot:
 			continue
-		
+
 		var slot_rect = Rect2(slot_check.global_position, slot_check.size)
-		
+
 		# Check if bounding boxes intersect
 		if preview_rect.intersects(slot_rect):
 			# Calculate overlap area to find the best match
 			var intersection = preview_rect.intersection(slot_rect)
 			var overlap_area = intersection.get_area()
-			
+
 			if overlap_area > max_overlap_area:
 				max_overlap_area = overlap_area
 				best_slot = slot_check
-	
+
 	return best_slot
+
 
 func _find_best_traditional_slot_with_bounds(preview_rect: Rect2, grid: InventoryGrid) -> InventorySlot:
 	"""Find best slot in traditional grid mode using bounding box detection"""
 	var best_slot = null
 	var max_overlap_area = 0.0
-	
+
 	# Check all slots for bounding box overlap
 	for y in grid.current_grid_height:
 		for x in grid.current_grid_width:
@@ -257,39 +263,41 @@ func _find_best_traditional_slot_with_bounds(preview_rect: Rect2, grid: Inventor
 				var slot_check = grid.slots[y][x]
 				if not slot_check or slot_check == slot:
 					continue
-				
+
 				var slot_rect = Rect2(slot_check.global_position, slot_check.size)
-				
+
 				# Check if bounding boxes intersect
 				if preview_rect.intersects(slot_rect):
 					# Calculate overlap area to find the best match
 					var intersection = preview_rect.intersection(slot_rect)
 					var overlap_area = intersection.get_area()
-					
+
 					if overlap_area > max_overlap_area:
 						max_overlap_area = overlap_area
 						best_slot = slot_check
-	
+
 	return best_slot
+
 
 func _get_current_drag_preview() -> Control:
 	"""Get the current drag preview control - FIXED to use root"""
 	var root = slot.get_tree().root
 	if not root:
 		return null
-	
+
 	# Look for the drag canvas in root instead of viewport
 	var drag_canvas = root.get_children().filter(func(child): return child is CanvasLayer and child.name == "DragCanvas")
 	if drag_canvas.is_empty():
 		return null
-	
+
 	# Get the preview from the drag canvas
 	var canvas = drag_canvas[0]
 	var preview_children = canvas.get_children().filter(func(child): return child.name == "DragPreview")
 	if preview_children.is_empty():
 		return null
-	
+
 	return preview_children[0]
+
 
 func _find_closest_virtual_drop_position(target_col: int, target_row: int, grid: InventoryGrid) -> InventorySlot:
 	"""Find the closest valid drop position in virtual mode"""
@@ -300,65 +308,68 @@ func _find_closest_virtual_drop_position(target_col: int, target_row: int, grid:
 			for dx in range(-search_radius, search_radius + 1):
 				if abs(dx) != search_radius and abs(dy) != search_radius:
 					continue  # Only check perimeter of current radius
-				
+
 				var check_col = target_col + dx
 				var check_row = target_row + dy
-				
+
 				if check_col >= 0 and check_col < grid.virtual_items_per_row and check_row >= 0:
 					# Check if there's a slot at this position
 					for slot_check in grid.virtual_rendered_slots:
 						if slot_check and slot_check.grid_position == Vector2i(check_col, check_row):
 							return slot_check
 		search_radius += 1
-	
+
 	# If no rendered slot found, we might need to create one or find next available
 	return null
+
 
 func _is_valid_drop_target(target_slot: InventorySlot) -> bool:
 	"""Check if a slot is a valid drop target"""
 	if not target_slot or target_slot == slot:
 		return false
-	
+
 	var source_item = slot.get_item()
 	if not source_item:
 		return false
-	
+
 	# Empty slot is always valid
 	if not target_slot.has_item():
 		return true
-	
+
 	var target_item = target_slot.get_item()
-	
+
 	# Same container - check if items can stack
 	if slot.container_id == target_slot.container_id:
 		return source_item.can_stack_with(target_item)
-	
+
 	# Different containers - check volume and stacking
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
 		return false
-	
+
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	if not target_container:
 		return false
-	
+
 	# Check if there's volume for the item
 	var available_volume = target_container.get_available_volume()
 	var required_volume = source_item.volume * source_item.quantity
-	
+
 	if target_item and source_item.can_stack_with(target_item):
 		# For stacking, only need volume for the additional quantity
 		var stack_space = target_item.max_stack_size - target_item.quantity
 		var transfer_amount = min(source_item.quantity, stack_space)
 		required_volume = source_item.volume * transfer_amount
-	
+
 	return required_volume <= available_volume
+
 
 func _clear_slot_highlighting():
 	"""Clear highlighting from any currently highlighted slot"""
 	if currently_highlighted_slot:
 		currently_highlighted_slot.set_highlighted(false)
 		currently_highlighted_slot = null
+
 
 func _handle_drag_end(end_position: Vector2):
 	"""Handle the end of a drag operation"""
@@ -370,54 +381,56 @@ func _handle_drag_end(end_position: Vector2):
 	# Always reset visual state first
 	slot.modulate.a = 1.0
 	slot.mouse_filter = Control.MOUSE_FILTER_PASS
-	
+
 	_cleanup_all_drag_previews()
 	_clear_slot_highlighting()  # Clear highlighting when drag ends
-	
+
 	var drop_successful = false
-	
+
 	# Use the currently highlighted slot if available (this is the most accurate)
 	var target_slot = currently_highlighted_slot
 	if not target_slot:
 		# Fallback to position-based detection
 		target_slot = _find_best_drop_slot(end_position)
-	
+
 	if target_slot and target_slot != slot:
 		drop_successful = _attempt_drop_on_slot(target_slot)
 	else:
 		# Check for other drop targets (virtual content, container list, etc.)
 		drop_successful = _attempt_drop_on_other_targets(end_position)
-	
+
 	# Clear drag data
 	var viewport = slot.get_viewport()
 	if viewport and viewport.has_meta("current_drag_data"):
 		viewport.remove_meta("current_drag_data")
-	
+
 	# Clear highlights
 	var content = _find_inventory_content()
 	if content and content.has_method("force_clear_highlights"):
 		content.force_clear_highlights()
-	
+
 	# Reset all drag state
 	is_dragging = false
 	drag_preview_created = false
-	
+
 	drag_ended.emit(slot, drop_successful)
+
 
 func _cleanup_all_drag_previews():
 	"""Clean up all drag preview elements - FIXED to match ListRowManager pattern"""
 	var root = slot.get_tree().root
 	var drag_canvases = []
-	
+
 	# Find all DragCanvas nodes - same pattern as ListRowManager
 	for child in root.get_children():
 		if child is CanvasLayer and child.name == "DragCanvas":
 			drag_canvases.append(child)
-	
+
 	# Clean them up
 	for canvas in drag_canvases:
 		if is_instance_valid(canvas):
 			canvas.queue_free()
+
 
 func _find_slot_at_position(global_pos: Vector2) -> InventorySlot:
 	"""Find an inventory slot at the given global position"""
@@ -428,33 +441,30 @@ func _find_slot_at_position(global_pos: Vector2) -> InventorySlot:
 		return grid.get_slot_at_position(global_pos)
 	return null
 
+
 func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	"""Attempt to drop item on another slot"""
 	if not target_slot or not slot.has_item():
 		return false
-	
+
 	# Emit the drop signal first
 	item_dropped_on_slot.emit(slot, target_slot)
-	
+
 	# Then handle the actual drop
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
 		return false
-	
+
 	# Use the inventory manager's transfer system
-	var success = inventory_manager.transfer_item(
-		slot.get_item(), 
-		slot.container_id, 
-		target_slot.container_id, 
-		target_slot.grid_position
-	)
-	
+	var success = inventory_manager.transfer_item(slot.get_item(), slot.container_id, target_slot.container_id, target_slot.grid_position)
+
 	if success:
 		# Update visuals
 		slot.visuals.update_item_display()
 		target_slot.visuals.update_item_display()
-	
+
 	return success
+
 
 func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 	"""Attempt to drop on other valid targets"""
@@ -465,13 +475,14 @@ func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 		if content_rect.has_point(end_position):
 			if grid.has_method("_handle_drop_on_empty_area"):
 				return grid._handle_drop_on_empty_area(slot, end_position)
-	
+
 	# Check container list drop
 	var content = _find_inventory_content()
 	if content and slot.has_method("_attempt_drop_on_container_list"):
 		return slot._attempt_drop_on_container_list(end_position)
-	
+
 	return false
+
 
 func _get_inventory_grid():
 	"""Get the inventory grid"""
@@ -482,15 +493,17 @@ func _get_inventory_grid():
 		current = current.get_parent()
 	return null
 
+
 func _get_ui_input_adapter():
 	"""Get reference to UI input adapter"""
 	if not slot:
 		return null
-		
+
 	var integration = slot.get_tree().get_first_node_in_group("inventory_integration")
 	if integration and integration.has_method("get_ui_input_adapter"):
 		return integration.get_ui_input_adapter()
 	return null
+
 
 func _find_inventory_content():
 	"""Find the inventory content"""
@@ -501,6 +514,7 @@ func _find_inventory_content():
 		current = current.get_parent()
 	return null
 
+
 func _find_inventory_window():
 	"""Find the InventoryWindow in the scene tree"""
 	var current = slot.get_parent()
@@ -510,6 +524,7 @@ func _find_inventory_window():
 		current = current.get_parent()
 	return null
 
+
 func _get_inventory_manager() -> InventoryManager:
 	"""Find the inventory manager in the scene hierarchy"""
 	# First try the parent chain looking for InventoryWindow
@@ -518,26 +533,29 @@ func _get_inventory_manager() -> InventoryManager:
 		if current.get_script() and current.get_script().get_global_name() == "InventoryWindow":
 			return current.inventory_manager
 		current = current.get_parent()
-	
+
 	# Fallback - look for InventoryManager in scene tree
 	var scene_root = slot.get_tree().current_scene
 	return _find_inventory_manager_recursive(scene_root)
+
 
 func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
 	"""Recursively find InventoryManager in scene tree"""
 	if node is InventoryManager:
 		return node
-	
+
 	for child in node.get_children():
 		var result = _find_inventory_manager_recursive(child)
 		if result:
 			return result
-	
+
 	return null
+
 
 func should_handle_input(event: InputEvent) -> bool:
 	"""Check if this handler should process the input event"""
 	return event is InputEventMouseButton or (event is InputEventMouseMotion and is_dragging)
+
 
 func cleanup():
 	"""Clean up drag handler"""

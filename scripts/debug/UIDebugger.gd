@@ -131,7 +131,7 @@ func _setup_debug_ui():
 	info_scroll.anchor_top = 0.0
 	info_scroll.anchor_bottom = 1.0
 	info_scroll.offset_left = 5
-	info_scroll.offset_top = 35 # Below title bar
+	info_scroll.offset_top = 35  # Below title bar
 	info_scroll.offset_right = -5
 	info_scroll.offset_bottom = -5
 	info_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -243,7 +243,7 @@ func _input(event: InputEvent):
 				if is_active:
 					toggle_snapping_guides()
 					get_viewport().set_input_as_handled()
-			KEY_QUOTELEFT: # Backtick key
+			KEY_QUOTELEFT:  # Backtick key
 				toggle_debugger()
 				get_viewport().set_input_as_handled()
 

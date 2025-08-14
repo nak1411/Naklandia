@@ -2,6 +2,10 @@
 class_name InventoryItem_Base
 extends Resource
 
+# Signals
+signal quantity_changed(new_quantity: int)
+signal item_modified
+
 # Basic item properties
 @export var item_id: String = ""
 @export var item_name: String = "Unknown Item"
@@ -10,7 +14,7 @@ extends Resource
 
 # Physical properties (EVE-like)
 @export var volume: float = 1.0  # m³
-@export var mass: float = 1.0    # kg
+@export var mass: float = 1.0  # kg
 @export var quantity: int = 1
 @export var max_stack_size: int = 1
 
@@ -28,57 +32,57 @@ extends Resource
 @export var container_volume: float = 0.0
 @export var container_type: ContainerTypes.Type = ContainerTypes.Type.NONE
 
-# Signals
-signal quantity_changed(new_quantity: int)
-signal item_modified()
 
 func _init(id: String = "", name: String = "Unknown Item"):
 	if not id.is_empty():
 		item_id = id
 	else:
 		item_id = _generate_unique_id()
-	
+
 	if not name.is_empty():
 		item_name = name
 
+
 func _generate_unique_id() -> String:
 	return "item_" + str(Time.get_unix_time_from_system()) + "_" + str(randi() % 10000)
+
 
 # Volume and mass calculations
 func get_total_volume() -> float:
 	# Safety checks to prevent infinite recursion
 	if volume < 0 or quantity < 0:
 		return 0.0
-	
+
 	# Prevent overflow
 	if volume > 1000000.0 or quantity > 1000000:
 		return min(volume * quantity, 1000000.0)  # Cap at 1M
-	
+
 	return volume * quantity
+
 
 func get_total_mass() -> float:
 	return mass * quantity
 
+
 func get_total_value() -> float:
 	return base_value * quantity
+
 
 # Stack management
 func can_stack_with(other_item: InventoryItem_Base) -> bool:
 	if not other_item:
 		return false
-	
-	var can_stack = (item_id == other_item.item_id and 
-			quantity < max_stack_size and 
-			other_item.quantity < other_item.max_stack_size and
-			not is_unique and not other_item.is_unique)
-	
+
+	var can_stack = item_id == other_item.item_id and quantity < max_stack_size and other_item.quantity < other_item.max_stack_size and not is_unique and not other_item.is_unique
+
 	return can_stack
-	
+
+
 func split_stack(split_quantity: int) -> InventoryItem_Base:
 	"""Split a quantity from this stack into a new item"""
 	if split_quantity <= 0 or split_quantity >= quantity:
 		return null
-	
+
 	# Create a new item with the split quantity
 	var new_item = InventoryItem_Base.new()
 	new_item.item_id = item_id
@@ -97,54 +101,61 @@ func split_stack(split_quantity: int) -> InventoryItem_Base:
 	new_item.is_container = is_container
 	new_item.container_volume = container_volume
 	new_item.container_type = container_type
-	
+
 	# Reduce this item's quantity
 	quantity -= split_quantity
 	quantity_changed.emit(quantity)
 	item_modified.emit()
-	
+
 	return new_item
+
 
 func add_to_stack(amount: int) -> int:
 	var space_available = max_stack_size - quantity
 	var amount_to_add = min(amount, space_available)
-	
+
 	if amount_to_add > 0:
 		quantity += amount_to_add
 		quantity_changed.emit(quantity)
 		item_modified.emit()
-	
+
 	return amount - amount_to_add  # Return remaining amount that couldn't be added
+
 
 func remove_from_stack(amount: int) -> int:
 	var amount_to_remove = min(amount, quantity)
 	quantity -= amount_to_remove
-	
+
 	if quantity <= 0:
 		quantity = 0
-	
+
 	quantity_changed.emit(quantity)
 	item_modified.emit()
-	
+
 	return amount_to_remove
+
 
 # Type color coding
 func get_type_color() -> Color:
 	return ItemTypes.get_type_color(item_type)
 
+
 # Icon management
 func get_icon_texture() -> Texture2D:
 	if icon_path.is_empty():
 		return null
-	
+
 	return load(icon_path) as Texture2D
+
 
 func has_icon() -> bool:
 	return not icon_path.is_empty()
 
+
 # Validation
 func is_valid_item() -> bool:
 	return not item_name.is_empty() and volume > 0 and mass >= 0 and quantity > 0
+
 
 # Serialization helpers
 func to_dict() -> Dictionary:
@@ -167,6 +178,7 @@ func to_dict() -> Dictionary:
 		"container_type": container_type
 	}
 
+
 func from_dict(data: Dictionary):
 	item_id = data.get("item_id") if data.has("item_id") else ""
 	item_name = data.get("item_name") if data.has("item_name") else "Unknown Item"
@@ -185,9 +197,10 @@ func from_dict(data: Dictionary):
 	container_volume = data.get("container_volume") if data.has("container_volume") else 0.0
 	container_type = data.get("container_type", ContainerTypes.Type.NONE)
 
+
 func get_item_id() -> String:
 	return item_id
 
+
 func get_item_name() -> String:
 	return item_name
-

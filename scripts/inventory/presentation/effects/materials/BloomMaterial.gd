@@ -2,15 +2,17 @@
 class_name BloomMaterial
 extends ShaderMaterial
 
+
 func _init():
 	_setup_eve_bloom_shader()
+
 
 func _setup_eve_bloom_shader():
 	# Load the bloom shader
 	var bloom_shader = load("res://scripts/inventory/presentation/effects/shaders/bloom_glow.gdshader") as Shader
 	if bloom_shader:
 		shader = bloom_shader
-		
+
 		# Set EVE-style default parameters
 		set_shader_parameter("bloom_intensity", 2.0)
 		set_shader_parameter("bloom_threshold", 0.2)
@@ -22,6 +24,7 @@ func _setup_eve_bloom_shader():
 	else:
 		push_error("Failed to load bloom_glow.gdshader - check file path")
 
+
 func apply_slot_hover_preset():
 	"""Enhanced preset for inventory slot hover with smooth falloff"""
 	set_shader_parameter("bloom_intensity", 12.0)
@@ -31,6 +34,7 @@ func apply_slot_hover_preset():
 	set_shader_parameter("enable_pulse", false)
 	set_shader_parameter("falloff_power", 0.6)  # Smooth but defined falloff
 	set_shader_parameter("edge_softness", 0.2)  # Very soft edges
+
 
 func apply_selection_preset():
 	"""Enhanced preset for selected slots with stronger, pulsing bloom"""
@@ -43,6 +47,7 @@ func apply_selection_preset():
 	set_shader_parameter("falloff_power", 2.5)  # Slightly sharper for selection
 	set_shader_parameter("edge_softness", 1.0)
 
+
 func apply_subtle_preset():
 	"""Very subtle bloom for background slots"""
 	set_shader_parameter("bloom_intensity", 1.5)
@@ -52,6 +57,7 @@ func apply_subtle_preset():
 	set_shader_parameter("enable_pulse", false)
 	set_shader_parameter("falloff_power", 3.5)  # Very soft falloff
 	set_shader_parameter("edge_softness", 1.2)
+
 
 func apply_intense_preset():
 	"""Intense bloom for special states (rare items, etc.)"""
@@ -63,6 +69,7 @@ func apply_intense_preset():
 	set_shader_parameter("pulse_speed", 2.5)
 	set_shader_parameter("falloff_power", 2.2)
 	set_shader_parameter("edge_softness", 0.7)
+
 
 func set_slot_aspect_ratio(width: float, height: float):
 	"""Set the aspect ratio to match slot dimensions"""

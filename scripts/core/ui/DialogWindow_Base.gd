@@ -2,12 +2,18 @@
 class_name DialogWindow_Base
 extends Window_Base
 
+# Signals
+signal dialog_confirmed
+signal dialog_cancelled
+signal dialog_closed
+
+static var open_dialogs: Array[DialogWindow_Base] = []
+static var disabled_windows: Array[Control] = []
+
 # Dialog properties
 @export var dialog_title: String = "Dialog"
 @export var dialog_size: Vector2 = Vector2(400, 300)
 @export var is_modal: bool = true
-static var open_dialogs: Array[DialogWindow_Base] = []
-static var disabled_windows: Array[Control] = []
 
 # UI Components
 var dialog_content: VBoxContainer
@@ -15,55 +21,56 @@ var button_container: HBoxContainer
 
 var _content_initialized: bool = false
 
-# Signals
-signal dialog_confirmed()
-signal dialog_cancelled()
-signal dialog_closed()
 
 func _init(title: String = "Dialog", size: Vector2 = Vector2(400, 300)):
 	super._init()
-	
+
 	# Set dialog-specific properties
 	dialog_title = title
 	dialog_size = size
 	window_title = dialog_title
 	default_size = dialog_size
 	min_window_size = Vector2(dialog_size.x - 100, dialog_size.y - 100)
-	
+
 	# Dialogs should not be resizable by default
 	can_resize = false
 	can_maximize = false
 	can_minimize = false
-	
+
+
 func _ready():
 	super._ready()
-	
+
 	# Disable automatic resize handling
 	can_resize = false
+
 
 # Override any resize-related methods
 func handle_window_resize():
 	# Do nothing for dialogs
 	pass
 
+
 func _handle_resize_motion(_global_pos: Vector2):
 	# Do nothing for dialogs
 	pass
+
 
 func _update_grid_size():
 	# Do nothing for dialogs
 	pass
 
+
 func _setup_window_content():
 	"""Override base method to add dialog-specific content"""
 	if _content_initialized:
 		return
-	
+
 	_content_initialized = true
 	size = dialog_size
 	_setup_dialog_content()
 	_connect_dialog_signals()
-	
+
 
 func _setup_dialog_content():
 	# Create main content container
@@ -75,10 +82,10 @@ func _setup_dialog_content():
 	dialog_content.add_theme_constant_override("margin_top", 15)
 	dialog_content.add_theme_constant_override("margin_bottom", 15)
 	dialog_content.add_theme_constant_override("separation", 10)
-	
+
 	# Add to the content area
 	add_content(dialog_content)
-	
+
 	# Create button container
 	button_container = HBoxContainer.new()
 	button_container.name = "ButtonContainer"
@@ -86,15 +93,16 @@ func _setup_dialog_content():
 	button_container.add_theme_constant_override("separation", 10)
 	dialog_content.add_child(button_container)
 
+
 func _connect_dialog_signals():
 	# Connect window signals to dialog signals
 	if not window_closed.is_connected(_on_dialog_close_requested):
 		window_closed.connect(_on_dialog_close_requested)
 
+
 func _on_dialog_close_requested():
 	dialog_closed.emit()
 	close_dialog()
-	
 
 
 # Dialog-specific methods
@@ -107,32 +115,37 @@ func add_dialog_content(content: Control):
 		if button_index >= 0:
 			dialog_content.move_child(content, button_index)
 
+
 func add_button(text: String, action: Callable = Callable()) -> Button:
 	"""Add a button to the dialog's button container"""
 	var button = Button.new()
 	button.text = text
 	button.custom_minimum_size = Vector2(80, 35)
-	
+
 	if action.is_valid():
 		button.pressed.connect(action)
-	
+
 	button_container.add_child(button)
 	return button
+
 
 func add_confirm_cancel_buttons(confirm_text: String = "OK", cancel_text: String = "Cancel"):
 	"""Add standard confirm/cancel buttons"""
 	var confirm_button = add_button(confirm_text, _on_confirmed)
 	var cancel_button = add_button(cancel_text, _on_cancelled)
-	
+
 	return {"confirm": confirm_button, "cancel": cancel_button}
+
 
 func _on_confirmed():
 	dialog_confirmed.emit()
 	close_dialog()
 
+
 func _on_cancelled():
 	dialog_cancelled.emit()
 	close_dialog()
+
 
 func show_dialog(parent: Window = null):
 	"""Show the dialog, optionally centering on a parent window"""
@@ -140,16 +153,17 @@ func show_dialog(parent: Window = null):
 		center_on_window(parent)
 	else:
 		center_on_viewport()
-	
+
 	visible = true
-	
+
+
 func center_on_window(parent):
 	"""Center this dialog on the specified parent window"""
 	if parent:
 		# Handle both Window and Control types
 		var parent_pos: Vector2
 		var parent_size: Vector2
-		
+
 		if parent is Window:
 			parent_pos = Vector2(parent.position)
 			parent_size = Vector2(parent.size)
@@ -157,10 +171,10 @@ func center_on_window(parent):
 			# For Control-based windows, use global_position
 			parent_pos = parent.global_position
 			parent_size = parent.size
-		
+
 		var parent_center = parent_pos + parent_size / 2
 		position = parent_center - size / 2
-		
+
 		# Ensure dialog stays on screen
 		var viewport = get_viewport()
 		if viewport:
@@ -169,10 +183,12 @@ func center_on_window(parent):
 	else:
 		center_on_viewport()
 
+
 func close_dialog():
 	"""Close the dialog"""
 	visible = false
 	queue_free()
+
 
 func center_on_viewport():
 	"""Center dialog on the viewport"""
@@ -180,4 +196,3 @@ func center_on_viewport():
 	if viewport:
 		var screen_size = viewport.get_visible_rect().size
 		position = (screen_size - size) / 2
-		
