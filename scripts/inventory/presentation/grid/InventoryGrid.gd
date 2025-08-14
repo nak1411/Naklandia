@@ -263,12 +263,12 @@ func _on_virtual_container_resized():
 	if not enable_virtual_scrolling:
 		return
 	
-	# Throttle the updates during resize
-	if _resize_complete_timer and _resize_complete_timer.time_left > 0:
-		return
+	# Use the same resize timer system as the slots
+	if _resize_complete_timer.time_left > 0:
+		_resize_complete_timer.stop()
 	
-	# Defer the update to avoid doing it on every pixel
-	call_deferred("_update_virtual_viewport")
+	_resize_complete_timer.wait_time = 0.1
+	_resize_complete_timer.start()
 	
 func _on_virtual_scroll(value: float):
 	"""Handle virtual scroll position changes"""
@@ -283,7 +283,7 @@ func _update_virtual_viewport():
 	if not enable_virtual_scrolling or not virtual_scroll_container:
 		return
 	
-	# Skip during active resize
+	# Skip during active resize - now properly handled by resize timer
 	if _resize_complete_timer and _resize_complete_timer.time_left > 0:
 		return
 	
@@ -859,68 +859,55 @@ func _create_initial_slots():
 	_update_grid_size()
 
 func _perform_compact_reflow():
-	"""Perform a compact reflow of all items"""
-	if enable_virtual_scrolling or not container:
-		return
-	
-	# Prevent redundant reflows
-	if _is_refreshing_display or _is_expanding_grid or _is_shrinking_grid:
-		return
-	
-	_is_refreshing_display = true
-	_needs_reflow = false
-	
-	# Calculate new grid width
-	var available_width = _get_actual_available_width()
-	if available_width <= slot_size.x:
+	"""Perform compact reflow after resize stops"""
+	if enable_virtual_scrolling:
+		# Handle virtual scrolling update after resize completes
+		_update_virtual_viewport()
+	else:
+		# Handle traditional grid reflow
+		if not container or container.items.size() == 0:
+			return
+		
+		_needs_reflow = false
+		
+		# Calculate new grid dimensions based on window size
+		var available_width = _get_actual_available_width()
+		if available_width <= 0:
+			return
+		
+		var slots_per_row = max(1, int(available_width / (slot_size.x + slot_spacing)))
+		var new_width = max(min_grid_width, min(slots_per_row, 20))
+		
+		# Only reflow if width changed significantly
+		if abs(new_width - current_grid_width) < 1:
+			return
+		
+		_is_refreshing_display = true
+		
+		# Update width
+		current_grid_width = new_width
+		
+		# Get all visible items
+		var items_to_place: Array[InventoryItem_Base] = []
+		for item in container.items:
+			if _should_show_item(item):
+				items_to_place.append(item)
+		
+		# Calculate required height
+		var required_rows = (items_to_place.size() + current_grid_width - 1) / current_grid_width if items_to_place.size() > 0 else min_grid_height
+		current_grid_height = max(min_grid_height, required_rows + 1)
+		
+		# Update grid structure
+		if grid_container:
+			grid_container.columns = current_grid_width
+		
+		# Ensure adequate slots and place items
+		_ensure_adequate_slots()
+		_clear_all_slots_completely()
+		_place_items_compactly(items_to_place)
+		
+		force_all_slots_refresh()
 		_is_refreshing_display = false
-		return
-	
-	var slots_per_row = max(1, int(available_width / (slot_size.x + slot_spacing)))
-	var new_width = max(1, min(slots_per_row, 20))
-	
-	# Only proceed if width actually changed by more than 1 column
-	if abs(new_width - current_grid_width) < 2:  # Allow 1 column tolerance
-		_is_refreshing_display = false
-		return
-	
-	# Don't reflow for minor changes during active resize
-	if _resize_complete_timer.time_left > 0 and abs(new_width - current_grid_width) < 3:
-		_is_refreshing_display = false
-		return
-	
-	# Get all visible items
-	var items_to_place: Array[InventoryItem_Base] = []
-	for item in container.items:
-		if _should_show_item(item):
-			items_to_place.append(item)
-	
-	# Calculate required height
-	var required_rows = (items_to_place.size() + new_width - 1) / new_width if items_to_place.size() > 0 else min_grid_height
-	var new_height = max(min_grid_height, required_rows + 1)
-	
-	# Update dimensions
-	current_grid_width = new_width
-	current_grid_height = new_height
-	
-	# Update GridContainer columns
-	if grid_container:
-		grid_container.columns = current_grid_width
-	
-	# Skip the expensive operations during active resize
-	if _resize_complete_timer.time_left > 0:
-		_is_refreshing_display = false
-		return
-	
-	# Do the actual reflow
-	_ensure_adequate_slots()
-	_clear_all_slots_completely()
-	_place_items_compactly(items_to_place)
-	
-	_update_grid_size()
-	force_all_slots_refresh()
-	
-	_is_refreshing_display = false
 
 func _complete_reflow():
 	"""Complete the reflow after grid columns are updated"""
