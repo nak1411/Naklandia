@@ -82,6 +82,18 @@ func _gui_input(event: InputEvent):
 				# Right-click in empty area
 				empty_area_context_menu.emit(mouse_event.global_position)
 				get_viewport().set_input_as_handled()
+		
+		# ADD THIS EXACT PATTERN FROM THE GRID
+		elif mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
+			# Check if we have drag data (mouse released after drag)
+			var viewport = get_viewport()
+			if viewport and viewport.has_meta("current_drag_data"):
+				var drag_data = viewport.get_meta("current_drag_data")
+				var source_slot = drag_data.get("source_slot")
+				
+				if source_slot and source_slot.has_item():
+					# Drop on empty area - add item to container
+					_handle_drop_on_empty_area(source_slot, mouse_event.global_position)
 
 func _setup_ui():
 	# Create main container
@@ -212,7 +224,7 @@ func _create_header_cell(column: Dictionary) -> Control:
 	cell.mouse_filter = Control.MOUSE_FILTER_PASS
 	
 	# Use EXACTLY the same sizing logic as row cells
-	cell.custom_minimum_size.y = header_height  # Different height
+	cell.custom_minimum_size.y = header_height # Different height
 	if column.id == "name":
 		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		cell.custom_minimum_size.x = 100
@@ -338,20 +350,20 @@ func _should_show_item(item: InventoryItem_Base) -> bool:
 	var item_type_filter = _get_item_type_from_filter(current_filter_type)
 	return item.item_type == item_type_filter
 	
-func _get_item_type_from_filter(filter_index: int) -> ItemTypes.Type:  # ← CHANGED RETURN TYPE
+func _get_item_type_from_filter(filter_index: int) -> ItemTypes.Type: # ← CHANGED RETURN TYPE
 	match filter_index:
-		1: return ItemTypes.Type.WEAPON          
-		2: return ItemTypes.Type.ARMOR             
-		3: return ItemTypes.Type.CONSUMABLE      
-		4: return ItemTypes.Type.RESOURCE       
-		5: return ItemTypes.Type.BLUEPRINT      
-		6: return ItemTypes.Type.MODULE         
-		7: return ItemTypes.Type.SHIP           
-		8: return ItemTypes.Type.CONTAINER      
-		9: return ItemTypes.Type.AMMUNITION     
-		10: return ItemTypes.Type.IMPLANT       
-		11: return ItemTypes.Type.SKILL_BOOK    
-		_: return ItemTypes.Type.MISCELLANEOUS  
+		1: return ItemTypes.Type.WEAPON
+		2: return ItemTypes.Type.ARMOR
+		3: return ItemTypes.Type.CONSUMABLE
+		4: return ItemTypes.Type.RESOURCE
+		5: return ItemTypes.Type.BLUEPRINT
+		6: return ItemTypes.Type.MODULE
+		7: return ItemTypes.Type.SHIP
+		8: return ItemTypes.Type.CONTAINER
+		9: return ItemTypes.Type.AMMUNITION
+		10: return ItemTypes.Type.IMPLANT
+		11: return ItemTypes.Type.SKILL_BOOK
+		_: return ItemTypes.Type.MISCELLANEOUS
 
 func _compare_items(a: InventoryItem_Base, b: InventoryItem_Base) -> bool:
 	var result: bool = false
@@ -508,7 +520,7 @@ func clear_display():
 func handle_item_drop(item: InventoryItem_Base, position: Vector2) -> bool:
 	"""Handle item drop - implements renderer interface"""
 	# For list view, drops would typically just add to the container
-	return false  # Implement based on your drop logic
+	return false # Implement based on your drop logic
 
 func handle_item_selection(item: InventoryItem_Base):
 	"""Handle item selection - implements renderer interface"""
@@ -540,3 +552,104 @@ func _disconnect_container_signals():
 			container.item_removed.disconnect(_on_container_item_removed)
 		if container.item_moved.is_connected(_on_container_item_moved):
 			container.item_moved.disconnect(_on_container_item_moved)
+
+func can_drop_data(position: Vector2, data: Variant) -> bool:
+	"""Check if we can accept drop data on the list view"""
+	if not data or not container:
+		return false
+	
+	var source_item = data.get("item") as InventoryItem_Base
+	var source_container_id = data.get("container_id") as String
+	var source_slot = data.get("source_slot") as InventorySlot
+	var source_row = data.get("source_row") as ListRowManager
+	
+	if not source_item:
+		return false
+	
+	# Don't accept drops from same container (handled by row-to-row drops)
+	var current_container_id = container.container_id if container else ""
+	if source_container_id == current_container_id:
+		return false
+	
+	# Check if container can accept the item
+	return container.can_add_item(source_item)
+
+func drop_data(position: Vector2, data: Variant):
+	"""Handle drop data on the list view"""
+	if not data or not container:
+		return
+	
+	var source_item = data.get("item") as InventoryItem_Base
+	var source_container_id = data.get("container_id") as String
+	var source_slot = data.get("source_slot") as InventorySlot
+	var source_row = data.get("source_row") as ListRowManager
+	
+	if not source_item:
+		return
+	
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return
+	
+	# Perform the transfer
+	var success = inventory_manager.transfer_item(
+		source_item,
+		source_container_id,
+		container.container_id,
+		Vector2i(-1, -1) # Let container decide position
+	)
+	
+	# Notify source of drop result
+	if success:
+		if source_slot and source_slot.has_method("_on_external_drop_result"):
+			source_slot._on_external_drop_result(true)
+		elif source_row and source_row.has_method("_on_external_drop_result"):
+			source_row._on_external_drop_result(true)
+		
+		# Refresh our display
+		refresh_display()
+
+func _handle_drop_on_empty_area(source_slot: InventorySlot, drop_position: Vector2) -> bool:
+	"""Handle dropping an item on empty list area - simplified version for list"""
+	if not source_slot or not source_slot.has_item():
+		return false
+	
+	var source_item = source_slot.get_item()
+	
+	# Don't handle same container drops
+	if source_slot.container_id == container_id:
+		return false
+	
+	# Cross-container transfer
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		return false
+	
+	var success = inventory_manager.transfer_item(
+		source_item,
+		source_slot.container_id,
+		container_id,
+		Vector2i(-1, -1) # Let container decide position
+	)
+	
+	if success:
+		refresh_display()
+	
+	return success
+
+func _get_inventory_manager() -> InventoryManager:
+	"""Find the inventory manager in the scene tree"""
+	var scene_root = get_tree().current_scene
+	return _find_inventory_manager_recursive(scene_root)
+
+func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
+	"""Recursively search for inventory manager"""
+	if node is InventoryManager:
+		return node
+	
+	for child in node.get_children():
+		var result = _find_inventory_manager_recursive(child)
+		if result:
+			return result
+	
+	return null
