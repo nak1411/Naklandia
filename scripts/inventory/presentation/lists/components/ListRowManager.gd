@@ -468,8 +468,8 @@ func _start_drag():
 	# Start following mouse
 	_follow_mouse(preview)
 
-	# Visual feedback on source row - use lighter transparency to maintain layout
-	modulate.a = 0.7  # Changed from 0.5 to 0.7 to keep layout more stable
+	# FIXED: Use background color change instead of modulate for visual feedback
+	_update_background_color_with_alpha(0.6)  # Fade the background instead of the whole row
 
 	# Emit signal
 	item_drag_started.emit(self, item)
@@ -865,18 +865,11 @@ func _drop_data(_position: Vector2, data: Variant):
 func _set_merge_highlight(enabled: bool):
 	"""Set visual feedback for potential merge"""
 	if enabled:
-		# Green highlight for valid merge
-		background.modulate = Color(0.5, 1.0, 0.5, 1.0)
+		# Green highlight for valid merge - don't use modulate, use direct color setting
+		_update_background_color(Color(0.2, 0.6, 0.2, 1.0))
 	else:
 		# Reset to normal color based on current state
-		if is_selected:
-			background.modulate = selected_color
-		elif is_hovered:
-			background.modulate = hover_color
-		elif use_alternate:
-			background.modulate = alternate_color
-		else:
-			background.modulate = normal_color
+		_update_background()
 
 
 func _handle_merge_with_source(source_row: ListRowManager, source_item: InventoryItem_Base):
@@ -1001,7 +994,9 @@ func _end_drag():
 
 	is_dragging = false
 	drag_preview_created = false
-	modulate.a = 1.0
+
+	# FIXED: Reset background properly instead of using modulate
+	_update_background()
 	_set_merge_highlight(false)
 
 	var viewport = get_viewport()
@@ -1035,6 +1030,25 @@ func _attempt_drop_on_list_rows(end_position: Vector2) -> bool:
 				return true
 
 	return false
+
+
+func _update_background_color_with_alpha(alpha: float):
+	"""Update background color with specific alpha for drag feedback"""
+	if not background:
+		return
+
+	var base_color: Color
+	if is_selected:
+		base_color = selected_color
+	elif is_hovered:
+		base_color = hover_color
+	elif use_alternate:
+		base_color = alternate_color
+	else:
+		base_color = normal_color
+
+	var faded_color = Color(base_color.r, base_color.g, base_color.b, alpha)
+	_update_background_color(faded_color)
 
 
 func _cleanup_drag_preview():
