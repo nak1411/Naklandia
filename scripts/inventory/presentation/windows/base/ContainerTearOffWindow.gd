@@ -32,12 +32,14 @@ func _init(tear_container: InventoryContainer_Base, parent_inv_window: Inventory
 	else:
 		window_title = "Container"
 		
-	# Same defaults as main inventory window
-	default_size = Vector2(800, 600)
-	min_window_size = Vector2(400, 300)
-	max_window_size = Vector2(1400, 1000)
+	
 
 func _ready():
+	# Same defaults as main inventory window
+	default_size = Vector2(500, 400)
+	min_window_size = Vector2(300, 250)
+	max_window_size = Vector2(1200, 800)
+
 	super._ready()
 	
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -108,6 +110,17 @@ func _setup_content():
 		_initialize_tearoff_content()
 	
 	call_deferred("setup_child_focus_handlers")
+	call_deferred("_resize_tearoff_window")
+
+func _resize_tearoff_window():
+	"""Resize tearoff window to smaller default size"""
+	size = Vector2(500, 400)
+	# Ensure it stays within screen bounds
+	var viewport = get_viewport()
+	if viewport:
+		var screen_size = viewport.get_visible_rect().size
+		position.x = clampf(position.x, 0, screen_size.x - size.x)
+		position.y = clampf(position.y, 0, screen_size.y - size.y)
 
 func _setup_item_actions():
 	"""Initialize the item actions handler - SAME AS MAIN WINDOW"""
