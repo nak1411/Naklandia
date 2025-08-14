@@ -83,17 +83,17 @@ func _gui_input(event: InputEvent):
 				empty_area_context_menu.emit(mouse_event.global_position)
 				get_viewport().set_input_as_handled()
 		
-		# ADD THIS EXACT PATTERN FROM THE GRID
+		# Handle drops from other windows (slots OR rows)
 		elif mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
-			# Check if we have drag data (mouse released after drag)
 			var viewport = get_viewport()
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
 				var source_slot = drag_data.get("source_slot")
+				var source_row = drag_data.get("source_row")
 				
-				if source_slot and source_slot.has_item():
-					# Drop on empty area - add item to container
-					_handle_drop_on_empty_area(source_slot, mouse_event.global_position)
+				# Handle drops from either slots or rows
+				if (source_slot and source_slot.has_item()) or (source_row and source_row.item):
+					_handle_drop_on_empty_area(drag_data, mouse_event.global_position)
 
 func _setup_ui():
 	# Create main container
@@ -609,27 +609,40 @@ func drop_data(position: Vector2, data: Variant):
 		# Refresh our display
 		refresh_display()
 
-func _handle_drop_on_empty_area(source_slot: InventorySlot, drop_position: Vector2) -> bool:
-	"""Handle dropping an item on empty list area - simplified version for list"""
-	if not source_slot or not source_slot.has_item():
+func _handle_drop_on_empty_area(drag_data: Dictionary, drop_position: Vector2) -> bool:
+	"""Handle drops from any source (slot or row)"""
+	if not container:
 		return false
 	
-	var source_item = source_slot.get_item()
+	var source_item: InventoryItem_Base
+	var source_container_id: String
+	
+	# Get data from either slot or row source
+	var source_slot = drag_data.get("source_slot") as InventorySlot
+	var source_row = drag_data.get("source_row") as ListRowManager
+	
+	if source_slot and source_slot.has_item():
+		source_item = source_slot.get_item()
+		source_container_id = source_slot.container_id
+	elif source_row and source_row.item:
+		source_item = source_row.item
+		source_container_id = source_row._get_container_id()
+	else:
+		return false
 	
 	# Don't handle same container drops
-	if source_slot.container_id == container_id:
+	if source_container_id == container_id:
 		return false
 	
-	# Cross-container transfer
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
 		return false
 	
 	var success = inventory_manager.transfer_item(
 		source_item,
-		source_slot.container_id,
+		source_container_id,
 		container_id,
-		Vector2i(-1, -1) # Let container decide position
+		Vector2i(-1, -1)
 	)
 	
 	if success:

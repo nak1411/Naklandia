@@ -39,11 +39,16 @@ func _input(event: InputEvent):
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
 				var source_slot = drag_data.get("source_slot")
+				var source_row = drag_data.get("source_row")
 				
-				# Check if drag is from an external source (tearoff window)
+				# Check if drag is from an external source (tearoff window) - HANDLE BOTH SLOT AND ROW
+				var source_container_id = ""
 				if source_slot and source_slot.has_method("get_container_id"):
-					var source_container_id = source_slot.get_container_id()
-					
+					source_container_id = source_slot.get_container_id()
+				elif source_row and source_row.has_method("_get_container_id"):
+					source_container_id = source_row._get_container_id()
+				
+				if source_container_id != "":
 					# Check if this is from a tearoff container (starts with "tearoff_")
 					if source_container_id.begins_with("tearoff_"):
 						# Extract the original container ID
@@ -366,12 +371,19 @@ func _get_target_container_for_drop(drop_position: Vector2) -> InventoryContaine
 func _handle_cross_window_drop_to_main(drag_data: Dictionary, target_container: InventoryContainer_Base) -> bool:
 	"""Handle drop from tearoff window to main inventory"""
 	var source_slot = drag_data.get("source_slot")
+	var source_row = drag_data.get("source_row")
 	var item = drag_data.get("item")
 	
 	if not item or not inventory_manager or not target_container:
 		return false
 	
-	var source_container_id = source_slot.get_container_id() if source_slot else ""
+	# Get source container ID from either slot or row
+	var source_container_id = ""
+	if source_slot and source_slot.has_method("get_container_id"):
+		source_container_id = source_slot.get_container_id()
+	elif source_row and source_row.has_method("_get_container_id"):
+		source_container_id = source_row._get_container_id()
+	
 	if source_container_id == "" or source_container_id == target_container.container_id:
 		return false
 	
@@ -396,8 +408,15 @@ func _handle_cross_window_drop_to_main(drag_data: Dictionary, target_container: 
 		transfer_amount
 	)
 	
-	if success and content:
+	if success:
+		# Refresh main window display
 		content.refresh_display()
+		
+		# Notify source of successful drop
+		if source_slot and source_slot.has_method("_on_external_drop_result"):
+			source_slot._on_external_drop_result(true)
+		elif source_row and source_row.has_method("_on_external_drop_result"):
+			source_row._on_external_drop_result(true)
 	
 	return success
 

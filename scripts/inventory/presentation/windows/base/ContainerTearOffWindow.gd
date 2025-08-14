@@ -66,10 +66,16 @@ func _input(event: InputEvent):
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
 				var source_slot = drag_data.get("source_slot")
+				var source_row = drag_data.get("source_row")
 				
-				# Check if drag is from an external source (not our container)
+				# Check if drag is from an external source (not our container) - HANDLE BOTH SLOT AND ROW
+				var source_container_id = ""
 				if source_slot and source_slot.has_method("get_container_id"):
-					var source_container_id = source_slot.get_container_id()
+					source_container_id = source_slot.get_container_id()
+				elif source_row and source_row.has_method("_get_container_id"):
+					source_container_id = source_row._get_container_id()
+				
+				if source_container_id != "":
 					var our_container_id = container_view.container_id if container_view else container.container_id
 					
 					# Only accept drops from OTHER containers
