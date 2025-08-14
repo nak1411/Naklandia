@@ -17,6 +17,8 @@ var slot_size: Vector2
 var border_color: Color = Color(0.2, 0.2, 0.2, 1.0)
 var highlight_color: Color = Color.YELLOW
 var selection_color: Color = Color.CYAN
+var outline_overlay: Panel
+var outline_tween: Tween
 
 
 func _init(inventory_slot: InventorySlot):
@@ -33,6 +35,7 @@ func setup_visual_components():
 	_create_background_panel()
 	_create_content_container()
 	_create_item_display_components()
+	_setup_border_outline_system()
 
 	# Verify all components were created
 	if not item_icon:
@@ -131,6 +134,87 @@ func _create_item_display_components():
 	slot.add_child(item_name_label)
 
 
+func _setup_border_outline_system():
+	"""Setup outline around the item icon area only (64x64)"""
+	outline_overlay = Panel.new()
+	outline_overlay.name = "IconOutlineOverlay"
+	outline_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	outline_overlay.z_index = 1  # Above the slot content
+	outline_overlay.visible = false
+	outline_overlay.modulate.a = 0.0  # Start invisible
+
+	# Position and size to match the item icon area only
+	outline_overlay.position = Vector2(0, 0)  # Same as item_icon position
+	outline_overlay.size = Vector2(64, 64)  # Same as item_icon size
+
+	# Create style with border
+	var outline_style = StyleBoxFlat.new()
+	outline_style.bg_color = Color.TRANSPARENT
+	outline_style.border_width_left = 2
+	outline_style.border_width_right = 2
+	outline_style.border_width_top = 2
+	outline_style.border_width_bottom = 2
+	outline_style.border_color = Color(0.6, 0.8, 1.0, 1.0)  # EVE blue
+
+	outline_overlay.add_theme_stylebox_override("panel", outline_style)
+	slot.add_child(outline_overlay)
+
+
+func _show_outline():
+	"""Show hover outline with smooth fade in"""
+	if not outline_overlay:
+		return
+
+	# Kill any existing tween
+	if outline_tween:
+		outline_tween.kill()
+
+	# Update border color for hover
+	var style = outline_overlay.get_theme_stylebox("panel") as StyleBoxFlat
+	if style:
+		style.border_color = Color(0.6, 0.8, 1.0, 1.0)  # EVE blue
+
+	# Show and fade in
+	outline_overlay.visible = true
+	outline_tween = slot.create_tween()
+	outline_tween.tween_property(outline_overlay, "modulate:a", 1.0, 0.15)
+
+
+func _show_selection_outline():
+	"""Show selection outline with smooth transition"""
+	if not outline_overlay:
+		return
+
+	# Kill any existing tween
+	if outline_tween:
+		outline_tween.kill()
+
+	# Update border color for selection
+	var style = outline_overlay.get_theme_stylebox("panel") as StyleBoxFlat
+	if style:
+		style.border_color = Color(0.8, 0.9, 1.0, 1.0)  # Brighter blue
+
+	# Show and fade in
+	outline_overlay.visible = true
+	outline_tween = slot.create_tween()
+	outline_tween.tween_property(outline_overlay, "modulate:a", 1.0, 0.15)
+
+
+func _hide_outline():
+	"""Hide outline with smooth fade out"""
+	if not outline_overlay or not outline_overlay.visible:
+		return
+
+	# Kill any existing tween
+	if outline_tween:
+		outline_tween.kill()
+
+	# Fade out then hide
+	outline_tween = slot.create_tween()
+	outline_tween.tween_property(outline_overlay, "modulate:a", 0.0, 0.2)
+	outline_tween.tween_callback(func(): outline_overlay.visible = false)
+
+
 func update_item_display():
 	"""Update the visual display for the current item"""
 	# Lazy initialization check
@@ -141,6 +225,8 @@ func update_item_display():
 
 	if not item:
 		_clear_item_display()
+		# IMPORTANT: Force visual state update when slot becomes empty
+		_reset_empty_slot_state()
 		return
 
 	# Now we should have components
@@ -177,6 +263,29 @@ func update_item_display():
 			item_name_label.visible = true
 		else:
 			item_name_label.visible = false
+
+
+func _reset_empty_slot_state():
+	"""Reset visual state when slot becomes empty"""
+	# Force hide any outline
+	if outline_overlay:
+		outline_overlay.visible = false
+		outline_overlay.modulate.a = 0.0
+
+	# Kill any running tweens
+	if outline_tween:
+		outline_tween.kill()
+		outline_tween = null
+
+	# Reset background to empty slot style
+	if background_panel:
+		var style_box = StyleBoxFlat.new()
+		style_box.bg_color = Color(0.1, 0.1, 0.1, 0.0)  # Empty slot background
+		style_box.border_width_left = 0
+		style_box.border_width_right = 0
+		style_box.border_width_top = 0
+		style_box.border_width_bottom = 0
+		background_panel.add_theme_stylebox_override("panel", style_box)
 
 
 func _auto_scale_quantity_label():
@@ -231,7 +340,7 @@ func _create_fallback_icon(item: InventoryItem_Base):
 
 
 func update_visual_state(is_highlighted: bool, is_selected: bool, is_occupied: bool):
-	"""Update visual state based on slot status"""
+	"""Update visual state - keep background unchanged on hover"""
 	if not background_panel:
 		return
 
@@ -242,16 +351,23 @@ func update_visual_state(is_highlighted: bool, is_selected: bool, is_occupied: b
 	style_box.border_width_top = 0
 	style_box.border_width_bottom = 0
 
-	if is_selected:
-		style_box.bg_color = selection_color.darkened(0.8)
-	elif is_highlighted:
-		style_box.bg_color = highlight_color.darkened(0.9)
-	elif is_occupied:
-		style_box.border_color = border_color.lightened(0.3)
-		style_box.bg_color = Color(0.1, 0.1, 0.1, 1.0)
+	# Only show outline on slots with items
+	if outline_overlay:
+		if is_highlighted and is_occupied:
+			_show_outline()
+		elif is_selected and is_occupied:
+			_show_selection_outline()
+		else:
+			_hide_outline()
+
+	# FIXED: Keep background exactly the same - don't change on hover
+	if is_occupied:
+		if is_selected:
+			style_box.bg_color = Color(0.15, 0.15, 0.25, 0.0)  # Only selection changes background
+		else:
+			style_box.bg_color = Color(0.1, 0.1, 0.1, 0.0)  # Same color whether highlighted or not
 	else:
-		style_box.border_color = border_color
-		style_box.bg_color = Color(0.1, 0.1, 0.1, 1.0)
+		style_box.bg_color = Color(0.1, 0.1, 0.1, 0.0)  # Empty slot
 
 	background_panel.add_theme_stylebox_override("panel", style_box)
 
@@ -264,6 +380,12 @@ func force_visual_refresh():
 
 func cleanup():
 	"""Clean up visual components"""
+	if outline_tween:
+		outline_tween.kill()
+		outline_tween = null
+	if outline_overlay:
+		outline_overlay.queue_free()
+		outline_overlay = null
 	background_panel = null
 	item_icon = null
 	quantity_label = null

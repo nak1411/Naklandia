@@ -133,14 +133,30 @@ func _on_gui_input(event: InputEvent):
 
 
 func _on_mouse_entered():
-	"""Handle mouse enter"""
+	"""Handle mouse enter - only highlight if slot has an item"""
 	is_hovered = true
+
+	# Only set highlighted state for slots WITH items
+	if has_item() and not is_highlighted:
+		is_highlighted = true
+		if visuals:
+			visuals.update_visual_state(is_highlighted, is_selected, has_item())
+		print("DEBUG: Slot hover - showing outline for item: ", item.item_name if item else "none")
+
 	tooltip_manager.start_tooltip_timer()
 
 
 func _on_mouse_exited():
 	"""Handle mouse exit"""
 	is_hovered = false
+
+	# Clear highlighted state when not hovering
+	if is_highlighted and not is_selected:
+		is_highlighted = false
+		if visuals:
+			visuals.update_visual_state(is_highlighted, is_selected, has_item())
+		print("DEBUG: Slot exit - hiding outline")
+
 	tooltip_manager.hide_tooltip()
 
 
@@ -284,7 +300,8 @@ func has_item() -> bool:
 func set_highlighted(highlighted: bool):
 	"""Set highlight state"""
 	is_highlighted = highlighted
-	visuals.update_visual_state(is_highlighted, is_selected, has_item())
+	if visuals:
+		visuals.update_visual_state(is_highlighted, is_selected, has_item())
 
 
 func set_selected(selected: bool):

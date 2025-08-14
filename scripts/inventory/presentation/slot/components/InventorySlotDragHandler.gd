@@ -170,7 +170,7 @@ func _update_preview_position(preview: Control):
 
 
 func _update_drop_target_highlighting_with_bounds():
-	"""Update highlighting using bounding box detection instead of mouse position"""
+	"""Update highlighting using bounding box detection - don't highlight empty slots"""
 	var target_slot = _find_best_drop_slot(Vector2.ZERO)  # Mouse pos not needed anymore
 
 	# Clear previous highlighting
@@ -178,16 +178,18 @@ func _update_drop_target_highlighting_with_bounds():
 		currently_highlighted_slot.set_highlighted(false)
 		currently_highlighted_slot = null
 
-	# Highlight new target slot
+	# Only highlight target slot if it's valid AND has an item
 	if target_slot and target_slot != slot:
 		# Check if this is a valid drop target
 		if _is_valid_drop_target(target_slot):
-			target_slot.set_highlighted(true)
-			currently_highlighted_slot = target_slot
+			# ONLY highlight slots that already have items - not empty slots
+			if target_slot.has_item():
+				target_slot.set_highlighted(true)
+				currently_highlighted_slot = target_slot
 
 
 func _update_drop_target_highlighting(mouse_pos: Vector2):
-	"""Update highlighting for the slot under the mouse cursor"""
+	"""Update highlighting for the slot under the mouse cursor - don't highlight empty slots"""
 	var target_slot = _find_best_drop_slot(mouse_pos)
 
 	# Clear previous highlighting
@@ -195,12 +197,14 @@ func _update_drop_target_highlighting(mouse_pos: Vector2):
 		currently_highlighted_slot.set_highlighted(false)
 		currently_highlighted_slot = null
 
-	# Highlight new target slot
+	# Only highlight target slot if it's valid AND has an item
 	if target_slot and target_slot != slot:
 		# Check if this is a valid drop target
 		if _is_valid_drop_target(target_slot):
-			target_slot.set_highlighted(true)
-			currently_highlighted_slot = target_slot
+			# ONLY highlight slots that already have items - not empty slots
+			if target_slot.has_item():
+				target_slot.set_highlighted(true)
+				currently_highlighted_slot = target_slot
 
 
 func _find_best_drop_slot(_mouse_pos: Vector2) -> InventorySlot:
