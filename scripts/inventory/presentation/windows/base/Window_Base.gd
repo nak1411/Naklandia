@@ -117,6 +117,7 @@ func _ready():
 
 	snapping_manager = get_node("/root/WindowSnappingManager") if has_node("/root/WindowSnappingManager") else null
 
+
 func _process(_delta):
 	if edge_bloom_overlay and size != last_known_size:
 		_update_edge_bloom_size()
@@ -1417,9 +1418,17 @@ func _start_resize(mode: ResizeMode, mouse_pos: Vector2):
 	resize_start_size = size
 	resize_start_mouse = mouse_pos
 
+	# Notify snapping manager of resize start
+	if snapping_manager:
+		snapping_manager.start_window_resize(self, mode)
+
 
 func _end_resize():
 	if is_resizing:
+		# Notify snapping manager of resize end
+		if snapping_manager:
+			snapping_manager.end_window_resize(self)
+
 		is_resizing = false
 		resize_mode = ResizeMode.NONE
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
@@ -1463,7 +1472,13 @@ func _handle_resize_motion(mouse_pos: Vector2):
 			new_size.x += delta.x
 			new_size.y += delta.y
 
-	# Apply size constraints
+	# APPLY RESIZE SNAPPING - get snapped position and size from snapping manager
+	if snapping_manager:
+		var snap_result = snapping_manager.update_window_resize(self, new_position, new_size, resize_mode)
+		new_position = snap_result.get("position", new_position)
+		new_size = snap_result.get("size", new_size)
+
+	# Apply size constraints AFTER snapping
 	var constrained_size = Vector2(max(min_window_size.x, min(new_size.x, max_window_size.x)), max(min_window_size.y, min(new_size.y, max_window_size.y)))
 
 	# Adjust position if size was constrained (for left/top resizing)

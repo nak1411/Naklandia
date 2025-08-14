@@ -3,6 +3,7 @@ extends Node
 
 # Signals
 signal window_snapped(window: Window_Base, snap_type: String, target_pos: Vector2)
+signal window_resize_snapped(window: Window_Base, snap_type: String, final_size: Vector2, final_position: Vector2)
 
 # Snap distance threshold (pixels)
 @export var snap_distance: float = 10.0
@@ -21,6 +22,10 @@ signal window_snapped(window: Window_Base, snap_type: String, target_pos: Vector
 
 # Reference to UI manager
 var ui_manager: UIManager
+
+var resizing_window: Window_Base
+var current_resize_mode: Window_Base.ResizeMode
+var current_resize_preview: Dictionary = {}
 
 # Debug line guides (old system)
 var snap_guides: Array[Line2D] = []
@@ -907,6 +912,506 @@ func _create_window_edge_indicator(position: Vector2, direction: String, color: 
 
 	# Add subtle pulsing
 	_animate_indicator_pulse(indicator)
+
+
+func start_window_resize(window: Window_Base, resize_mode: Window_Base.ResizeMode):
+	"""Called when window resize starts"""
+	resizing_window = window
+	current_resize_mode = resize_mode
+	current_resize_preview = {}
+	_cache_snap_targets()
+	_show_snap_guides()
+
+
+func update_window_resize(window: Window_Base, new_position: Vector2, new_size: Vector2, resize_mode: Window_Base.ResizeMode) -> Dictionary:
+	"""Update window position/size during resize - shows preview and returns snapped values"""
+	if window != resizing_window:
+		return {"position": new_position, "size": new_size}
+
+	var preview_info_combined = {}
+	var snapped_position = new_position
+	var snapped_size = new_size
+
+	# Check for edge snapping during resize
+	if snap_to_edges:
+		var edge_snap_result = _check_resize_edge_snapping(window, new_position, new_size, resize_mode)
+		if edge_snap_result.has("snap_applied"):
+			preview_info_combined.merge(edge_snap_result)
+			snapped_position = edge_snap_result.get("position", new_position)
+			snapped_size = edge_snap_result.get("size", new_size)
+
+	# Check for window edge snapping during resize
+	if snap_to_windows:
+		var window_snap_result = _check_resize_window_snapping(window, snapped_position, snapped_size, resize_mode)
+		if window_snap_result.has("snap_applied"):
+			preview_info_combined.merge(window_snap_result)
+			snapped_position = window_snap_result.get("position", snapped_position)
+			snapped_size = window_snap_result.get("size", snapped_size)
+
+	# Store preview for visual feedback
+	current_resize_preview = preview_info_combined
+
+	# Update visual guides
+	_update_resize_guides(preview_info_combined, snapped_position, snapped_size)
+
+	return {"position": snapped_position, "size": snapped_size}
+
+
+func end_window_resize(window: Window_Base):
+	"""Called when window resize ends"""
+	if window != resizing_window:
+		return
+
+	# Emit signal if snapping occurred
+	if not current_resize_preview.is_empty():
+		window_resize_snapped.emit(window, current_resize_preview.get("type", ""), window.size, window.position)
+
+	# Clean up
+	resizing_window = null
+	current_resize_mode = Window_Base.ResizeMode.NONE
+	current_resize_preview = {}
+	_hide_snap_guides()
+	snap_targets.clear()
+
+
+func _check_resize_edge_snapping(window: Window_Base, pos: Vector2, window_size: Vector2, resize_mode: Window_Base.ResizeMode) -> Dictionary:
+	"""Check for screen edge snapping during resize"""
+	var screen_size = get_viewport().get_visible_rect().size
+	var snap_info = {}
+	var snapped_pos = pos
+	var snapped_size = window_size
+
+	# Only snap the edges that are being resized
+	match resize_mode:
+		Window_Base.ResizeMode.LEFT:
+			# Snap left edge to screen left
+			if abs(pos.x - edge_padding) <= snap_distance:
+				var size_change = pos.x - edge_padding
+				snapped_pos.x = edge_padding
+				snapped_size.x += size_change
+				snap_info["left_edge"] = true
+
+		Window_Base.ResizeMode.RIGHT:
+			# Snap right edge to screen right
+			if abs(pos.x + window_size.x - (screen_size.x - edge_padding)) <= snap_distance:
+				snapped_size.x = screen_size.x - pos.x - edge_padding
+				snap_info["right_edge"] = true
+
+		Window_Base.ResizeMode.TOP:
+			# Snap top edge to screen top
+			if abs(pos.y - edge_padding) <= snap_distance:
+				var size_change = pos.y - edge_padding
+				snapped_pos.y = edge_padding
+				snapped_size.y += size_change
+				snap_info["top_edge"] = true
+
+		Window_Base.ResizeMode.BOTTOM:
+			# Snap bottom edge to screen bottom
+			if abs(pos.y + window_size.y - (screen_size.y - edge_padding)) <= snap_distance:
+				snapped_size.y = screen_size.y - pos.y - edge_padding
+				snap_info["bottom_edge"] = true
+
+		Window_Base.ResizeMode.TOP_LEFT:
+			# Check both top and left edges
+			if abs(pos.x - edge_padding) <= snap_distance:
+				var size_change = pos.x - edge_padding
+				snapped_pos.x = edge_padding
+				snapped_size.x += size_change
+				snap_info["left_edge"] = true
+			if abs(pos.y - edge_padding) <= snap_distance:
+				var size_change = pos.y - edge_padding
+				snapped_pos.y = edge_padding
+				snapped_size.y += size_change
+				snap_info["top_edge"] = true
+
+		Window_Base.ResizeMode.TOP_RIGHT:
+			# Check top and right edges
+			if abs(pos.x + window_size.x - (screen_size.x - edge_padding)) <= snap_distance:
+				snapped_size.x = screen_size.x - pos.x - edge_padding
+				snap_info["right_edge"] = true
+			if abs(pos.y - edge_padding) <= snap_distance:
+				var size_change = pos.y - edge_padding
+				snapped_pos.y = edge_padding
+				snapped_size.y += size_change
+				snap_info["top_edge"] = true
+
+		Window_Base.ResizeMode.BOTTOM_LEFT:
+			# Check bottom and left edges
+			if abs(pos.x - edge_padding) <= snap_distance:
+				var size_change = pos.x - edge_padding
+				snapped_pos.x = edge_padding
+				snapped_size.x += size_change
+				snap_info["left_edge"] = true
+			if abs(pos.y + window_size.y - (screen_size.y - edge_padding)) <= snap_distance:
+				snapped_size.y = screen_size.y - pos.y - edge_padding
+				snap_info["bottom_edge"] = true
+
+		Window_Base.ResizeMode.BOTTOM_RIGHT:
+			# Check bottom and right edges
+			if abs(pos.x + window_size.x - (screen_size.x - edge_padding)) <= snap_distance:
+				snapped_size.x = screen_size.x - pos.x - edge_padding
+				snap_info["right_edge"] = true
+			if abs(pos.y + window_size.y - (screen_size.y - edge_padding)) <= snap_distance:
+				snapped_size.y = screen_size.y - pos.y - edge_padding
+				snap_info["bottom_edge"] = true
+
+	if snap_info.size() > 0:
+		snap_info["type"] = "edge_resize"
+		snap_info["position"] = snapped_pos
+		snap_info["size"] = snapped_size
+		snap_info["snap_applied"] = true
+
+	return snap_info
+
+
+func _check_resize_window_snapping(window: Window_Base, pos: Vector2, window_size: Vector2, resize_mode: Window_Base.ResizeMode) -> Dictionary:
+	"""Check for window-to-window edge snapping AND alignment during resize"""
+	var window_rect = Rect2(pos, window_size)
+	var snap_info = {}
+	var snapped_pos = pos
+	var snapped_size = window_size
+	var best_snap_distance = snap_distance + 1
+	
+	# Check against all window targets
+	for target in snap_targets:
+		if target.type != "window":
+			continue
+		
+		var target_rect = target.rect
+		
+		# Check snapping based on resize mode
+		match resize_mode:
+			Window_Base.ResizeMode.LEFT:
+				# Check both edge-to-edge snapping and alignment
+				var left_snaps = _get_resize_left_edge_snaps(window_rect, target_rect, pos)
+				for snap in left_snaps:
+					if snap.distance <= snap_distance and snap.distance < best_snap_distance:
+						snapped_pos.x = snap.new_pos_x
+						snapped_size.x = snap.new_size_x
+						snap_info["target_window"] = target.window
+						snap_info["snap_type"] = snap.type
+						best_snap_distance = snap.distance
+			
+			Window_Base.ResizeMode.RIGHT:
+				var right_snaps = _get_resize_right_edge_snaps(window_rect, target_rect, pos)
+				for snap in right_snaps:
+					if snap.distance <= snap_distance and snap.distance < best_snap_distance:
+						snapped_size.x = snap.new_size_x
+						snap_info["target_window"] = target.window
+						snap_info["snap_type"] = snap.type
+						best_snap_distance = snap.distance
+			
+			Window_Base.ResizeMode.TOP:
+				var top_snaps = _get_resize_top_edge_snaps(window_rect, target_rect, pos)
+				for snap in top_snaps:
+					if snap.distance <= snap_distance and snap.distance < best_snap_distance:
+						snapped_pos.y = snap.new_pos_y
+						snapped_size.y = snap.new_size_y
+						snap_info["target_window"] = target.window
+						snap_info["snap_type"] = snap.type
+						best_snap_distance = snap.distance
+			
+			Window_Base.ResizeMode.BOTTOM:
+				var bottom_snaps = _get_resize_bottom_edge_snaps(window_rect, target_rect, pos)
+				for snap in bottom_snaps:
+					if snap.distance <= snap_distance and snap.distance < best_snap_distance:
+						snapped_size.y = snap.new_size_y
+						snap_info["target_window"] = target.window
+						snap_info["snap_type"] = snap.type
+						best_snap_distance = snap.distance
+			
+			# For corner resizing, handle both axes independently
+			Window_Base.ResizeMode.TOP_LEFT, Window_Base.ResizeMode.TOP_RIGHT, Window_Base.ResizeMode.BOTTOM_LEFT, Window_Base.ResizeMode.BOTTOM_RIGHT:
+				# Handle X-axis snapping for corner modes
+				if resize_mode in [Window_Base.ResizeMode.TOP_LEFT, Window_Base.ResizeMode.BOTTOM_LEFT]:
+					var left_snaps = _get_resize_left_edge_snaps(window_rect, target_rect, pos)
+					for snap in left_snaps:
+						if snap.distance <= snap_distance:
+							snapped_pos.x = snap.new_pos_x
+							snapped_size.x = snap.new_size_x
+							snap_info["target_window"] = target.window
+							snap_info["x_snap_type"] = snap.type
+				
+				elif resize_mode in [Window_Base.ResizeMode.TOP_RIGHT, Window_Base.ResizeMode.BOTTOM_RIGHT]:
+					var right_snaps = _get_resize_right_edge_snaps(window_rect, target_rect, pos)
+					for snap in right_snaps:
+						if snap.distance <= snap_distance:
+							snapped_size.x = snap.new_size_x
+							snap_info["target_window"] = target.window
+							snap_info["x_snap_type"] = snap.type
+				
+				# Handle Y-axis snapping for corner modes
+				if resize_mode in [Window_Base.ResizeMode.TOP_LEFT, Window_Base.ResizeMode.TOP_RIGHT]:
+					var top_snaps = _get_resize_top_edge_snaps(window_rect, target_rect, pos)
+					for snap in top_snaps:
+						if snap.distance <= snap_distance:
+							snapped_pos.y = snap.new_pos_y
+							snapped_size.y = snap.new_size_y
+							snap_info["target_window"] = target.window
+							snap_info["y_snap_type"] = snap.type
+				
+				elif resize_mode in [Window_Base.ResizeMode.BOTTOM_LEFT, Window_Base.ResizeMode.BOTTOM_RIGHT]:
+					var bottom_snaps = _get_resize_bottom_edge_snaps(window_rect, target_rect, pos)
+					for snap in bottom_snaps:
+						if snap.distance <= snap_distance:
+							snapped_size.y = snap.new_size_y
+							snap_info["target_window"] = target.window
+							snap_info["y_snap_type"] = snap.type
+	
+	if snap_info.size() > 0:
+		snap_info["type"] = "window_resize"
+		snap_info["position"] = snapped_pos
+		snap_info["size"] = snapped_size
+		snap_info["snap_applied"] = true
+	
+	return snap_info
+
+func _get_resize_left_edge_snaps(window_rect: Rect2, target_rect: Rect2, current_pos: Vector2) -> Array[Dictionary]:
+	"""Get all possible left edge resize snaps - both edge-to-edge and alignment"""
+	var snaps: Array[Dictionary] = []
+	
+	# Edge-to-edge: Left edge snaps to right edge of target
+	var snap_x = target_rect.end.x + window_edge_padding
+	var size_change = current_pos.x - snap_x
+	var new_size_x = window_rect.size.x + size_change
+	if new_size_x > 0: # Ensure positive size
+		snaps.append({
+			"distance": abs(current_pos.x - snap_x),
+			"new_pos_x": snap_x,
+			"new_size_x": new_size_x,
+			"type": "left_to_right"
+		})
+	
+	# Alignment: Left edge aligns with left edge of target
+	var align_x = target_rect.position.x + window_align_padding
+	size_change = current_pos.x - align_x
+	new_size_x = window_rect.size.x + size_change
+	if new_size_x > 0:
+		snaps.append({
+			"distance": abs(current_pos.x - align_x),
+			"new_pos_x": align_x,
+			"new_size_x": new_size_x,
+			"type": "align_left"
+		})
+	
+	# Alignment: Left edge aligns with right edge of target
+	align_x = target_rect.end.x - window_align_padding
+	size_change = current_pos.x - align_x
+	new_size_x = window_rect.size.x + size_change
+	if new_size_x > 0:
+		snaps.append({
+			"distance": abs(current_pos.x - align_x),
+			"new_pos_x": align_x,
+			"new_size_x": new_size_x,
+			"type": "align_right"
+		})
+	
+	return snaps
+
+func _get_resize_right_edge_snaps(window_rect: Rect2, target_rect: Rect2, current_pos: Vector2) -> Array[Dictionary]:
+	"""Get all possible right edge resize snaps - both edge-to-edge and alignment"""
+	var snaps: Array[Dictionary] = []
+	
+	# Edge-to-edge: Right edge snaps to left edge of target
+	var snap_x = target_rect.position.x - window_edge_padding
+	var new_size_x = snap_x - current_pos.x
+	if new_size_x > 0:
+		snaps.append({
+			"distance": abs(current_pos.x + window_rect.size.x - snap_x),
+			"new_size_x": new_size_x,
+			"type": "right_to_left"
+		})
+	
+	# Alignment: Right edge aligns with left edge of target
+	var align_x = target_rect.position.x + window_align_padding
+	new_size_x = align_x - current_pos.x
+	if new_size_x > 0:
+		snaps.append({
+			"distance": abs(current_pos.x + window_rect.size.x - align_x),
+			"new_size_x": new_size_x,
+			"type": "align_left"
+		})
+	
+	# Alignment: Right edge aligns with right edge of target
+	align_x = target_rect.end.x - window_align_padding
+	new_size_x = align_x - current_pos.x
+	if new_size_x > 0:
+		snaps.append({
+			"distance": abs(current_pos.x + window_rect.size.x - align_x),
+			"new_size_x": new_size_x,
+			"type": "align_right"
+		})
+	
+	return snaps
+
+func _get_resize_top_edge_snaps(window_rect: Rect2, target_rect: Rect2, current_pos: Vector2) -> Array[Dictionary]:
+	"""Get all possible top edge resize snaps - both edge-to-edge and alignment"""
+	var snaps: Array[Dictionary] = []
+	
+	# Edge-to-edge: Top edge snaps to bottom edge of target
+	var snap_y = target_rect.end.y + window_edge_padding
+	var size_change = current_pos.y - snap_y
+	var new_size_y = window_rect.size.y + size_change
+	if new_size_y > 0:
+		snaps.append({
+			"distance": abs(current_pos.y - snap_y),
+			"new_pos_y": snap_y,
+			"new_size_y": new_size_y,
+			"type": "top_to_bottom"
+		})
+	
+	# Alignment: Top edge aligns with top edge of target
+	var align_y = target_rect.position.y + window_align_padding
+	size_change = current_pos.y - align_y
+	new_size_y = window_rect.size.y + size_change
+	if new_size_y > 0:
+		snaps.append({
+			"distance": abs(current_pos.y - align_y),
+			"new_pos_y": align_y,
+			"new_size_y": new_size_y,
+			"type": "align_top"
+		})
+	
+	# Alignment: Top edge aligns with bottom edge of target
+	align_y = target_rect.end.y - window_align_padding
+	size_change = current_pos.y - align_y
+	new_size_y = window_rect.size.y + size_change
+	if new_size_y > 0:
+		snaps.append({
+			"distance": abs(current_pos.y - align_y),
+			"new_pos_y": align_y,
+			"new_size_y": new_size_y,
+			"type": "align_bottom"
+		})
+	
+	return snaps
+
+func _get_resize_bottom_edge_snaps(window_rect: Rect2, target_rect: Rect2, current_pos: Vector2) -> Array[Dictionary]:
+	"""Get all possible bottom edge resize snaps - both edge-to-edge and alignment"""
+	var snaps: Array[Dictionary] = []
+	
+	# Edge-to-edge: Bottom edge snaps to top edge of target
+	var snap_y = target_rect.position.y - window_edge_padding
+	var new_size_y = snap_y - current_pos.y
+	if new_size_y > 0:
+		snaps.append({
+			"distance": abs(current_pos.y + window_rect.size.y - snap_y),
+			"new_size_y": new_size_y,
+			"type": "bottom_to_top"
+		})
+	
+	# Alignment: Bottom edge aligns with top edge of target
+	var align_y = target_rect.position.y + window_align_padding
+	new_size_y = align_y - current_pos.y
+	if new_size_y > 0:
+		snaps.append({
+			"distance": abs(current_pos.y + window_rect.size.y - align_y),
+			"new_size_y": new_size_y,
+			"type": "align_top"
+		})
+	
+	# Alignment: Bottom edge aligns with bottom edge of target
+	align_y = target_rect.end.y - window_align_padding
+	new_size_y = align_y - current_pos.y
+	if new_size_y > 0:
+		snaps.append({
+			"distance": abs(current_pos.y + window_rect.size.y - align_y),
+			"new_size_y": new_size_y,
+			"type": "align_bottom"
+		})
+	
+	return snaps
+
+
+func _update_resize_guides(snap_info: Dictionary, window_pos: Vector2, window_size: Vector2):
+	"""Update visual feedback for resize snapping"""
+	# Clear existing visuals
+	_hide_snap_guides()
+
+	if not show_snap_guides or snap_info.is_empty():
+		return
+
+	# Create guides based on snap type
+	if snap_info.get("type") == "edge_resize":
+		_create_resize_edge_guides(snap_info, window_pos, window_size)
+	elif snap_info.get("type") == "window_resize":
+		_create_resize_window_guides(snap_info, window_pos, window_size)
+
+
+func _create_resize_edge_guides(snap_info: Dictionary, window_pos: Vector2, window_size: Vector2):
+	"""Create visual guides for edge resize snapping"""
+	var screen_size = get_viewport().get_visible_rect().size
+	var guide_color = Color.CYAN
+
+	if snap_info.has("left_edge"):
+		var guide = _create_guide_line(guide_color)
+		guide.add_point(Vector2(edge_padding, 0))
+		guide.add_point(Vector2(edge_padding, screen_size.y))
+
+	if snap_info.has("right_edge"):
+		var guide = _create_guide_line(guide_color)
+		var x = screen_size.x - edge_padding
+		guide.add_point(Vector2(x, 0))
+		guide.add_point(Vector2(x, screen_size.y))
+
+	if snap_info.has("top_edge"):
+		var guide = _create_guide_line(guide_color)
+		guide.add_point(Vector2(0, edge_padding))
+		guide.add_point(Vector2(screen_size.x, edge_padding))
+
+	if snap_info.has("bottom_edge"):
+		var guide = _create_guide_line(guide_color)
+		var y = screen_size.y - edge_padding
+		guide.add_point(Vector2(0, y))
+		guide.add_point(Vector2(screen_size.x, y))
+
+
+func _create_resize_window_guides(snap_info: Dictionary, window_pos: Vector2, window_size: Vector2):
+	"""Create visual guides for window resize snapping"""
+	var target_window = snap_info.get("target_window")
+	if not is_instance_valid(target_window):
+		return
+	
+	var target_rect = Rect2(target_window.position, target_window.size)
+	var edge_color = Color.CYAN
+	var align_color = Color.YELLOW
+	
+	# Create guides based on snap type
+	var snap_type = snap_info.get("snap_type", "")
+	var x_snap_type = snap_info.get("x_snap_type", "")
+	var y_snap_type = snap_info.get("y_snap_type", "")
+	
+	# Handle X-axis guides
+	if snap_type in ["left_to_right", "right_to_left"] or x_snap_type in ["left_to_right", "right_to_left"]:
+		var guide_color = edge_color
+		var line_x = target_rect.end.x if "left_to_right" in snap_type + x_snap_type else target_rect.position.x
+		var guide = _create_guide_line(guide_color)
+		guide.add_point(Vector2(line_x, target_rect.position.y))
+		guide.add_point(Vector2(line_x, target_rect.end.y))
+	
+	elif snap_type in ["align_left", "align_right"] or x_snap_type in ["align_left", "align_right"]:
+		var guide_color = align_color
+		var line_x = target_rect.position.x if "align_left" in snap_type + x_snap_type else target_rect.end.x
+		var guide = _create_guide_line(guide_color)
+		var screen_height = get_viewport().get_visible_rect().size.y
+		guide.add_point(Vector2(line_x, 0))
+		guide.add_point(Vector2(line_x, screen_height))
+	
+	# Handle Y-axis guides
+	if snap_type in ["top_to_bottom", "bottom_to_top"] or y_snap_type in ["top_to_bottom", "bottom_to_top"]:
+		var guide_color = edge_color
+		var line_y = target_rect.end.y if "top_to_bottom" in snap_type + y_snap_type else target_rect.position.y
+		var guide = _create_guide_line(guide_color)
+		guide.add_point(Vector2(target_rect.position.x, line_y))
+		guide.add_point(Vector2(target_rect.end.x, line_y))
+	
+	elif snap_type in ["align_top", "align_bottom"] or y_snap_type in ["align_top", "align_bottom"]:
+		var guide_color = align_color
+		var line_y = target_rect.position.y if "align_top" in snap_type + y_snap_type else target_rect.end.y
+		var guide = _create_guide_line(guide_color)
+		var screen_width = get_viewport().get_visible_rect().size.x
+		guide.add_point(Vector2(0, line_y))
+		guide.add_point(Vector2(screen_width, line_y))
 
 
 func _animate_indicator_pulse(indicator: Control):
