@@ -26,8 +26,38 @@ func _init():
 	min_window_size = Vector2(400, 300)
 	max_window_size = Vector2(1400, 1000)
 
+	set_process_input(true)
+
+func _input(event: InputEvent):
+	"""Handle cross-window drops to main inventory window"""
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		var window_rect = Rect2(global_position, size)
+		
+		# Only handle drops that happen WITHIN our window bounds
+		if window_rect.has_point(event.global_position):
+			var viewport = get_viewport()
+			if viewport and viewport.has_meta("current_drag_data"):
+				var drag_data = viewport.get_meta("current_drag_data")
+				var source_slot = drag_data.get("source_slot")
+				
+				# Check if drag is from an external source (tearoff window)
+				if source_slot and source_slot.has_method("get_container_id"):
+					var source_container_id = source_slot.get_container_id()
+					
+					# Check if this is from a tearoff container (starts with "tearoff_")
+					if source_container_id.begins_with("tearoff_"):
+						# Extract the original container ID
+						var original_container_id = source_container_id.replace("tearoff_", "")
+						
+						# Find which of our containers should receive this
+						var target_container = _get_target_container_for_drop(event.global_position)
+						if target_container and target_container.container_id != original_container_id:
+							if _handle_cross_window_drop_to_main(drag_data, target_container):
+								get_viewport().set_input_as_handled()
+								return
+
 func _setup_window_content():
-	"""Override base method to add inventory-specific content"""	
+	"""Override base method to add inventory-specific content"""
 	# Call the original content setup method
 	_setup_content()
 
@@ -94,7 +124,6 @@ func _setup_content():
 	call_deferred("setup_child_focus_handlers")
 
 
-
 func _on_empty_area_context_menu_from_content(_global_position: Vector2):
 	"""Handle empty area context menu from content"""
 	if item_actions and item_actions.has_method("show_empty_area_context_menu"):
@@ -119,9 +148,9 @@ func _on_display_mode_changed(mode: InventoryDisplayMode.Mode):
 		content.set_display_mode(mode)
 	
 func _on_container_list_item_selected(index: int):
-	"""Handle container list selection"""	
+	"""Handle container list selection"""
 	if index >= 0 and index < open_containers.size():
-		var selected_container = open_containers[index]		
+		var selected_container = open_containers[index]
 		# Update current container
 		current_container = selected_container
 		
@@ -276,7 +305,7 @@ func _update_options_dropdown_text():
 	
 	var options = [
 		"Sort by Name",
-		"Sort by Type", 
+		"Sort by Type",
 		"Sort by Quantity",
 		"---",
 		"Auto-Stack Items",
@@ -302,6 +331,75 @@ func _on_container_selected_from_content(container: InventoryContainer_Base):
 		item_actions.set_current_container(container)
 	
 	container_switched.emit(container)
+
+func _get_target_container_for_drop(drop_position: Vector2) -> InventoryContainer_Base:
+	"""Determine which container should receive the drop based on position - only valid drop areas"""
+	if not content:
+		return null
+	
+	# Check if dropping on container list area
+	if content.container_list:
+		var list_rect = Rect2(content.container_list.global_position, content.container_list.size)
+		if list_rect.has_point(drop_position):
+			# Get the container under the mouse
+			var local_pos = drop_position - content.container_list.global_position
+			var item_index = content.container_list.get_item_at_position(local_pos, true)
+			if item_index >= 0 and item_index < content.open_containers.size():
+				return content.open_containers[item_index]
+			# If clicking container list but not on a specific container, reject
+			return null
+	
+	# Check if dropping on the inventory grid/list view area
+	if content.inventory_grid and content.inventory_grid.visible:
+		var grid_rect = Rect2(content.inventory_grid.global_position, content.inventory_grid.size)
+		if grid_rect.has_point(drop_position):
+			return content.current_container
+	
+	if content.list_view and content.list_view.visible:
+		var list_view_rect = Rect2(content.list_view.global_position, content.list_view.size)
+		if list_view_rect.has_point(drop_position):
+			return content.current_container
+	
+	# If not over any valid drop area, reject the drop
+	return null
+
+func _handle_cross_window_drop_to_main(drag_data: Dictionary, target_container: InventoryContainer_Base) -> bool:
+	"""Handle drop from tearoff window to main inventory"""
+	var source_slot = drag_data.get("source_slot")
+	var item = drag_data.get("item")
+	
+	if not item or not inventory_manager or not target_container:
+		return false
+	
+	var source_container_id = source_slot.get_container_id() if source_slot else ""
+	if source_container_id == "" or source_container_id == target_container.container_id:
+		return false
+	
+	# Check if target can accept the item
+	if not target_container.can_add_item(item):
+		return false
+	
+	# Calculate transfer amount
+	var available_volume = target_container.get_available_volume()
+	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
+	var transfer_amount = min(item.quantity, max_transferable)
+	
+	if transfer_amount <= 0:
+		return false
+	
+	# Use the existing transaction manager
+	var success = inventory_manager.transfer_item(
+		item,
+		source_container_id,
+		target_container.container_id,
+		Vector2i(-1, -1),
+		transfer_amount
+	)
+	
+	if success and content:
+		content.refresh_display()
+	
+	return success
 
 func _on_search_text_changed_from_header(search_text: String):
 	if content and content.has_method("filter_items"):
@@ -590,6 +688,5 @@ func _on_sort_requested(sort_type: InventorySortType.Type):
 	
 	# Force grid refresh after sort
 	if content and content.inventory_grid:
-		await get_tree().process_frame  # Wait for sort to complete
+		await get_tree().process_frame # Wait for sort to complete
 		content.inventory_grid.refresh_display()
-	
