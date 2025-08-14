@@ -3,7 +3,7 @@ class_name ContainerTearOffManager
 extends RefCounted
 
 var main_window: InventoryWindow
-var tearoff_windows: Dictionary = {}  # container_id -> ContainerTearOffWindow
+var tearoff_windows: Dictionary = {} # container_id -> ContainerTearOffWindow
 var drag_threshold: float = 15.0
 
 # Drag state tracking
@@ -11,7 +11,7 @@ var drag_start_position: Vector2
 var drag_start_time: float
 var dragging_container_index: int = -1
 var is_potential_tearoff: bool = false
-var is_drag_active: bool = false  # New flag to track active drag state
+var is_drag_active: bool = false # New flag to track active drag state
 
 func _init(window: InventoryWindow):
 	main_window = window
@@ -36,6 +36,8 @@ func _on_container_list_input(event: InputEvent):
 	
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 		_start_potential_tearoff(mouse_event.global_position)
+		# IMPORTANT: Stop the event from selecting the container immediately
+		main_window.get_viewport().set_input_as_handled()
 	elif mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
 		_check_tearoff_completion(mouse_event.global_position)
 
@@ -111,10 +113,28 @@ func _stop_drag_monitoring():
 func _check_tearoff_completion(position: Vector2):
 	"""Check if tearoff should be completed on mouse release"""
 	if is_drag_active:
-		# Only create window on drop if we were actively dragging
+		# User dragged beyond threshold - create tearoff window
 		_execute_tearoff_on_drop(position)
+		main_window.get_viewport().set_input_as_handled()
+	elif is_potential_tearoff and dragging_container_index >= 0:
+		# User clicked without dragging - select the container
+		_handle_container_selection(dragging_container_index)
+		main_window.get_viewport().set_input_as_handled()
 	
 	_stop_drag_monitoring()
+
+func _handle_container_selection(index: int):
+	"""Handle normal container selection when not dragging"""
+	if not main_window or not main_window.content:
+		return
+		
+	# Select the container in the list
+	if main_window.content.container_list:
+		main_window.content.container_list.select(index)
+		
+	# Trigger the selection logic
+	if main_window.content.has_method("_on_container_list_selected"):
+		main_window.content._on_container_list_selected(index)
 
 func _execute_tearoff_on_drop(drop_position: Vector2):
 	"""Execute the container tearoff when mouse is released after dragging"""
@@ -270,13 +290,6 @@ func _on_window_reattached(container: InventoryContainer_Base):
 	
 	# Restore to main list
 	_restore_container_to_main_list(container)
-	
-	# Select the reattached container in main window
-	if main_window.content:
-		var container_index = main_window.content.open_containers.find(container)
-		if container_index >= 0:
-			main_window.content.container_list.select(container_index)
-			main_window.content._on_container_list_selected(container_index)
 
 func _on_tearoff_window_closed(container_id: String):
 	"""Handle tearoff window being closed"""
