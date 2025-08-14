@@ -20,6 +20,7 @@ var item_actions: InventoryItemActions
 var container: InventoryContainer_Base # Original container reference
 var container_view: ContainerView # Independent view of the container
 var parent_window: InventoryWindow
+var _suppress_auto_refresh: bool = false
 
 
 func _init(tear_container: InventoryContainer_Base, parent_inv_window: InventoryWindow):
@@ -358,6 +359,9 @@ func _initialize_tearoff_content():
 
 func _on_view_changed():
 	"""Handle when the container view changes"""
+	if _suppress_auto_refresh:
+		return
+		
 	if content:
 		content.refresh_display()
 
@@ -365,20 +369,51 @@ func _on_view_changed():
 # ALL THE SAME EVENT HANDLERS AS MAIN WINDOW BUT WORKING WITH VIEW
 func _on_search_changed(search_text: String):
 	"""Handle search text changes - TEAROFF-SPECIFIC (affects only this view)"""
-	if container_view:
-		container_view.set_search_filter(search_text)
+	if not container_view:
+		return
+	
+	# Temporarily suppress automatic refreshes to avoid lag
+	_suppress_auto_refresh = true
+	
+	# Update search without triggering container_changed
+	container_view.search_filter = search_text
+	container_view._refresh_view()
+	container_view.items = container_view.view_items
+	
+	# Re-enable refreshes and do ONE final refresh
+	_suppress_auto_refresh = false
+	if content:
+		content.refresh_display()
 
 
-func _on_filter_changed(filter_data: Dictionary):
+func _on_filter_changed(filter_type: int):
 	"""Handle filter changes - TEAROFF-SPECIFIC (affects only this view)"""
-	if container_view and filter_data.has("type"):
-		container_view.set_type_filter(filter_data.type)
+	if container_view:
+		container_view.set_type_filter(filter_type)
 
 
 func _on_sort_requested(sort_type: InventorySortType.Type):
 	"""Handle sort requests - TEAROFF-SPECIFIC (affects only this view)"""
-	if container_view:
-		container_view.set_sort(sort_type, true)
+	if not inventory_manager or not container_view:
+		return
+	
+	# Temporarily suppress automatic refreshes to avoid lag
+	_suppress_auto_refresh = true
+	
+	# FIRST: Sort the source container like the main window does
+	inventory_manager.sort_container(container_view.source_container.container_id, sort_type)
+	
+	# SECOND: Update the view's sort settings (but don't emit container_changed)
+	container_view.sort_type = sort_type
+	container_view.sort_ascending = true
+	container_view._apply_current_sort()
+	container_view.items = container_view.view_items
+	
+	# THIRD: Re-enable refreshes and do ONE final refresh
+	_suppress_auto_refresh = false
+	if content and content.inventory_grid:
+		await get_tree().process_frame # Wait for sort to complete
+		content.inventory_grid.refresh_display()
 
 
 func _on_display_mode_changed(mode: InventoryDisplayMode.Mode):

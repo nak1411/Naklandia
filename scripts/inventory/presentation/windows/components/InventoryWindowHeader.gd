@@ -29,8 +29,8 @@ var current_transparency: float = 1.0
 
 # Filter dropdown data
 var filter_items = [
-	"All Items", "Weapons", "Armor", "Consumables", "Resources", 
-	"Blueprints", "Modules", "Ships", "Containers", "Ammunition", 
+	"All Items", "Weapons", "Armor", "Consumables", "Resources",
+	"Blueprints", "Modules", "Ships", "Containers", "Ammunition",
 	"Implants", "Skill Books"
 ]
 var current_filter_index = 0
@@ -42,13 +42,13 @@ var sort_items = [
 var current_sort_index = 0
 
 func _ready():
-	custom_minimum_size.y = 30  # 16px buttons + 4px margin (2px top + 2px bottom)
+	custom_minimum_size.y = 30 # 16px buttons + 4px margin (2px top + 2px bottom)
 	_setup_controls()
 	_connect_signals()
 
 func _setup_controls():
 	var current_x = 0
-	var button_height = 24  # Our target height
+	var button_height = 24 # Our target height
 	var margin = 4
 	var bottom_padding = 4
 	var top_padding = 2
@@ -127,9 +127,9 @@ func _create_label_button(text: String, button_size: Vector2) -> Panel:
 func _on_fake_button_hover(panel: Panel, is_hovering: bool):
 	var style = StyleBoxFlat.new()
 	if is_hovering:
-		style.bg_color = Color(0.5, 0.5, 0.5, 1.0)  # Hover color
+		style.bg_color = Color(0.5, 0.5, 0.5, 1.0) # Hover color
 	else:
-		style.bg_color = Color(0.2, 0.2, 0.2, 1.0)  # Normal color
+		style.bg_color = Color(0.2, 0.2, 0.2, 1.0) # Normal color
 	
 	style.border_width_left = 1
 	style.border_width_right = 1
@@ -157,7 +157,7 @@ func _position_right_elements():
 	var button_height = 16
 	var margin = 2
 	var top_padding = 4
-	var right_padding = 8  # Add right padding
+	var right_padding = 8 # Add right padding
 	
 	# Position display button at far right (minus right padding)
 	if display_mode_button:
@@ -241,10 +241,10 @@ func _style_search_field():
 	style_normal.content_margin_right = 6
 	style_normal.content_margin_top = 1
 	style_normal.content_margin_bottom = 1
-	style_normal.set_corner_radius_all(0)  # Remove rounded corners
+	style_normal.set_corner_radius_all(0) # Remove rounded corners
 	
 	var style_focus = style_normal.duplicate()
-	style_focus.border_color = Color(0.6, 0.6, 0.8, 1.0)  # Slightly brighter border when focused
+	style_focus.border_color = Color(0.6, 0.6, 0.8, 1.0) # Slightly brighter border when focused
 	
 	search_field.add_theme_stylebox_override("normal", style_normal)
 	search_field.add_theme_stylebox_override("focus", style_focus)
@@ -263,14 +263,14 @@ func _on_display_mode_toggled():
 	match current_display_mode:
 		InventoryDisplayMode.Mode.GRID:
 			current_display_mode = InventoryDisplayMode.Mode.LIST
-			set_fake_button_text(display_mode_button, "☰")  # Changed
+			set_fake_button_text(display_mode_button, "☰") # Changed
 		InventoryDisplayMode.Mode.LIST:
 			current_display_mode = InventoryDisplayMode.Mode.GRID
-			set_fake_button_text(display_mode_button, "⊞")  # Changed
+			set_fake_button_text(display_mode_button, "⊞") # Changed
 	
 	display_mode_changed.emit(current_display_mode)
 
-func _create_dropdown_menus():	
+func _create_dropdown_menus():
 	# Create filter dropdown
 	filter_dropdown = DropDownMenu_Base.new()
 	filter_dropdown.name = "FilterDropdown"
@@ -281,7 +281,7 @@ func _create_dropdown_menus():
 	sort_dropdown.name = "SortDropdown"
 	_setup_sort_dropdown()
 	
-func _setup_filter_dropdown():	
+func _setup_filter_dropdown():
 	# Add all filter items to dropdown
 	for i in range(filter_items.size()):
 		var item_id = "filter_" + str(i)
@@ -295,7 +295,7 @@ func _setup_filter_dropdown():
 	if filter_dropdown.has_signal("tree_exiting"):
 		filter_dropdown.tree_exiting.connect(_on_filter_dropdown_closed)
 
-func _setup_sort_dropdown():	
+func _setup_sort_dropdown():
 	# Add all sort items to dropdown
 	for i in range(sort_items.size()):
 		var item_id = "sort_" + str(i)
@@ -305,11 +305,11 @@ func _setup_sort_dropdown():
 	if sort_dropdown.has_signal("item_selected"):
 		sort_dropdown.item_selected.connect(_on_sort_dropdown_selected)
 	
-	# Connect menu close signal
+	# Connect menu close signal  
 	if sort_dropdown.has_signal("tree_exiting"):
 		sort_dropdown.tree_exiting.connect(_on_sort_dropdown_closed)
 
-func _style_custom_filter_button():	
+func _style_custom_filter_button():
 	filter_options.flat = false
 	filter_options.focus_mode = Control.FOCUS_NONE
 	
@@ -324,8 +324,8 @@ func _style_custom_filter_button():
 	# Reduce content margins to make button shorter
 	normal_style.content_margin_left = 8
 	normal_style.content_margin_right = 8
-	normal_style.content_margin_top = 2  # Reduced from 6 to 2
-	normal_style.content_margin_bottom = 2  # Reduced from 6 to 2
+	normal_style.content_margin_top = 2 # Reduced from 6 to 2
+	normal_style.content_margin_bottom = 2 # Reduced from 6 to 2
 	
 	# Create hover style
 	var hover_style = normal_style.duplicate()
@@ -342,7 +342,7 @@ func _style_custom_filter_button():
 	filter_options.add_theme_color_override("font_color", Color.WHITE)
 	filter_options.add_theme_font_size_override("font_size", 12)
 
-func _style_custom_sort_button():	
+func _style_custom_sort_button():
 	sort_button.focus_mode = Control.FOCUS_NONE
 	sort_button.flat = false
 	
@@ -357,8 +357,8 @@ func _style_custom_sort_button():
 	# Reduce content margins to make button shorter
 	style_normal.content_margin_left = 8
 	style_normal.content_margin_right = 8
-	style_normal.content_margin_top = 2  # Reduced from 6 to 2
-	style_normal.content_margin_bottom = 2  # Reduced from 6 to 2
+	style_normal.content_margin_top = 2 # Reduced from 6 to 2
+	style_normal.content_margin_bottom = 2 # Reduced from 6 to 2
 	style_normal.set_corner_radius_all(0)
 	
 	# Create hover style
@@ -376,7 +376,7 @@ func _style_custom_sort_button():
 	sort_button.add_theme_color_override("font_color", Color.WHITE)
 	sort_button.add_theme_font_size_override("font_size", 12)
 
-func _connect_signals():	
+func _connect_signals():
 	if search_field:
 		search_field.text_changed.connect(_on_search_text_changed)
 		search_field.focus_entered.connect(_on_search_focus_entered)
@@ -438,20 +438,20 @@ func _remove_default_outlines():
 				# Reduce content margins for shorter height
 				style_normal.content_margin_left = 6
 				style_normal.content_margin_right = 6
-				style_normal.content_margin_top = 2  # Reduced padding
-				style_normal.content_margin_bottom = 2  # Reduced padding
+				style_normal.content_margin_top = 2 # Reduced padding
+				style_normal.content_margin_bottom = 2 # Reduced padding
 				
 				control.add_theme_stylebox_override("normal", style_normal)
 				control.add_theme_stylebox_override("focus", style_normal)
 
-func _apply_custom_theme():	
+func _apply_custom_theme():
 	# Create a theme for the entire header
 	var header_theme = Theme.new()
 	
 	# Apply theme to the header container
 	set_theme(header_theme)
 
-func _force_button_styling():	
+func _force_button_styling():
 	# Make sure buttons are visible
 	if filter_options:
 		filter_options.modulate = Color(1.0, 1.0, 1.0, 1.0)
@@ -465,7 +465,7 @@ func _force_button_styling():
 func _on_search_text_changed(new_text: String):
 	search_changed.emit(new_text)
 
-func _on_filter_button_pressed():	
+func _on_filter_button_pressed():
 	if not filter_dropdown:
 		return
 		
@@ -481,16 +481,16 @@ func _on_filter_button_pressed():
 	if filter_dropdown.has_method("show_menu"):
 		filter_dropdown.show_menu(dropdown_pos)
 
-func _on_filter_dropdown_selected(item_id: String, _item_data: Dictionary):	
+func _on_filter_dropdown_selected(item_id: String, _item_data: Dictionary):
 	var index_str = item_id.replace("filter_", "")
 	var index = int(index_str)
 	
 	if index >= 0 and index < filter_items.size():
 		current_filter_index = index
-		set_fake_button_text(filter_options, filter_items[index] + " ▼")  # Changed
+		set_fake_button_text(filter_options, filter_items[index] + " ▼")
 		filter_changed.emit(index)
 
-func _on_sort_button_pressed():	
+func _on_sort_button_pressed():
 	if not sort_dropdown:
 		return
 		
@@ -506,13 +506,13 @@ func _on_sort_button_pressed():
 	if sort_dropdown.has_method("show_menu"):
 		sort_dropdown.show_menu(dropdown_pos)
 
-func _on_sort_dropdown_selected(item_id: String, _item_data: Dictionary):	
+func _on_sort_dropdown_selected(item_id: String, _item_data: Dictionary):
 	var index_str = item_id.replace("sort_", "")
 	var index = int(index_str)
 	
 	if index >= 0 and index < sort_items.size():
 		current_sort_index = index
-		set_fake_button_text(sort_button, sort_items[index] + " ▼")  # Changed
+		set_fake_button_text(sort_button, sort_items[index] + " ▼")
 		
 		var sort_type = index as InventorySortType.Type
 		sort_requested.emit(sort_type)
@@ -561,7 +561,7 @@ func set_transparency(transparency: float):
 	# Apply transparency to buttons using stored originals
 	_apply_transparency_from_originals(transparency)
 
-func _store_original_header_styles():	
+func _store_original_header_styles():
 	if filter_options:
 		var style = filter_options.get_theme_stylebox("normal")
 		if style and style is StyleBoxFlat:

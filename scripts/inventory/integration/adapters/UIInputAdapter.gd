@@ -5,7 +5,7 @@ extends Node
 
 var event_bus: InventoryEventBus
 var connected_ui_manager: UIManager
-var input_mode: String = "game"  # "game", "inventory", "menu"
+var input_mode: String = "game" # "game", "inventory", "menu"
 
 var drag_in_progress: bool = false
 var input_processing_enabled: bool = true
@@ -34,6 +34,12 @@ func connect_to_ui_manager(ui_manager: UIManager):
 func _input(event):
 	"""Handle input events and route them appropriately"""
 	if not event is InputEventKey:
+		return
+	
+	# Check if any LineEdit (like search field) has focus
+	var focused_control = get_viewport().gui_get_focus_owner()
+	if focused_control is LineEdit:
+		# Don't handle inventory toggle when text input is active
 		return
 		
 	# ONLY handle inventory toggle - remove the interact fallback
