@@ -39,6 +39,7 @@ var item_positions: Dictionary = {}  # Dictionary[InventoryItem_Base, Vector2i]
 var _is_adapting_width: bool = false
 var _resize_complete_timer: Timer
 var _needs_reflow: bool = false
+var _is_window_resizing: bool = false
 
 # Virtual scrolling state
 var virtual_items: Array[InventoryItem_Base] = []
@@ -59,6 +60,9 @@ var _last_item_count: int = -1
 var _cached_visible_items: Array[InventoryItem_Base] = []
 var _slots_needing_update: Array[Vector2i] = []
 var _batch_update_timer: Timer
+var _virtual_content_resize_timer: Timer
+var _pending_virtual_content_resize: bool = false
+var _pending_virtual_content_size: Vector2
 
 # UI components
 var background_panel: Panel
@@ -113,6 +117,13 @@ func _setup_optimization_timers():
 	_batch_update_timer.one_shot = true
 	_batch_update_timer.timeout.connect(_process_batch_slot_updates)
 	add_child(_batch_update_timer)
+	
+	# Add virtual content resize timer
+	_virtual_content_resize_timer = Timer.new()
+	_virtual_content_resize_timer.wait_time = 0.3  # Same delay as resize complete
+	_virtual_content_resize_timer.one_shot = true
+	_virtual_content_resize_timer.timeout.connect(_apply_virtual_content_resize)
+	add_child(_virtual_content_resize_timer)
 	
 func _setup_virtual_scrolling():
 	"""Setup virtual scrolling container"""
@@ -389,11 +400,37 @@ func _render_virtual_items():
 			virtual_rendered_slots.append(slot)
 			rendered_count += 1
 		
-	# Update content size - much smaller now
+	# CHANGE: Only resize virtual content if NOT currently resizing the window
 	virtual_total_height = total_rows * slot_size.y
 	var content_width = virtual_items_per_row * slot_size.x
-	virtual_content.custom_minimum_size = Vector2(content_width, virtual_total_height)
-	virtual_content.size = Vector2(content_width, virtual_total_height)
+	var new_size = Vector2(content_width, virtual_total_height)
+	
+	if _is_window_resizing:
+		# During window resize, just store the pending size
+		_pending_virtual_content_size = new_size
+		_pending_virtual_content_resize = true
+	else:
+		# Not resizing, apply immediately
+		if virtual_content.custom_minimum_size != new_size or virtual_content.size != new_size:
+			virtual_content.custom_minimum_size = new_size
+			virtual_content.size = new_size
+
+func _schedule_virtual_content_resize(new_size: Vector2):
+	"""Schedule a delayed virtual content resize"""
+	_pending_virtual_content_size = new_size
+	_pending_virtual_content_resize = true
+	
+	# Reset the timer
+	if _virtual_content_resize_timer.time_left > 0:
+		_virtual_content_resize_timer.stop()
+	_virtual_content_resize_timer.start()
+
+func _apply_virtual_content_resize():
+	"""Apply the pending virtual content resize"""
+	if _pending_virtual_content_resize and virtual_content:
+		virtual_content.custom_minimum_size = _pending_virtual_content_size
+		virtual_content.size = _pending_virtual_content_size
+		_pending_virtual_content_resize = false
 		
 func _cleanup_virtual_rendered_slots():
 	"""Properly clean up existing virtual rendered slots"""
@@ -441,13 +478,15 @@ func _check_and_fix_initial_layout():
 		
 		# Force a proper recalculation
 		_initialize_with_proper_size()
+
+func handle_window_resize():
+	"""Called when window starts resizing"""
+	_is_window_resizing = true
 	
-func handle_resize_complete():
-	"""Called when window resize is complete"""
-	# VERY aggressive debouncing - only reflow after resize stops
+	# Reset the resize completion timer
 	if _resize_complete_timer.time_left > 0:
 		_resize_complete_timer.stop()
-	_resize_complete_timer.wait_time = 0.5  # Half second wait
+	_resize_complete_timer.wait_time = 0.3
 	_resize_complete_timer.start()
 	
 func _update_container_positions_from_visual():
@@ -860,6 +899,13 @@ func _create_initial_slots():
 
 func _perform_compact_reflow():
 	"""Perform a compact reflow of all items"""
+	# Mark resize as complete
+	_is_window_resizing = false
+	
+	# Apply any pending virtual content resize immediately
+	if _pending_virtual_content_resize:
+		_apply_virtual_content_resize()
+
 	if enable_virtual_scrolling or not container:
 		return
 	
