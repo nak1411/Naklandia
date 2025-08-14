@@ -10,8 +10,8 @@ var content: InventoryWindowContent
 var item_actions: InventoryItemActions
 
 # Tearoff-specific properties
-var container: InventoryContainer_Base  # Original container reference
-var container_view: ContainerView       # Independent view of the container
+var container: InventoryContainer_Base # Original container reference
+var container_view: ContainerView # Independent view of the container
 var parent_window: InventoryWindow
 
 # Same signals as main window
@@ -33,7 +33,6 @@ func _init(tear_container: InventoryContainer_Base, parent_inv_window: Inventory
 		window_title = "Container"
 		
 	
-
 func _ready():
 	# Same defaults as main inventory window
 	default_size = Vector2(500, 400)
@@ -161,6 +160,14 @@ func _initialize_tearoff_content():
 	
 	# CRITICAL: Create independent view instead of using container directly
 	container_view = ContainerView.new(container, "tearoff_" + container.container_id)
+
+	# REGISTER THE CONTAINER VIEW WITH INVENTORY MANAGER
+	if inventory_manager.has_method("add_container"):
+		inventory_manager.add_container(container_view)
+
+	# FORCE REFRESH ON ANY CONTAINER CHANGES
+	if container_view.has_signal("container_changed"):
+		container_view.container_changed.connect(_on_view_changed)
 	
 	# Set inventory manager on content - SAME AS MAIN WINDOW
 	if content.has_method("set_inventory_manager"):
@@ -186,6 +193,11 @@ func _on_search_changed(search_text: String):
 	"""Handle search text changes - TEAROFF-SPECIFIC (affects only this view)"""
 	if container_view:
 		container_view.set_search_filter(search_text)
+
+func _on_view_changed():
+	"""Handle when the container view changes"""
+	if content:
+		content.refresh_display()
 
 func _on_filter_changed(filter_data: Dictionary):
 	"""Handle filter changes - TEAROFF-SPECIFIC (affects only this view)"""
@@ -264,7 +276,7 @@ func reattach_to_parent():
 		queue_free()
 		return
 	
-	window_reattached.emit(container)  # Emit original container, not view
+	window_reattached.emit(container) # Emit original container, not view
 	hide_window()
 	queue_free()
 
