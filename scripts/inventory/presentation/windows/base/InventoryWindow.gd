@@ -91,6 +91,8 @@ func _setup_content():
 		tearoff_manager = ContainerTearOffManager.new(self)
 		tearoff_manager.setup_tearoff_functionality()
 
+	call_deferred("setup_child_focus_handlers")
+
 
 
 func _on_empty_area_context_menu_from_content(_global_position: Vector2):

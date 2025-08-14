@@ -141,7 +141,25 @@ func _connect_to_ui_manager():
 		print("Window_Base: No UIManager found for %s" % name)
 
 func _unhandled_input(event: InputEvent):
-	"""Handle unhandled input - catch resize motion that other systems missed"""
+	"""Handle unhandled input - catch resize motion that other systems missed AND window focusing"""
+	
+	# Handle window focusing on any unhandled left click
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		# Check if the click is within this window's bounds
+		var local_pos = global_position
+		var window_rect = Rect2(local_pos, size)
+		
+		if window_rect.has_point(event.global_position):
+			# Don't interfere with resize operations
+			var resize_mode = _get_resize_area_at_position(event.global_position)
+			if resize_mode != ResizeMode.NONE:
+				return
+			
+			# Focus the window
+			_bring_to_front()
+			# Don't set as handled - let other systems continue processing
+	
+	# Existing resize handling
 	if not is_resizing:
 		return
 		
@@ -158,7 +176,7 @@ func _unhandled_input(event: InputEvent):
 func _gui_input(event: InputEvent):
 	"""Handle input events for window interaction"""
 	
-	# CRITICAL: Check for resize FIRST before any focus handling
+	# CRITICAL: Check for resize FIRST
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
@@ -169,18 +187,11 @@ func _gui_input(event: InputEvent):
 				if mouse_event.pressed:
 					_start_resize(resize_mode, mouse_event.global_position)
 					get_viewport().set_input_as_handled()
-					return  # Stop processing - don't focus
+					return  # Stop processing
 				elif is_resizing:
 					_end_resize()
 					get_viewport().set_input_as_handled()
 					return  # Stop processing
-			
-			# Only handle focus if NOT resizing
-			if mouse_event.pressed and not is_resizing:
-				if ui_manager and ui_manager.has_method("focus_window"):
-					ui_manager.focus_window(self)
-				else:
-					_bring_to_front()
 	
 	# Handle resize motion
 	if is_resizing and event is InputEventMouseMotion:
@@ -316,14 +327,6 @@ func _get_resize_area_at_position(global_pos: Vector2) -> ResizeMode:
 	
 	return ResizeMode.NONE
 
-func _is_point_in_title_bar(global_pos: Vector2) -> bool:
-	if not title_bar:
-		return false
-	
-	# Convert to title bar's local coordinate space
-	var title_bar_global_rect = Rect2(title_bar.global_position, title_bar.size)
-	return title_bar_global_rect.has_point(global_pos)
-
 func _setup_window_ui():
 	# Main container
 	main_container = Control.new()
@@ -332,10 +335,14 @@ func _setup_window_ui():
 	main_container.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(main_container)
 	
+	# Connect input to main container for full-window focus
+	main_container.gui_input.connect(_on_container_input)
+	
 	# Background panel
 	background_panel = Panel.new()
 	background_panel.name = "BackgroundPanel"
 	background_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background_panel.mouse_filter = Control.MOUSE_FILTER_PASS  # Allow clicks to pass through to main_container
 	main_container.add_child(background_panel)
 	
 	# Style background
@@ -520,6 +527,71 @@ func _style_title_bar_button(button: Button, button_type: String = "default"):
 	
 	# Pressed state
 	button.add_theme_color_override("icon_pressed_color", Color(1.0, 1.0, 1.0, 1.0))
+
+func _on_container_input(event: InputEvent):
+	"""Handle input on the main container for full-window focus"""
+	if event is InputEventMouseButton and event.pressed:
+		# Don't interfere with resize operations
+		var resize_mode = _get_resize_area_at_position(event.global_position)
+		if resize_mode != ResizeMode.NONE:
+			return
+		
+		# Focus the window for any other click
+		_bring_to_front()
+
+func setup_child_focus_handlers():
+	"""Setup focus handlers on child controls after they're created"""
+	call_deferred("_setup_child_focus_handlers_deferred")
+
+func _setup_child_focus_handlers_deferred():
+	"""Setup focus handlers on all interactive child controls"""
+	_add_focus_to_nodes_by_name([
+		"InventoryGrid",
+		"VirtualContent", 
+		"MassInfoBar",
+		"InventoryHeader",
+		"ScrollContainer",
+		"VScrollBar",
+		"HScrollBar",
+		"Button",
+		"InventorySlot",
+		"ContainerList",
+		"Search",
+	])
+
+func _add_focus_to_nodes_by_name(node_names: Array):
+	"""Add focus handlers to nodes with specific names"""
+	for node_name in node_names:
+		var nodes = _find_nodes_by_name(self, node_name)
+		for node in nodes:
+			if node is Control:
+				var control = node as Control
+				if not control.gui_input.is_connected(_on_child_focus_input):
+					control.gui_input.connect(_on_child_focus_input)
+					print("Window_Base: Added focus handler to %s" % node.name)
+
+func _find_nodes_by_name(root: Node, target_name: String) -> Array:
+	"""Recursively find all nodes with a specific name"""
+	var found_nodes = []
+	
+	if root.name.contains(target_name):
+		found_nodes.append(root)
+	
+	for child in root.get_children():
+		found_nodes.append_array(_find_nodes_by_name(child, target_name))
+	
+	return found_nodes
+
+func _on_child_focus_input(event: InputEvent):
+	"""Handle focus input from child controls"""
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		# Don't interfere with resize operations
+		var resize_mode = _get_resize_area_at_position(event.global_position)
+		if resize_mode != ResizeMode.NONE:
+			return
+		
+		# Focus the window
+		_bring_to_front()
 
 func _create_backbuffer_bloom_effect(button_size: Vector2, button_type: String) -> Control:
 	"""Create bloom effect using multiple blurred copies"""

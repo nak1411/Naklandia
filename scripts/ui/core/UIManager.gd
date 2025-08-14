@@ -282,7 +282,7 @@ func _set_window_focus_state(window: Window_Base, has_focus: bool):
 		
 	if has_focus:
 		# Add focus styling
-		window.modulate = Color(1.05, 1.05, 1.05, 1.0)  # Slightly brighter
+		window.modulate = Color(1.25, 1.25, 1.25, 1.0)  # Slightly brighter
 		if window.has_method("set_edge_bloom_state"):
 			window.set_edge_bloom_state(Window_Base.BloomState.ACTIVE)
 	else:

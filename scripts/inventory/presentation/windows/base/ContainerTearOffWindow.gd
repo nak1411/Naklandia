@@ -106,6 +106,8 @@ func _setup_content():
 	# TEAROFF-SPECIFIC: Initialize with independent container view
 	if inventory_manager and container:
 		_initialize_tearoff_content()
+	
+	call_deferred("setup_child_focus_handlers")
 
 func _setup_item_actions():
 	"""Initialize the item actions handler - SAME AS MAIN WINDOW"""
