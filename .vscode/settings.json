@@ -1,3 +1,8 @@
 {
-	"godotTools.editorPath.godot4": "c:\\Users\\Justin\\Desktop\\Godot_v4.4.1-stable_win64.exe"
+	"godotTools.editorPath.godot4": "c:\\Users\\Justin\\Desktop\\Godot_v4.4.1-stable_win64.exe",
+	"godotFormatterAndLinter.lineLength": 200,
+	"godotFormatterAndLinter.lintSeverityLevel": "Error",
+	"editor.formatOnPaste": true,
+	"editor.defaultFormatter": "EddieDover.gdscript-formatter-linter",
+	"editor.formatOnSave": true
 }

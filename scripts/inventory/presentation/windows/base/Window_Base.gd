@@ -16,6 +16,7 @@ extends Control
 @export var resize_corner_size: float = 8.0
 
 var ui_manager: UIManager = null
+var snapping_manager: WindowSnappingManager
 
 # Window state
 var is_maximized: bool = false
@@ -126,6 +127,8 @@ func _ready():
 	mouse_entered.connect(_on_mouse_entered)
 	gui_input.connect(_on_window_gui_input)
 
+	snapping_manager = get_node("/root/WindowSnappingManager") if has_node("/root/WindowSnappingManager") else null
+
 func _process(_delta):
 	if edge_bloom_overlay and size != last_known_size:
 		_update_edge_bloom_size()
@@ -159,6 +162,23 @@ func _unhandled_input(event: InputEvent):
 			_bring_to_front()
 			# Don't set as handled - let other systems continue processing
 	
+	# Handle mouse release globally during ANY operation (resize OR drag)
+	if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if is_resizing:
+			print("Window: Global mouse release during resize")
+			_end_resize()
+			get_viewport().set_input_as_handled()
+		elif is_dragging:
+			print("Window: Global mouse release during drag")
+			is_dragging = false
+			drag_initiated = false
+			mouse_pressed = false
+			Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+			# END DRAG - notify snapping manager
+			if snapping_manager:
+				snapping_manager.end_window_drag(self)
+			get_viewport().set_input_as_handled()
+	
 	# Existing resize handling
 	if not is_resizing:
 		return
@@ -166,11 +186,6 @@ func _unhandled_input(event: InputEvent):
 	if event is InputEventMouseMotion:
 		print("Window: Unhandled motion during resize - %s" % event.global_position)
 		_handle_resize_motion(event.global_position)
-		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and not event.pressed:
-		# Handle mouse release globally during resize
-		print("Window: Global mouse release during resize")
-		_end_resize()
 		get_viewport().set_input_as_handled()
 
 func _gui_input(event: InputEvent):
@@ -1682,10 +1697,7 @@ func _setup_options_dropdown():
 	_setup_default_options_dropdown()
 	
 func _on_title_bar_input(event: InputEvent):
-	"""Handle title bar input events"""
-	if is_locked:
-		return
-	
+	"""Handle title bar input for drag and focus"""
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
@@ -1722,6 +1734,9 @@ func _on_title_bar_input(event: InputEvent):
 				if is_dragging:
 					is_dragging = false
 					Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+					# END DRAG - notify snapping manager
+					if snapping_manager:
+						snapping_manager.end_window_drag(self)
 				drag_initiated = false
 	
 	elif event is InputEventMouseMotion and mouse_pressed and not drag_initiated and not is_locked and can_drag:
@@ -1736,6 +1751,10 @@ func _on_title_bar_input(event: InputEvent):
 			# Start actual dragging
 			drag_initiated = true
 			is_dragging = true
+			
+			# START DRAG - notify snapping manager
+			if snapping_manager:
+				snapping_manager.start_window_drag(self)
 			
 			# If window is maximized, restore it and adjust position
 			if is_maximized:
@@ -1763,18 +1782,17 @@ func _on_title_bar_input(event: InputEvent):
 		# Declare motion_event here for this scope
 		var motion_event = event as InputEventMouseMotion
 		
-		# Handle actual dragging (only if not maximized)
-		if not is_maximized:
-			# Calculate new position: mouse position minus the original offset
-			var new_position = motion_event.global_position - drag_start_position
-			
-			# Optional: Clamp to screen bounds
-			var viewport_size = get_viewport().get_visible_rect().size
-			new_position.x = clampf(new_position.x, 0, viewport_size.x - size.x)
-			new_position.y = clampf(new_position.y, 0, viewport_size.y - size.y)
-			
-			position = new_position
-			window_moved.emit(Vector2i(position))
+		# Calculate new position
+		var new_position = motion_event.global_position - drag_start_position
+		
+		# APPLY SNAPPING - get snapped position from snapping manager
+		if snapping_manager:
+			new_position = snapping_manager.update_window_drag(self, new_position)
+		
+		# Apply the position (snapped or normal)
+		position = new_position
+		
+		get_viewport().set_input_as_handled()
 			
 func _enable_resize_visuals():
 	"""Enable resize cursors and edge glows"""

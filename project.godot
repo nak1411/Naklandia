@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 UiDebuggerAutoload="*res://scripts/debug/UIDebuggerAutoload.gd"
+WindowSnappingManager="*res://scripts/ui/core/WindowSnappingManager.gd"
 
 [display]
 
