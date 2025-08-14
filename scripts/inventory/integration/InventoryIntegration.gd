@@ -39,7 +39,7 @@ func _ready():
 	call_deferred("_setup_original_inventory_system")
 
 func _setup_integration_layer():
-	"""Setup the integration layer components"""	
+	"""Setup the integration layer components"""
 	# Create event bus first
 	event_bus = InventoryEventBus.new()
 	event_bus.name = "EventBus"
@@ -113,14 +113,14 @@ func _connect_external_signals():
 		game_state_adapter.connect_to_game_state(game_state_nodes[0])
 
 func _setup_original_inventory_system():
-	"""Setup the original inventory system"""	
+	"""Setup the original inventory system"""
 	# Find or create the inventory canvas layer
 	var scene_root = get_tree().current_scene
 	inventory_canvas = scene_root.get_node_or_null("InventoryLayer")
 	
 	if not inventory_canvas:
 		inventory_canvas = CanvasLayer.new()
-		inventory_canvas.name = "InventoryLayer" 
+		inventory_canvas.name = "InventoryLayer"
 		inventory_canvas.layer = 50
 		scene_root.add_child(inventory_canvas)
 	
@@ -180,11 +180,33 @@ func _on_inventory_opened_event():
 
 func _on_inventory_closed_event():
 	"""Handle inventory closed event from integration system"""
+	# Only hide if the main inventory window should actually close
+	var should_hide = true
+	
+	# Check if we have tearoff windows that should keep inventory "conceptually open"
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		var ui_manager = ui_managers[0]
+		if ui_manager.has_method("get_all_windows"):
+			var remaining_windows = ui_manager.get_all_windows()
+			var valid_windows = remaining_windows.filter(func(w): return is_instance_valid(w) and w.visible)
+			
+			# Check if main inventory should stay open due to tearoffs
+			var has_tearoffs = valid_windows.any(func(w): return w.get_meta("window_type", "") == "tearoff")
+			if has_tearoffs and not is_inventory_open:
+				# Don't change anything - tearoffs are handling UI state
+				return
+	
 	if is_inventory_open:
 		_hide_inventory()
 
 func _show_inventory():
 	"""Show the inventory window"""
+	# Check if inventory window was destroyed and recreate if needed
+	if not inventory_window or not is_instance_valid(inventory_window):
+		print("InventoryIntegration: Inventory window was destroyed, recreating...")
+		await _recreate_inventory_window()
+	
 	if not inventory_window or not setup_complete:
 		print("InventoryIntegration: Cannot show inventory - not ready")
 		return
@@ -201,6 +223,44 @@ func _show_inventory():
 	
 	# Emit signal
 	inventory_toggled.emit(true)
+
+func _recreate_inventory_window():
+	"""Recreate the inventory window if it was destroyed"""
+	# Create inventory window
+	inventory_window = InventoryWindow.new()
+	inventory_window.name = "InventoryWindow"
+
+	# Get UIManager and register the main inventory window
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		var ui_manager = ui_managers[0]
+		if ui_manager.has_method("add_main_inventory_window"):
+			print("InventoryIntegration: Re-registering main inventory window with UIManager")
+			ui_manager.add_main_inventory_window(inventory_window)
+		else:
+			# Fallback to inventory canvas
+			inventory_canvas.add_child(inventory_window)
+	else:
+		# Fallback to inventory canvas
+		inventory_canvas.add_child(inventory_window)
+	
+	# Wait for initialization
+	await get_tree().process_frame
+	
+	# Set inventory manager on the window
+	if inventory_window.has_method("set_inventory_manager"):
+		inventory_window.set_inventory_manager(inventory_manager)
+	
+	# Reconnect signals
+	_connect_window_signals()
+	
+	# Load saved position
+	_load_and_apply_position()
+	
+	# Hide the window initially
+	inventory_window.visible = false
+	
+	print("InventoryIntegration: Inventory window recreated!")
 
 func _hide_inventory():
 	"""Hide the inventory window"""
@@ -255,11 +315,7 @@ func _connect_signals():
 		inventory_manager.item_removed.connect(_on_item_removed)
 	
 	# Connect window signals
-	if inventory_window:
-		if inventory_window.has_signal("window_closed"):
-			inventory_window.window_closed.connect(_on_window_closed)
-		if inventory_window.has_signal("container_switched"):
-			inventory_window.container_switched.connect(_on_container_switched)
+	_connect_window_signals()
 
 func _set_player_input_enabled(enabled: bool):
 	"""Enable or disable player input"""
@@ -331,6 +387,19 @@ func set_integration_enabled(enabled: bool):
 	# Also disable event processing in event handlers
 	if event_handlers:
 		event_handlers.set_process_mode(Node.PROCESS_MODE_DISABLED if not enabled else Node.PROCESS_MODE_INHERIT)
+
+func _connect_window_signals():
+	"""Connect window signals"""
+	if inventory_window:
+		if inventory_window.has_signal("window_closed"):
+			# Disconnect first to avoid double connections
+			if inventory_window.window_closed.is_connected(_on_window_closed):
+				inventory_window.window_closed.disconnect(_on_window_closed)
+			inventory_window.window_closed.connect(_on_window_closed)
+		if inventory_window.has_signal("container_switched"):
+			if inventory_window.container_switched.is_connected(_on_container_switched):
+				inventory_window.container_switched.disconnect(_on_container_switched)
+			inventory_window.container_switched.connect(_on_container_switched)
 
 # Public interface methods
 func is_inventory_window_open() -> bool:

@@ -523,7 +523,8 @@ func _on_window_closed():
 		item_actions.close_all_dialogs()
 		item_actions.cleanup()
 
-	# Check if this is the last UI window before restoring game input
+	# CRITICAL FIX: Only emit inventory_closed if ALL UI windows are closing
+	# AND the main inventory is also gone
 	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
 	if ui_managers.size() > 0:
 		var ui_manager = ui_managers[0]
@@ -532,8 +533,11 @@ func _on_window_closed():
 			# Filter out this window since it's closing
 			var other_windows = remaining_windows.filter(func(w): return w != self and is_instance_valid(w))
 
+			# Check if main inventory is still open
+			var has_main_inventory = other_windows.any(func(w): return w.get_meta("window_type", "") == "main_inventory")
+			
+			# Only restore input if NO windows are left at all
 			if other_windows.size() == 0:
-				# This is the last UI window - emit inventory_closed to restore game input
 				print("ContainerTearOffWindow: Last UI window closing, emitting inventory_closed")
 				var integration = _find_inventory_integration(get_tree().current_scene)
 				if integration:
@@ -545,6 +549,11 @@ func _on_window_closed():
 					Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			else:
 				print("ContainerTearOffWindow: %d UI windows remaining, keeping UI input active" % other_windows.size())
+				
+				# CRITICAL: If main inventory is still open, don't change inventory state
+				if has_main_inventory:
+					print("ContainerTearOffWindow: Main inventory still open, preserving inventory state")
+					# Don't emit inventory_closed or change integration state
 
 	# Only try to reattach if parent window still exists
 	if parent_window and is_instance_valid(parent_window):

@@ -115,15 +115,30 @@ func _on_inventory_closed():
 	
 	if connected_ui_manager and connected_ui_manager.has_method("get_all_windows"):
 		var remaining_windows = connected_ui_manager.get_all_windows()
-		# Filter out any invalid windows
+		# Filter out any invalid windows and check for main inventory
 		var valid_windows = remaining_windows.filter(func(w): return is_instance_valid(w) and w.visible)
 		
-		if valid_windows.size() > 0:
+		# CRITICAL FIX: Always check if main inventory is actually closed
+		var main_inventory_open = false
+		for window in valid_windows:
+			var window_type = window.get_meta("window_type", "")
+			if window_type == "main_inventory":
+				main_inventory_open = true
+				break
+		
+		# Only stay in inventory mode if main inventory is actually open
+		if main_inventory_open:
 			should_switch_to_game = false
-			print("UIInputAdapter: Keeping inventory input mode - %d UI windows still open" % valid_windows.size())
+			print("UIInputAdapter: Main inventory still open - staying in inventory mode")
+		elif valid_windows.size() > 0:
+			# Tearoff windows only - check if we should stay in inventory mode
+			var has_tearoffs = valid_windows.any(func(w): return w.get_meta("window_type", "") == "tearoff")
+			if has_tearoffs:
+				should_switch_to_game = false
+				print("UIInputAdapter: Tearoff windows open - staying in inventory mode")
 	
 	if should_switch_to_game:
-		print("UIInputAdapter: Switching to game input mode - no UI windows remaining")
+		print("UIInputAdapter: Switching to game input mode - no main inventory open")
 		set_input_mode("game")
 	else:
 		print("UIInputAdapter: Staying in inventory input mode")

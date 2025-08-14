@@ -303,9 +303,9 @@ func unregister_window(window: Window_Base):
 	if window not in active_windows:
 		return
 		
-	# Don't automatically close other windows when main inventory closes
 	var window_type = window.get_meta("window_type", "")
 	var is_main_inventory = (window_type == "main_inventory")
+	var is_tearoff = (window_type == "tearoff")
 	
 	active_windows.erase(window)
 	window_stack.erase(window)
@@ -315,16 +315,25 @@ func unregister_window(window: Window_Base):
 	if canvas and is_instance_valid(canvas):
 		canvas.queue_free()
 	
-	# Update focus to remaining windows (but don't close them)
-	if window == focused_window:
-		focused_window = null
-		# Focus the topmost remaining window
-		_cleanup_invalid_windows()
-		if window_stack.size() > 0:
-			var next_window = window_stack[-1]
-			# Only focus if it's not the main inventory closing
-			if not is_main_inventory or next_window.get_meta("window_type", "") != "tearoff":
-				focus_window(next_window)
+	# CRITICAL FIX: If main inventory closes, don't close tearoff windows
+	if is_main_inventory:
+		# Keep tearoff windows open and independent
+		print("UIManager: Main inventory closing, preserving tearoff windows")
+		# Just remove focus without closing tearoffs
+		if window == focused_window:
+			focused_window = null
+			# Focus a tearoff window if available
+			_cleanup_invalid_windows()
+			var tearoff_windows = active_windows.filter(func(w): return w.get_meta("window_type", "") == "tearoff")
+			if tearoff_windows.size() > 0:
+				focus_window(tearoff_windows[0])
+	else:
+		# Normal window closing behavior for non-inventory windows
+		if window == focused_window:
+			focused_window = null
+			_cleanup_invalid_windows()
+			if window_stack.size() > 0:
+				focus_window(window_stack[-1])
 	
 	# Update layers
 	_update_window_layers()
