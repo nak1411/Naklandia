@@ -3,11 +3,11 @@ class_name UIManager
 extends Node
 
 # Canvas layers for different UI elements
-@onready var game_ui_canvas: CanvasLayer      # Layer 10 - HUD and game UI
-@onready var menu_ui_canvas: CanvasLayer      # Layer 20 - Menus and overlays
-@onready var inventory_canvas: CanvasLayer    # Layer 50 - Inventory window
-@onready var pause_canvas: CanvasLayer        # Layer 100 - Pause menu (top layer)
-@onready var ui_debugger: CanvasLayer 
+@onready var game_ui_canvas: CanvasLayer # Layer 10 - HUD and game UI
+@onready var menu_ui_canvas: CanvasLayer # Layer 20 - Menus and overlays
+@onready var inventory_canvas: CanvasLayer # Layer 50 - Inventory window
+@onready var pause_canvas: CanvasLayer # Layer 100 - Pause menu (top layer)
+@onready var ui_debugger: CanvasLayer
 
 # Containers within the canvas layers
 @onready var hud_container: Control
@@ -19,8 +19,8 @@ var crosshair_ui: CrosshairUI
 # Window management properties
 var active_windows: Array[Window_Base] = []
 var focused_window: Window_Base = null
-var window_stack: Array[Window_Base] = []  # Z-order stack
-var next_tearoff_layer: int = 60  # Start tearoffs higher than inventory (50)
+var window_stack: Array[Window_Base] = [] # Z-order stack
+var next_tearoff_layer: int = 60 # Start tearoffs higher than inventory (50)
 
 # Window management signals
 signal window_focused(window: Window_Base)
@@ -39,7 +39,7 @@ func setup_ui_debugger():
 	"""Set up the UI debugger"""
 	ui_debugger = CanvasLayer.new()
 	ui_debugger.name = "UIDebugger"
-	ui_debugger.layer = 200  # Higher than pause layer for visibility
+	ui_debugger.layer = 200 # Higher than pause layer for visibility
 	add_child(ui_debugger)
 
 func setup_canvas_layers():
@@ -72,7 +72,7 @@ func setup_ui_containers():
 	hud_container = Control.new()
 	hud_container.name = "HUDContainer"
 	hud_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	hud_container.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Don't block input
+	hud_container.mouse_filter = Control.MOUSE_FILTER_IGNORE # Don't block input
 	game_ui_canvas.add_child(hud_container)
 	
 	# Create menu container for overlays/menus
@@ -94,7 +94,7 @@ func setup_window_management():
 	
 	# Set up a timer for periodic cleanup of invalid windows
 	var cleanup_timer = Timer.new()
-	cleanup_timer.wait_time = 5.0  # Clean up every 5 seconds
+	cleanup_timer.wait_time = 5.0 # Clean up every 5 seconds
 	cleanup_timer.timeout.connect(_cleanup_invalid_windows)
 	cleanup_timer.autostart = true
 	add_child(cleanup_timer)
@@ -135,14 +135,14 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 	
 	match window_type:
 		"main_inventory":
-			canvas.layer = 50  # Use inventory layer
+			canvas.layer = 50 # Use inventory layer
 			inventory_canvas.add_child(canvas)
 		"tearoff":
 			# FIX: Add tearoff windows directly to scene tree with their own layer
 			canvas.layer = next_tearoff_layer
 			next_tearoff_layer += 1
 			# Add directly to scene tree, not nested in inventory_canvas
-			add_child(canvas)  # Changed from inventory_canvas.add_child(canvas)
+			add_child(canvas) # Changed from inventory_canvas.add_child(canvas)
 		"dialog":
 			# Dialogs use the highest priority pause canvas
 			canvas.layer = 100 + active_windows.size()
@@ -208,7 +208,7 @@ func focus_window(window: Window_Base):
 
 func _get_highest_layer_for_type(window_type: String) -> int:
 	"""Get the highest layer currently used by windows of the same type"""
-	var highest = 50  # Base layer
+	var highest = 50 # Base layer
 	
 	for window in active_windows:
 		if not is_instance_valid(window):
@@ -279,15 +279,18 @@ func _set_window_focus_state(window: Window_Base, has_focus: bool):
 	# Don't change visual state if window is being resized
 	if window.is_resizing:
 		return
+	
+	# Preserve the current alpha (transparency) value
+	var current_alpha = window.modulate.a
 		
 	if has_focus:
-		# Add focus styling
-		window.modulate = Color(1.25, 1.25, 1.25, 1.0)  # Slightly brighter
+		# Add focus styling while preserving transparency
+		window.modulate = Color(1.25, 1.25, 1.25, current_alpha) # Keep alpha
 		if window.has_method("set_edge_bloom_state"):
 			window.set_edge_bloom_state(Window_Base.BloomState.ACTIVE)
 	else:
-		# Remove focus styling  
-		window.modulate = Color(0.95, 0.95, 0.95, 1.0)  # Slightly dimmer
+		# Remove focus styling while preserving transparency
+		window.modulate = Color(0.95, 0.95, 0.95, current_alpha) # Keep alpha
 		if window.has_method("set_edge_bloom_state"):
 			window.set_edge_bloom_state(Window_Base.BloomState.SUBTLE)
 

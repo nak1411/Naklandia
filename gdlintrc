@@ -1,6 +1,6 @@
 class-definitions-order:
-- tools
 - classnames
+- tools
 - extends
 - docstrings
 - signals
