@@ -129,9 +129,6 @@ func _connect_to_ui_manager():
 	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
 	if ui_managers.size() > 0:
 		ui_manager = ui_managers[0]
-		print("Window_Base: %s connected to UIManager" % name)
-	else:
-		print("Window_Base: No UIManager found for %s" % name)
 
 
 func _unhandled_input(event: InputEvent):

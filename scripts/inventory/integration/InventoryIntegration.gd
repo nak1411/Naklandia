@@ -148,7 +148,6 @@ func _setup_original_inventory_system():
 	if ui_managers.size() > 0:
 		var ui_manager = ui_managers[0]
 		if ui_manager.has_method("add_main_inventory_window"):
-			print("InventoryIntegration: Registering main inventory window with UIManager")
 			ui_manager.add_main_inventory_window(inventory_window)
 		else:
 			# Fallback to inventory canvas
@@ -176,20 +175,16 @@ func _setup_original_inventory_system():
 	setup_complete = true
 	setup_completed.emit()
 
-	print("InventoryIntegration: Setup complete!")
-
 
 # Event handlers for integration layer
 func _on_inventory_opened_event():
 	"""Handle inventory opened event from integration system"""
-	print("InventoryIntegration: Received inventory_opened event")
 	if not is_inventory_open:
 		_show_inventory()
 
 
 func _on_inventory_closed_event():
 	"""Handle inventory closed event from integration system"""
-	print("InventoryIntegration: Received inventory_closed event")
 	if is_inventory_open:
 		_hide_inventory()
 
@@ -198,11 +193,9 @@ func _show_inventory():
 	"""Show the inventory window"""
 	# Check if inventory window was destroyed and recreate if needed
 	if not inventory_window or not is_instance_valid(inventory_window):
-		print("InventoryIntegration: Inventory window was destroyed, recreating...")
 		await _recreate_inventory_window()
 
 	if not inventory_window or not setup_complete:
-		print("InventoryIntegration: Cannot show inventory - not ready")
 		return
 
 	# Update the main inventory with filtered containers (excluding tearoff views)
@@ -256,7 +249,6 @@ func _recreate_inventory_window():
 	if ui_managers.size() > 0:
 		var ui_manager = ui_managers[0]
 		if ui_manager.has_method("add_main_inventory_window"):
-			print("InventoryIntegration: Re-registering main inventory window with UIManager")
 			ui_manager.add_main_inventory_window(inventory_window)
 		else:
 			# Fallback to inventory canvas
@@ -290,8 +282,6 @@ func _recreate_inventory_window():
 	# Hide the window initially
 	inventory_window.visible = false
 
-	print("InventoryIntegration: Inventory window recreated!")
-
 
 func _hide_inventory():
 	"""Hide the inventory window"""
@@ -317,12 +307,9 @@ func _hide_inventory():
 func _refresh_inventory_display():
 	"""Force refresh the inventory display"""
 	if inventory_window and inventory_window.content and inventory_window.visible:
-		print("Forcing inventory display refresh...")
-
 		# FIX: Synchronize container references before refreshing
 		var correct_container = inventory_manager.get_player_inventory()
 		if correct_container and inventory_window.content.current_container != correct_container:
-			print("Synchronizing container references...")
 			inventory_window.content.current_container = correct_container
 
 			if inventory_window.content.inventory_grid:
@@ -407,7 +394,6 @@ func _on_container_switched(_container: InventoryContainer_Base):
 
 func _on_window_closed():
 	"""Handle window being closed"""
-	print("InventoryIntegration: Main inventory window closed")
 
 
 func close_inventory_session():

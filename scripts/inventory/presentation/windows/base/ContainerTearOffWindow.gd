@@ -215,7 +215,7 @@ func _setup_content():
 	await get_tree().process_frame
 
 	# Setup item actions BEFORE initializing inventory content - SAME AS MAIN WINDOW
-	_setup_item_actions()
+	call_deferred("_setup_item_actions")
 
 	# ENABLE CROSS-WINDOW DROPS ON CONTENT
 	if content and not content.gui_input.is_connected(_on_content_gui_input):
@@ -552,7 +552,7 @@ func set_inventory_manager(manager: InventoryManager):
 
 	# Set up item actions now that we have inventory manager
 	if not item_actions:
-		_setup_item_actions()
+		call_deferred("_setup_item_actions")
 
 	# Also set/update it on item_actions if it exists
 	if item_actions and item_actions.has_method("set_inventory_manager"):

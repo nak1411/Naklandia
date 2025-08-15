@@ -136,13 +136,9 @@ func _on_inventory_closed():
 
 		if valid_windows.size() > 0:
 			should_switch_to_game = false
-			print("UIInputAdapter: %d UI windows still open - staying in inventory mode" % valid_windows.size())
 
 	if should_switch_to_game:
-		print("UIInputAdapter: No UI windows remaining - switching to game mode")
 		set_input_mode("game")
-	else:
-		print("UIInputAdapter: Staying in inventory input mode")
 
 	# Hide main inventory UI layer (tearoffs have their own layers)
 	if connected_ui_manager:
@@ -162,9 +158,6 @@ func _on_layer_visibility_changed(layer_name: String, visible: bool):
 		# Fix: Use a method call instead of emitting a non-existent signal
 		if event_bus.has_method("emit_ui_layer_changed"):
 			event_bus.emit_ui_layer_changed(layer_name, visible)
-		else:
-			# Just print for debugging if the method doesn't exist
-			print("UIInputAdapter: Layer %s visibility changed to %s" % [layer_name, visible])
 
 
 func set_drag_in_progress(dragging: bool):

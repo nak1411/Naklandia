@@ -95,7 +95,7 @@ func _setup_content():
 	await get_tree().process_frame
 
 	# FIXED: Setup item actions BEFORE initializing inventory content
-	_setup_item_actions()
+	call_deferred("_setup_item_actions")
 
 	# Connect header signals AFTER both header and content are created
 	if header:
