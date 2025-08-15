@@ -94,7 +94,6 @@ func _input(event: InputEvent):
 								# The external window will handle the drop
 								# But we need to refresh our display after
 								await get_tree().process_frame
-
 								# FIX: Force refresh our display to remove ghost items
 								if content:
 									content.refresh_display()
@@ -450,16 +449,6 @@ func _handle_cross_window_drop_to_main(drag_data: Dictionary, target_container: 
 
 	# Use the existing transaction manager
 	var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
-
-	if success:
-		# Refresh main window display
-		content.refresh_display()
-
-		# Notify source of successful drop
-		if source_slot and source_slot.has_method("_on_external_drop_result"):
-			source_slot._on_external_drop_result(true)
-		elif source_row and source_row.has_method("_on_external_drop_result"):
-			source_row._on_external_drop_result(true)
 
 	return success
 

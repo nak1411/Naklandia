@@ -47,12 +47,13 @@ func _setup_controls():
 	var button_height = 24  # Our target height
 	var margin = 4
 	var bottom_padding = 4
+	var left_padding = 0
 	var top_padding = 2
 
 	# Filter "button" using Panel + Label
 	filter_options = _create_label_button("All Items ▼", Vector2(100, button_height))
 	filter_options.name = "FilterButton"
-	filter_options.position = Vector2(current_x, bottom_padding)
+	filter_options.position = Vector2(current_x + left_padding, bottom_padding)
 	add_child(filter_options)
 	current_x += 100 + margin
 
@@ -100,7 +101,7 @@ func _create_label_button(text: String, button_size: Vector2) -> Panel:
 	normal_style.border_width_right = 1
 	normal_style.border_width_top = 1
 	normal_style.border_width_bottom = 1
-	normal_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	normal_style.border_color = ColorUtilities.get_border_color()
 	panel.add_theme_stylebox_override("panel", normal_style)
 
 	# Add label for text
@@ -133,7 +134,7 @@ func _on_fake_button_hover(panel: Panel, is_hovering: bool):
 	style.border_width_right = 1
 	style.border_width_top = 1
 	style.border_width_bottom = 1
-	style.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	style.border_color = ColorUtilities.get_border_color()
 	panel.add_theme_stylebox_override("panel", style)
 
 
@@ -185,7 +186,7 @@ func _style_display_mode_button():
 	normal_style.border_width_right = 1
 	normal_style.border_width_top = 1
 	normal_style.border_width_bottom = 1
-	normal_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	normal_style.border_color = ColorUtilities.get_border_color()
 
 	# Create hover style
 	var hover_style = normal_style.duplicate()
@@ -211,7 +212,7 @@ func _style_custom_display_button():
 	style_normal.border_width_right = 1
 	style_normal.border_width_top = 1
 	style_normal.border_width_bottom = 1
-	style_normal.border_color = Color(0.6, 0.6, 0.6, 1.0)
+	style_normal.border_color = ColorUtilities.get_border_color()
 
 	var style_hover = StyleBoxFlat.new()
 	style_hover.bg_color = Color(0.5, 0.5, 0.5, 1.0)
@@ -240,7 +241,7 @@ func _style_search_field():
 	style_normal.border_width_right = 1
 	style_normal.border_width_top = 1
 	style_normal.border_width_bottom = 1
-	style_normal.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	style_normal.border_color = ColorUtilities.get_border_color()
 	style_normal.content_margin_left = 6
 	style_normal.content_margin_right = 6
 	style_normal.content_margin_top = 1
@@ -330,7 +331,7 @@ func _style_custom_filter_button():
 	normal_style.border_width_right = 1
 	normal_style.border_width_top = 1
 	normal_style.border_width_bottom = 1
-	normal_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	normal_style.border_color = ColorUtilities.get_border_color()
 	# Reduce content margins to make button shorter
 	normal_style.content_margin_left = 8
 	normal_style.content_margin_right = 8
@@ -364,7 +365,7 @@ func _style_custom_sort_button():
 	style_normal.border_width_right = 1
 	style_normal.border_width_top = 1
 	style_normal.border_width_bottom = 1
-	style_normal.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	style_normal.border_color = ColorUtilities.get_border_color()
 	# Reduce content margins to make button shorter
 	style_normal.content_margin_left = 8
 	style_normal.content_margin_right = 8
@@ -452,7 +453,7 @@ func _remove_default_outlines():
 				style_normal.border_width_right = 1
 				style_normal.border_width_top = 1
 				style_normal.border_width_bottom = 1
-				style_normal.border_color = Color(0.4, 0.4, 0.4, 1.0)
+				style_normal.border_color = ColorUtilities.get_border_color()
 				# Reduce content margins for shorter height
 				style_normal.content_margin_left = 6
 				style_normal.content_margin_right = 6

@@ -291,7 +291,7 @@ func _setup_left_panel():
 	# Keep normal dark background for container list
 	var list_style = StyleBoxFlat.new()
 	list_style.bg_color = Color(0.1, 0.1, 0.1, 1.0)
-	list_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
+	list_style.border_color = ColorUtilities.get_border_color()
 	list_style.border_width_left = 1
 	list_style.border_width_right = 1
 	list_style.border_width_top = 1
@@ -300,6 +300,7 @@ func _setup_left_panel():
 	list_style.content_margin_right = 6
 	list_style.content_margin_top = 4
 	list_style.content_margin_bottom = 4
+
 	container_list.add_theme_stylebox_override("panel", list_style)
 
 	list_wrapper.add_child(container_list)
@@ -374,7 +375,7 @@ func _setup_mass_info_bar(parent: Control):
 
 	var style_box = StyleBoxFlat.new()
 	style_box.bg_color = Color(0.1, 0.1, 0.15, 0.9)
-	style_box.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	style_box.border_color = ColorUtilities.get_border_color()
 	style_box.border_width_left = 1
 	style_box.border_width_right = 1
 	style_box.border_width_top = 1

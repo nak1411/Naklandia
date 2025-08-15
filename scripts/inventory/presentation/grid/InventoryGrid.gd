@@ -138,6 +138,16 @@ func _setup_virtual_scrolling():
 	virtual_content.clip_contents = true
 	virtual_scroll_container.add_child(virtual_content)
 
+	# Set background color
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = background_color
+	style_box.border_color = ColorUtilities.get_border_color()
+	style_box.border_width_left = 1
+	style_box.border_width_right = 1
+	style_box.border_width_top = 1
+	style_box.border_width_bottom = 1
+	virtual_scroll_container.add_theme_stylebox_override("panel", style_box)
+
 	# Connect input for right-click context menus
 	virtual_content.gui_input.connect(_on_virtual_content_input)
 
@@ -146,11 +156,6 @@ func _setup_virtual_scrolling():
 	# OPTIMIZATION: Only connect resize if we're actually using virtual scrolling
 	if enable_virtual_scrolling:
 		virtual_scroll_container.resized.connect(_on_virtual_container_resized)
-
-	# Set background color
-	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = background_color
-	virtual_scroll_container.add_theme_stylebox_override("panel", style_box)
 
 
 func _on_virtual_content_input(event: InputEvent):
@@ -795,7 +800,6 @@ func _setup_background():
 
 	var style_box = StyleBoxFlat.new()
 	style_box.bg_color = background_color
-	background_panel.add_theme_stylebox_override("panel", style_box)
 
 
 func _setup_grid():

@@ -335,6 +335,8 @@ func _get_resize_area_at_position(global_pos: Vector2) -> ResizeMode:
 
 
 func _setup_window_ui():
+	var container_offset = 2
+
 	# Main container
 	main_container = Control.new()
 	main_container.name = "MainContainer"
@@ -399,10 +401,10 @@ func _setup_window_ui():
 	content_area.anchor_top = 0.0
 	content_area.anchor_right = 1.0
 	content_area.anchor_bottom = 1.0
-	content_area.offset_left = border_width
-	content_area.offset_top = title_bar_height + border_width
-	content_area.offset_right = -border_width
-	content_area.offset_bottom = -border_width
+	content_area.offset_left = border_width + container_offset
+	content_area.offset_top = title_bar_height + border_width + container_offset
+	content_area.offset_right = -border_width - container_offset
+	content_area.offset_bottom = -border_width - container_offset
 	content_area.mouse_filter = Control.MOUSE_FILTER_PASS
 	main_container.add_child(content_area)
 
