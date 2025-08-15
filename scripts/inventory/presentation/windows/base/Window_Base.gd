@@ -107,6 +107,8 @@ func _ready():
 
 	set_process_unhandled_input(true)
 
+	mouse_filter = Control.MOUSE_FILTER_STOP
+
 	# Call virtual method for child classes to override
 	call_deferred("_setup_window_content")
 	# Find and connect to UIManager
@@ -141,6 +143,11 @@ func _unhandled_input(event: InputEvent):
 		var window_rect = Rect2(local_pos, size)
 
 		if window_rect.has_point(event.global_position):
+			# Check if there's an active drag operation - don't interfere
+			var viewport = get_viewport()
+			if viewport and viewport.has_meta("current_drag_data"):
+				return  # Let drag system handle it
+
 			# Don't interfere with resize operations
 			var resize_mode = _get_resize_area_at_position(event.global_position)
 			if resize_mode != ResizeMode.NONE:
@@ -152,10 +159,11 @@ func _unhandled_input(event: InputEvent):
 
 	# Handle mouse release globally during ANY operation (resize OR drag)
 	if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		# ONLY handle our own window operations, not global drag operations
 		if is_resizing:
 			_end_resize()
 			get_viewport().set_input_as_handled()
-		elif is_dragging:
+		elif is_dragging:  # This is window dragging, not item dragging
 			is_dragging = false
 			drag_initiated = false
 			mouse_pressed = false
@@ -164,14 +172,6 @@ func _unhandled_input(event: InputEvent):
 			if snapping_manager:
 				snapping_manager.end_window_drag(self)
 			get_viewport().set_input_as_handled()
-
-	# Existing resize handling
-	if not is_resizing:
-		return
-
-	if event is InputEventMouseMotion:
-		_handle_resize_motion(event.global_position)
-		get_viewport().set_input_as_handled()
 
 
 func _gui_input(event: InputEvent):
@@ -341,7 +341,7 @@ func _setup_window_ui():
 	main_container = Control.new()
 	main_container.name = "MainContainer"
 	main_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main_container.mouse_filter = Control.MOUSE_FILTER_STOP
+	main_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(main_container)
 
 	# Connect input to main container for full-window focus
@@ -351,7 +351,7 @@ func _setup_window_ui():
 	background_panel = Panel.new()
 	background_panel.name = "BackgroundPanel"
 	background_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	background_panel.mouse_filter = Control.MOUSE_FILTER_PASS  # Allow clicks to pass through to main_container
+	background_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	main_container.add_child(background_panel)
 
 	# Style background

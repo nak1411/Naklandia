@@ -59,11 +59,7 @@ func _input(event: InputEvent):
 
 		# Check if drop is within our window bounds
 		if window_rect.has_point(event.global_position):
-			# Check if drop is over a valid drop area
-			var target_container = _get_tearoff_target_container(event.global_position)
-			if not target_container:
-				return  # Not over a valid drop area
-
+			# Check if there's an active drag operation
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
 				var source_slot = drag_data.get("source_slot")
@@ -72,25 +68,39 @@ func _input(event: InputEvent):
 				# Check if drag is from an external source (not our container)
 				var source_container_id = ""
 				if source_slot and source_slot.has_method("get_container_id"):
-					source_container_id = source_slot.get_container_id()  # Fixed: removed quote
+					source_container_id = source_slot.get_container_id()
 				elif source_row and source_row.has_method("_get_container_id"):
 					source_container_id = source_row._get_container_id()
 
 				if source_container_id != "":
 					var our_container_id = container_view.container_id if container_view else container.container_id
 
-					# Only accept drops from OTHER containers
+					# Check if it's a cross-container drop
 					if source_container_id != our_container_id:
-						if _handle_cross_window_drop(drag_data):
-							get_viewport().set_input_as_handled()
-							return
+						# Check if drop is over a valid drop area
+						var target_container = _get_tearoff_target_container(event.global_position)
+						if target_container:
+							# Valid cross-container drop - handle it and block event
+							if _handle_cross_window_drop(drag_data):
+								get_viewport().set_input_as_handled()
+								return
 
-		# NEW: Check if we're dropping FROM this tearoff TO an external container
-		# This needs to run for ALL tearoff windows to check external drops
+						# Invalid drop area but cross-container - block and cleanup
+						_cleanup_failed_drop(drag_data)
+						get_viewport().set_input_as_handled()
+						return
+
+					# Same container drop - block and cleanup
+					_cleanup_failed_drop(drag_data)
+					get_viewport().set_input_as_handled()
+					return
+
+			# No drag operation active - regular window interaction
+			return
+
+		# Handle drops FROM this tearoff TO external containers
 		if viewport and viewport.has_meta("current_drag_data"):
 			var drag_data = viewport.get_meta("current_drag_data")
-
-			# Check if the drag originated from THIS tearoff window
 			var source_slot = drag_data.get("source_slot")
 			var source_row = drag_data.get("source_row")
 			var source_container_id = ""
@@ -104,33 +114,67 @@ func _input(event: InputEvent):
 
 			# Process drops to external windows ONLY if drag is from THIS tearoff
 			if source_container_id == our_container_id or source_container_id == "tearoff_" + our_container_id:
-				# Check ALL external container windows (including other tearoffs marked as external)
 				var external_windows = get_tree().get_nodes_in_group("external_container_windows")
 				for window in external_windows:
 					if window != self and is_instance_valid(window):
 						var external_window_rect = Rect2(window.global_position, window.size)
 						if external_window_rect.has_point(event.global_position):
-							# Check if it's another tearoff marked as external
+							get_viewport().set_input_as_handled()
+
 							if window is ContainerTearOffWindow:
-								# Handle drop to another tearoff that's an external container
 								var external_tearoff = window as ContainerTearOffWindow
 								var target_container = external_tearoff.container_view if external_tearoff.container_view else external_tearoff.container
 
-								# Don't drop to same container
 								if target_container and target_container.container_id != our_container_id:
-									# Perform the transfer directly
-									if _handle_transfer_to_external_tearoff(drag_data, target_container):
-										get_viewport().set_input_as_handled()
-										return
+									_handle_transfer_to_external_tearoff(drag_data, target_container)
+									return
 							else:
-								# Handle drop to InteractableContainer's window
 								var external_container = window.get_meta("external_container", null)
 								if external_container:
 									var interactable_container = window.get_meta("interactable_container", null)
 									if interactable_container and interactable_container.has_method("_handle_cross_window_drop_to_container"):
-										if interactable_container._handle_cross_window_drop_to_container(drag_data):
-											get_viewport().set_input_as_handled()
-											return
+										interactable_container._handle_cross_window_drop_to_container(drag_data)
+										return
+
+							# If we get here, the external drop failed
+							_cleanup_failed_drop(drag_data)
+							return
+
+
+func _cleanup_failed_drop(drag_data: Dictionary):
+	"""Clean up failed drag operations"""
+	var source_slot = drag_data.get("source_slot")
+	var source_row = drag_data.get("source_row")
+
+	# Notify source that drop failed
+	if source_slot and source_slot.has_method("_on_external_drop_result"):
+		source_slot._on_external_drop_result(false)
+	elif source_row and source_row.has_method("_on_external_drop_result"):
+		source_row._on_external_drop_result(false)
+
+	# Clean up global drag state
+	var viewport = get_viewport()
+	if viewport and viewport.has_meta("current_drag_data"):
+		viewport.remove_meta("current_drag_data")
+
+	# Clean up any drag previews
+	_cleanup_all_drag_previews()
+
+
+func _cleanup_all_drag_previews():
+	"""Clean up all drag preview elements"""
+	var root = get_tree().root
+	var drag_canvases = []
+
+	# Find all DragCanvas nodes
+	for child in root.get_children():
+		if child is CanvasLayer and child.name == "DragCanvas":
+			drag_canvases.append(child)
+
+	# Clean them up
+	for canvas in drag_canvases:
+		if is_instance_valid(canvas):
+			canvas.queue_free()
 
 
 func _handle_transfer_to_external_tearoff(drag_data: Dictionary, target_container: InventoryContainer_Base) -> bool:
