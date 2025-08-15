@@ -52,27 +52,27 @@ func _ready():
 
 
 func _input(event: InputEvent):
-	"""Handle input with higher priority"""
+	"""Handle input with higher priority for cross-window drops"""
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		var window_rect = Rect2(global_position, size)
+		var viewport = get_viewport()
 
-		# Only handle drops that happen WITHIN our window bounds
+		# Check if drop is within our window bounds
 		if window_rect.has_point(event.global_position):
 			# Check if drop is over a valid drop area
 			var target_container = _get_tearoff_target_container(event.global_position)
 			if not target_container:
 				return  # Not over a valid drop area
 
-			var viewport = get_viewport()
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
 				var source_slot = drag_data.get("source_slot")
 				var source_row = drag_data.get("source_row")
 
-				# Check if drag is from an external source (not our container) - HANDLE BOTH SLOT AND ROW
+				# Check if drag is from an external source (not our container)
 				var source_container_id = ""
 				if source_slot and source_slot.has_method("get_container_id"):
-					source_container_id = source_slot.get_container_id()
+					source_container_id = source_slot.get_container_id()  # Fixed: removed quote
 				elif source_row and source_row.has_method("_get_container_id"):
 					source_container_id = source_row._get_container_id()
 
@@ -84,6 +84,104 @@ func _input(event: InputEvent):
 						if _handle_cross_window_drop(drag_data):
 							get_viewport().set_input_as_handled()
 							return
+
+		# NEW: Check if we're dropping FROM this tearoff TO an external container
+		# This needs to run for ALL tearoff windows to check external drops
+		if viewport and viewport.has_meta("current_drag_data"):
+			var drag_data = viewport.get_meta("current_drag_data")
+
+			# Check if the drag originated from THIS tearoff window
+			var source_slot = drag_data.get("source_slot")
+			var source_row = drag_data.get("source_row")
+			var source_container_id = ""
+
+			if source_slot and source_slot.has_method("get_container_id"):
+				source_container_id = source_slot.get_container_id()
+			elif source_row and source_row.has_method("_get_container_id"):
+				source_container_id = source_row._get_container_id()
+
+			var our_container_id = container_view.container_id if container_view else container.container_id
+
+			# Process drops to external windows ONLY if drag is from THIS tearoff
+			if source_container_id == our_container_id or source_container_id == "tearoff_" + our_container_id:
+				# Check ALL external container windows (including other tearoffs marked as external)
+				var external_windows = get_tree().get_nodes_in_group("external_container_windows")
+				for window in external_windows:
+					if window != self and is_instance_valid(window):
+						var external_window_rect = Rect2(window.global_position, window.size)
+						if external_window_rect.has_point(event.global_position):
+							# Check if it's another tearoff marked as external
+							if window is ContainerTearOffWindow:
+								# Handle drop to another tearoff that's an external container
+								var external_tearoff = window as ContainerTearOffWindow
+								var target_container = external_tearoff.container_view if external_tearoff.container_view else external_tearoff.container
+
+								# Don't drop to same container
+								if target_container and target_container.container_id != our_container_id:
+									# Perform the transfer directly
+									if _handle_transfer_to_external_tearoff(drag_data, target_container):
+										get_viewport().set_input_as_handled()
+										return
+							else:
+								# Handle drop to InteractableContainer's window
+								var external_container = window.get_meta("external_container", null)
+								if external_container:
+									var interactable_container = window.get_meta("interactable_container", null)
+									if interactable_container and interactable_container.has_method("_handle_cross_window_drop_to_container"):
+										if interactable_container._handle_cross_window_drop_to_container(drag_data):
+											get_viewport().set_input_as_handled()
+											return
+
+
+func _handle_transfer_to_external_tearoff(drag_data: Dictionary, target_container: InventoryContainer_Base) -> bool:
+	"""Handle transferring item to another external tearoff window"""
+	var source_slot = drag_data.get("source_slot")
+	var source_row = drag_data.get("source_row")
+	var item = drag_data.get("item")
+
+	if not item or not inventory_manager or not target_container:
+		return false
+
+	# Check if target can accept the item
+	if not target_container.can_add_item(item):
+		return false
+
+	# Calculate transfer amount
+	var available_volume = target_container.get_available_volume()
+	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
+	var transfer_amount = min(item.quantity, max_transferable)
+
+	if transfer_amount <= 0:
+		return false
+
+	# Get source container ID
+	var source_container_id = container_view.container_id if container_view else container.container_id
+
+	# Use the inventory manager to transfer
+	var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
+
+	if success:
+		# Refresh both windows
+		if content:
+			content.refresh_display()
+
+		# Find and refresh the target tearoff window
+		var external_windows = get_tree().get_nodes_in_group("external_container_windows")
+		for window in external_windows:
+			if window is ContainerTearOffWindow:
+				var tearoff = window as ContainerTearOffWindow
+				if tearoff.container == target_container or (tearoff.container_view and tearoff.container_view.source_container == target_container):
+					if tearoff.content:
+						tearoff.content.refresh_display()
+					break
+
+		# Notify source of successful drop
+		if source_slot and source_slot.has_method("_on_external_drop_result"):
+			source_slot._on_external_drop_result(true)
+		elif source_row and source_row.has_method("_on_external_drop_result"):
+			source_row._on_external_drop_result(true)
+
+	return success
 
 
 func _get_tearoff_target_container(drop_position: Vector2) -> InventoryContainer_Base:
