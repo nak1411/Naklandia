@@ -1727,26 +1727,34 @@ func _place_item_in_grid(item: InventoryItem_Base, position: Vector2i):
 
 
 func force_all_slots_refresh():
-	# Skip visual refresh during active resize
-	if _resize_complete_timer.time_left > 0:
-		return
-
+	"""Force all slots to refresh their visual state - fixes ghost items"""
 	if enable_virtual_scrolling:
-		for slot in virtual_rendered_slots:
-			if slot and is_instance_valid(slot) and slot.has_method("force_visual_refresh"):
-				slot.force_visual_refresh()
+		# For virtual scrolling, refresh the entire display
+		_refresh_virtual_display()
 	else:
-		# Traditional grid refresh
-		if not slots or slots.size() == 0:
-			return
-
+		# For traditional mode, clear and rebuild all slots
 		for y in range(slots.size()):
-			if not slots[y]:
-				continue
 			for x in range(slots[y].size()):
 				var slot = slots[y][x]
-				if slot and is_instance_valid(slot) and slot.has_method("force_visual_refresh"):
-					slot.force_visual_refresh()
+				if slot:
+					# Check if slot has an item that no longer exists in container
+					if slot.has_item():
+						var item_exists = false
+						if container:
+							for container_item in container.items:
+								if container_item == slot.get_item():
+									item_exists = true
+									break
+
+						# Clear ghost items
+						if not item_exists:
+							slot.clear_item()
+							slot.modulate.a = 1.0
+							slot.mouse_filter = Control.MOUSE_FILTER_PASS
+
+					# Force visual refresh
+					if slot.visuals:
+						slot.visuals.force_visual_refresh()
 
 
 # Input handling for focus management

@@ -228,7 +228,7 @@ func cleanup_glow():
 
 
 func _get_inventory_grid():
-	"""Legacy helper method"""
+	"""Get the parent inventory grid"""
 	var current = get_parent()
 	while current:
 		if current.get_script() and current.get_script().get_global_name() == "InventoryGrid":
@@ -328,13 +328,10 @@ func force_visual_refresh():
 	visuals.force_visual_refresh()
 
 
-func _trigger_grid_refresh(grid):
-	"""Helper to trigger grid refresh - same pattern as list view"""
+func _trigger_grid_refresh(grid: InventoryGrid):
+	"""Helper to trigger grid refresh"""
 	if grid and is_instance_valid(grid):
-		if grid.enable_virtual_scrolling:
-			grid._refresh_virtual_display()
-		else:
-			grid.refresh_display()
+		grid.refresh_display()
 
 
 func cleanup():
@@ -393,8 +390,24 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 
 	if success:
 		if item.quantity <= 0:
+			# FIX: Make slot invisible immediately when item is fully transferred
+			modulate.a = 0.0
+			mouse_filter = Control.MOUSE_FILTER_IGNORE
 			clear_item()
+
+			# Clean up drag state
+			if drag_handler:
+				drag_handler.is_dragging = false
+				drag_handler.drag_preview_created = false
+
+			# Trigger a deferred refresh of the source grid/list
+			var grid = _get_inventory_grid()
+			if grid:
+				call_deferred("_trigger_grid_refresh", grid)
 		else:
+			# Item partially transferred - reset visual state
+			modulate.a = 1.0
+			mouse_filter = Control.MOUSE_FILTER_PASS
 			visuals.update_item_display()
 
 		# Refresh target display

@@ -575,11 +575,12 @@ func _on_container_item_removed(item: InventoryItem_Base, _position: Vector2i):
 
 	update_mass_info()
 
-	# FORCE IMMEDIATE REFRESH of both views to ensure item disappears
-	await get_tree().process_frame  # Wait one frame for signals to propagate
-
+	# FIX: Force IMMEDIATE refresh without waiting for frame
+	# This prevents ghost items from remaining visible
 	if inventory_grid and inventory_grid.visible:
 		inventory_grid.refresh_display()
+		# Force all slots to update their visual state
+		inventory_grid.force_all_slots_refresh()
 
 	if list_view and list_view.visible:
 		list_view.refresh_display()

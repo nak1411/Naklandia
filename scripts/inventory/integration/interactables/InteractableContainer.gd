@@ -330,35 +330,33 @@ func _handle_cross_window_drop_to_container(drag_data: Dictionary) -> bool:
 	if transfer_amount <= 0:
 		return false
 
-	# Direct transfer (bypassing InventoryTransactionManager)
-	var source_container = inventory_manager.containers.get(source_container_id)
-	var target_container = inventory_manager.containers.get(inventory_container.container_id)
+	# FIX: Use the inventory manager's transfer system instead of manual duplication
+	# This ensures proper notifications and cleanup
+	var success = inventory_manager.transfer_item(item, source_container_id, inventory_container.container_id, Vector2i(-1, -1), transfer_amount)
 
-	if source_container and target_container:
-		# Create a copy of the item for transfer
-		var item_copy = item.duplicate()
-		item_copy.quantity = transfer_amount
+	if success:
+		# Refresh the container window display
+		if container_window and container_window.content:
+			container_window.content.refresh_display()
 
-		# Add to target
-		if target_container.add_item(item_copy):
-			# Remove from source
-			item.quantity -= transfer_amount
+		# Notify source slot/row that drop was successful
+		# This triggers proper cleanup of the source slot
+		if source_slot and source_slot.has_method("_on_external_drop_result"):
+			source_slot._on_external_drop_result(true)
+		elif source_row and source_row.has_method("_on_external_drop_result"):
+			source_row._on_external_drop_result(true)
 
-			if item.quantity <= 0:
-				source_container.remove_item(item)
+		# Force refresh of the main inventory window to clear ghost items
+		var inventory_integration = get_tree().get_first_node_in_group("inventory_integration")
+		if inventory_integration and inventory_integration.inventory_window and inventory_integration.inventory_window.content:
+			# Force immediate refresh
+			inventory_integration.inventory_window.content.refresh_display()
 
-			# Refresh displays
-			if container_window and container_window.content:
-				container_window.content.refresh_display()
+			# Also force the grid to clear any ghost slots
+			if inventory_integration.inventory_window.content.inventory_grid:
+				inventory_integration.inventory_window.content.inventory_grid.force_all_slots_refresh()
 
-			# Refresh main inventory
-			var inventory_integration = get_tree().get_first_node_in_group("inventory_integration")
-			if inventory_integration and inventory_integration.inventory_window and inventory_integration.inventory_window.content:
-				inventory_integration.inventory_window.content.refresh_display()
-
-			return true
-
-	return false
+	return success
 
 
 func _on_container_window_closed():

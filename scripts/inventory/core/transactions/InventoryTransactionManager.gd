@@ -49,6 +49,7 @@ func _handle_cross_container_transfer(item: InventoryItem_Base, from_container: 
 	transfer_quantity = min(transfer_quantity, item.quantity)
 
 	if transfer_quantity <= 0:
+		print("HEYYYEYE")
 		return false
 
 	# Check if target can accept the item/quantity
