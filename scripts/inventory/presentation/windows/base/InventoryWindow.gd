@@ -34,16 +34,16 @@ func _input(event: InputEvent):
 	"""Handle cross-window drops to main inventory window"""
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		var window_rect = Rect2(global_position, size)
+		var viewport = get_viewport()
 
 		# Only handle drops that happen WITHIN our window bounds
 		if window_rect.has_point(event.global_position):
-			var viewport = get_viewport()
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
 				var source_slot = drag_data.get("source_slot")
 				var source_row = drag_data.get("source_row")
 
-				# Check if drag is from an external source (tearoff window) - HANDLE BOTH SLOT AND ROW
+				# Check if drag is from an external source (tearoff window)
 				var source_container_id = ""
 				if source_slot and source_slot.has_method("get_container_id"):
 					source_container_id = source_slot.get_container_id()
@@ -63,25 +63,47 @@ func _input(event: InputEvent):
 								get_viewport().set_input_as_handled()
 								return
 		else:
-			# Handle drops OUTSIDE our window (to external container windows)
-			var viewport = get_viewport()
+			# FIX: Handle drops OUTSIDE our window (to external containers)
+			# Check if the drag originated from THIS inventory window
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
+				var source_slot = drag_data.get("source_slot")
+				var source_row = drag_data.get("source_row")
 
-				# Check for drops to external container windows
-				var external_windows = get_tree().get_nodes_in_group("external_container_windows")
-				for window in external_windows:
-					if window != self and is_instance_valid(window):
-						var external_window_rect = Rect2(window.global_position, window.size)
-						if external_window_rect.has_point(event.global_position):
-							# This drop is targeting an external container window
-							var external_container = window.get_meta("external_container", null)
-							if external_container:
-								var interactable_container = window.get_meta("interactable_container", null)
-								if interactable_container and interactable_container.has_method("_handle_cross_window_drop_to_container"):
-									if interactable_container._handle_cross_window_drop_to_container(drag_data):
-										get_viewport().set_input_as_handled()
-										return
+				# Check if drag is from our inventory
+				var source_container_id = ""
+				if source_slot and source_slot.has_method("get_container_id"):
+					source_container_id = source_slot.get_container_id()
+				elif source_row and source_row.has_method("_get_container_id"):
+					source_container_id = source_row._get_container_id()
+
+				# Check if this is from one of our containers
+				var is_our_drag = false
+				for container in open_containers:
+					if container.container_id == source_container_id:
+						is_our_drag = true
+						break
+
+				if is_our_drag:
+					# Check if we dropped on an external container window
+					var external_windows = get_tree().get_nodes_in_group("external_container_windows")
+					for window in external_windows:
+						if window != self and is_instance_valid(window):
+							var external_window_rect = Rect2(window.global_position, window.size)
+							if external_window_rect.has_point(event.global_position):
+								# The external window will handle the drop
+								# But we need to refresh our display after
+								await get_tree().process_frame
+
+								# FIX: Force refresh our display to remove ghost items
+								if content:
+									content.refresh_display()
+
+								# Clean up the drag data
+								if viewport.has_meta("current_drag_data"):
+									viewport.remove_meta("current_drag_data")
+
+								return
 
 
 func _setup_window_content():
