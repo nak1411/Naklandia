@@ -191,8 +191,16 @@ func _create_tearoff_window(container: InventoryContainer_Base, drop_position: V
 	if drop_position != Vector2.ZERO:
 		tearoff_window.position = drop_position
 	else:
-		var mouse_pos = main_window.get_global_mouse_position()
-		tearoff_window.position = mouse_pos - Vector2(100, 50)
+		# For interactable containers (no drop position), center on screen
+		var viewport = main_window.get_viewport()
+		if viewport:
+			var screen_size = viewport.get_visible_rect().size
+			var window_size_to_use = tearoff_window.size if tearoff_window.size != Vector2.ZERO else tearoff_window.default_size
+			tearoff_window.position = (screen_size - window_size_to_use) / 2
+		else:
+			# Fallback to mouse position if viewport not available
+			var mouse_pos = main_window.get_global_mouse_position()
+			tearoff_window.position = mouse_pos - Vector2(100, 50)
 
 	# Set size if provided
 	if window_size != Vector2.ZERO:
