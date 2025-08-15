@@ -174,10 +174,20 @@ func _execute_tearoff_on_drop(drop_position: Vector2):
 
 
 func _create_tearoff_window(container: InventoryContainer_Base, drop_position: Vector2 = Vector2.ZERO, window_size: Vector2 = Vector2.ZERO):
-	"""Create a new tearoff window for the container"""
-	var tearoff_window = ContainerTearOffWindow.new(container, main_window)
+	"""Create a new tearoff window for the given container"""
+	if not container or not main_window:
+		return
 
-	# Position the window - use drop_position if provided, otherwise use mouse position
+	var tearoff_window = ContainerTearOffWindow.new(container, main_window)
+	tearoff_window.name = "TearoffWindow_" + container.container_name
+
+	# CRITICAL: Set metadata IMMEDIATELY after creation
+	tearoff_window.set_meta("window_type", "tearoff")
+
+	# Set up inventory connection
+	tearoff_window.set_inventory_manager(main_window.inventory_manager)
+
+	# Set position - use drop_position if provided, otherwise use mouse position
 	if drop_position != Vector2.ZERO:
 		tearoff_window.position = drop_position
 	else:
@@ -187,18 +197,12 @@ func _create_tearoff_window(container: InventoryContainer_Base, drop_position: V
 	# Set size if provided
 	if window_size != Vector2.ZERO:
 		tearoff_window.size = window_size
-		print("ContainerTearOffManager: Set tearoff window size to %s" % window_size)
-	else:
-		print("ContainerTearOffManager: Using default size %s" % tearoff_window.size)
 
 	# Try to use UIManager first
 	var ui_managers = main_window.get_tree().get_nodes_in_group("ui_manager")
 	var ui_manager: UIManager = null
 	if ui_managers.size() > 0:
 		ui_manager = ui_managers[0]
-		print("ContainerTearOffManager: Found UIManager")
-	else:
-		print("ContainerTearOffManager: No UIManager found")
 
 	if ui_manager and ui_manager.has_method("add_tearoff_window"):
 		# Let UIManager handle canvas creation and layering
@@ -211,14 +215,13 @@ func _create_tearoff_window(container: InventoryContainer_Base, drop_position: V
 		main_window.get_tree().current_scene.add_child(tearoff_canvas)
 		tearoff_canvas.add_child(tearoff_window)
 
-	if ui_manager and ui_manager.has_method("register_window"):
-		ui_manager.register_window(tearoff_window, "tearoff")
-		print("ContainerTearOffManager: Registered tearoff window with UIManager")
+		# Set metadata for fallback path
+		tearoff_window.set_meta("window_canvas", tearoff_canvas)
 
 	# Ensure it's on screen
 	_ensure_window_on_screen(tearoff_window)
 
-	# Show the window
+	# Show the window (this will trigger registration check)
 	tearoff_window.show_window()
 
 	# Store reference

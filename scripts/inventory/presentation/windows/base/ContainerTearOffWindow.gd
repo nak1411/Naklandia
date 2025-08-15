@@ -115,16 +115,12 @@ func _get_tearoff_target_container(drop_position: Vector2) -> InventoryContainer
 
 func _handle_cross_window_drop(drag_data: Dictionary) -> bool:
 	"""Handle cross-window item drop with debug"""
-	print("ContainerTearOffWindow: _handle_cross_window_drop called")
 
 	var source_slot = drag_data.get("source_slot")
 	var source_row = drag_data.get("source_row")
 	var item = drag_data.get("item")
 
-	print("ContainerTearOffWindow: source_slot=", source_slot, " source_row=", source_row, " item=", item)
-
 	if not item or not inventory_manager:
-		print("ContainerTearOffWindow: Missing item or inventory_manager")
 		return false
 
 	# Get source container ID
@@ -134,24 +130,17 @@ func _handle_cross_window_drop(drag_data: Dictionary) -> bool:
 	elif source_row and source_row.has_method("_get_container_id"):
 		source_container_id = source_row._get_container_id()
 
-	print("ContainerTearOffWindow: source_container_id=", source_container_id)
-
 	if source_container_id == "":
-		print("ContainerTearOffWindow: Empty source container ID")
 		return false
 
 	# Get target container
 	var target_container = container_view.source_container if container_view else container
-	print("ContainerTearOffWindow: target_container=", target_container)
-	print("ContainerTearOffWindow: target_container.container_id=", target_container.container_id if target_container else "null")
 
 	if not target_container or source_container_id == target_container.container_id:
-		print("ContainerTearOffWindow: Same container or no target")
 		return false
 
 	# Check if target can accept the item
 	if not target_container.can_add_item(item):
-		print("ContainerTearOffWindow: Target cannot accept item")
 		return false
 
 	# Calculate transfer amount
@@ -159,17 +148,11 @@ func _handle_cross_window_drop(drag_data: Dictionary) -> bool:
 	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
 	var transfer_amount = min(item.quantity, max_transferable)
 
-	print("ContainerTearOffWindow: transfer_amount=", transfer_amount)
-
 	if transfer_amount <= 0:
-		print("ContainerTearOffWindow: No transferable amount")
 		return false
 
 	# Use the existing transaction manager
-	print("ContainerTearOffWindow: Attempting transfer...")
 	var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
-
-	print("ContainerTearOffWindow: Transfer result=", success)
 
 	if success:
 		# Force refresh our view
@@ -193,16 +176,11 @@ func _on_content_gui_input(event: InputEvent):
 		var mouse_event = event as InputEventMouseButton
 
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
-			print("ContainerTearOffWindow: Content got mouse release")
 			var viewport = get_viewport()
 			if viewport and viewport.has_meta("current_drag_data"):
-				print("ContainerTearOffWindow: Content has drag data")
 				var drag_data = viewport.get_meta("current_drag_data")
 				if _handle_cross_window_drop(drag_data):
-					print("ContainerTearOffWindow: Successfully handled drop")
 					return
-			else:
-				print("ContainerTearOffWindow: Content no drag data")
 
 
 func _setup_window_content():
@@ -353,8 +331,6 @@ func _initialize_tearoff_content():
 	if content.has_method("select_container"):
 		content.select_container(container_view)
 
-	print("ContainerTearOffWindow: Independent view initialized for %s (registered but marked as tearoff view)" % container.container_name)
-
 
 func _on_view_changed():
 	"""Handle container view changes - TEAROFF-SPECIFIC"""
@@ -484,7 +460,6 @@ func reattach_to_parent():
 	"""Reattach this container to the parent window"""
 	# Check if parent window still exists
 	if not parent_window or not is_instance_valid(parent_window):
-		print("ContainerTearOffWindow: Cannot reattach - parent window no longer exists")
 		# Just close this window since there's nowhere to reattach to
 		hide_window()
 		queue_free()
@@ -540,7 +515,6 @@ func _on_window_closed():
 
 			# Only restore input if NO windows are left at all
 			if other_windows.size() == 0:
-				print("ContainerTearOffWindow: Last UI window closing, emitting inventory_closed")
 				var integration = _find_inventory_integration(get_tree().current_scene)
 				if integration:
 					integration._set_player_input_enabled(true)
@@ -549,21 +523,13 @@ func _on_window_closed():
 						integration.event_bus.emit_inventory_closed()
 				else:
 					Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-			else:
-				print("ContainerTearOffWindow: %d UI windows remaining, keeping UI input active" % other_windows.size())
 
-				# CRITICAL: If main inventory is still open, don't change inventory state
-				if has_main_inventory:
-					print("ContainerTearOffWindow: Main inventory still open, preserving inventory state")
-					# Don't emit inventory_closed or change integration state
-
-	# Only try to reattach if parent window still exists
+	# Only try to reattach if parent window still existsi
 	if parent_window and is_instance_valid(parent_window):
 		# Emit reattach signal when window is closed (use original container)
 		reattach_to_parent()
 	else:
 		# Parent window is gone, just clean up
-		print("ContainerTearOffWindow: Parent window gone, cleaning up independently")
 		queue_free()
 
 
@@ -606,7 +572,10 @@ func show_window():
 	"""Show window and register with UIManager"""
 	super.show_window()
 
-	# Make sure we're registered with UIManager
+	# CRITICAL: Ensure we're properly registered with UIManager
+	_ensure_ui_manager_registration()
+
+	# Then focus the window
 	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
 	if ui_managers.size() > 0:
 		var ui_manager = ui_managers[0]
@@ -659,10 +628,20 @@ func _ensure_ui_manager_registration():
 	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
 	if ui_managers.size() > 0:
 		var ui_manager = ui_managers[0]
-		if ui_manager.has_method("register_window"):
-			print("ContainerTearOffWindow: Registering %s with UIManager" % name)
-			ui_manager.register_window(self, "tearoff")
-		else:
-			print("ContainerTearOffWindow: UIManager doesn't have register_window method")
-	else:
-		print("ContainerTearOffWindow: No UIManager found")
+
+		# Check if we're already registered
+		var all_windows = ui_manager.get_all_windows()
+		var is_already_registered = self in all_windows
+
+		if not is_already_registered:
+			# Ensure metadata is set
+			if not has_meta("window_type"):
+				set_meta("window_type", "tearoff")
+
+			if ui_manager.has_method("register_window"):
+				ui_manager.register_window(self, "tearoff")
+
+				# Verify registration worked
+				await get_tree().process_frame
+				all_windows = ui_manager.get_all_windows()
+				is_already_registered = self in all_windows
