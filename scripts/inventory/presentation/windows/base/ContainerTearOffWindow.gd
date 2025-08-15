@@ -59,6 +59,22 @@ func _input(event: InputEvent):
 
 		# Check if drop is within our window bounds
 		if window_rect.has_point(event.global_position):
+			var all_windows = get_tree().get_nodes_in_group("external_container_windows")
+			var topmost_window = null
+			var highest_z = -999999
+
+			for window in all_windows:
+				if is_instance_valid(window):
+					var w_rect = Rect2(window.global_position, window.size)
+					if w_rect.has_point(event.global_position):
+						if window.z_index > highest_z:
+							highest_z = window.z_index
+							topmost_window = window
+
+			# Only process if we're the topmost windowii
+			if topmost_window != self:
+				print("TEAROFF: Not topmost window, ignoring input")
+				return
 			# Check if there's an active drag operation
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
@@ -129,16 +145,23 @@ func _input(event: InputEvent):
 									_handle_transfer_to_external_tearoff(drag_data, target_container)
 									return
 							else:
-								var external_container = window.get_meta("external_container", null)
-								if external_container:
-									var interactable_container = window.get_meta("interactable_container", null)
-									if interactable_container and interactable_container.has_method("_handle_cross_window_drop_to_container"):
-										interactable_container._handle_cross_window_drop_to_container(drag_data)
-										return
+								# Handle drop to InteractableContainer's window
+								if window.has_meta("external_container"):
+									var external_container = window.get_meta("external_container")
+									if external_container and window.has_meta("interactable_container"):
+										var interactable_container = window.get_meta("interactable_container")
+										if interactable_container and interactable_container.has_method("_handle_cross_window_drop_to_container"):
+											interactable_container._handle_cross_window_drop_to_container(drag_data)
+											return
 
-							# If we get here, the external drop failed
-							_cleanup_failed_drop(drag_data)
-							return
+								# Handle main inventory window
+								elif window.has_meta("window_type") and window.get_meta("window_type") == "main_inventory":
+									var inventory_window = window as InventoryWindow
+									if inventory_window and inventory_window.has_method("_handle_cross_window_drop_to_main"):
+										var target_container = inventory_window._get_target_container_for_drop(event.global_position)
+										if target_container:
+											inventory_window._handle_cross_window_drop_to_main(drag_data, target_container)
+											return
 
 
 func _cleanup_failed_drop(drag_data: Dictionary):

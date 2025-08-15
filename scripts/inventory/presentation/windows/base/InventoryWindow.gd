@@ -33,7 +33,14 @@ func _init():
 func _ready():
 	super._ready()
 
+	process_priority = 100
+	move_to_front()
 	get_viewport().gui_embed_subwindows = false  # Ensure windows are separate
+	set_process_input(true)
+	mouse_filter = Control.MOUSE_FILTER_STOP
+
+	add_to_group("external_container_windows")
+	set_meta("window_type", "main_inventory")
 
 	# Connect to container signals to refresh when items change
 	if inventory_manager:
@@ -45,20 +52,34 @@ func _ready():
 
 
 func _input(event: InputEvent):
-	"""Handle cross-window drops to main inventory window"""
+	"""Handle input with higher priority for cross-window drops - COPIED FROM WORKING TEAROFF"""
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		var window_rect = Rect2(global_position, size)
+		print("INVENTORY _input called at position: ", event.global_position)
+		# DEBUG: Check what other windows exist at this position
+		var all_windows = get_tree().get_nodes_in_group("external_container_windows")
+		print("All external windows:")
+		for window in all_windows:
+			if is_instance_valid(window):
+				var w_rect = Rect2(window.global_position, window.size)
+				var overlaps = w_rect.has_point(event.global_position)
+				print("  Window: ", window.name, " at ", w_rect, " overlaps: ", overlaps)
 
-		# ONLY handle drops that happen WITHIN our window bounds
-		# DO NOT handle drops outside - let the target windows handle them
+		var window_rect = Rect2(global_position, size)
+		print("INVENTORY window rect: ", window_rect)
+		print("INVENTORY point in window: ", window_rect.has_point(event.global_position))
+		var viewport = get_viewport()
+
+		# Check if drop is within our window bounds
 		if window_rect.has_point(event.global_position):
-			var viewport = get_viewport()
+			print("INVENTORY: Handling drop within bounds")
+			# Check if there's an active drag operation
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
+				print("INVENTORY: Handling drop within bounds")
 				var source_slot = drag_data.get("source_slot")
 				var source_row = drag_data.get("source_row")
 
-				# Check if drag is from an external source (tearoff window)
+				# Check if drag is from an external source (not our container)
 				var source_container_id = ""
 				if source_slot and source_slot.has_method("get_container_id"):
 					source_container_id = source_slot.get_container_id()
@@ -66,17 +87,57 @@ func _input(event: InputEvent):
 					source_container_id = source_row._get_container_id()
 
 				if source_container_id != "":
-					# Check if this is from a tearoff container (starts with "tearoff_")
-					if source_container_id.begins_with("tearoff_"):
-						# Extract the original container ID
-						var original_container_id = source_container_id.replace("tearoff_", "")
+					var our_container_id = current_container.container_id if current_container else ""
 
-						# Find which of our containers should receive this
+					# Only accept drops from OTHER containers
+					if source_container_id != our_container_id:
 						var target_container = _get_target_container_for_drop(event.global_position)
-						if target_container and target_container.container_id != original_container_id:
+						if target_container:
 							if _handle_cross_window_drop_to_main(drag_data, target_container):
 								get_viewport().set_input_as_handled()
 								return
+
+					# CRITICAL: Block ALL other drops - same as tearoff windows
+					_cleanup_failed_drop(drag_data)
+					get_viewport().set_input_as_handled()
+					return
+			return
+
+
+func _cleanup_failed_drop(drag_data: Dictionary):
+	"""Clean up failed drag operations"""
+	var source_slot = drag_data.get("source_slot")
+	var source_row = drag_data.get("source_row")
+
+	# Notify source that drop failed
+	if source_slot and source_slot.has_method("_on_external_drop_result"):
+		source_slot._on_external_drop_result(false)
+	elif source_row and source_row.has_method("_on_external_drop_result"):
+		source_row._on_external_drop_result(false)
+
+	# Clean up global drag state
+	var viewport = get_viewport()
+	if viewport and viewport.has_meta("current_drag_data"):
+		viewport.remove_meta("current_drag_data")
+
+	# Clean up any drag previews
+	_cleanup_all_drag_previews()
+
+
+func _cleanup_all_drag_previews():
+	"""Clean up all drag preview elements"""
+	var root = get_tree().root
+	var drag_canvases = []
+
+	# Find all DragCanvas nodes
+	for child in root.get_children():
+		if child is CanvasLayer and child.name == "DragCanvas":
+			drag_canvases.append(child)
+
+	# Clean them up
+	for canvas in drag_canvases:
+		if is_instance_valid(canvas):
+			canvas.queue_free()
 
 
 func _setup_window_content():
@@ -358,48 +419,36 @@ func _on_container_selected_from_content(container: InventoryContainer_Base):
 	container_switched.emit(container)
 
 
-func _get_target_container_for_drop(drop_position: Vector2) -> InventoryContainer_Base:
-	"""Determine which container should receive the drop based on position - only valid drop areas"""
+func _get_target_container_for_drop(_drop_position: Vector2) -> InventoryContainer_Base:
+	"""Get the target container for a drop at the given position"""
 	if not content:
 		return null
 
-	# Check if dropping on container list area
-	if content.container_list:
-		var list_rect = Rect2(content.container_list.global_position, content.container_list.size)
-		if list_rect.has_point(drop_position):
-			# Get the container under the mouse
-			var local_pos = drop_position - content.container_list.global_position
-			var item_index = content.container_list.get_item_at_position(local_pos, true)
-			if item_index >= 0 and item_index < content.open_containers.size():
-				return content.open_containers[item_index]
-			# If clicking container list but not on a specific container, reject
-			return null
+	# Check if dropping on the main inventory grid/list area
+	if content.has_method("get_current_container"):
+		return content.get_current_container()
 
-	# Check if dropping on the inventory grid/list view area
-	if content.inventory_grid and content.inventory_grid.visible:
-		var grid_rect = Rect2(content.inventory_grid.global_position, content.inventory_grid.size)
-		if grid_rect.has_point(drop_position):
-			return content.current_container
-
-	if content.list_view and content.list_view.visible:
-		var list_view_rect = Rect2(content.list_view.global_position, content.list_view.size)
-		if list_view_rect.has_point(drop_position):
-			return content.current_container
-
-	# If not over any valid drop area, reject the drop
-	return null
+	return current_container
 
 
 func _handle_cross_window_drop_to_main(drag_data: Dictionary, target_container: InventoryContainer_Base) -> bool:
-	"""Handle drop from tearoff window to main inventory"""
+	"""Handle dropping items from tearoff windows into main inventory"""
 	var source_slot = drag_data.get("source_slot")
 	var source_row = drag_data.get("source_row")
-	var item = drag_data.get("item")
+	var item: InventoryItem_Base
+
+	# Get the item being dragged
+	if source_slot:
+		item = source_slot.get_item()
+	elif source_row:
+		item = source_row.item
+	else:
+		return false
 
 	if not item or not inventory_manager or not target_container:
 		return false
 
-	# Get source container ID from either slot or row
+	# Get source container ID
 	var source_container_id = ""
 	if source_slot and source_slot.has_method("get_container_id"):
 		source_container_id = source_slot.get_container_id()
@@ -421,8 +470,19 @@ func _handle_cross_window_drop_to_main(drag_data: Dictionary, target_container: 
 	if transfer_amount <= 0:
 		return false
 
-	# Use the existing transaction manager
+	# Use the inventory manager to transfer
 	var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
+
+	if success:
+		# Refresh main inventory
+		if content:
+			content.refresh_display()
+
+		# Notify source of successful drop
+		if source_slot and source_slot.has_method("_on_external_drop_result"):
+			source_slot._on_external_drop_result(true)
+		elif source_row and source_row.has_method("_on_external_drop_result"):
+			source_row._on_external_drop_result(true)
 
 	return success
 

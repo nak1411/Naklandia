@@ -136,6 +136,12 @@ func _connect_to_ui_manager():
 func _unhandled_input(event: InputEvent):
 	"""Handle unhandled input - catch resize motion that other systems missed AND window focusing"""
 
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		print(self.name, " _unhandled_input called at: ", event.global_position)
+		var my_rect = Rect2(global_position, size)
+		if my_rect.has_point(event.global_position):
+			print(self.name, " would handle this input")
+
 	# Handle window focusing on any unhandled left click
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		# Check if the click is within this window's bounds
