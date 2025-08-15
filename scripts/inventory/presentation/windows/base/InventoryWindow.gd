@@ -30,14 +30,29 @@ func _init():
 	set_process_input(true)
 
 
+func _ready():
+	super._ready()
+
+	get_viewport().gui_embed_subwindows = false  # Ensure windows are separate
+
+	# Connect to container signals to refresh when items change
+	if inventory_manager:
+		for container_id in inventory_manager.containers:
+			var container = inventory_manager.containers[container_id]
+			if container.has_signal("item_removed"):
+				if not container.item_removed.is_connected(_on_container_item_removed):
+					container.item_removed.connect(_on_container_item_removed)
+
+
 func _input(event: InputEvent):
 	"""Handle cross-window drops to main inventory window"""
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		var window_rect = Rect2(global_position, size)
-		var viewport = get_viewport()
 
-		# Only handle drops that happen WITHIN our window bounds
+		# ONLY handle drops that happen WITHIN our window bounds
+		# DO NOT handle drops outside - let the target windows handle them
 		if window_rect.has_point(event.global_position):
+			var viewport = get_viewport()
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
 				var source_slot = drag_data.get("source_slot")
@@ -61,47 +76,6 @@ func _input(event: InputEvent):
 						if target_container and target_container.container_id != original_container_id:
 							if _handle_cross_window_drop_to_main(drag_data, target_container):
 								get_viewport().set_input_as_handled()
-								return
-		else:
-			# FIX: Handle drops OUTSIDE our window (to external containers)
-			# Check if the drag originated from THIS inventory window
-			if viewport and viewport.has_meta("current_drag_data"):
-				var drag_data = viewport.get_meta("current_drag_data")
-				var source_slot = drag_data.get("source_slot")
-				var source_row = drag_data.get("source_row")
-
-				# Check if drag is from our inventory
-				var source_container_id = ""
-				if source_slot and source_slot.has_method("get_container_id"):
-					source_container_id = source_slot.get_container_id()
-				elif source_row and source_row.has_method("_get_container_id"):
-					source_container_id = source_row._get_container_id()
-
-				# Check if this is from one of our containers
-				var is_our_drag = false
-				for container in open_containers:
-					if container.container_id == source_container_id:
-						is_our_drag = true
-						break
-
-				if is_our_drag:
-					# Check if we dropped on an external container window
-					var external_windows = get_tree().get_nodes_in_group("external_container_windows")
-					for window in external_windows:
-						if window != self and is_instance_valid(window):
-							var external_window_rect = Rect2(window.global_position, window.size)
-							if external_window_rect.has_point(event.global_position):
-								# The external window will handle the drop
-								# But we need to refresh our display after
-								await get_tree().process_frame
-								# FIX: Force refresh our display to remove ghost items
-								if content:
-									content.refresh_display()
-
-								# Clean up the drag data
-								if viewport.has_meta("current_drag_data"):
-									viewport.remove_meta("current_drag_data")
-
 								return
 
 
@@ -451,6 +425,23 @@ func _handle_cross_window_drop_to_main(drag_data: Dictionary, target_container: 
 	var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
 
 	return success
+
+
+func _on_item_transferred(_item: InventoryItem_Base, from_container_id: String, _to_container_id: String):
+	"""Refresh display when an item is transferred from our containers"""
+	# Check if the transfer was from one of our containers
+	for container in open_containers:
+		if container.container_id == from_container_id:
+			# Refresh our display to remove ghost items
+			if content:
+				content.refresh_display()
+			break
+
+
+func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i):
+	"""Refresh display when an item is removed from any container"""
+	if content:
+		content.refresh_display()
 
 
 func _on_search_text_changed_from_header(search_text: String):

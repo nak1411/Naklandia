@@ -352,10 +352,6 @@ func _handle_cross_window_drop_to_container(drag_data: Dictionary) -> bool:
 			# Force immediate refresh
 			inventory_integration.inventory_window.content.refresh_display()
 
-			# Also force the grid to clear any ghost slots
-			if inventory_integration.inventory_window.content.inventory_grid:
-				inventory_integration.inventory_window.content.inventory_grid.force_all_slots_refresh()
-
 	return success
 
 
