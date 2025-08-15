@@ -231,8 +231,8 @@ func _handle_cross_window_drop(drag_data: Dictionary) -> bool:
 	if source_container_id == "":
 		return false
 
-	# Get target container
-	var target_container = container_view.source_container if container_view else container
+	# FIXED: Get target container - use the container_view itself, not its source
+	var target_container = container_view if container_view else container
 
 	if not target_container or source_container_id == target_container.container_id:
 		return false
@@ -249,26 +249,19 @@ func _handle_cross_window_drop(drag_data: Dictionary) -> bool:
 	if transfer_amount <= 0:
 		return false
 
-	var source_container = inventory_manager.containers.get(source_container_id)
-	var target_container_obj = inventory_manager.containers.get(target_container.container_id)
-
-	var success = false
-	if source_container and target_container_obj:
-		var item_copy = item.duplicate()
-		item_copy.quantity = transfer_amount
-
-		if target_container_obj.add_item(item_copy):
-			item.quantity -= transfer_amount
-			if item.quantity <= 0:
-				source_container.remove_item(item)
-			success = true
+	# Use the inventory manager to transfer
+	var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
 
 	if success:
-		# Force refresh our view
-		if container_view:
-			container_view.force_refresh()
+		# Refresh both windows
 		if content:
 			content.refresh_display()
+
+		# Notify source of successful drop
+		if source_slot and source_slot.has_method("_on_external_drop_result"):
+			source_slot._on_external_drop_result(true)
+		elif source_row and source_row.has_method("_on_external_drop_result"):
+			source_row._on_external_drop_result(true)
 
 	return success
 

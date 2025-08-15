@@ -483,7 +483,33 @@ func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 	# Check container list drop
 	var content = _find_inventory_content()
 	if content and slot.has_method("_attempt_drop_on_container_list"):
-		return slot._attempt_drop_on_container_list(end_position)
+		if slot._attempt_drop_on_container_list(end_position):
+			return true
+
+	# NEW: Check external container windows - CRITICAL FIX
+	if slot and slot.get_tree():
+		var external_windows = slot.get_tree().get_nodes_in_group("external_container_windows")
+		for window in external_windows:
+			if is_instance_valid(window):
+				var window_rect = Rect2(window.global_position, window.size)
+				if window_rect.has_point(end_position):
+					# Get current drag data from viewport
+					var viewport = slot.get_viewport()
+					if viewport and viewport.has_meta("current_drag_data"):
+						var drag_data = viewport.get_meta("current_drag_data")
+
+						# Check if it's an InteractableContainer window
+						var interactable_container = window.get_meta("interactable_container", null)
+						if interactable_container and interactable_container.has_method("_handle_cross_window_drop_to_container"):
+							if interactable_container._handle_cross_window_drop_to_container(drag_data):
+								return true
+
+						# Check if it's a ContainerTearOffWindow marked as external
+						elif window is ContainerTearOffWindow:
+							var tearoff = window as ContainerTearOffWindow
+							if tearoff.has_method("_handle_cross_window_drop"):
+								if tearoff._handle_cross_window_drop(drag_data):
+									return true
 
 	return false
 
