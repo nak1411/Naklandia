@@ -256,37 +256,30 @@ func _handle_container_action(action_id: String, context_data: Dictionary):
 
 
 func _handle_move_item_action(action_id: String, item: InventoryItem_Base):
-	"""Handle moving individual items between containers"""
+	"""Handle moving individual items between containers - now uses handler"""
 	if not inventory_manager or not current_container:
 		return
 
-	var target_container_id = ""
+	var target_container_id = _parse_target_container_id(action_id)
+	if target_container_id.is_empty():
+		return
 
-	match action_id:
-		"move_to_player":
-			target_container_id = "player_inventory"
-		"move_to_cargo":
-			target_container_id = "player_cargo"
-		"move_to_hangar_1":
-			target_container_id = "hangar_0"
-		"move_to_hangar_2":
-			target_container_id = "hangar_1"
-		"move_to_hangar_3":
-			target_container_id = "hangar_2"
-		_:
-			# Parse container ID from action
-			if action_id.begins_with("move_to_"):
-				target_container_id = action_id.replace("move_to_", "")
-
-	if not target_container_id.is_empty() and target_container_id != current_container.container_id:
-		var success = inventory_manager.transfer_item(item, current_container.container_id, target_container_id)
-		if not success:
-			_show_transfer_failed_notification()
+	var success = ItemTransferHandler.transfer_item(item, current_container.container_id, target_container_id, inventory_manager)
+	if not success:
+		_show_transfer_failed_notification()
 
 
 func _handle_move_container_items_action(_action_id: String, _container: InventoryContainer_Base):
 	"""Handle moving all items from a container"""
 	# Implementation for bulk container moves
+
+
+func _handle_use_item_action(item: InventoryItem_Base):
+	"""Handle item usage - delegates to handler"""
+	var success = UseItemHandler.use_item(item, inventory_manager)
+
+	if success:
+		container_refreshed.emit()
 
 
 # Dialog methods
@@ -827,40 +820,12 @@ func _generate_detailed_container_info(container: InventoryContainer_Base) -> St
 
 
 func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_stack: bool):
-	"""Perform the item stack split operation"""
-	if not inventory_manager or not current_container or not item:
+	"""Perform the item stack split operation - now delegates to handler"""
+	var success = StackSplitHandler.perform_split(item, split_amount, current_container, inventory_manager)
+
+	if not success:
 		inventory_manager.set_auto_stack(original_auto_stack)
 		return
-
-	if split_amount <= 0 or split_amount >= item.quantity:
-		inventory_manager.set_auto_stack(original_auto_stack)
-		return
-
-	# FIXED: Use the built-in split_stack method which handles the volume correctly
-	var new_item = item.split_stack(split_amount)
-	if not new_item:
-		inventory_manager.set_auto_stack(original_auto_stack)
-		return
-
-	# Check if container has space for the new item (AFTER the original was reduced)
-	if not current_container.has_volume_for_item(new_item):
-		# Restore the split by adding back to original item
-		item.add_to_stack(new_item.quantity)
-		inventory_manager.set_auto_stack(original_auto_stack)
-		return
-
-	# Temporarily disable auto-stacking
-	var temp_auto_stack = inventory_manager.settings.auto_stack
-	inventory_manager.settings.auto_stack = false
-
-	# Add the new item to the container
-	if not current_container.add_item(new_item, Vector2i(-1, -1), false):
-		item.add_to_stack(new_item.quantity)
-		inventory_manager.set_auto_stack(original_auto_stack)
-		return
-
-	# Restore auto-stack setting
-	inventory_manager.settings.auto_stack = temp_auto_stack
 
 	# Force display refresh
 	container_refreshed.emit()
@@ -937,6 +902,25 @@ func is_context_menu_visible() -> bool:
 func get_context_menu() -> ContextMenu_Base:
 	"""Get reference to the context menu for external use"""
 	return context_menu
+
+
+func _parse_target_container_id(action_id: String) -> String:
+	"""Parse target container ID from action"""
+	match action_id:
+		"move_to_player":
+			return "player_inventory"
+		"move_to_cargo":
+			return "player_cargo"
+		"move_to_hangar_1":
+			return "hangar_0"
+		"move_to_hangar_2":
+			return "hangar_1"
+		"move_to_hangar_3":
+			return "hangar_2"
+		_:
+			if action_id.begins_with("move_to_"):
+				return action_id.replace("move_to_", "")
+			return ""
 
 
 # Cleanup methods
