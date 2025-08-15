@@ -387,37 +387,40 @@ func _handle_drag_end(end_position: Vector2):
 	slot.mouse_filter = Control.MOUSE_FILTER_PASS
 
 	_cleanup_all_drag_previews()
-	_clear_slot_highlighting()  # Clear highlighting when drag ends
+	_clear_slot_highlighting()
 
 	var drop_successful = false
 
-	# Use the currently highlighted slot if available (this is the most accurate)
+	# Try normal slot drops first
 	var target_slot = currently_highlighted_slot
 	if not target_slot:
-		# Fallback to position-based detection
 		target_slot = _find_best_drop_slot(end_position)
 
 	if target_slot and target_slot != slot:
 		drop_successful = _attempt_drop_on_slot(target_slot)
 	else:
-		# Check for other drop targets (virtual content, container list, etc.)
+		# Try other targets
 		drop_successful = _attempt_drop_on_other_targets(end_position)
 
-	# Clear drag data
-	var viewport = slot.get_viewport()
-	if viewport and viewport.has_meta("current_drag_data"):
-		viewport.remove_meta("current_drag_data")
-
-	# Clear highlights
-	var content = _find_inventory_content()
-	if content and content.has_method("force_clear_highlights"):
-		content.force_clear_highlights()
+	# If drop failed, make sure we don't leave drag data hanging around
+	if not drop_successful:
+		print("DRAG FAILED: Cleaning up at position ", end_position)
 
 	# Reset all drag state
 	is_dragging = false
 	drag_preview_created = false
 
 	drag_ended.emit(slot, drop_successful)
+
+	# Clear drag data AFTER everything else is done
+	call_deferred("_cleanup_drag_data")
+
+
+func _cleanup_drag_data():
+	"""Clean up drag data after all systems have processed the drop"""
+	var viewport = slot.get_viewport()
+	if viewport and viewport.has_meta("current_drag_data"):
+		viewport.remove_meta("current_drag_data")
 
 
 func _cleanup_all_drag_previews():

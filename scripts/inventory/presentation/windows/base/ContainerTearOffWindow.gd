@@ -59,22 +59,6 @@ func _input(event: InputEvent):
 
 		# Check if drop is within our window bounds
 		if window_rect.has_point(event.global_position):
-			var all_windows = get_tree().get_nodes_in_group("external_container_windows")
-			var topmost_window = null
-			var highest_z = -999999
-
-			for window in all_windows:
-				if is_instance_valid(window):
-					var w_rect = Rect2(window.global_position, window.size)
-					if w_rect.has_point(event.global_position):
-						if window.z_index > highest_z:
-							highest_z = window.z_index
-							topmost_window = window
-
-			# Only process if we're the topmost windowii
-			if topmost_window != self:
-				print("TEAROFF: Not topmost window, ignoring input")
-				return
 			# Check if there's an active drag operation
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
@@ -97,16 +81,16 @@ func _input(event: InputEvent):
 						var target_container = _get_tearoff_target_container(event.global_position)
 						if target_container:
 							# Valid cross-container drop - handle it and block event
-							if _handle_cross_window_drop(drag_data):
+							if _handle_cross_window_drop(drag_data, target_container):
 								get_viewport().set_input_as_handled()
 								return
 
-						# Invalid drop area but cross-container - block and cleanup
-						_cleanup_failed_drop(drag_data)
-						get_viewport().set_input_as_handled()
-						return
-
-					# Same container drop - block and cleanup
+					# CRITICAL: Block ALL other drops within window bounds
+					_cleanup_failed_drop(drag_data)
+					get_viewport().set_input_as_handled()
+					return
+				else:
+					# No valid container ID - block and cleanup
 					_cleanup_failed_drop(drag_data)
 					get_viewport().set_input_as_handled()
 					return
@@ -114,7 +98,7 @@ func _input(event: InputEvent):
 			# No drag operation active - regular window interaction
 			return
 
-		# Handle drops FROM this tearoff TO external containers
+		# Handle drops FROM this tearoff TO external containers (existing logic)
 		if viewport and viewport.has_meta("current_drag_data"):
 			var drag_data = viewport.get_meta("current_drag_data")
 			var source_slot = drag_data.get("source_slot")
@@ -145,23 +129,18 @@ func _input(event: InputEvent):
 									_handle_transfer_to_external_tearoff(drag_data, target_container)
 									return
 							else:
-								# Handle drop to InteractableContainer's window
-								if window.has_meta("external_container"):
-									var external_container = window.get_meta("external_container")
-									if external_container and window.has_meta("interactable_container"):
-										var interactable_container = window.get_meta("interactable_container")
-										if interactable_container and interactable_container.has_method("_handle_cross_window_drop_to_container"):
-											interactable_container._handle_cross_window_drop_to_container(drag_data)
-											return
-
 								# Handle main inventory window
-								elif window.has_meta("window_type") and window.get_meta("window_type") == "main_inventory":
+								if window.has_meta("window_type") and window.get_meta("window_type") == "main_inventory":
 									var inventory_window = window as InventoryWindow
 									if inventory_window and inventory_window.has_method("_handle_cross_window_drop_to_main"):
 										var target_container = inventory_window._get_target_container_for_drop(event.global_position)
 										if target_container:
 											inventory_window._handle_cross_window_drop_to_main(drag_data, target_container)
 											return
+
+							# If we get here, the drop failed - cleanup
+							_cleanup_failed_drop(drag_data)
+							return
 
 
 func _cleanup_failed_drop(drag_data: Dictionary):
@@ -278,14 +257,21 @@ func _get_tearoff_target_container(drop_position: Vector2) -> InventoryContainer
 	return null
 
 
-func _handle_cross_window_drop(drag_data: Dictionary) -> bool:
-	"""Handle cross-window item drop with debug"""
+func _handle_cross_window_drop(drag_data: Dictionary, target_container: InventoryContainer_Base = null) -> bool:
+	"""Handle cross-window item drop - CORRECTED to match InventoryWindow signature"""
 
 	var source_slot = drag_data.get("source_slot")
 	var source_row = drag_data.get("source_row")
 	var item = drag_data.get("item")
 
 	if not item or not inventory_manager:
+		return false
+
+	# If no target container provided, determine it from position
+	if not target_container:
+		target_container = _get_tearoff_target_container(get_global_mouse_position())
+
+	if not target_container:
 		return false
 
 	# Get source container ID
@@ -295,13 +281,7 @@ func _handle_cross_window_drop(drag_data: Dictionary) -> bool:
 	elif source_row and source_row.has_method("_get_container_id"):
 		source_container_id = source_row._get_container_id()
 
-	if source_container_id == "":
-		return false
-
-	# FIXED: Get target container - use the container_view itself, not its source
-	var target_container = container_view if container_view else container
-
-	if not target_container or source_container_id == target_container.container_id:
+	if source_container_id == "" or source_container_id == target_container.container_id:
 		return false
 
 	# Check if target can accept the item
@@ -320,7 +300,7 @@ func _handle_cross_window_drop(drag_data: Dictionary) -> bool:
 	var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
 
 	if success:
-		# Refresh both windows
+		# Refresh this window
 		if content:
 			content.refresh_display()
 

@@ -37,7 +37,7 @@ func _ready():
 	move_to_front()
 	get_viewport().gui_embed_subwindows = false  # Ensure windows are separate
 	set_process_input(true)
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_filter = Control.MOUSE_FILTER_PASS
 
 	add_to_group("external_container_windows")
 	set_meta("window_type", "main_inventory")
@@ -52,21 +52,9 @@ func _ready():
 
 
 func _input(event: InputEvent):
-	"""Handle input with higher priority for cross-window drops - COPIED FROM WORKING TEAROFF"""
+	"""Handle cross-window drops to main inventory window"""
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		print("INVENTORY _input called at position: ", event.global_position)
-		# DEBUG: Check what other windows exist at this position
-		var all_windows = get_tree().get_nodes_in_group("external_container_windows")
-		print("All external windows:")
-		for window in all_windows:
-			if is_instance_valid(window):
-				var w_rect = Rect2(window.global_position, window.size)
-				var overlaps = w_rect.has_point(event.global_position)
-				print("  Window: ", window.name, " at ", w_rect, " overlaps: ", overlaps)
-
 		var window_rect = Rect2(global_position, size)
-		print("INVENTORY window rect: ", window_rect)
-		print("INVENTORY point in window: ", window_rect.has_point(event.global_position))
 		var viewport = get_viewport()
 
 		# Check if drop is within our window bounds
@@ -75,11 +63,10 @@ func _input(event: InputEvent):
 			# Check if there's an active drag operation
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
-				print("INVENTORY: Handling drop within bounds")
 				var source_slot = drag_data.get("source_slot")
 				var source_row = drag_data.get("source_row")
 
-				# Check if drag is from an external source (not our container)
+				# Check if drag is from an external source
 				var source_container_id = ""
 				if source_slot and source_slot.has_method("get_container_id"):
 					source_container_id = source_slot.get_container_id()
@@ -89,18 +76,30 @@ func _input(event: InputEvent):
 				if source_container_id != "":
 					var our_container_id = current_container.container_id if current_container else ""
 
-					# Only accept drops from OTHER containers
+					# Check if it's a cross-container drop
 					if source_container_id != our_container_id:
+						# Check if drop is over a valid drop area
 						var target_container = _get_target_container_for_drop(event.global_position)
 						if target_container:
+							# Valid cross-container drop - handle it and block event
 							if _handle_cross_window_drop_to_main(drag_data, target_container):
 								get_viewport().set_input_as_handled()
+								print("INVENTORY: Called set_input_as_handled()")
 								return
 
-					# CRITICAL: Block ALL other drops - same as tearoff windows
+					# CRITICAL: Block ALL other drops within window bounds
 					_cleanup_failed_drop(drag_data)
 					get_viewport().set_input_as_handled()
+					print("INVENTORY: Called set_input_as_handled()")
 					return
+				else:
+					# No valid container ID - block and cleanup
+					_cleanup_failed_drop(drag_data)
+					get_viewport().set_input_as_handled()
+					print("INVENTORY: Called set_input_as_handled()")
+					return
+
+			# No drag operation active - regular window interaction
 			return
 
 
@@ -148,7 +147,7 @@ func _setup_window_content():
 
 func _setup_content():
 	"""Setup inventory-specific content"""
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_filter = Control.MOUSE_FILTER_PASS
 
 	# Create main inventory container
 	inventory_container = VBoxContainer.new()
@@ -628,6 +627,11 @@ func get_tearoff_manager() -> ContainerTearOffManager:
 func show_window():
 	"""Show inventory window with grid layout fix"""
 	super.show_window()
+
+	var canvas = get_parent()
+	if canvas is CanvasLayer:
+		canvas.layer = 100
+
 	move_to_front()
 	_fix_initial_grid_layout()
 
