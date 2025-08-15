@@ -220,8 +220,6 @@ func _add_resize_handles(header_wrapper: Control):
 
 		header_wrapper.add_child(resize_handle)
 
-		print("Added resize handle ", i, " at x=", resize_handle.position.x)
-
 
 func _create_header_cell(column: Dictionary) -> Control:
 	"""Create header cell using the same sizing logic as row cells"""

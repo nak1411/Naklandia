@@ -75,9 +75,9 @@ var resize_start_mouse: Vector2
 
 # Window styling
 var title_bar_height: float = 50.0
-var border_width: float = 2.0
+var border_width: float = 1.0
 var title_bar_color: Color = Color(0.1, 0.1, 0.1, 1.0)
-var border_color: Color = Color(0.4, 0.4, 0.4, 1.0)
+var border_color: Color = Color(0.2, 0.2, 0.2, 1.0)
 var background_color: Color = Color(0.15, 0.15, 0.15, 1.0)
 var _transparency_value: float = 1.0
 var _was_resizing: bool = false
@@ -1057,52 +1057,52 @@ func _create_resize_border_visuals():
 	# Left border
 	var left_line = ColorRect.new()
 	left_line.name = "LeftBorder"
-	left_line.color = Color(0.5, 0.8, 1.0, 0.0)  # Start invisible
+	left_line.color = border_color
 	left_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	left_line.anchor_top = 0.0
 	left_line.anchor_bottom = 1.0
 	left_line.anchor_left = 0.0
 	left_line.anchor_right = 0.0
-	left_line.offset_right = 2
+	left_line.offset_right = 1
 	resize_border_visual.add_child(left_line)
 	border_lines.append(left_line)
 
 	# Right border
 	var right_line = ColorRect.new()
 	right_line.name = "RightBorder"
-	right_line.color = Color(0.5, 0.8, 1.0, 0.0)  # Start invisible
+	right_line.color = border_color
 	right_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	right_line.anchor_top = 0.0
 	right_line.anchor_bottom = 1.0
 	right_line.anchor_left = 1.0
 	right_line.anchor_right = 1.0
-	right_line.offset_left = -2
+	right_line.offset_left = -1
 	resize_border_visual.add_child(right_line)
 	border_lines.append(right_line)
 
 	# Top border
 	var top_line = ColorRect.new()
 	top_line.name = "TopBorder"
-	top_line.color = Color(0.5, 0.8, 1.0, 0.0)  # Start invisible
+	top_line.color = border_color
 	top_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_line.anchor_left = 0.0
 	top_line.anchor_right = 1.0
 	top_line.anchor_top = 0.0
 	top_line.anchor_bottom = 0.0
-	top_line.offset_bottom = 2
+	top_line.offset_bottom = 1
 	resize_border_visual.add_child(top_line)
 	border_lines.append(top_line)
 
 	# Bottom border
 	var bottom_line = ColorRect.new()
 	bottom_line.name = "BottomBorder"
-	bottom_line.color = Color(0.5, 0.8, 1.0, 0.0)  # Start invisible
+	bottom_line.color = border_color
 	bottom_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bottom_line.anchor_left = 0.0
 	bottom_line.anchor_right = 1.0
 	bottom_line.anchor_top = 1.0
 	bottom_line.anchor_bottom = 1.0
-	bottom_line.offset_top = -2
+	bottom_line.offset_top = -1
 	resize_border_visual.add_child(bottom_line)
 	border_lines.append(bottom_line)
 

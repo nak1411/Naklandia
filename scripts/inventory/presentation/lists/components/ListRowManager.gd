@@ -311,7 +311,6 @@ func _mouse_entered():
 	is_hovered = true
 	_animate_hover_in()
 	if item and tooltip_manager:
-		print("Starting tooltip timer")
 		tooltip_manager.start_tooltip_timer()
 
 
@@ -319,7 +318,6 @@ func _mouse_exited():
 	is_hovered = false
 	_animate_hover_out()
 	if tooltip_manager:
-		print("Hiding tooltip")
 		tooltip_manager.hide_tooltip()
 
 
@@ -481,9 +479,6 @@ func _create_drag_preview() -> Control:
 	preview.name = "DragPreview"
 	preview.size = Vector2(32, 32)
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	# Debug what we're working with
-	print("Item icon_path: ", item.icon_path)
 
 	# Try to get the texture
 	var texture: Texture2D = item.get_icon_texture()
