@@ -181,10 +181,12 @@ func _get_tooltip_text(item: InventoryItem_Base) -> String:
 
 func _find_inventory_window() -> Control:
 	"""Find the inventory window in the scene hierarchy"""
-	var current = slot.get_parent()
+	var current = slot.get_parent()  # or row.get_parent() for ListRowTooltipManager
 	while current:
-		if current.get_script() and current.get_script().get_global_name() == "InventoryWindow":
-			return current
+		if current.get_script():
+			var script_name = current.get_script().get_global_name()
+			if script_name == "InventoryWindow" or script_name == "ContainerTearOffWindow":
+				return current
 		current = current.get_parent()
 	return null
 

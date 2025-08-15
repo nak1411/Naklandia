@@ -27,10 +27,7 @@ func setup_tooltip():
 	"""Initialize the tooltip system - exact copy of slot version"""
 	var inventory_window = _find_inventory_window()
 	if not inventory_window:
-		print("ListRowTooltipManager: Could not find inventory window")
 		return
-
-	print("ListRowTooltipManager: Found inventory window: ", inventory_window.name)
 
 	# Create tooltip panel - exact copy
 	tooltip = PanelContainer.new()
@@ -62,7 +59,6 @@ func setup_tooltip():
 
 	# Add to inventory window - exact copy
 	inventory_window.add_child(tooltip)
-	print("ListRowTooltipManager: Tooltip added to inventory window")
 
 
 func process_tooltip_timer(delta: float):
@@ -77,10 +73,7 @@ func show_tooltip():
 	"""Show the tooltip - exact copy of slot logic"""
 	var item = row.item
 	if not item or is_showing_tooltip or not tooltip:
-		print("ListRowTooltipManager: Cannot show - item: ", item, " showing: ", is_showing_tooltip, " tooltip: ", tooltip)
 		return
-
-	print("ListRowTooltipManager: Showing tooltip for: ", item.item_name)
 
 	# Kill any existing tween first - exact copy
 	if tooltip_tween:
@@ -128,7 +121,6 @@ func show_tooltip():
 
 	tooltip.position = tooltip_pos
 	tooltip.visible = true
-	print("ListRowTooltipManager: Tooltip positioned at: ", tooltip_pos)
 
 	# Start fully transparent and fade in - exact copy
 	tooltip.modulate.a = 0.0
@@ -165,7 +157,6 @@ func start_tooltip_timer():
 	var item = row.item
 	if item and not is_showing_tooltip:
 		tooltip_timer = tooltip_delay
-		print("ListRowTooltipManager: Timer started for: ", item.item_name)
 	else:
 		tooltip_timer = 0.0
 
@@ -192,11 +183,13 @@ func _get_tooltip_text(item: InventoryItem_Base) -> String:
 
 
 func _find_inventory_window() -> Control:
-	"""Find the inventory window - exact copy of slot version"""
+	"""Find the inventory window in the scene hierarchy"""
 	var current = row.get_parent()
 	while current:
-		if current.get_script() and current.get_script().get_global_name() == "InventoryWindow":
-			return current
+		if current.get_script():
+			var script_name = current.get_script().get_global_name()
+			if script_name == "InventoryWindow" or script_name == "ContainerTearOffWindow":
+				return current
 		current = current.get_parent()
 	return null
 
