@@ -46,6 +46,9 @@ func _ready():
 	add_child(cleanup_timer)
 	cleanup_timer.start()
 
+	# Force clipping on the HSplitContainer if it exists
+	call_deferred("_enforce_container_clipping")
+
 
 func set_display_mode(mode: InventoryDisplayMode.Mode):
 	if mode == current_display_mode:
@@ -255,21 +258,29 @@ func _setup_left_panel():
 	left_panel.name = "LeftPanel"
 	left_panel.custom_minimum_size.x = 180
 	left_panel.size_flags_horizontal = Control.SIZE_FILL
+	# CRITICAL: Enable clipping for left panel
+	left_panel.clip_contents = true
 
 	add_child(left_panel)
 
+	# Create a clipping wrapper for the container list
+	var list_wrapper = Control.new()
+	list_wrapper.name = "ListWrapper"
+	list_wrapper.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	list_wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_wrapper.clip_contents = true
+	left_panel.add_child(list_wrapper)
+
 	container_list = ItemList.new()
 	container_list.name = "ContainerList"
+	container_list.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	container_list.mouse_filter = Control.MOUSE_FILTER_PASS
-	container_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	container_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container_list.custom_minimum_size = Vector2(160, 200)
-	container_list.auto_height = true
+	container_list.auto_height = false  # IMPORTANT: Disable auto_height to respect clipping
 	container_list.allow_rmb_select = false
 	container_list.focus_mode = Control.FOCUS_NONE
-
-	# Set up drop detection on container list
-	container_list.mouse_filter = Control.MOUSE_FILTER_PASS
+	# CRITICAL: Enable clipping on the ItemList itself
+	container_list.clip_contents = true
 
 	# Add padding for items inside the container list
 	container_list.add_theme_constant_override("h_separation", 4)
@@ -291,7 +302,7 @@ func _setup_left_panel():
 	list_style.content_margin_bottom = 4
 	container_list.add_theme_stylebox_override("panel", list_style)
 
-	left_panel.add_child(container_list)
+	list_wrapper.add_child(container_list)
 
 	container_list.item_selected.connect(_on_container_list_selected)
 	container_list.gui_input.connect(_on_container_list_input)
@@ -399,6 +410,21 @@ func _setup_mass_info_bar(parent: Control):
 	mass_info_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 
 	margin_container.add_child(mass_info_label)
+
+
+func _enforce_container_clipping():
+	"""Ensure all containers have proper clipping enabled"""
+	# Find the HSplitContainer parent and enforce clipping
+	var current = self
+	while current:
+		if current is HSplitContainer:
+			current.clip_contents = true
+			# Also force clipping on both child panels
+			for child in current.get_children():
+				if child is Control:
+					child.clip_contents = true
+			break
+		current = current.get_parent()
 
 
 func _format_currency(value: float) -> String:

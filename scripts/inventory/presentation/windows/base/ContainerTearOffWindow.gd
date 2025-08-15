@@ -198,6 +198,7 @@ func _setup_content():
 	inventory_container = VBoxContainer.new()
 	inventory_container.name = "InventoryContainer"
 	inventory_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	inventory_container.clip_contents = true
 	add_content(inventory_container)
 
 	# Create the header (search, filter, sort) - SAME AS MAIN WINDOW
@@ -209,6 +210,7 @@ func _setup_content():
 	content = InventoryWindowContent.new()
 	content.name = "InventoryContent"
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.clip_contents = true
 	inventory_container.add_child(content)
 
 	# Wait for content to be ready

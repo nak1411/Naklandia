@@ -127,6 +127,7 @@ func _setup_virtual_scrolling():
 	virtual_scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	virtual_scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	virtual_scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	virtual_scroll_container.clip_contents = true
 
 	add_child(virtual_scroll_container)
 
@@ -134,6 +135,7 @@ func _setup_virtual_scrolling():
 	virtual_content = Control.new()
 	virtual_content.name = "VirtualContent"
 	virtual_content.mouse_filter = Control.MOUSE_FILTER_STOP
+	virtual_content.clip_contents = true
 	virtual_scroll_container.add_child(virtual_content)
 
 	# Connect input for right-click context menus
