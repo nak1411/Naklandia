@@ -30,6 +30,19 @@ var position_save_file: String = "user://inventory_window_position.dat"
 
 
 func _ready():
+	add_to_group("inventory_integration")
+
+	# Create or find inventory manager
+	if not inventory_manager:
+		print("Creating new InventoryManager...")
+		inventory_manager = InventoryManager.new()
+		inventory_manager.name = "InventoryManager"
+		add_child(inventory_manager)
+		inventory_manager.add_to_group("inventory_manager")
+		print("InventoryManager created and added to scene")
+	else:
+		print("InventoryManager already exists")
+
 	name = "InventoryIntegration"
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
@@ -132,6 +145,7 @@ func _setup_original_inventory_system():
 
 	# Create inventory manager
 	inventory_manager = InventoryManager.new()
+	inventory_manager.add_to_group("inventory_manager")
 	inventory_manager.name = "InventoryManager"
 	add_child(inventory_manager)
 	inventory_manager.load_inventory()

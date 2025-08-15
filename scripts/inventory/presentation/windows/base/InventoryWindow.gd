@@ -62,6 +62,26 @@ func _input(event: InputEvent):
 							if _handle_cross_window_drop_to_main(drag_data, target_container):
 								get_viewport().set_input_as_handled()
 								return
+		else:
+			# Handle drops OUTSIDE our window (to external container windows)
+			var viewport = get_viewport()
+			if viewport and viewport.has_meta("current_drag_data"):
+				var drag_data = viewport.get_meta("current_drag_data")
+
+				# Check for drops to external container windows
+				var external_windows = get_tree().get_nodes_in_group("external_container_windows")
+				for window in external_windows:
+					if window != self and is_instance_valid(window):
+						var external_window_rect = Rect2(window.global_position, window.size)
+						if external_window_rect.has_point(event.global_position):
+							# This drop is targeting an external container window
+							var external_container = window.get_meta("external_container", null)
+							if external_container:
+								var interactable_container = window.get_meta("interactable_container", null)
+								if interactable_container and interactable_container.has_method("_handle_cross_window_drop_to_container"):
+									if interactable_container._handle_cross_window_drop_to_container(drag_data):
+										get_viewport().set_input_as_handled()
+										return
 
 
 func _setup_window_content():
@@ -475,7 +495,6 @@ func _switch_container(container: InventoryContainer_Base):
 # Override base class close behavior
 func _on_window_closed():
 	"""Handle main inventory window being closed"""
-	print("InventoryWindow: Main inventory window closing")
 
 	# Check if there are tearoff windows that should remain open
 	var should_restore_input = true
@@ -492,14 +511,12 @@ func _on_window_closed():
 
 			if tearoff_windows.size() > 0:
 				should_restore_input = false
-				print("InventoryWindow: %d tearoff windows remaining - keeping UI input active" % tearoff_windows.size())
 
 	# Find the inventory integration and close properly
 	var integration = _find_inventory_integration(get_tree().current_scene)
 	if integration:
 		# ALWAYS set inventory as closed when main window closes
 		integration.is_inventory_open = false
-		print("InventoryIntegration: Main inventory marked as closed")
 
 		# Handle input restoration based on tearoff windows
 		if should_restore_input:
@@ -507,10 +524,6 @@ func _on_window_closed():
 			integration.inventory_toggled.emit(false)
 			if integration.event_bus:
 				integration.event_bus.emit_inventory_closed()
-		else:
-			# Keep UI input active since tearoff windows are open
-			# But DON'T emit inventory_closed since that would confuse the input adapter
-			print("InventoryWindow: Preserving UI input mode for tearoff windows")
 
 		# Save position
 		integration._save_window_position()

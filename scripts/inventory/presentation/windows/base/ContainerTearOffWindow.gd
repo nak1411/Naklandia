@@ -151,8 +151,19 @@ func _handle_cross_window_drop(drag_data: Dictionary) -> bool:
 	if transfer_amount <= 0:
 		return false
 
-	# Use the existing transaction manager
-	var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
+	var source_container = inventory_manager.containers.get(source_container_id)
+	var target_container_obj = inventory_manager.containers.get(target_container.container_id)
+
+	var success = false
+	if source_container and target_container_obj:
+		var item_copy = item.duplicate()
+		item_copy.quantity = transfer_amount
+
+		if target_container_obj.add_item(item_copy):
+			item.quantity -= transfer_amount
+			if item.quantity <= 0:
+				source_container.remove_item(item)
+			success = true
 
 	if success:
 		# Force refresh our view

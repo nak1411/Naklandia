@@ -1,0 +1,37 @@
+[gd_scene load_steps=5 format=3 uid="uid://dvusnrd1ps7xx"]
+
+[ext_resource type="Script" uid="uid://d2242u46scobg" path="res://scripts/inventory/integration/interactables/InteractableContainer.gd" id="1_m0ttg"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_b2tfw"]
+size = Vector3(2, 1, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_06kkd"]
+size = Vector3(2, 1, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_3f7mu"]
+size = Vector3(2, 1, 1)
+
+[node name="InteractableContainer" type="Area3D"]
+script = ExtResource("1_m0ttg")
+container_type = 5
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_b2tfw")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_06kkd")
+
+[node name="RaycastTarget" type="StaticBody3D" parent="."]
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RaycastTarget"]
+shape = SubResource("BoxShape3D_3f7mu")
+
+[node name="ContainerVisuals" type="Node3D" parent="."]
+
+[node name="OpenAnimation" type="AnimationPlayer" parent="ContainerVisuals"]
+
+[node name="ParticleEffects" type="GPUParticles3D" parent="ContainerVisuals"]
+
+[node name="AudioEffects" type="AudioStreamPlayer3D" parent="ContainerVisuals"]

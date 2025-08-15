@@ -28,6 +28,7 @@ var settings: Dictionary = {"auto_stack": true, "auto_sort": false}
 
 
 func _ready():
+	add_to_group("inventory_manager")
 	_initialize_core_systems()
 	_initialize_default_containers()
 

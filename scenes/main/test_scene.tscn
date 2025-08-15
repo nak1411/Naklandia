@@ -1,6 +1,7 @@
-[gd_scene load_steps=16 format=3 uid="uid://r45rejc363d"]
+[gd_scene load_steps=17 format=3 uid="uid://r45rejc363d"]
 
 [ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
+[ext_resource type="PackedScene" uid="uid://dvusnrd1ps7xx" path="res://scenes/objects/interactable_container.tscn" id="2_1swwb"]
 [ext_resource type="PackedScene" uid="uid://b2wfoje26x7fv" path="res://scenes/player/player.tscn" id="2_d2t3o"]
 [ext_resource type="PackedScene" uid="uid://3crjjuj2n4na" path="res://scenes/objects/test_switch.tscn" id="3_ny3xg"]
 [ext_resource type="Script" uid="uid://criw8ficpl2be" path="res://scripts/ui/core/UIManager.gd" id="4_ny3xg"]
@@ -89,6 +90,9 @@ mesh = SubResource("BoxMesh_8pr8v")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Level/Wall1"]
 shape = SubResource("BoxShape3D_buypi")
+
+[node name="InteractableContainer" parent="Level/Wall1" instance=ExtResource("2_1swwb")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.02668, -1.4, -5.31083)
 
 [node name="Wall2" type="StaticBody3D" parent="Level"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 2, 0)
