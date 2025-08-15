@@ -15,8 +15,6 @@ func _ready():
 	# Add to the root so it persists across scene changes
 	get_tree().root.add_child(ui_debugger)
 
-	print("UIDebugger autoload ready! Press F3 or ` to toggle")
-
 
 func get_debugger() -> UIDebugger:
 	return ui_debugger

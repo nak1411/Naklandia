@@ -9,6 +9,7 @@ signal window_maximized
 signal window_restored
 signal window_resized(new_size: Vector2i)
 signal window_moved(new_position: Vector2i)
+signal window_property_changed(property: String, value)
 
 enum BloomState { NONE, SUBTLE, ACTIVE, ALERT, CRITICAL }
 enum ResizeMode { NONE, LEFT, RIGHT, TOP, BOTTOM, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
@@ -155,11 +156,9 @@ func _unhandled_input(event: InputEvent):
 	# Handle mouse release globally during ANY operation (resize OR drag)
 	if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if is_resizing:
-			print("Window: Global mouse release during resize")
 			_end_resize()
 			get_viewport().set_input_as_handled()
 		elif is_dragging:
-			print("Window: Global mouse release during drag")
 			is_dragging = false
 			drag_initiated = false
 			mouse_pressed = false
@@ -174,7 +173,6 @@ func _unhandled_input(event: InputEvent):
 		return
 
 	if event is InputEventMouseMotion:
-		print("Window: Unhandled motion during resize - %s" % event.global_position)
 		_handle_resize_motion(event.global_position)
 		get_viewport().set_input_as_handled()
 
@@ -234,12 +232,10 @@ func _handle_resize_input(event: InputEvent) -> bool:
 
 			if resize_mode != ResizeMode.NONE:
 				if mouse_event.pressed:
-					print("Window_Base: Direct resize start - mode: %d" % resize_mode)
 					_start_resize(resize_mode, mouse_event.global_position)
 					get_viewport().set_input_as_handled()
 					return true
 				if is_resizing:
-					print("Window_Base: Direct resize end")
 					_end_resize()
 					get_viewport().set_input_as_handled()
 					return true
@@ -590,7 +586,6 @@ func _add_focus_to_nodes_by_name(node_names: Array):
 				var control = node as Control
 				if not control.gui_input.is_connected(_on_child_focus_input):
 					control.gui_input.connect(_on_child_focus_input)
-					print("Window_Base: Added focus handler to %s" % node.name)
 
 
 func _find_nodes_by_name(root: Node, target_name: String) -> Array:
@@ -1591,14 +1586,16 @@ func get_window_locked() -> bool:
 
 func set_window_locked(locked: bool):
 	is_locked = locked
+	window_property_changed.emit("locked", locked)
 
 
 func get_transparency() -> float:
 	return modulate.a
 
 
-func set_transparency(value: float):
-	modulate.a = value
+func set_transparency(alpha: float):
+	modulate.a = alpha
+	window_property_changed.emit("transparency", alpha)
 
 
 func set_resizing_enabled(enabled: bool):
@@ -1778,7 +1775,6 @@ func _on_title_bar_input(event: InputEvent):
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
-				print("Window_Base: Title bar clicked on %s, bringing to front" % name)
 				_bring_to_front()
 			# Handle double-click first, before any other logic
 			if mouse_event.double_click and can_maximize:

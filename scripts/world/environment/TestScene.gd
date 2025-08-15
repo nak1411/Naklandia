@@ -9,6 +9,9 @@ func _ready():
 	setup_ui_manager()
 
 	# Wait for everything to initialize properly
+	await get_tree().process_frame
+	_load_window_position()
+
 	await get_tree().create_timer(2.0).timeout
 	create_test_items()
 
@@ -170,3 +173,59 @@ func setup_materials():
 
 func setup_ui_manager():
 	ui_manager = UIManager.new()
+
+
+func _save_window_position():
+	var config = ConfigFile.new()
+
+	var window_pos = DisplayServer.window_get_position()
+	var window_size = DisplayServer.window_get_size()
+	var window_mode = DisplayServer.window_get_mode()
+
+	config.set_value("window", "position_x", window_pos.x)
+	config.set_value("window", "position_y", window_pos.y)
+	config.set_value("window", "size_x", window_size.x)
+	config.set_value("window", "size_y", window_size.y)
+	config.set_value("window", "mode", window_mode)
+
+	config.save("user://window_settings.cfg")
+
+
+func _load_window_position():
+	var config = ConfigFile.new()
+	if config.load("user://window_settings.cfg") != OK:
+		return
+
+	var pos_x = config.get_value("window", "position_x", -1)
+	var pos_y = config.get_value("window", "position_y", -1)
+	var size_x = config.get_value("window", "size_x", -1)
+	var size_y = config.get_value("window", "size_y", -1)
+	var mode = config.get_value("window", "mode", DisplayServer.WINDOW_MODE_WINDOWED)
+
+	# Apply window mode
+	if mode != DisplayServer.window_get_mode():
+		DisplayServer.window_set_mode(mode)
+
+	# Apply position if valid and within screen bounds
+	if pos_x >= 0 and pos_y >= 0:
+		var screen_count = DisplayServer.get_screen_count()
+		var valid_position = false
+
+		for screen_id in screen_count:
+			var screen_rect = Rect2(DisplayServer.screen_get_position(screen_id), DisplayServer.screen_get_size(screen_id))
+			if screen_rect.has_point(Vector2i(pos_x, pos_y)):
+				valid_position = true
+				break
+
+		if valid_position:
+			DisplayServer.window_set_position(Vector2i(pos_x, pos_y))
+
+	# Apply size if valid
+	if size_x > 0 and size_y > 0:
+		DisplayServer.window_set_size(Vector2i(size_x, size_y))
+
+
+func _notification(what):
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_save_window_position()
+		get_tree().quit()

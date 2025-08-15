@@ -23,8 +23,6 @@ static func start_drag(data: Dictionary, preview: Control = null):
 	if preview:
 		_setup_global_drag_preview(preview)
 
-	print("GlobalDragManager: Started drag with item: ", data.get("item", {}).get("item_name", "Unknown"))
-
 
 static func _setup_global_drag_preview(preview: Control):
 	"""Setup a global drag preview that follows the mouse"""
@@ -94,7 +92,6 @@ static func end_drag() -> Dictionary:
 		drag_canvas = null
 	drag_preview = null
 
-	print("GlobalDragManager: Ended drag")
 	return data
 
 

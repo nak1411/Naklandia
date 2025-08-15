@@ -141,7 +141,6 @@ func _on_mouse_entered():
 		is_highlighted = true
 		if visuals:
 			visuals.update_visual_state(is_highlighted, is_selected, has_item())
-		print("DEBUG: Slot hover - showing outline for item: ", item.item_name if item else "none")
 
 	tooltip_manager.start_tooltip_timer()
 
@@ -155,7 +154,6 @@ func _on_mouse_exited():
 		is_highlighted = false
 		if visuals:
 			visuals.update_visual_state(is_highlighted, is_selected, has_item())
-		print("DEBUG: Slot exit - hiding outline")
 
 	tooltip_manager.hide_tooltip()
 

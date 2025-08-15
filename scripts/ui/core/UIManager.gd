@@ -97,7 +97,6 @@ func setup_default_ui_elements():
 
 func setup_window_management():
 	"""Initialize window management system with periodic cleanup"""
-	print("UIManager: Window management initialized")
 
 	# Set up a timer for periodic cleanup of invalid windows
 	var cleanup_timer = Timer.new()
@@ -122,8 +121,17 @@ func register_window(window: Window_Base, window_type: String = "tearoff") -> Ca
 	active_windows.append(window)
 	window_stack.append(window)
 
+	window.set_meta("window_type", window_type)
+
 	# Create appropriate canvas layer
 	var canvas_layer = _create_window_canvas(window, window_type)
+
+	# Connect to window layout manager for auto-saving
+	var layout_managers = get_tree().get_nodes_in_group("window_layout_manager")
+	if layout_managers.size() > 0:
+		var layout_manager = layout_managers[0]
+		if layout_manager.has_method("connect_window_signals"):
+			layout_manager.connect_window_signals(window)
 
 	# Connect window signals with safety checks
 	if is_instance_valid(window):
@@ -164,8 +172,6 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 
 	# Add window to canvas
 	canvas.add_child(window)
-
-	print("UIManager: Created canvas %s with layer %d for window %s" % [canvas.name, canvas.layer, window.name])
 
 	return canvas
 
@@ -319,6 +325,13 @@ func _on_managed_window_closed(window: Window_Base):
 
 func unregister_window(window: Window_Base):
 	"""Unregister a window from the UI manager"""
+
+	var layout_managers = get_tree().get_nodes_in_group("window_layout_manager")
+	if layout_managers.size() > 0:
+		var layout_manager = layout_managers[0]
+		if layout_manager.has_method("disconnect_window_signals"):
+			layout_manager.disconnect_window_signals(window)
+
 	if window not in active_windows:
 		return
 
@@ -337,7 +350,6 @@ func unregister_window(window: Window_Base):
 	# CRITICAL FIX: If main inventory closes, don't close tearoff windows
 	if is_main_inventory:
 		# Keep tearoff windows open and independent
-		print("UIManager: Main inventory closing, preserving tearoff windows")
 		# Just remove focus without closing tearoffs
 		if window == focused_window:
 			focused_window = null
@@ -371,31 +383,25 @@ func get_all_windows() -> Array[Window_Base]:
 
 func close_all_windows():
 	"""Close all managed windows except main inventory"""
-	print("UIManager: Closing all non-inventory windows")
 	for window in active_windows.duplicate():
 		if is_instance_valid(window):
 			var window_type = window.get_meta("window_type", "")
 			if window_type != "main_inventory":
-				print("UIManager: Closing window %s (type: %s)" % [window.name, window_type])
 				window.hide_window()
 
 
 func close_windows_by_type(window_type: String):
 	"""Close all windows of a specific type"""
-	print("UIManager: Closing all windows of type: %s" % window_type)
 	var windows_to_close = get_windows_by_type(window_type)
 	for window in windows_to_close:
 		if is_instance_valid(window):
-			print("UIManager: Closing window %s" % window.name)
 			window.hide_window()
 
 
 func close_all_windows_including_main():
 	"""Close ALL managed windows including main inventory"""
-	print("UIManager: Closing ALL windows")
 	for window in active_windows.duplicate():
 		if is_instance_valid(window):
-			print("UIManager: Closing window %s" % window.name)
 			window.hide_window()
 
 

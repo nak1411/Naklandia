@@ -274,7 +274,6 @@ func _setup_content():
 
 func _resize_tearoff_window():
 	"""Resize tearoff window to smaller default size"""
-	size = Vector2(500, 400)
 	# Ensure it stays within screen bounds
 	var viewport = get_viewport()
 	if viewport:

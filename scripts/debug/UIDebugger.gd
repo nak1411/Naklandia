@@ -54,7 +54,6 @@ func _ready():
 
 	_setup_debug_ui()
 	_setup_discovery_timer()
-	print("UIDebugger initialized")
 
 
 func _setup_debug_ui():
