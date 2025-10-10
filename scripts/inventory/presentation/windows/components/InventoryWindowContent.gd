@@ -822,13 +822,14 @@ func _gui_input(event: InputEvent):
 
 
 func _on_container_list_input(event: InputEvent):
-	"""Handle input on container list - including drops from list rows"""
+	"""Handle input on container list - only for sources NOT already handled by ListRowManager"""
 	if not event is InputEventMouseButton:
 		return
 
 	var mouse_event = event as InputEventMouseButton
 
-	# Handle drops on container list
+	# Handle drops on container list - BUT ONLY FROM SLOTS, NOT ROWS
+	# (ListRowManager handles its own drops via _attempt_drop_on_container_list)
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
 		var viewport = get_viewport()
 		if viewport and viewport.has_meta("current_drag_data"):
@@ -837,10 +838,16 @@ func _on_container_list_input(event: InputEvent):
 			# Get source information
 			var source_slot = drag_data.get("source_slot")
 			var source_row = drag_data.get("source_row")
+
+			# CRITICAL: Only handle drops from SLOTS here
+			# ListRowManager handles drops from rows via its own _attempt_drop_on_container_list method
+			if source_row:
+				return  # Let ListRowManager handle it
+
+			# Continue with slot handling only
 			var item = drag_data.get("item")
 
-			# Only proceed if we have a valid item from either source
-			if not item or (not source_slot and not source_row):
+			if not item or not source_slot:
 				return
 
 			# Get the container under the mouse
@@ -852,16 +859,14 @@ func _on_container_list_input(event: InputEvent):
 
 				# Get source container ID
 				var source_container_id = ""
-				if source_slot and source_slot.has_method("get_container_id"):
+				if source_slot.has_method("get_container_id"):
 					source_container_id = source_slot.get_container_id()
-				elif source_row and source_row.has_method("_get_container_id"):
-					source_container_id = source_row._get_container_id()
 
 				# Don't transfer to same container
 				if source_container_id == target_container.container_id:
 					return
 
-				# Perform the transfer
+				# Get inventory manager
 				if not inventory_manager:
 					inventory_manager = _get_inventory_manager()
 
@@ -869,16 +874,15 @@ func _on_container_list_input(event: InputEvent):
 					# Determine transfer quantity
 					var transfer_quantity = item.quantity
 					if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
-						transfer_quantity = max(1, int(item.quantity / 2.0))  # Transfer half
+						transfer_quantity = max(1, int(item.quantity / 2.0))
 
+					# Perform transfer
 					var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_quantity)
 
 					if success:
-						# Notify source of successful drop
-						if source_slot and source_slot.has_method("_on_external_drop_result"):
+						# Notify source slot of successful drop
+						if source_slot.has_method("_on_external_drop_result"):
 							source_slot._on_external_drop_result(true)
-						elif source_row and source_row.has_method("_on_external_drop_result"):
-							source_row._on_external_drop_result(true)
 
 						# Refresh displays
 						match current_display_mode:

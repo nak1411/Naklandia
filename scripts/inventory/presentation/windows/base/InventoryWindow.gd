@@ -59,14 +59,13 @@ func _input(event: InputEvent):
 
 		# Check if drop is within our window bounds
 		if window_rect.has_point(event.global_position):
-			print("INVENTORY: Handling drop within bounds")
 			# Check if there's an active drag operation
 			if viewport and viewport.has_meta("current_drag_data"):
 				var drag_data = viewport.get_meta("current_drag_data")
 				var source_slot = drag_data.get("source_slot")
 				var source_row = drag_data.get("source_row")
 
-				# Check if drag is from an external source
+				# Check if drag is from a valid source
 				var source_container_id = ""
 				if source_slot and source_slot.has_method("get_container_id"):
 					source_container_id = source_slot.get_container_id()
@@ -74,29 +73,28 @@ func _input(event: InputEvent):
 					source_container_id = source_row._get_container_id()
 
 				if source_container_id != "":
-					var our_container_id = current_container.container_id if current_container else ""
+					# ALWAYS check if drop is over a valid drop area (container list or grid)
+					var target_container = _get_target_container_for_drop(event.global_position)
 
-					# Check if it's a cross-container drop
-					if source_container_id != our_container_id:
-						# Check if drop is over a valid drop area
-						var target_container = _get_target_container_for_drop(event.global_position)
-						if target_container:
+					if target_container:
+						# Check if it's actually a different container
+						if source_container_id != target_container.container_id:
 							# Valid cross-container drop - handle it and block event
 							if _handle_cross_window_drop_to_main(drag_data, target_container):
 								get_viewport().set_input_as_handled()
-								print("INVENTORY: Called set_input_as_handled()")
 								return
+						else:
+							# Same container - let ListRowManager or other handlers deal with it
+							return
 
-					# CRITICAL: Block ALL other drops within window bounds
+					# No valid target found - block and cleanup
 					_cleanup_failed_drop(drag_data)
 					get_viewport().set_input_as_handled()
-					print("INVENTORY: Called set_input_as_handled()")
 					return
 				else:
 					# No valid container ID - block and cleanup
 					_cleanup_failed_drop(drag_data)
 					get_viewport().set_input_as_handled()
-					print("INVENTORY: Called set_input_as_handled()")
 					return
 
 			# No drag operation active - regular window interaction
@@ -418,15 +416,43 @@ func _on_container_selected_from_content(container: InventoryContainer_Base):
 	container_switched.emit(container)
 
 
-func _get_target_container_for_drop(_drop_position: Vector2) -> InventoryContainer_Base:
+func _get_target_container_for_drop(drop_position: Vector2) -> InventoryContainer_Base:
 	"""Get the target container for a drop at the given position"""
+	print("DEBUG: _get_target_container_for_drop at position: ", drop_position)
+
 	if not content:
+		print("DEBUG: No content")
 		return null
 
-	# Check if dropping on the main inventory grid/list area
-	if content.has_method("get_current_container"):
-		return content.get_current_container()
+	# Check if dropping on the container list FIRST
+	if content.container_list:
+		var list_rect = Rect2(content.container_list.global_position, content.container_list.size)
+		print("DEBUG: Container list rect: ", list_rect)
 
+		if list_rect.has_point(drop_position):
+			print("DEBUG: Drop is over container list!")
+			# Get the container at the drop position
+			var local_pos = drop_position - content.container_list.global_position
+			var item_index = content.container_list.get_item_at_position(local_pos, true)
+			print("DEBUG: Container list item_index: ", item_index, " open_containers size: ", content.open_containers.size())
+
+			if item_index >= 0 and item_index < content.open_containers.size():
+				var target = content.open_containers[item_index]
+				print("DEBUG: Found target container: ", target.container_name if target else "null")
+				return target
+			else:
+				print("DEBUG: Invalid item_index or out of range")
+	else:
+		print("DEBUG: No container_list in content")
+
+	# Check if dropping on the main inventory grid/list area
+	print("DEBUG: Checking current container fallback")
+	if content.has_method("get_current_container"):
+		var current = content.get_current_container()
+		print("DEBUG: Current container: ", current.container_name if current else "null")
+		return current
+
+	print("DEBUG: Returning current_container: ", current_container.container_name if current_container else "null")
 	return current_container
 
 
