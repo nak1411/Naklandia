@@ -821,9 +821,104 @@ func _gui_input(event: InputEvent):
 				is_drag_highlighting_active = false
 
 
-func _on_container_list_input(_event: InputEvent):
-	# Handle specific container list input events
-	pass
+func _on_container_list_input(event: InputEvent):
+	"""Handle input on container list - including drops from list rows"""
+	if not event is InputEventMouseButton:
+		return
+
+	var mouse_event = event as InputEventMouseButton
+
+	# Handle drops on container list
+	if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
+		var viewport = get_viewport()
+		if viewport and viewport.has_meta("current_drag_data"):
+			var drag_data = viewport.get_meta("current_drag_data")
+
+			# Get source information
+			var source_slot = drag_data.get("source_slot")
+			var source_row = drag_data.get("source_row")
+			var item = drag_data.get("item")
+
+			# Only proceed if we have a valid item from either source
+			if not item or (not source_slot and not source_row):
+				return
+
+			# Get the container under the mouse
+			var local_pos = mouse_event.global_position - container_list.global_position
+			var item_index = container_list.get_item_at_position(local_pos, true)
+
+			if item_index >= 0 and item_index < open_containers.size():
+				var target_container = open_containers[item_index]
+
+				# Get source container ID
+				var source_container_id = ""
+				if source_slot and source_slot.has_method("get_container_id"):
+					source_container_id = source_slot.get_container_id()
+				elif source_row and source_row.has_method("_get_container_id"):
+					source_container_id = source_row._get_container_id()
+
+				# Don't transfer to same container
+				if source_container_id == target_container.container_id:
+					return
+
+				# Perform the transfer
+				if not inventory_manager:
+					inventory_manager = _get_inventory_manager()
+
+				if inventory_manager:
+					# Determine transfer quantity
+					var transfer_quantity = item.quantity
+					if Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1:
+						transfer_quantity = max(1, int(item.quantity / 2.0))  # Transfer half
+
+					var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_quantity)
+
+					if success:
+						# Notify source of successful drop
+						if source_slot and source_slot.has_method("_on_external_drop_result"):
+							source_slot._on_external_drop_result(true)
+						elif source_row and source_row.has_method("_on_external_drop_result"):
+							source_row._on_external_drop_result(true)
+
+						# Refresh displays
+						match current_display_mode:
+							InventoryDisplayMode.Mode.GRID:
+								if inventory_grid and inventory_grid.visible:
+									inventory_grid.refresh_display()
+							InventoryDisplayMode.Mode.LIST:
+								if list_view and list_view.visible:
+									list_view.refresh_display()
+
+						# Update mass info
+						update_mass_info()
+
+						# Clear drag data
+						viewport.remove_meta("current_drag_data")
+
+						# Clear highlights
+						_clear_all_container_highlights()
+
+
+func _get_inventory_manager() -> InventoryManager:
+	"""Find the inventory manager in the scene tree"""
+	if inventory_manager:
+		return inventory_manager
+
+	var scene_root = get_tree().current_scene
+	return _find_inventory_manager_recursive(scene_root)
+
+
+func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
+	"""Recursively search for inventory manager"""
+	if node is InventoryManager:
+		return node
+
+	for child in node.get_children():
+		var result = _find_inventory_manager_recursive(child)
+		if result:
+			return result
+
+	return null
 
 
 # Transparency handling
