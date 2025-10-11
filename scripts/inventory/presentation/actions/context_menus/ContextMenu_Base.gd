@@ -103,7 +103,15 @@ func show_context_menu(_show_position: Vector2, data: Dictionary = {}, parent_wi
 	root_viewport.add_child(main_popup)
 	main_popup.size = popup_size
 	main_popup.position = Vector2i(final_position)
-	main_popup.show()
+
+	# Hide initially to prevent flicker while content loads
+	main_popup.visible = false
+
+	# Wait for one frame to let content and styling complete
+	await get_tree().process_frame
+
+	# Now show the fully-styled menu
+	main_popup.visible = true
 
 	set_process_unhandled_input(true)
 	set_process_input(true)
@@ -160,6 +168,25 @@ func _create_main_popup():
 	main_popup = PopupPanel.new()
 	main_popup.name = "ContextMenuPopup"
 
+	# CRITICAL: Apply popup styling IMMEDIATELY before adding children
+	# This prevents the gray flicker by setting the background color first
+	var popup_style = StyleBoxFlat.new()
+	popup_style.bg_color = Color(0.07, 0.07, 0.07, 0.95)  # Match button normal color
+	popup_style.border_width_left = 1
+	popup_style.border_width_right = 1
+	popup_style.border_width_top = 1
+	popup_style.border_width_bottom = 1
+	popup_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
+	popup_style.content_margin_left = 0
+	popup_style.content_margin_right = 0
+	popup_style.content_margin_top = 0
+	popup_style.content_margin_bottom = 0
+	popup_style.expand_margin_left = 0
+	popup_style.expand_margin_right = 0
+	popup_style.expand_margin_top = 0
+	popup_style.expand_margin_bottom = 0
+	main_popup.add_theme_stylebox_override("panel", popup_style)
+
 	# Create container for menu items
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 0)
@@ -186,25 +213,6 @@ func _create_main_popup():
 	# Set the VBox to exactly match the content
 	vbox.custom_minimum_size = Vector2(menu_width, actual_height)
 	vbox.size = Vector2(menu_width, actual_height)
-
-	# Create completely flat popup style with zero padding
-	var popup_style = StyleBoxFlat.new()
-	popup_style.bg_color = Color(0.1, 0.1, 0.1, 0.95)
-	popup_style.border_width_left = 1
-	popup_style.border_width_right = 1
-	popup_style.border_width_top = 1
-	popup_style.border_width_bottom = 1
-	popup_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
-	# Ensure zero margins and padding
-	popup_style.content_margin_left = 0
-	popup_style.content_margin_right = 0
-	popup_style.content_margin_top = 0
-	popup_style.content_margin_bottom = 0
-	popup_style.expand_margin_left = 0
-	popup_style.expand_margin_right = 0
-	popup_style.expand_margin_top = 0
-	popup_style.expand_margin_bottom = 0
-	main_popup.add_theme_stylebox_override("panel", popup_style)
 
 
 func _calculate_optimal_width():
