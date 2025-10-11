@@ -54,72 +54,80 @@ func show_context_menu(_show_position: Vector2, data: Dictionary = {}, parent_wi
 	context_data = data
 	_create_main_popup()
 
-	# Get viewport and calculate proper position
 	var viewport = get_viewport()
 	if not viewport:
 		return
 
-	var final_position: Vector2
-
-	# Use current mouse position instead of passed position for mouse-following behavior
-	var current_mouse_pos = get_global_mouse_position()
-
-	# If we have a parent window, we still need to consider its position for coordinate conversion
-	if parent_window:
-		# Convert global mouse position to be relative to viewport
-		final_position = current_mouse_pos
-	else:
-		# Use current mouse position directly
-		final_position = current_mouse_pos
-
-	# Add small offset to avoid cursor overlap (optional - you can remove this if you want it exactly at cursor)
-	var popup_offset = Vector2(5, 5)
-	final_position += popup_offset
-
-	# Ensure menu stays within screen bounds
-	final_position = _calculate_screen_position(final_position)
-
-	# Add the popup to the viewport
-	viewport.add_child(main_popup)
-
-	# Set position and show with explicit size
-	main_popup.position = Vector2i(final_position)
-
-	# Calculate the actual required size based on content
 	var actual_height = _calculate_total_height()
 	var popup_size = Vector2i(menu_width, actual_height)
 
-	# Force the popup to use the exact size we want
-	main_popup.popup(Rect2i(final_position, popup_size))
+	# Get current mouse position in viewport space
+	var mouse_pos = viewport.get_mouse_position()
 
-	# Delay input processing to avoid immediate closure
+	# The popup is appearing at x=1920 when we want it at the mouse
+	# So we need to offset by (1920 - mouse_x)
+	# Let's just use the mouse position directly and add the offset
+	var final_position = mouse_pos + Vector2(5, 5)
+
+	# Simple bounds check
+	if parent_window:
+		var bounds = Vector2(parent_window.size)
+		if final_position.x + menu_width > bounds.x:
+			final_position.x = bounds.x - menu_width - 10
+		if final_position.y + actual_height > bounds.y:
+			final_position.y = bounds.y - actual_height - 10
+
+	viewport.add_child(main_popup)
+	main_popup.size = popup_size
+
+	# Don't set position at all - let it auto-position, then we'll move it
+	main_popup.show()
+
+	# Wait a frame for it to position itself
 	await get_tree().process_frame
 
-	# Enable input processing
+	# NOW calculate the offset we need
+	var current_pos = main_popup.position
+	print("Popup auto-positioned at: ", current_pos)
+	print("We want it at: ", final_position)
+	print("Offset needed: ", Vector2(final_position) - Vector2(current_pos))
+
+	# Apply the correction
+	main_popup.position = Vector2i(final_position)
+
 	set_process_unhandled_input(true)
 	set_process_input(true)
-
-	# Start input polling for reliable click detection with delay
 	_start_input_polling_delayed()
 
 
-func _calculate_screen_position(desired_position: Vector2) -> Vector2:
-	"""Calculate menu position ensuring it stays within screen bounds"""
-	var viewport = get_viewport()
-	if not viewport:
-		return desired_position
+func _set_popup_position(pos: Vector2i):
+	if main_popup and is_instance_valid(main_popup):
+		print("Setting position deferred to: ", pos)
+		main_popup.position = pos
+		print("Position after deferred set: ", main_popup.position)
 
-	var viewport_size = viewport.get_visible_rect().size
+
+func _calculate_screen_position(desired_position: Vector2, parent_window: Window = null) -> Vector2:
+	"""Calculate menu position ensuring it stays within screen bounds"""
+	var bounds_size: Vector2
+	if parent_window:
+		bounds_size = Vector2(parent_window.size)
+	else:
+		var viewport = get_viewport()
+		if not viewport:
+			return desired_position
+		bounds_size = viewport.get_visible_rect().size
+
 	var estimated_menu_size = Vector2(menu_width, _calculate_total_height())
 	var final_pos = desired_position
 
-	# Ensure menu doesn't go off right edge of viewport
-	if final_pos.x + estimated_menu_size.x > viewport_size.x:
-		final_pos.x = viewport_size.x - estimated_menu_size.x - 10
+	# Ensure menu doesn't go off right edge
+	if final_pos.x + estimated_menu_size.x > bounds_size.x:
+		final_pos.x = bounds_size.x - estimated_menu_size.x - 10
 
-	# Ensure menu doesn't go off bottom edge of viewport
-	if final_pos.y + estimated_menu_size.y > viewport_size.y:
-		final_pos.y = viewport_size.y - estimated_menu_size.y - 10
+	# Ensure menu doesn't go off bottom edge
+	if final_pos.y + estimated_menu_size.y > bounds_size.y:
+		final_pos.y = bounds_size.y - estimated_menu_size.y - 10
 
 	# Ensure menu doesn't go off left or top edges
 	if final_pos.x < 10:
