@@ -54,6 +54,9 @@ func show_context_menu(_show_position: Vector2, data: Dictionary = {}, parent_wi
 	context_data = data
 	_create_main_popup()
 
+	# Reset right-click state immediately to prevent flicker
+	_previous_right_click_state = true  # Set to true so the opening right-click doesn't trigger close
+
 	var viewport = get_viewport()
 	if not viewport:
 		return
@@ -61,39 +64,46 @@ func show_context_menu(_show_position: Vector2, data: Dictionary = {}, parent_wi
 	var actual_height = _calculate_total_height()
 	var popup_size = Vector2i(menu_width, actual_height)
 
-	# Get current mouse position in viewport space
-	var mouse_pos = viewport.get_mouse_position()
+	# Get the root viewport to convert coordinates correctly
+	var root_viewport = get_tree().root
 
-	# The popup is appearing at x=1920 when we want it at the mouse
-	# So we need to offset by (1920 - mouse_x)
-	# Let's just use the mouse position directly and add the offset
-	var final_position = mouse_pos + Vector2(5, 5)
+	# Get mouse position in global screen coordinates
+	var screen_pos = Vector2(DisplayServer.mouse_get_position())
 
-	# Simple bounds check
-	if parent_window:
-		var bounds = Vector2(parent_window.size)
-		if final_position.x + menu_width > bounds.x:
-			final_position.x = bounds.x - menu_width - 10
-		if final_position.y + actual_height > bounds.y:
-			final_position.y = bounds.y - actual_height - 10
+	# Get the screen the mouse is currently on
+	var screen_count = DisplayServer.get_screen_count()
+	var current_screen = -1
+	var screen_rect = Rect2()
 
-	viewport.add_child(main_popup)
+	for i in range(screen_count):
+		var screen_position = DisplayServer.screen_get_position(i)
+		var screen_size = DisplayServer.screen_get_size(i)
+		var rect = Rect2(screen_position, screen_size)
+		if rect.has_point(screen_pos):
+			current_screen = i
+			screen_rect = rect
+			break
+
+	# Add small offset so menu doesn't appear directly under cursor
+	var final_position = screen_pos + Vector2(5, 5)
+
+	# Bounds check against the actual screen the mouse is on
+	if final_position.x + menu_width > screen_rect.position.x + screen_rect.size.x:
+		final_position.x = screen_rect.position.x + screen_rect.size.x - menu_width - 10
+	if final_position.y + actual_height > screen_rect.position.y + screen_rect.size.y:
+		final_position.y = screen_rect.position.y + screen_rect.size.y - actual_height - 10
+
+	# Ensure menu doesn't go off left or top edges of current screen
+	if final_position.x < screen_rect.position.x + 10:
+		final_position.x = screen_rect.position.x + 10
+	if final_position.y < screen_rect.position.y + 10:
+		final_position.y = screen_rect.position.y + 10
+
+	# Add to root viewport for screen-space positioning
+	root_viewport.add_child(main_popup)
 	main_popup.size = popup_size
-
-	# Don't set position at all - let it auto-position, then we'll move it
-	main_popup.show()
-
-	# Wait a frame for it to position itself
-	await get_tree().process_frame
-
-	# NOW calculate the offset we need
-	var current_pos = main_popup.position
-	print("Popup auto-positioned at: ", current_pos)
-	print("We want it at: ", final_position)
-	print("Offset needed: ", Vector2(final_position) - Vector2(current_pos))
-
-	# Apply the correction
 	main_popup.position = Vector2i(final_position)
+	main_popup.show()
 
 	set_process_unhandled_input(true)
 	set_process_input(true)
