@@ -30,6 +30,7 @@ window/size/always_on_top=true
 
 [gui]
 
+theme/custom="res://dark_theme.tres"
 theme/custom_font="uid://na8yltwpq1mv"
 
 [input]

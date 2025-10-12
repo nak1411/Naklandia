@@ -99,19 +99,22 @@ func show_context_menu(_show_position: Vector2, data: Dictionary = {}, parent_wi
 	if final_position.y < screen_rect.position.y + 10:
 		final_position.y = screen_rect.position.y + 10
 
-	# Add to root viewport for screen-space positioning
+	# Add to root viewport but keep hidden initially
 	root_viewport.add_child(main_popup)
 	main_popup.size = popup_size
 	main_popup.position = Vector2i(final_position)
-
-	# Hide initially to prevent flicker while content loads
 	main_popup.visible = false
 
-	# Wait for one frame to let content and styling complete
+	# Force Godot to process the node and apply all theme overrides
+	main_popup.notification(NOTIFICATION_THEME_CHANGED)
+
+	# Wait TWO frames to ensure everything is fully styled
+	await get_tree().process_frame
 	await get_tree().process_frame
 
-	# Now show the fully-styled menu
-	main_popup.visible = true
+	# Now show it with all styles applied
+	if main_popup and is_instance_valid(main_popup):
+		main_popup.visible = true
 
 	set_process_unhandled_input(true)
 	set_process_input(true)
@@ -168,6 +171,9 @@ func _create_main_popup():
 	main_popup = PopupPanel.new()
 	main_popup.name = "ContextMenuPopup"
 
+	# CRITICAL: Hide popup BEFORE adding any children to prevent flicker
+	main_popup.visible = false
+
 	# CRITICAL: Apply popup styling IMMEDIATELY before adding children
 	# This prevents the gray flicker by setting the background color first
 	var popup_style = StyleBoxFlat.new()
@@ -187,6 +193,15 @@ func _create_main_popup():
 	popup_style.expand_margin_bottom = 0
 	main_popup.add_theme_stylebox_override("panel", popup_style)
 
+	# Add a ColorRect as the background to prevent any flicker
+	var background = ColorRect.new()
+	background.name = "Background"
+	background.color = Color(0.07, 0.07, 0.07, 0.95)
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background.z_index = -1
+	main_popup.add_child(background)
+
 	# Create container for menu items
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 0)
@@ -198,6 +213,7 @@ func _create_main_popup():
 
 	# Create menu items and track actual height
 	var actual_height = 0
+	var created_buttons = []  # Track buttons to re-enable mouse later
 	for i in range(menu_items.size()):
 		var item_data = menu_items[i]
 
@@ -207,12 +223,25 @@ func _create_main_popup():
 			actual_height += 1  # separator height
 		else:
 			var item_button = _create_menu_item_button(item_data, i)
+			# Temporarily disable mouse to prevent hover flicker
+			item_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			created_buttons.append(item_button)
 			vbox.add_child(item_button)
 			actual_height += item_height
 
 	# Set the VBox to exactly match the content
 	vbox.custom_minimum_size = Vector2(menu_width, actual_height)
 	vbox.size = Vector2(menu_width, actual_height)
+
+	# Re-enable mouse on buttons after a short delay
+	get_tree().create_timer(0.05).timeout.connect(
+		func():
+			for btn in created_buttons:
+				if btn and is_instance_valid(btn):
+					btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	)
+
+	# NOW the popup is fully built and styled, ready to be shown
 
 
 func _calculate_optimal_width():
