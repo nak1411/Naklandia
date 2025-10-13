@@ -50,7 +50,7 @@ func add_separator():
 	menu_items.append(separator)
 
 
-func show_context_menu(_show_position: Vector2, data: Dictionary = {}, parent_window: Window = null):
+func show_context_menu(_show_position: Vector2, data: Dictionary = {}, _parent_window: Window = null):
 	context_data = data
 	_create_main_popup()
 
