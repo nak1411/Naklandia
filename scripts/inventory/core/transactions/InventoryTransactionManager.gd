@@ -18,16 +18,13 @@ func set_container_registry(containers: Dictionary):
 	container_registry = containers
 
 
-func transfer_item(item: InventoryItem_Base, from_container_id: String, to_container_id: String, position: Vector2i = Vector2i(-1, -1), quantity: int = 0) -> bool:
-	var from_container = container_registry.get(from_container_id)
-	var to_container = container_registry.get(to_container_id)
-
+func transfer_item(item: InventoryItem_Base, from_container: InventoryContainer_Base, to_container: InventoryContainer_Base, position: Vector2i = Vector2i(-1, -1), quantity: int = 0) -> bool:
 	if not from_container or not to_container:
-		push_error("InventoryTransactionManager: Invalid container IDs")
+		push_error("InventoryTransactionManager: Invalid containers")
 		return false
 
 	# Same container - just move position
-	if from_container_id == to_container_id:
+	if from_container == to_container:
 		return _handle_same_container_move(item, from_container, position)
 
 	# Cross-container transfer
@@ -49,7 +46,6 @@ func _handle_cross_container_transfer(item: InventoryItem_Base, from_container: 
 	transfer_quantity = min(transfer_quantity, item.quantity)
 
 	if transfer_quantity <= 0:
-		print("HEYYYEYE")
 		return false
 
 	# Check if target can accept the item/quantity

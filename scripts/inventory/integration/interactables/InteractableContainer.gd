@@ -46,8 +46,25 @@ func _ready():
 
 func _delayed_setup():
 	"""Setup called after scene is fully ready"""
-	_find_managers()
+	await _wait_for_inventory_manager()
 	_setup_container()
+
+
+func _wait_for_inventory_manager():
+	"""Wait for the InventoryManager to be ready"""
+	var max_attempts = 100  # 10 seconds at 100ms per attempt
+	var attempt = 0
+
+	while attempt < max_attempts:
+		_find_managers()
+
+		if inventory_manager:
+			return
+
+		await get_tree().create_timer(0.1).timeout
+		attempt += 1
+
+	push_error("InteractableContainer: Timed out waiting for InventoryManager!")
 
 
 func _find_managers():
@@ -179,9 +196,9 @@ func interact() -> bool:
 
 	if not inventory_container:
 		push_error("InteractableContainer: No container data available!")
-		_setup_container()
-		if not inventory_container:
-			return false
+		# Try to reinitialize
+		call_deferred("_delayed_setup")
+		return false
 
 	# Set a brief flag to prevent multiple rapid interactions
 	is_container_open = true

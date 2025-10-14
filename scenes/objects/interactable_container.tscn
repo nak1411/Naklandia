@@ -13,7 +13,7 @@ size = Vector3(2, 1, 1)
 
 [node name="InteractableContainer" type="Area3D"]
 script = ExtResource("1_m0ttg")
-container_type = 5
+container_type = 8
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 mesh = SubResource("BoxMesh_b2tfw")
