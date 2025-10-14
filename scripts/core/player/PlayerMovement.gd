@@ -13,6 +13,8 @@ signal state_changed(new_state)
 @export var crouch_speed: float = 2.5
 @export var acceleration: float = 10.0
 @export var friction: float = 10.0
+@export var air_acceleration: float = 8.0
+@export var air_friction: float = 2.0
 
 @export_group("Jumping")
 @export var jump_velocity: float = 8.0
@@ -74,16 +76,26 @@ func _handle_horizontal_movement(player: CharacterBody3D, input_vector: Vector2,
 	# Get current speed based on state
 	var current_speed = _get_speed_for_state(state)
 
-	# Apply movement instantly
-	if input_vector.length() > 0:
-		# Instant response - directly set velocity
-		var target_velocity = movement_direction * current_speed
-		player.velocity.x = target_velocity.x
-		player.velocity.z = target_velocity.z
+	# Different movement behavior for ground vs air
+	if player.is_on_floor():
+		# Ground movement - instant and responsive
+		if input_vector.length() > 0:
+			var target_velocity = movement_direction * current_speed
+			player.velocity.x = target_velocity.x
+			player.velocity.z = target_velocity.z
+		else:
+			player.velocity.x = 0.0
+			player.velocity.z = 0.0
 	else:
-		# Instant stop when no input
-		player.velocity.x = 0.0
-		player.velocity.z = 0.0
+		# Air movement - with inertia
+		if input_vector.length() > 0:
+			var target_velocity = movement_direction * current_speed
+			player.velocity.x = move_toward(player.velocity.x, target_velocity.x, air_acceleration * delta)
+			player.velocity.z = move_toward(player.velocity.z, target_velocity.z, air_acceleration * delta)
+		else:
+			# Gradually slow down in air when no input
+			player.velocity.x = move_toward(player.velocity.x, 0.0, air_friction * delta)
+			player.velocity.z = move_toward(player.velocity.z, 0.0, air_friction * delta)
 
 
 func _handle_crouching(state: Player.PlayerState, delta: float):
