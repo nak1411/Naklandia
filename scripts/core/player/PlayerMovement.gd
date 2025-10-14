@@ -74,16 +74,16 @@ func _handle_horizontal_movement(player: CharacterBody3D, input_vector: Vector2,
 	# Get current speed based on state
 	var current_speed = _get_speed_for_state(state)
 
-	# Apply movement
-	if movement_direction.length() > 0:
-		# Accelerate
+	# Apply movement instantly
+	if input_vector.length() > 0:
+		# Instant response - directly set velocity
 		var target_velocity = movement_direction * current_speed
-		player.velocity.x = move_toward(player.velocity.x, target_velocity.x, acceleration * delta)
-		player.velocity.z = move_toward(player.velocity.z, target_velocity.z, acceleration * delta)
+		player.velocity.x = target_velocity.x
+		player.velocity.z = target_velocity.z
 	else:
-		# Apply friction
-		player.velocity.x = move_toward(player.velocity.x, 0, friction * delta)
-		player.velocity.z = move_toward(player.velocity.z, 0, friction * delta)
+		# Instant stop when no input
+		player.velocity.x = 0.0
+		player.velocity.z = 0.0
 
 
 func _handle_crouching(state: Player.PlayerState, delta: float):
