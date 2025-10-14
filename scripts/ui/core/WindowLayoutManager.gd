@@ -1,3 +1,4 @@
+# WindowLayoutManager.gd
 extends Node
 
 # Comprehensive window layout manager - handles all UI/window positioning, state, saving/loading
@@ -6,6 +7,7 @@ extends Node
 signal layout_saved
 signal layout_loaded
 signal layout_cleared
+signal managers_found
 
 # Configuration
 var config_file_path: String = "user://window_layout.cfg"
@@ -19,6 +21,7 @@ var ui_manager: UIManager
 # State tracking
 var is_saving_layout: bool = false
 var is_loading_layout: bool = false
+var managers_ready: bool = false
 
 # Real-time tracking
 var drag_save_windows: Array[Window_Base] = []
@@ -30,16 +33,8 @@ var inventory_window_state: Dictionary = {"is_open": false, "position": Vector2.
 func _ready():
 	add_to_group("window_layout_manager")
 
-	# Wait for other systems to initialize
-	await get_tree().process_frame
-	await get_tree().process_frame
-
-	# Find required managers
-	_find_managers()
-
-	# Auto-load layout if enabled
-	if auto_load_enabled:
-		call_deferred("_auto_load_layout")
+	# Start trying to find managers with retry logic
+	_start_manager_discovery()
 
 
 func _notification(what):
@@ -50,30 +45,60 @@ func _notification(what):
 
 
 # ==============================================================================
-# MANAGER DISCOVERY
+# MANAGER DISCOVERY WITH RETRY
 # ==============================================================================
+
+
+func _start_manager_discovery():
+	"""Start the manager discovery process with retry logic"""
+	# Try multiple times to find managers since they might not exist yet
+	for i in range(10):  # Try 10 times over 5 seconds
+		await get_tree().create_timer(0.5).timeout
+		_find_managers()
+
+		if managers_ready:
+			break
+
+	# If we found managers and auto-load is enabled, load the layout
+	if managers_ready and auto_load_enabled:
+		await get_tree().process_frame
+		_auto_load_layout()
 
 
 func _find_managers():
 	"""Find the required managers in the scene"""
+	var found_ui = false
+	var found_inventory = false
 
 	# Find UI Manager
 	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
 	if ui_managers.size() > 0:
 		ui_manager = ui_managers[0]
 		_connect_ui_manager_signals()
+		found_ui = true
 
 	# Find Inventory Manager
 	var inventory_managers = get_tree().get_nodes_in_group("inventory_manager")
 	if inventory_managers.size() > 0:
 		inventory_manager = inventory_managers[0]
+		found_inventory = true
 	else:
 		# Alternative: search recursively
 		inventory_manager = _find_inventory_manager_recursive(get_tree().current_scene)
+		if inventory_manager:
+			found_inventory = true
+
+	# Mark as ready when both managers are found
+	if found_ui and found_inventory and not managers_ready:
+		managers_ready = true
+		managers_found.emit()
 
 
 func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
 	"""Recursively find InventoryManager"""
+	if not node:
+		return null
+
 	if node is InventoryManager:
 		return node
 
@@ -87,145 +112,15 @@ func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
 
 func _connect_ui_manager_signals():
 	"""Connect to UI manager signals for real-time saving"""
+	if not ui_manager:
+		return
+
 	if ui_manager.has_signal("window_focused"):
-		ui_manager.window_focused.connect(_on_window_changed)
+		if not ui_manager.window_focused.is_connected(_on_window_changed):
+			ui_manager.window_focused.connect(_on_window_changed)
 	if ui_manager.has_signal("window_closed"):
-		ui_manager.window_closed.connect(_on_window_changed)
-
-
-# ==============================================================================
-# REAL-TIME WINDOW MONITORING
-# ==============================================================================
-
-
-func _on_window_changed(_window: Window_Base = null):
-	"""Called when any window changes - save immediately"""
-	if auto_save_enabled and not is_saving_layout:
-		save_complete_layout()
-
-
-func connect_window_signals(window: Window_Base):
-	"""Connect to window movement/resize signals for immediate auto-saving"""
-	if not window:
-		return
-
-	var window_type = window.get_meta("window_type", "")
-
-	# Connect to window resize
-	if window.has_signal("window_resized"):
-		if not window.window_resized.is_connected(_on_immediate_window_change):
-			window.window_resized.connect(func(_size): _on_immediate_window_change(window, "resize"))
-
-	# Connect to window close for tearoff windows
-	if window_type == "tearoff":
-		if window.has_signal("window_closed"):
-			if not window.window_closed.is_connected(_on_tearoff_window_closed):
-				window.window_closed.connect(_on_tearoff_window_closed.bind(window))
-
-	# For inventory window, also monitor open/close state
-	if window_type == "main_inventory" or window_type == "inventory":
-		_connect_inventory_specific_signals(window)
-
-	# Monitor position changes in real-time
-	_start_realtime_position_monitoring(window)
-
-	# Monitor drag events
-	connect_window_drag_signals(window)
-
-
-func _connect_inventory_specific_signals(window: Window_Base):
-	"""Connect inventory-specific signals"""
-
-	# Monitor visibility changes
-	if window.has_signal("visibility_changed"):
-		if not window.visibility_changed.is_connected(_on_inventory_visibility_changed):
-			window.visibility_changed.connect(_on_inventory_visibility_changed.bind(window))
-
-	# Monitor window close
-	if window.has_signal("window_closed"):
-		if not window.window_closed.is_connected(_on_inventory_window_closed):
-			window.window_closed.connect(_on_inventory_window_closed.bind(window))
-
-
-func _on_immediate_window_change(_window: Window_Base, _change_type: String):
-	"""Handle immediate window changes"""
-	if auto_save_enabled and not is_saving_layout:
-		save_complete_layout()
-
-
-func _start_realtime_position_monitoring(window: Window_Base):
-	"""Start real-time position monitoring for a window"""
-	if not window:
-		return
-
-	# Store initial position
-	window.set_meta("last_saved_position", window.position)
-
-	# Create a high-frequency timer for position checking
-	var position_timer = Timer.new()
-	position_timer.wait_time = 0.1  # Check every 100ms
-	position_timer.autostart = true
-	position_timer.timeout.connect(_check_window_position_realtime.bind(window, position_timer))
-	window.add_child(position_timer)
-
-
-func _check_window_position_realtime(window: Window_Base, timer: Timer):
-	"""Check window position in real-time and save if changed"""
-	if not is_instance_valid(window):
-		timer.queue_free()
-		return
-
-	var last_position = window.get_meta("last_saved_position", Vector2.ZERO)
-	if window.position != last_position:
-		window.set_meta("last_saved_position", window.position)
-		_on_immediate_window_change(window, "move")
-
-
-func connect_window_drag_signals(window: Window_Base):
-	"""Connect to window drag events for ultra-responsive saving"""
-	if not window:
-		return
-
-	# Connect to mouse events to detect dragging
-	if not window.gui_input.is_connected(_on_window_input):
-		window.gui_input.connect(_on_window_input.bind(window))
-
-
-func _on_window_input(event: InputEvent, window: Window_Base):
-	"""Handle window input for drag detection"""
-	if event is InputEventMouseButton:
-		var mouse_event = event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			if mouse_event.pressed:
-				# Start drag tracking
-				if window not in drag_save_windows:
-					drag_save_windows.append(window)
-			else:
-				# End drag - save position
-				if window in drag_save_windows:
-					drag_save_windows.erase(window)
-					_on_immediate_window_change(window, "drag_end")
-
-
-func disconnect_window_signals(window: Window_Base):
-	"""Disconnect window signals when window is destroyed"""
-	if not window:
-		return
-
-	# Remove from drag tracking
-	if window in drag_save_windows:
-		drag_save_windows.erase(window)
-
-	# Since we're using lambdas, disconnect all our connections
-	if window.has_signal("window_resized"):
-		for connection in window.window_resized.get_connections():
-			if connection.callable.get_object() == self:
-				window.window_resized.disconnect(connection.callable)
-
-	if window.has_signal("gui_input"):
-		for connection in window.gui_input.get_connections():
-			if connection.callable.get_object() == self:
-				window.gui_input.disconnect(connection.callable)
+		if not ui_manager.window_closed.is_connected(_on_window_changed):
+			ui_manager.window_closed.connect(_on_window_changed)
 
 
 # ==============================================================================
@@ -234,7 +129,7 @@ func disconnect_window_signals(window: Window_Base):
 
 
 func save_main_window_position():
-	"""Save main window position and properties"""
+	"""Save main window position and size"""
 	var config = ConfigFile.new()
 	_load_existing_config(config)
 
@@ -289,7 +184,6 @@ func load_main_window_position():
 # ==============================================================================
 
 
-# Update save_inventory_window_state() to be more comprehensive:
 func save_inventory_window_state():
 	"""Save main inventory window state"""
 	# Don't save inventory state while we're loading layout
@@ -333,34 +227,15 @@ func save_inventory_window_state():
 			if current_container:
 				config.set_value("inventory_window", "selected_container_id", current_container.container_id)
 
-		# Save window view state if available
-		if inventory_window.has_method("get_view_state"):
-			var view_state = inventory_window.get_view_state()
-			if not view_state.is_empty():
-				config.set_value("inventory_window", "view_state", view_state)
-
-		# Save any filter/search state
-		if inventory_window.has_method("get_filter_state"):
-			var filter_state = inventory_window.get_filter_state()
-			if not filter_state.is_empty():
-				config.set_value("inventory_window", "filter_state", filter_state)
-
 	var error = config.save(config_file_path)
 	if error != OK:
 		return false
-
-	# Verify what was actually saved
-	var verify_config = ConfigFile.new()
-	if verify_config.load(config_file_path) == OK:
-		if verify_config.has_section("inventory_window"):
-			var keys = verify_config.get_section_keys("inventory_window")
 
 	return true
 
 
 func load_inventory_window_state():
 	"""Load and apply saved inventory window state"""
-
 	var config = ConfigFile.new()
 	var error = config.load(config_file_path)
 
@@ -407,7 +282,6 @@ func load_inventory_window_state():
 
 func _restore_inventory_open_state():
 	"""Try to open the inventory and restore its state"""
-
 	# Find inventory integration to open the inventory
 	var integration = _find_inventory_integration()
 
@@ -444,7 +318,6 @@ func _apply_inventory_window_state():
 		inventory_window.position = inventory_window_state.position
 
 	inventory_window.size = inventory_window_state.size
-
 	inventory_window.modulate.a = inventory_window_state.get("modulate_a", 1.0)
 
 	# Apply lock state
@@ -455,16 +328,6 @@ func _apply_inventory_window_state():
 	if inventory_window_state.get("is_maximized", false) and inventory_window.has_method("_maximize_window"):
 		inventory_window._maximize_window()
 
-	# Apply additional saved data
-	if inventory_window_state.has("window_data") and inventory_window.has_method("load_save_data"):
-		inventory_window.load_save_data(inventory_window_state["window_data"])
-
-	if inventory_window_state.has("view_state") and inventory_window.has_method("restore_view_state"):
-		inventory_window.restore_view_state(inventory_window_state["view_state"])
-
-	if inventory_window_state.has("filter_state") and inventory_window.has_method("restore_filter_state"):
-		inventory_window.restore_filter_state(inventory_window_state["filter_state"])
-
 	# Restore selected container if available
 	if inventory_window_state.has("selected_container_id") and inventory_window.has_method("select_container_by_id"):
 		inventory_window.select_container_by_id(inventory_window_state["selected_container_id"])
@@ -472,7 +335,6 @@ func _apply_inventory_window_state():
 
 func _find_inventory_integration():
 	"""Find the inventory integration in the scene"""
-
 	# Search for inventory integration
 	var integrations = get_tree().get_nodes_in_group("inventory_integration")
 
@@ -487,6 +349,9 @@ func _find_inventory_integration():
 
 func _find_node_recursive(node: Node, target_class_name: String) -> Node:
 	"""Recursively find a node by class name"""
+	if not node:
+		return null
+
 	if node.get_class() == target_class_name or (node.get_script() and node.get_script().get_global_name() == target_class_name):
 		return node
 
@@ -494,6 +359,20 @@ func _find_node_recursive(node: Node, target_class_name: String) -> Node:
 		var result = _find_node_recursive(child, target_class_name)
 		if result:
 			return result
+
+	return null
+
+
+func _find_main_inventory_window():
+	"""Find the main inventory window"""
+	if not ui_manager:
+		return null
+
+	var all_windows = ui_manager.get_all_windows()
+	for window in all_windows:
+		var window_type = window.get_meta("window_type", "")
+		if window_type == "main_inventory" or window_type == "inventory":
+			return window
 
 	return null
 
@@ -521,7 +400,6 @@ func _on_inventory_window_closed(_window: Window_Base):
 
 func save_tearoff_window_states():
 	"""Save all tearoff window states"""
-
 	if not ui_manager:
 		return false
 
@@ -530,11 +408,6 @@ func save_tearoff_window_states():
 
 	var all_windows = ui_manager.get_all_windows()
 
-	for i in range(all_windows.size()):
-		var window = all_windows[i]
-		var window_type = window.get_meta("window_type", "NONE")
-		var window_name = window.name if window.name else "UNNAMED"
-
 	var tearoff_windows: Array[Window_Base] = []
 	for window in all_windows:
 		var window_type = window.get_meta("window_type", "")
@@ -542,7 +415,6 @@ func save_tearoff_window_states():
 			tearoff_windows.append(window)
 
 	# ALWAYS clear old tearoff sections and rebuild them
-	# This ensures closed windows are removed from save data
 	_clear_tearoff_sections(config)
 
 	# Save currently open tearoff windows
@@ -550,6 +422,8 @@ func save_tearoff_window_states():
 		var window = tearoff_windows[i] as ContainerTearOffWindow
 		if not window or not is_instance_valid(window):
 			continue
+
+		_save_tearoff_window(config, window, i)
 
 	var error = config.save(config_file_path)
 	if error != OK:
@@ -585,24 +459,11 @@ func _save_tearoff_window(config: ConfigFile, window: ContainerTearOffWindow, in
 	else:
 		config.set_value(section, "is_locked", false)
 
-	# Save view state if available
-	if window.has_method("get_view_state"):
-		var view_state = window.get_view_state()
-		if not view_state.is_empty():
-			config.set_value(section, "view_state", view_state)
-
-	# Save window-specific properties
-	if window.has_method("get_save_data"):
-		var save_data = window.get_save_data()
-		if not save_data.is_empty():
-			config.set_value(section, "window_data", save_data)
-
 	return true
 
 
 func load_tearoff_window_states():
 	"""Load and restore all tearoff window states"""
-
 	if not inventory_manager:
 		return false
 
@@ -636,7 +497,6 @@ func load_tearoff_window_states():
 func _restore_tearoff_window(config: ConfigFile, section: String) -> bool:
 	"""Restore a single tearoff window"""
 	var container_id = config.get_value(section, "container_id", "")
-	var container_name = config.get_value(section, "container_name", "")
 
 	if container_id.is_empty():
 		return false
@@ -644,9 +504,6 @@ func _restore_tearoff_window(config: ConfigFile, section: String) -> bool:
 	# Find the container in inventory manager
 	var container = inventory_manager.get_container(container_id)
 	if not container:
-		# Debug: List available containers
-		if inventory_manager.has_method("get_all_containers"):
-			var available_containers = inventory_manager.get_all_containers()
 		return false
 
 	# Get saved properties
@@ -672,7 +529,7 @@ func _restore_tearoff_window(config: ConfigFile, section: String) -> bool:
 	if not tearoff_manager:
 		return false
 
-	# Create tearoff window through the proper system with our desired position and size
+	# Create tearoff window through the proper system
 	tearoff_manager._create_tearoff_window(container, restore_position, restore_size)
 
 	# Wait a frame for the window to be created
@@ -697,36 +554,7 @@ func _restore_tearoff_window(config: ConfigFile, section: String) -> bool:
 	if is_locked and tearoff_window.has_method("set_window_locked"):
 		tearoff_window.set_window_locked(true)
 
-	# Restore view state
-	var view_state = config.get_value(section, "view_state", {})
-	if not view_state.is_empty() and tearoff_window.has_method("restore_view_state"):
-		tearoff_window.restore_view_state(view_state)
-
-	# Restore window-specific data
-	var window_data = config.get_value(section, "window_data", {})
-	if not window_data.is_empty() and tearoff_window.has_method("load_save_data"):
-		tearoff_window.load_save_data(window_data)
-
 	return true
-
-
-func _find_main_inventory_window():
-	"""Find the main inventory window"""
-	if not ui_manager:
-		return null
-
-	var all_windows = ui_manager.get_all_windows()
-	for window in all_windows:
-		var window_type = window.get_meta("window_type", "")
-		if window_type == "main_inventory" or window_type == "inventory":
-			return window
-
-	# Alternative: search by class type
-	for window in all_windows:
-		if window.get_script() and window.get_script().get_global_name() == "InventoryWindow":
-			return window
-
-	return null
 
 
 # ==============================================================================
@@ -741,6 +569,10 @@ func save_complete_layout():
 
 	# Don't trigger saves during loading process
 	if is_loading_layout:
+		return false
+
+	# Don't save if managers aren't ready yet
+	if not managers_ready:
 		return false
 
 	is_saving_layout = true
@@ -761,6 +593,10 @@ func save_complete_layout():
 func load_complete_layout():
 	"""Load complete window layout"""
 	if is_loading_layout:
+		return false
+
+	# Don't load if managers aren't ready yet
+	if not managers_ready:
 		return false
 
 	is_loading_layout = true
@@ -808,22 +644,16 @@ func clear_saved_layout():
 
 func _auto_load_layout():
 	"""Auto-load layout when ready"""
-
 	if not auto_load_enabled:
 		return
 
-	# Ensure managers are available
-	if not inventory_manager:
-		return
-
-	if not ui_manager:
+	# Double-check managers are available
+	if not inventory_manager or not ui_manager:
 		return
 
 	# Check if there's actually saved data
 	if not has_saved_layout():
 		return
-
-	var layout_info = get_layout_info()
 
 	await load_complete_layout()
 
@@ -833,7 +663,103 @@ func _auto_save_layout():
 	if not auto_save_enabled:
 		return
 
-	var result = save_complete_layout()
+	save_complete_layout()
+
+
+# ==============================================================================
+# REAL-TIME WINDOW MONITORING
+# ==============================================================================
+
+
+func _on_window_changed(_window: Window_Base = null):
+	"""Called when any window changes - save immediately"""
+	if auto_save_enabled and not is_saving_layout and managers_ready:
+		save_complete_layout()
+
+
+func connect_window_signals(window: Window_Base):
+	"""Connect to window movement/resize signals for immediate auto-saving"""
+	if not window:
+		return
+
+	var window_type = window.get_meta("window_type", "")
+
+	# Connect to window resize
+	if window.has_signal("window_resized"):
+		if not window.window_resized.is_connected(_on_immediate_window_change):
+			window.window_resized.connect(func(_size): _on_immediate_window_change(window, "resize"))
+
+	# Connect to window close for tearoff windows
+	if window_type == "tearoff":
+		if window.has_signal("window_closed"):
+			if not window.window_closed.is_connected(_on_tearoff_window_closed):
+				window.window_closed.connect(_on_tearoff_window_closed.bind(window))
+
+	# For inventory window, also monitor open/close state
+	if window_type == "main_inventory" or window_type == "inventory":
+		_connect_inventory_specific_signals(window)
+
+	# Monitor position changes in real-time
+	_start_realtime_position_monitoring(window)
+
+
+func _connect_inventory_specific_signals(window: Window_Base):
+	"""Connect inventory-specific signals"""
+	# Monitor visibility changes
+	if window.has_signal("visibility_changed"):
+		if not window.visibility_changed.is_connected(_on_inventory_visibility_changed):
+			window.visibility_changed.connect(_on_inventory_visibility_changed.bind(window))
+
+	# Monitor window close
+	if window.has_signal("window_closed"):
+		if not window.window_closed.is_connected(_on_inventory_window_closed):
+			window.window_closed.connect(_on_inventory_window_closed.bind(window))
+
+
+func _on_immediate_window_change(_window: Window_Base, _change_type: String):
+	"""Handle immediate window changes"""
+	if auto_save_enabled and not is_saving_layout and managers_ready:
+		save_complete_layout()
+
+
+func _start_realtime_position_monitoring(window: Window_Base):
+	"""Start real-time position monitoring for a window"""
+	if not window:
+		return
+
+	# Store initial position
+	window.set_meta("last_saved_position", window.position)
+
+	# Create a high-frequency timer for position checking
+	var position_timer = Timer.new()
+	position_timer.wait_time = 0.1  # Check every 100ms
+	position_timer.autostart = true
+	position_timer.timeout.connect(_check_window_position_realtime.bind(window, position_timer))
+	window.add_child(position_timer)
+
+
+func _check_window_position_realtime(window: Window_Base, timer: Timer):
+	"""Check window position in real-time and save if changed"""
+	if not is_instance_valid(window) or not is_instance_valid(timer):
+		if is_instance_valid(timer):
+			timer.queue_free()
+		return
+
+	var last_pos = window.get_meta("last_saved_position", Vector2.ZERO)
+	var current_pos = window.position
+
+	# If position changed significantly
+	if last_pos.distance_to(current_pos) > 5:
+		window.set_meta("last_saved_position", current_pos)
+		if auto_save_enabled and not is_saving_layout and managers_ready:
+			save_complete_layout()
+
+
+func _on_tearoff_window_closed(_window: Window_Base):
+	"""Handle when a tearoff window is closed"""
+	# Trigger immediate save to remove this window from save data
+	if auto_save_enabled and not is_saving_layout and managers_ready:
+		save_complete_layout()
 
 
 # ==============================================================================
@@ -861,9 +787,8 @@ func _is_position_valid(pos: Vector2i) -> bool:
 	for screen_id in screen_count:
 		var screen_rect = Rect2i(DisplayServer.screen_get_position(screen_id), DisplayServer.screen_get_size(screen_id))
 
-		# Allow windows to be partially off-screen (common for multi-monitor setups)
-		# Just ensure at least 100px of the window would be visible
-		var expanded_rect = screen_rect.grow(400)  # Very generous margin
+		# Allow windows to be partially off-screen
+		var expanded_rect = screen_rect.grow(400)
 
 		if expanded_rect.has_point(pos):
 			return true
@@ -879,14 +804,6 @@ func _get_safe_window_position() -> Vector2:
 
 	# Position in upper-left area of primary screen
 	return Vector2(screen_pos.x + 100, screen_pos.y + 100)
-
-
-func _on_tearoff_window_closed(_window: Window_Base):
-	"""Handle when a tearoff window is closed"""
-
-	# Trigger immediate save to remove this window from save data
-	if auto_save_enabled and not is_saving_layout:
-		save_complete_layout()
 
 
 # ==============================================================================

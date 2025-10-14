@@ -31,18 +31,6 @@ var position_save_file: String = "user://inventory_window_position.dat"
 
 func _ready():
 	add_to_group("inventory_integration")
-
-	# Create or find inventory manager
-	if not inventory_manager:
-		print("Creating new InventoryManager...")
-		inventory_manager = InventoryManager.new()
-		inventory_manager.name = "InventoryManager"
-		add_child(inventory_manager)
-		inventory_manager.add_to_group("inventory_manager")
-		print("InventoryManager created and added to scene")
-	else:
-		print("InventoryManager already exists")
-
 	name = "InventoryIntegration"
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
@@ -143,12 +131,14 @@ func _setup_original_inventory_system():
 		inventory_canvas.layer = 50
 		scene_root.add_child(inventory_canvas)
 
-	# Create inventory manager
-	inventory_manager = InventoryManager.new()
-	inventory_manager.add_to_group("inventory_manager")
-	inventory_manager.name = "InventoryManager"
-	add_child(inventory_manager)
-	inventory_manager.load_inventory()
+	# FIXED: Only create InventoryManager once
+	if not inventory_manager:
+		inventory_manager = InventoryManager.new()
+		inventory_manager.add_to_group("inventory_manager")
+		inventory_manager.name = "InventoryManager"
+		add_child(inventory_manager)
+		# Wait for InventoryManager._ready() to complete (which loads inventory)
+		await get_tree().process_frame
 
 	# Wait for scene to be ready
 	await get_tree().process_frame
@@ -352,6 +342,18 @@ func _connect_signals():
 	_connect_window_signals()
 
 
+func _connect_window_signals():
+	"""Connect window-specific signals"""
+	if not inventory_window:
+		return
+
+	if inventory_window.has_signal("window_closed"):
+		# Disconnect first to avoid duplicate connections
+		if inventory_window.window_closed.is_connected(_on_inventory_window_closed):
+			inventory_window.window_closed.disconnect(_on_inventory_window_closed)
+		inventory_window.window_closed.connect(_on_inventory_window_closed)
+
+
 func _set_player_input_enabled(enabled: bool):
 	"""Enable or disable player input"""
 	var player_node = get_tree().get_first_node_in_group("player")
@@ -394,91 +396,52 @@ func _is_position_valid(pos: Vector2i) -> bool:
 
 
 # Signal handlers
-func _on_item_added(_item_id: String, _quantity: int):
-	pass
+func _on_item_added(_item: InventoryItem_Base, _container: InventoryContainer_Base):
+	"""Handle item being added to inventory"""
+	_refresh_inventory_display()
 
 
-func _on_item_removed(_item_id: String, _quantity: int):
-	pass
+func _on_item_removed(_item: InventoryItem_Base, _container: InventoryContainer_Base):
+	"""Handle item being removed from inventory"""
+	_refresh_inventory_display()
 
 
-func _on_container_switched(_container: InventoryContainer_Base):
-	pass
+func _on_inventory_window_closed():
+	"""Handle inventory window being closed"""
+	_hide_inventory()
 
 
-func _on_window_closed():
-	"""Handle window being closed"""
-
-
-func close_inventory_session():
-	"""Close the entire inventory session including tearoffs"""
-	if event_bus:
-		event_bus.emit_inventory_closed()
-
-
-func _is_pause_menu_open() -> bool:
-	"""Check if pause menu is currently open"""
-	var ui_manager = get_tree().get_first_node_in_group("ui_manager")
-	if ui_manager and ui_manager.has_method("is_any_overlay_visible"):
-		return ui_manager.is_any_overlay_visible()
-	return false
-
-
-func set_integration_enabled(enabled: bool):
-	"""Enable/disable integration system processing"""
-	if ui_input_adapter:
-		ui_input_adapter.set_input_processing_enabled(enabled)
-
-	# Also disable event processing in event handlers
-	if event_handlers:
-		event_handlers.set_process_mode(Node.PROCESS_MODE_DISABLED if not enabled else Node.PROCESS_MODE_INHERIT)
-
-
-func _connect_window_signals():
-	"""Connect window signals"""
-	if inventory_window:
-		if inventory_window.has_signal("window_closed"):
-			# Disconnect first to avoid double connections
-			if inventory_window.window_closed.is_connected(_on_window_closed):
-				inventory_window.window_closed.disconnect(_on_window_closed)
-			inventory_window.window_closed.connect(_on_window_closed)
-		if inventory_window.has_signal("container_switched"):
-			if inventory_window.container_switched.is_connected(_on_container_switched):
-				inventory_window.container_switched.disconnect(_on_container_switched)
-			inventory_window.container_switched.connect(_on_container_switched)
-
-
-# Public interface methods
-func is_inventory_window_open() -> bool:
-	return is_inventory_open and inventory_window != null and inventory_window.visible
-
-
-func get_inventory_window() -> InventoryWindow:
-	return inventory_window
-
-
-func get_inventory_manager() -> InventoryManager:
-	return inventory_manager
-
-
-func close_inventory():
-	if event_bus:
-		event_bus.emit_inventory_closed()
+# Public API
+func toggle_inventory():
+	"""Toggle inventory open/closed"""
+	if is_inventory_open:
+		_hide_inventory()
+	else:
+		_show_inventory()
 
 
 func open_inventory():
-	if event_bus:
-		event_bus.emit_inventory_opened()
+	"""Open inventory"""
+	if not is_inventory_open:
+		_show_inventory()
 
 
-func get_event_bus() -> InventoryEventBus:
-	return event_bus
+func close_inventory():
+	"""Close inventory"""
+	if is_inventory_open:
+		_hide_inventory()
 
 
-func get_player_adapter() -> PlayerAdapter:
-	return player_adapter
+func get_inventory_manager() -> InventoryManager:
+	"""Get the inventory manager instance"""
+	return inventory_manager
 
 
-func get_ui_input_adapter():
-	"""Get reference to UI input adapter"""
-	return ui_input_adapter
+func get_inventory_window() -> InventoryWindow:
+	"""Get the inventory window instance"""
+	return inventory_window
+
+
+func is_inventory_window_open() -> bool:
+	"""Check if inventory window is open"""
+	return is_inventory_open
