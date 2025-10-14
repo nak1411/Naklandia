@@ -50,77 +50,6 @@ func add_separator():
 	menu_items.append(separator)
 
 
-func show_context_menu(_show_position: Vector2, data: Dictionary = {}, _parent_window: Window = null):
-	context_data = data
-	_create_main_popup()
-
-	# Reset right-click state immediately to prevent flicker
-	_previous_right_click_state = true  # Set to true so the opening right-click doesn't trigger close
-
-	var viewport = get_viewport()
-	if not viewport:
-		return
-
-	var actual_height = _calculate_total_height()
-	var popup_size = Vector2i(menu_width, actual_height)
-
-	# Get the root viewport to convert coordinates correctly
-	var root_viewport = get_tree().root
-
-	# Get mouse position in global screen coordinates
-	var screen_pos = Vector2(DisplayServer.mouse_get_position())
-
-	# Get the screen the mouse is currently on
-	var screen_count = DisplayServer.get_screen_count()
-	var current_screen = -1
-	var screen_rect = Rect2()
-
-	for i in range(screen_count):
-		var screen_position = DisplayServer.screen_get_position(i)
-		var screen_size = DisplayServer.screen_get_size(i)
-		var rect = Rect2(screen_position, screen_size)
-		if rect.has_point(screen_pos):
-			current_screen = i
-			screen_rect = rect
-			break
-
-	# Add small offset so menu doesn't appear directly under cursor
-	var final_position = screen_pos + Vector2(5, 5)
-
-	# Bounds check against the actual screen the mouse is on
-	if final_position.x + menu_width > screen_rect.position.x + screen_rect.size.x:
-		final_position.x = screen_rect.position.x + screen_rect.size.x - menu_width - 10
-	if final_position.y + actual_height > screen_rect.position.y + screen_rect.size.y:
-		final_position.y = screen_rect.position.y + screen_rect.size.y - actual_height - 10
-
-	# Ensure menu doesn't go off left or top edges of current screen
-	if final_position.x < screen_rect.position.x + 10:
-		final_position.x = screen_rect.position.x + 10
-	if final_position.y < screen_rect.position.y + 10:
-		final_position.y = screen_rect.position.y + 10
-
-	# Add to root viewport but keep hidden initially
-	root_viewport.add_child(main_popup)
-	main_popup.size = popup_size
-	main_popup.position = Vector2i(final_position)
-	main_popup.visible = false
-
-	# Force Godot to process the node and apply all theme overrides
-	main_popup.notification(NOTIFICATION_THEME_CHANGED)
-
-	# Wait TWO frames to ensure everything is fully styled
-	await get_tree().process_frame
-	await get_tree().process_frame
-
-	# Now show it with all styles applied
-	if main_popup and is_instance_valid(main_popup):
-		main_popup.visible = true
-
-	set_process_unhandled_input(true)
-	set_process_input(true)
-	_start_input_polling_delayed()
-
-
 func _set_popup_position(pos: Vector2i):
 	if main_popup and is_instance_valid(main_popup):
 		print("Setting position deferred to: ", pos)
@@ -170,14 +99,21 @@ func _create_main_popup():
 
 	main_popup = PopupPanel.new()
 	main_popup.name = "ContextMenuPopup"
-
-	# CRITICAL: Hide popup BEFORE adding any children to prevent flicker
 	main_popup.visible = false
+	main_popup.transparent_bg = true  # Enable transparent background
 
-	# CRITICAL: Apply popup styling IMMEDIATELY before adding children
-	# This prevents the gray flicker by setting the background color first
+	# Calculate dimensions first
+	if auto_size:
+		_calculate_optimal_width()
+	var actual_height = _calculate_total_height()
+
+	# Set size FIRST before any styling
+	main_popup.size = Vector2i(menu_width, actual_height)
+
+	# Apply styling
 	var popup_style = StyleBoxFlat.new()
-	popup_style.bg_color = Color(0.07, 0.07, 0.07, 0.95)  # Match button normal color
+	popup_style.bg_color = Color(0.07, 0.07, 0.07, 1.0)
+	popup_style.draw_center = true
 	popup_style.border_width_left = 1
 	popup_style.border_width_right = 1
 	popup_style.border_width_top = 1
@@ -187,61 +123,110 @@ func _create_main_popup():
 	popup_style.content_margin_right = 0
 	popup_style.content_margin_top = 0
 	popup_style.content_margin_bottom = 0
-	popup_style.expand_margin_left = 0
-	popup_style.expand_margin_right = 0
-	popup_style.expand_margin_top = 0
-	popup_style.expand_margin_bottom = 0
+	popup_style.anti_aliasing = false
 	main_popup.add_theme_stylebox_override("panel", popup_style)
 
-	# Add a ColorRect as the background to prevent any flicker
-	var background = ColorRect.new()
-	background.name = "Background"
-	background.color = Color(0.07, 0.07, 0.07, 0.95)
-	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	background.z_index = -1
-	main_popup.add_child(background)
+	# Create a wrapping Control to enable modulate/fade
+	var wrapper = Control.new()
+	wrapper.name = "PopupWrapper"
+	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wrapper.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	wrapper.modulate = Color(1.0, 1.0, 1.0, 0.0)  # Start transparent
+	main_popup.add_child(wrapper)
 
-	# Create container for menu items
+	# Create container for menu items inside wrapper
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 0)
-	main_popup.add_child(vbox)
+	vbox.custom_minimum_size = Vector2(menu_width, actual_height)
+	wrapper.add_child(vbox)
 
-	# Calculate menu width if auto-sizing
-	if auto_size:
-		_calculate_optimal_width()
-
-	# Create menu items and track actual height
-	var actual_height = 0
-	var created_buttons = []  # Track buttons to re-enable mouse later
+	# Create menu items
+	var created_buttons = []
 	for i in range(menu_items.size()):
 		var item_data = menu_items[i]
 
 		if item_data.get("is_separator", false):
 			var separator = _create_separator()
 			vbox.add_child(separator)
-			actual_height += 1  # separator height
 		else:
 			var item_button = _create_menu_item_button(item_data, i)
-			# Temporarily disable mouse to prevent hover flicker
 			item_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			created_buttons.append(item_button)
 			vbox.add_child(item_button)
-			actual_height += item_height
-
-	# Set the VBox to exactly match the content
-	vbox.custom_minimum_size = Vector2(menu_width, actual_height)
-	vbox.size = Vector2(menu_width, actual_height)
 
 	# Re-enable mouse on buttons after a short delay
 	get_tree().create_timer(0.05).timeout.connect(
 		func():
 			for btn in created_buttons:
-				if btn and is_instance_valid(btn):
-					btn.mouse_filter = Control.MOUSE_FILTER_STOP
+				if is_instance_valid(btn):
+					btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	)
 
-	# NOW the popup is fully built and styled, ready to be shown
+
+func show_context_menu(_show_position: Vector2, data: Dictionary = {}, _parent_window: Window = null):
+	context_data = data
+	_create_main_popup()
+
+	# Reset right-click state immediately to prevent flicker
+	_previous_right_click_state = true
+
+	var viewport = get_viewport()
+	if not viewport:
+		return
+
+	var actual_height = _calculate_total_height()
+
+	# Get the root viewport
+	var root_viewport = get_tree().root
+
+	# Get mouse position in global screen coordinates
+	var screen_pos = Vector2(DisplayServer.mouse_get_position())
+
+	# Get the screen the mouse is currently on
+	var screen_count = DisplayServer.get_screen_count()
+	var current_screen = -1
+	var screen_rect = Rect2()
+
+	for i in range(screen_count):
+		var screen_position = DisplayServer.screen_get_position(i)
+		var screen_size = DisplayServer.screen_get_size(i)
+		var rect = Rect2(screen_position, screen_size)
+		if rect.has_point(screen_pos):
+			current_screen = i
+			screen_rect = rect
+			break
+
+	# Add small offset so menu doesn't appear directly under cursor
+	var final_position = screen_pos + Vector2(5, 5)
+
+	# Bounds check against the actual screen the mouse is on
+	if final_position.x + menu_width > screen_rect.position.x + screen_rect.size.x:
+		final_position.x = screen_rect.position.x + screen_rect.size.x - menu_width - 10
+	if final_position.y + actual_height > screen_rect.position.y + screen_rect.size.y:
+		final_position.y = screen_rect.position.y + screen_rect.size.y - actual_height - 10
+
+	# Ensure menu doesn't go off left or top edges of current screen
+	if final_position.x < screen_rect.position.x + 10:
+		final_position.x = screen_rect.position.x + 10
+	if final_position.y < screen_rect.position.y + 10:
+		final_position.y = screen_rect.position.y + 10
+
+	# Add to root viewport
+	root_viewport.add_child(main_popup)
+
+	# Set position and show
+	main_popup.position = Vector2i(final_position)
+	main_popup.popup(Rect2i(final_position, Vector2i(menu_width, actual_height)))
+
+	# Fade in the wrapper Control which contains all menu content
+	var wrapper = main_popup.get_node_or_null("PopupWrapper")
+	if wrapper:
+		var fade_tween = create_tween()
+		fade_tween.tween_property(wrapper, "modulate:a", 1.0, 0.12)
+
+	set_process_unhandled_input(true)
+	set_process_input(true)
+	_start_input_polling_delayed()
 
 
 func _calculate_optimal_width():
