@@ -151,20 +151,75 @@ func end_window_drag(window: Window_Base):
 
 
 func _calculate_snap_position(window: Window_Base, current_pos: Vector2) -> Vector2:
-	"""Calculate the final snap position based on current preview"""
-	var final_pos = current_pos
+	"""Calculate the final snap position - allows simultaneous edge and window snapping on different axes"""
+	var screen_size = get_viewport().get_visible_rect().size
+	var window_size = window.size
 
-	# Apply edge snapping
-	if current_snap_preview.get("type") == "edge":
-		var edge_snap = _check_edge_snapping(window, current_pos)
-		if edge_snap.has("position"):
-			final_pos = edge_snap.position
+	# Track best snaps for each axis independently
+	var best_x_snap = {"distance": snap_distance + 1, "value": current_pos.x}
+	var best_y_snap = {"distance": snap_distance + 1, "value": current_pos.y}
 
-	# Apply window snapping
-	elif current_snap_preview.get("type") == "window":
-		var window_snap = _check_multi_axis_window_snapping(window, current_pos)
-		if window_snap.has("position"):
-			final_pos = window_snap.position
+	# Check EDGE snapping for both axes
+	if snap_to_edges:
+		# X-axis edge snapping
+		# Left edge
+		var left_distance = abs(current_pos.x - edge_padding)
+		if left_distance <= snap_distance and left_distance < best_x_snap.distance:
+			best_x_snap.distance = left_distance
+			best_x_snap.value = edge_padding
+			best_x_snap.type = "edge_left"
+
+		# Right edge
+		var right_distance = abs(current_pos.x + window_size.x - (screen_size.x - edge_padding))
+		if right_distance <= snap_distance and right_distance < best_x_snap.distance:
+			best_x_snap.distance = right_distance
+			best_x_snap.value = screen_size.x - window_size.x - edge_padding
+			best_x_snap.type = "edge_right"
+
+		# Y-axis edge snapping
+		# Top edge
+		var top_distance = abs(current_pos.y - edge_padding)
+		if top_distance <= snap_distance and top_distance < best_y_snap.distance:
+			best_y_snap.distance = top_distance
+			best_y_snap.value = edge_padding
+			best_y_snap.type = "edge_top"
+
+		# Bottom edge
+		var bottom_distance = abs(current_pos.y + window_size.y - (screen_size.y - edge_padding))
+		if bottom_distance <= snap_distance and bottom_distance < best_y_snap.distance:
+			best_y_snap.distance = bottom_distance
+			best_y_snap.value = screen_size.y - window_size.y - edge_padding
+			best_y_snap.type = "edge_bottom"
+
+	# Check WINDOW snapping for both axes
+	if snap_to_windows:
+		var window_rect = Rect2(current_pos, window_size)
+
+		# Check all window targets
+		for target in snap_targets:
+			if target.type != "window":
+				continue
+
+			var target_rect = target.rect
+
+			# X-axis window snaps
+			var x_snaps = _get_x_axis_snaps(window_rect, target_rect)
+			for x_snap in x_snaps:
+				if x_snap.distance < best_x_snap.distance and x_snap.distance <= snap_distance:
+					best_x_snap.distance = x_snap.distance
+					best_x_snap.value = x_snap.new_x
+					best_x_snap.type = "window_" + x_snap.type
+
+			# Y-axis window snaps
+			var y_snaps = _get_y_axis_snaps(window_rect, target_rect)
+			for y_snap in y_snaps:
+				if y_snap.distance < best_y_snap.distance and y_snap.distance <= snap_distance:
+					best_y_snap.distance = y_snap.distance
+					best_y_snap.value = y_snap.new_y
+					best_y_snap.type = "window_" + y_snap.type
+
+	# Apply the best snaps for each axis
+	var final_pos = Vector2(best_x_snap.value, best_y_snap.value)
 
 	return final_pos
 
@@ -228,7 +283,7 @@ func _find_window_base_nodes(node: Node) -> Array[Window_Base]:
 
 
 func _check_edge_snapping(window: Window_Base, pos: Vector2) -> Dictionary:
-	"""Check for snapping to screen edges with padding"""
+	"""Check for snapping to screen edges with padding - allows multi-axis detection"""
 	var screen_size = get_viewport().get_visible_rect().size
 	var window_size = window.size
 	var snap_info = {}
@@ -236,23 +291,23 @@ func _check_edge_snapping(window: Window_Base, pos: Vector2) -> Dictionary:
 	var snapped_x = pos.x
 	var snapped_y = pos.y
 
-	# Left edge snapping with padding
+	# Left edge snapping with padding - REMOVED elif, now uses if
 	if abs(pos.x - edge_padding) <= snap_distance:
 		snapped_x = edge_padding
 		snap_info["left_edge"] = true
 
-	# Right edge snapping with padding
-	elif abs(pos.x + window_size.x - (screen_size.x - edge_padding)) <= snap_distance:
+	# Right edge snapping with padding - REMOVED elif, now uses if
+	if abs(pos.x + window_size.x - (screen_size.x - edge_padding)) <= snap_distance:
 		snapped_x = screen_size.x - window_size.x - edge_padding
 		snap_info["right_edge"] = true
 
-	# Top edge snapping with padding
+	# Top edge snapping with padding - REMOVED elif, now uses if
 	if abs(pos.y - edge_padding) <= snap_distance:
 		snapped_y = edge_padding
 		snap_info["top_edge"] = true
 
-	# Bottom edge snapping with padding
-	elif abs(pos.y + window_size.y - (screen_size.y - edge_padding)) <= snap_distance:
+	# Bottom edge snapping with padding - REMOVED elif, now uses if
+	if abs(pos.y + window_size.y - (screen_size.y - edge_padding)) <= snap_distance:
 		snapped_y = screen_size.y - window_size.y - edge_padding
 		snap_info["bottom_edge"] = true
 
@@ -264,25 +319,25 @@ func _check_edge_snapping(window: Window_Base, pos: Vector2) -> Dictionary:
 
 
 func _check_edge_preview(window: Window_Base, pos: Vector2) -> Dictionary:
-	"""Check for edge snapping preview with padding"""
+	"""Check for edge snapping preview with padding - allows multi-axis detection"""
 	var screen_size = get_viewport().get_visible_rect().size
 	var window_size = window.size
 	var preview_info = {}
 
-	# Left edge preview with padding
+	# Left edge preview with padding - REMOVED elif, now uses if
 	if abs(pos.x - edge_padding) <= preview_distance:
 		preview_info["left_edge"] = true
 
-	# Right edge preview with padding
-	elif abs(pos.x + window_size.x - (screen_size.x - edge_padding)) <= preview_distance:
+	# Right edge preview with padding - REMOVED elif, now uses if
+	if abs(pos.x + window_size.x - (screen_size.x - edge_padding)) <= preview_distance:
 		preview_info["right_edge"] = true
 
-	# Top edge preview with padding
+	# Top edge preview with padding - REMOVED elif, now uses if
 	if abs(pos.y - edge_padding) <= preview_distance:
 		preview_info["top_edge"] = true
 
-	# Bottom edge preview with padding
-	elif abs(pos.y + window_size.y - (screen_size.y - edge_padding)) <= preview_distance:
+	# Bottom edge preview with padding - REMOVED elif, now uses if
+	if abs(pos.y + window_size.y - (screen_size.y - edge_padding)) <= preview_distance:
 		preview_info["bottom_edge"] = true
 
 	if preview_info.size() > 0:
@@ -493,21 +548,25 @@ func _clear_edge_glows():
 
 
 func _create_debug_guides(snap_info: Dictionary):
-	"""Create debug line guides (old system)"""
-	match snap_info.get("type", ""):
-		"edge":
-			_create_edge_guides(snap_info)
-		"window":
-			_create_window_guides(snap_info)
+	"""Create debug line guides - supports showing BOTH edge and window guides simultaneously"""
+	# Check for screen edge guides
+	if snap_info.has("left_edge") or snap_info.has("right_edge") or snap_info.has("top_edge") or snap_info.has("bottom_edge"):
+		_create_edge_guides(snap_info)
+
+	# Check for window guides (can happen at same time as edge guides)
+	if snap_info.has("x_snap_type") or snap_info.has("y_snap_type") or snap_info.has("snap_type"):
+		_create_window_guides(snap_info)
 
 
 func _create_edge_indicators(snap_info: Dictionary, window_pos: Vector2):
-	"""Create edge indicators based on dragging window position"""
-	match snap_info.get("type", ""):
-		"edge":
-			_create_screen_edge_indicators(snap_info, window_pos)
-		"window":
-			_create_window_edge_indicators(snap_info, window_pos)
+	"""Create edge indicators - supports showing BOTH edge and window snapping simultaneously"""
+	# Check for screen edge snapping indicators
+	if snap_info.has("left_edge") or snap_info.has("right_edge") or snap_info.has("top_edge") or snap_info.has("bottom_edge"):
+		_create_screen_edge_indicators(snap_info, window_pos)
+
+	# Check for window snapping indicators (can happen at same time as edge snapping)
+	if snap_info.has("x_snap_type") or snap_info.has("y_snap_type") or snap_info.has("snap_type"):
+		_create_window_edge_indicators(snap_info, window_pos)
 
 
 # DEBUG LINE GUIDE FUNCTIONS (for debug mode)
