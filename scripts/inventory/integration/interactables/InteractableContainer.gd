@@ -42,8 +42,127 @@ func _ready():
 	if interaction_text == "Interact":
 		interaction_text = "Open " + container_name
 
+	# Enable input handling for drops
+	set_process_input(true)
+
 	# Find managers with delay to ensure scene is ready
 	call_deferred("_delayed_setup")
+
+
+func _exit_tree():
+	"""Save container state when node exits tree"""
+	if persistent and inventory_manager and inventory_container:
+		print("[InteractableContainer] _exit_tree called for: ", container_id)
+		print("  Container has ", inventory_container.items.size(), " items")
+		print("  Manually saving inventory...")
+		inventory_manager.save_inventory()
+
+
+func _input(event: InputEvent):
+	"""Handle drops onto this container"""
+	if not event is InputEventMouseButton:
+		return
+
+	var mouse_event = event as InputEventMouseButton
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT or mouse_event.pressed:
+		return
+
+	# Check if mouse is over this interactable
+	if not _is_mouse_over():
+		return
+
+	# Check for active drag data
+	var viewport = get_viewport()
+	if not viewport or not viewport.has_meta("current_drag_data"):
+		return
+
+	var drag_data = viewport.get_meta("current_drag_data")
+	_handle_drop(drag_data)
+	get_viewport().set_input_as_handled()
+
+
+func _is_mouse_over() -> bool:
+	"""Check if mouse is over this interactable"""
+	# For 3D interactables, check if there's an active interaction from the player
+	# This is a simple proximity check - the InteractionSystem handles the actual raycasting
+	var player = get_player_reference()
+	if not player:
+		return false
+
+	# Check distance to player
+	var distance = global_position.distance_to(player.global_position)
+	return distance < 5.0  # Reasonable interaction range
+
+
+func _handle_drop(drag_data: Dictionary) -> bool:
+	"""Handle item being dropped onto this container"""
+	if not inventory_container or not inventory_manager:
+		return false
+
+	var source_slot = drag_data.get("source_slot")
+	var source_row = drag_data.get("source_row")
+	var item: InventoryItem_Base
+
+	# Get the item being dragged
+	if source_slot:
+		item = source_slot.item
+	elif source_row:
+		item = source_row.item
+	else:
+		return false
+
+	if not item:
+		return false
+
+	# Get source container ID
+	var source_container_id = ""
+	if source_slot and source_slot.has_method("get_container_id"):
+		source_container_id = source_slot.get_container_id()
+	elif source_row and source_row.has_method("_get_container_id"):
+		source_container_id = source_row._get_container_id()
+
+	# Don't transfer to same container
+	if source_container_id == inventory_container.container_id:
+		return false
+
+	# Calculate transfer amount
+	var available_volume = inventory_container.get_available_volume()
+	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
+	var transfer_amount = min(item.quantity, max_transferable)
+
+	if transfer_amount <= 0:
+		return false
+
+	# Transfer the item
+	var success = inventory_manager.transfer_item(item, source_container_id, inventory_container.container_id, Vector2i(-1, -1), transfer_amount)
+
+	if success:
+		# Immediately save if persistent
+		if persistent and inventory_manager:
+			inventory_manager.save_inventory()
+
+		# Notify source that drop was successful
+		if source_slot and source_slot.has_method("_on_external_drop_result"):
+			source_slot._on_external_drop_result(true)
+		elif source_row and source_row.has_method("_on_external_drop_result"):
+			source_row._on_external_drop_result(true)
+
+		# Refresh any open window for this container
+		if container_window and is_instance_valid(container_window):
+			if container_window.content:
+				container_window.content.refresh_display()
+
+	# Clear drag data
+	var viewport = get_viewport()
+	if viewport:
+		viewport.remove_meta("current_drag_data")
+
+	return success
+
+	# Clear drag data
+	viewport.remove_meta("current_drag_data")
+
+	return success
 
 
 func _delayed_setup():
@@ -252,9 +371,9 @@ func _open_container_window():
 	# Add to scene via UIManager or fallback
 	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
 	if ui_managers.size() > 0:
-		var ui_manager = ui_managers[0]
-		if ui_manager.has_method("add_tearoff_window"):
-			ui_manager.add_tearoff_window(container_window)
+		var ui_mgr = ui_managers[0]
+		if ui_mgr.has_method("add_tearoff_window"):
+			ui_mgr.add_tearoff_window(container_window)
 	else:
 		# Fallback: create canvas layer
 		var canvas = CanvasLayer.new()
@@ -371,7 +490,13 @@ func add_item_to_container(item: InventoryItem_Base) -> bool:
 	if not inventory_container:
 		return false
 
-	return inventory_container.add_item(item)
+	var result = inventory_container.add_item(item)
+
+	# Immediately save if persistent
+	if result and persistent and inventory_manager:
+		inventory_manager.save_inventory()
+
+	return result
 
 
 func remove_item_from_container(item: InventoryItem_Base) -> bool:
@@ -379,7 +504,13 @@ func remove_item_from_container(item: InventoryItem_Base) -> bool:
 	if not inventory_container:
 		return false
 
-	return inventory_container.remove_item(item)
+	var result = inventory_container.remove_item(item)
+
+	# Immediately save if persistent
+	if result and persistent and inventory_manager:
+		inventory_manager.save_inventory()
+
+	return result
 
 
 func get_container_data() -> Dictionary:
