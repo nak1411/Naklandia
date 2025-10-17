@@ -329,6 +329,9 @@ func _setup_item_actions():
 	if inventory_manager:
 		item_actions.set_inventory_manager(inventory_manager)
 
+	if current_container:
+		item_actions.set_current_container(current_container)
+
 	# Connect to inventory manager updates
 	if item_actions.has_signal("container_refreshed"):
 		item_actions.container_refreshed.connect(_on_container_refreshed)

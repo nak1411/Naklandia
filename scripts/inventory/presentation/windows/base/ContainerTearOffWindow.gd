@@ -393,7 +393,7 @@ func _setup_content():
 	await get_tree().process_frame
 
 	# Setup item actions BEFORE initializing inventory content - SAME AS MAIN WINDOW
-	call_deferred("_setup_item_actions")
+	_setup_item_actions()
 
 	# ENABLE CROSS-WINDOW DROPS ON CONTENT
 	if content and not content.gui_input.is_connected(_on_content_gui_input):

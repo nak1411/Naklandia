@@ -558,7 +558,7 @@ func show_destroy_item_confirmation(item: InventoryItem_Base, _slot: InventorySl
 	destroy_button.pressed.connect(
 		func():
 			if inventory_manager and current_container:
-				inventory_manager.remove_item_from_container(item, current_container.container_id)
+				current_container.remove_item(item)
 				await window_parent.get_tree().process_frame
 				container_refreshed.emit()
 			dialog_window.close_dialog()
