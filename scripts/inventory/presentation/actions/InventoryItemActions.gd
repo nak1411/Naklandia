@@ -412,7 +412,7 @@ func show_split_stack_dialog(item: InventoryItem_Base, _slot: InventorySlot):
 	"""Show split stack dialog using DialogWindow_Base"""
 	# Prevent auto-stacking while dialog is open
 	var original_auto_stack = inventory_manager.settings.auto_stack
-	inventory_manager.set_auto_stack(false)
+	inventory_manager.settings.auto_stack = false
 
 	# Create dialog using the base class
 	var dialog_window = DialogWindow_Base.new("Split Stack", Vector2(300, 180))
@@ -824,7 +824,7 @@ func _perform_split(item: InventoryItem_Base, split_amount: int, original_auto_s
 	var success = StackSplitHandler.perform_split(item, split_amount, current_container, inventory_manager)
 
 	if not success:
-		inventory_manager.set_auto_stack(original_auto_stack)
+		inventory_manager.settings.auto_stack = original_auto_stack
 		return
 
 	# Force display refresh

@@ -307,6 +307,7 @@ func _handle_cross_window_drop_to_container(drag_data: Dictionary) -> bool:
 	"""Handle dropping items from other windows into this container"""
 	# Check if our inventory container exists
 	if not inventory_container:
+		_cleanup_failed_drop(drag_data)
 		return false
 
 	var source_slot = drag_data.get("source_slot")
@@ -319,9 +320,11 @@ func _handle_cross_window_drop_to_container(drag_data: Dictionary) -> bool:
 	elif source_row:
 		item = source_row.item
 	else:
+		_cleanup_failed_drop(drag_data)
 		return false
 
 	if not item:
+		_cleanup_failed_drop(drag_data)
 		return false
 
 	# Get source container ID
@@ -333,22 +336,19 @@ func _handle_cross_window_drop_to_container(drag_data: Dictionary) -> bool:
 
 	# Don't transfer to same container
 	if source_container_id == inventory_container.container_id:
+		_cleanup_failed_drop(drag_data)
 		return false
 
-	# Check if target can accept the item
-	if not inventory_container.can_add_item(item):
-		return false
-
-	# Calculate transfer amount
+	# Calculate transfer amount based on available volume
 	var available_volume = inventory_container.get_available_volume()
 	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
 	var transfer_amount = min(item.quantity, max_transferable)
 
 	if transfer_amount <= 0:
+		_cleanup_failed_drop(drag_data)
 		return false
 
-	# FIX: Use the inventory manager's transfer system instead of manual duplication
-	# This ensures proper notifications and cleanup
+	# Use the inventory manager's transfer system
 	var success = inventory_manager.transfer_item(item, source_container_id, inventory_container.container_id, Vector2i(-1, -1), transfer_amount)
 
 	if success:
@@ -357,17 +357,17 @@ func _handle_cross_window_drop_to_container(drag_data: Dictionary) -> bool:
 			container_window.content.refresh_display()
 
 		# Notify source slot/row that drop was successful
-		# This triggers proper cleanup of the source slot
 		if source_slot and source_slot.has_method("_on_external_drop_result"):
 			source_slot._on_external_drop_result(true)
 		elif source_row and source_row.has_method("_on_external_drop_result"):
 			source_row._on_external_drop_result(true)
 
-		# Force refresh of the main inventory window to clear ghost items
+		# Force refresh of the main inventory window
 		var inventory_integration = get_tree().get_first_node_in_group("inventory_integration")
 		if inventory_integration and inventory_integration.inventory_window and inventory_integration.inventory_window.content:
-			# Force immediate refresh
 			inventory_integration.inventory_window.content.refresh_display()
+	else:
+		_cleanup_failed_drop(drag_data)
 
 	return success
 
@@ -409,6 +409,42 @@ func close_container():
 
 		# Handle cleanup manually since signal is disconnected
 		_on_container_window_closed()
+
+
+func _cleanup_failed_drop(drag_data: Dictionary):
+	"""Clean up failed drag operations"""
+	var source_slot = drag_data.get("source_slot")
+	var source_row = drag_data.get("source_row")
+
+	# Notify source that drop failed
+	if source_slot and source_slot.has_method("_on_external_drop_result"):
+		source_slot._on_external_drop_result(false)
+	elif source_row and source_row.has_method("_on_external_drop_result"):
+		source_row._on_external_drop_result(false)
+
+	# Clean up global drag state
+	var viewport = get_viewport()
+	if viewport and viewport.has_meta("current_drag_data"):
+		viewport.remove_meta("current_drag_data")
+
+	# Clean up any drag previews
+	_cleanup_all_drag_previews()
+
+
+func _cleanup_all_drag_previews():
+	"""Clean up all drag preview elements"""
+	var root = get_tree().root
+	var drag_canvases = []
+
+	# Find all DragCanvas nodes
+	for child in root.get_children():
+		if child is CanvasLayer and child.name == "DragCanvas":
+			drag_canvases.append(child)
+
+	# Clean them up
+	for canvas in drag_canvases:
+		if is_instance_valid(canvas):
+			canvas.queue_free()
 
 
 func get_container() -> InventoryContainer_Base:

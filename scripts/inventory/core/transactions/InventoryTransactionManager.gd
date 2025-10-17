@@ -41,14 +41,24 @@ func _handle_same_container_move(item: InventoryItem_Base, container: InventoryC
 
 
 func _handle_cross_container_transfer(item: InventoryItem_Base, from_container: InventoryContainer_Base, to_container: InventoryContainer_Base, position: Vector2i, quantity: int) -> bool:
-	# Extract existing transfer logic from InventoryManager
+	# Calculate requested transfer quantity
 	var transfer_quantity = quantity if quantity > 0 else item.quantity
 	transfer_quantity = min(transfer_quantity, item.quantity)
 
 	if transfer_quantity <= 0:
 		return false
 
-	# Check if target can accept the item/quantity
+	# Calculate maximum transferable based on available volume
+	var available_volume = to_container.get_available_volume()
+	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else transfer_quantity
+
+	# Adjust transfer quantity to what will actually fit
+	transfer_quantity = min(transfer_quantity, max_transferable)
+
+	if transfer_quantity <= 0:
+		return false
+
+	# Basic validation (item exists in source container)
 	if not _can_transfer(item, from_container, to_container, transfer_quantity):
 		return false
 

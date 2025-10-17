@@ -186,18 +186,16 @@ func _handle_transfer_to_external_tearoff(drag_data: Dictionary, target_containe
 	var item = drag_data.get("item")
 
 	if not item or not inventory_manager or not target_container:
+		_cleanup_failed_drop(drag_data)
 		return false
 
-	# Check if target can accept the item
-	if not target_container.can_add_item(item):
-		return false
-
-	# Calculate transfer amount
+	# Calculate transfer amount based on available volume
 	var available_volume = target_container.get_available_volume()
 	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
 	var transfer_amount = min(item.quantity, max_transferable)
 
 	if transfer_amount <= 0:
+		_cleanup_failed_drop(drag_data)
 		return false
 
 	# Get source container ID
@@ -226,6 +224,8 @@ func _handle_transfer_to_external_tearoff(drag_data: Dictionary, target_containe
 			source_slot._on_external_drop_result(true)
 		elif source_row and source_row.has_method("_on_external_drop_result"):
 			source_row._on_external_drop_result(true)
+	else:
+		_cleanup_failed_drop(drag_data)
 
 	return success
 
@@ -258,13 +258,14 @@ func _get_tearoff_target_container(drop_position: Vector2) -> InventoryContainer
 
 
 func _handle_cross_window_drop(drag_data: Dictionary, target_container: InventoryContainer_Base = null) -> bool:
-	"""Handle cross-window item drop - CORRECTED to match InventoryWindow signature"""
+	"""Handle cross-window item drop"""
 
 	var source_slot = drag_data.get("source_slot")
 	var source_row = drag_data.get("source_row")
 	var item = drag_data.get("item")
 
 	if not item or not inventory_manager:
+		_cleanup_failed_drop(drag_data)
 		return false
 
 	# If no target container provided, determine it from position
@@ -272,6 +273,7 @@ func _handle_cross_window_drop(drag_data: Dictionary, target_container: Inventor
 		target_container = _get_tearoff_target_container(get_global_mouse_position())
 
 	if not target_container:
+		_cleanup_failed_drop(drag_data)
 		return false
 
 	# Get source container ID
@@ -282,18 +284,16 @@ func _handle_cross_window_drop(drag_data: Dictionary, target_container: Inventor
 		source_container_id = source_row._get_container_id()
 
 	if source_container_id == "" or source_container_id == target_container.container_id:
+		_cleanup_failed_drop(drag_data)
 		return false
 
-	# Check if target can accept the item
-	if not target_container.can_add_item(item):
-		return false
-
-	# Calculate transfer amount
+	# Calculate transfer amount based on available volume
 	var available_volume = target_container.get_available_volume()
 	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
 	var transfer_amount = min(item.quantity, max_transferable)
 
 	if transfer_amount <= 0:
+		_cleanup_failed_drop(drag_data)
 		return false
 
 	# Use the inventory manager to transfer
@@ -309,6 +309,8 @@ func _handle_cross_window_drop(drag_data: Dictionary, target_container: Inventor
 			source_slot._on_external_drop_result(true)
 		elif source_row and source_row.has_method("_on_external_drop_result"):
 			source_row._on_external_drop_result(true)
+	else:
+		_cleanup_failed_drop(drag_data)
 
 	return success
 
