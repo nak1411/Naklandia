@@ -96,6 +96,9 @@ shape = SubResource("BoxShape3D_buypi")
 
 [node name="InteractableContainer" parent="Level/Wall1" instance=ExtResource("2_1swwb")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.02668, -1.4, -5.31083)
+container_id = "item_crate"
+container_name = "Item Crate"
+auto_generate_id = false
 
 [node name="Wall2" type="StaticBody3D" parent="Level"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 2, 0)

@@ -34,7 +34,9 @@ func _ready():
 
 	# Generate unique ID if needed
 	if auto_generate_id and container_id == "":
-		container_id = "container_" + str(get_instance_id())
+		# Use node path for stable ID across game sessions
+		var path_hash = str(get_path()).hash()
+		container_id = "container_" + str(path_hash)
 
 	# Set interaction text
 	if interaction_text == "Interact":
@@ -144,9 +146,9 @@ func _find_node_recursive(node: Node, condition: Callable) -> Node:
 
 
 func _setup_container():
-	"""Setup the container data"""
+	"""Set up or retrieve the container"""
 	if not inventory_manager:
-		push_error("InteractableContainer: No InventoryManager found in scene!")
+		push_error("InteractableContainer: No inventory manager found!")
 		return
 
 	# Check if container already exists
@@ -162,6 +164,10 @@ func _setup_container():
 
 		# Add to inventory manager
 		inventory_manager.add_container(inventory_container)
+
+		# Load saved data if available
+		if persistent:
+			_load_persistent_data()
 
 	# Ensure the container is accessible
 	var requires_docking = inventory_container.get("requires_docking")
@@ -228,37 +234,37 @@ func _open_container_window():
 		push_error("Cannot find main inventory window!")
 		return
 
-	# Wait for tearoff manager to be ready
-	var attempts = 0
-	while not main_inventory_window.tearoff_manager and attempts < 10:
-		await get_tree().process_frame
-		attempts += 1
+	# Create new container window through tearoff manager
+	# The tearoff manager doesn't have a public API for this, so we create the window directly
+	container_window = ContainerTearOffWindow.new(inventory_container, main_inventory_window)
+	container_window.name = "InteractableContainer_" + container_id
 
-	var tearoff_manager = main_inventory_window.tearoff_manager
-	if not tearoff_manager:
-		push_error("No tearoff manager found after waiting!")
-		return
+	# Setup the window
+	container_window.set_inventory_manager(inventory_manager)
 
-	# Check once more if tearoff already exists
-	var existing_tearoff = tearoff_manager.get_tearoff_window(inventory_container)
-	if existing_tearoff and is_instance_valid(existing_tearoff):
-		container_window = existing_tearoff
-		is_container_open = true
-		container_window.move_to_front()
-		return
+	# Position at center of screen
+	var viewport = get_viewport()
+	if viewport:
+		var screen_size = viewport.get_visible_rect().size
+		var window_size = Vector2(500, 400)
+		container_window.position = (screen_size - window_size) / 2
 
-	# Use the tearoff manager's method to create the tearoff window properly
-	tearoff_manager._create_tearoff_window(inventory_container)
+	# Add to scene via UIManager or fallback
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		var ui_manager = ui_managers[0]
+		if ui_manager.has_method("add_tearoff_window"):
+			ui_manager.add_tearoff_window(container_window)
+	else:
+		# Fallback: create canvas layer
+		var canvas = CanvasLayer.new()
+		canvas.name = "InteractableContainerLayer"
+		canvas.layer = 100
+		get_tree().current_scene.add_child(canvas)
+		canvas.add_child(container_window)
 
-	# Wait for creation
-	await get_tree().process_frame
-
-	# Get the created window from the tearoff manager
-	container_window = tearoff_manager.get_tearoff_window(inventory_container)
-
-	if not container_window:
-		push_error("Failed to create tearoff window!")
-		return
+	# Show the window
+	container_window.show_window()
 
 	# Register as external container window for cross-window drops
 	container_window.add_to_group("external_container_windows")
@@ -303,99 +309,6 @@ func _get_main_inventory_window() -> InventoryWindow:
 	return null
 
 
-func _handle_cross_window_drop_to_container(drag_data: Dictionary) -> bool:
-	"""Handle dropping items from other windows into this container"""
-	# Check if our inventory container exists
-	if not inventory_container:
-		_cleanup_failed_drop(drag_data)
-		return false
-
-	var source_slot = drag_data.get("source_slot")
-	var source_row = drag_data.get("source_row")
-	var item: InventoryItem_Base
-
-	# Get the item being dragged
-	if source_slot:
-		item = source_slot.item
-	elif source_row:
-		item = source_row.item
-	else:
-		_cleanup_failed_drop(drag_data)
-		return false
-
-	if not item:
-		_cleanup_failed_drop(drag_data)
-		return false
-
-	# Get source container ID
-	var source_container_id = ""
-	if source_slot and source_slot.has_method("get_container_id"):
-		source_container_id = source_slot.get_container_id()
-	elif source_row and source_row.has_method("_get_container_id"):
-		source_container_id = source_row._get_container_id()
-
-	# Don't transfer to same container
-	if source_container_id == inventory_container.container_id:
-		_cleanup_failed_drop(drag_data)
-		return false
-
-	# Calculate transfer amount based on available volume
-	var available_volume = inventory_container.get_available_volume()
-	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
-	var transfer_amount = min(item.quantity, max_transferable)
-
-	if transfer_amount <= 0:
-		_cleanup_failed_drop(drag_data)
-		return false
-
-	# Use the inventory manager's transfer system
-	var success = inventory_manager.transfer_item(item, source_container_id, inventory_container.container_id, Vector2i(-1, -1), transfer_amount)
-
-	if success:
-		# Refresh this container window (target)
-		if container_window and container_window.content:
-			container_window.content.refresh_display()
-
-		# Find and refresh the SOURCE window
-		_refresh_source_window(source_container_id)
-
-		# Notify source slot/row that drop was successful
-		if source_slot and source_slot.has_method("_on_external_drop_result"):
-			source_slot._on_external_drop_result(true)
-		elif source_row and source_row.has_method("_on_external_drop_result"):
-			source_row._on_external_drop_result(true)
-	else:
-		_cleanup_failed_drop(drag_data)
-
-	return success
-
-
-func _refresh_source_window(source_container_id: String):
-	"""Find and refresh the window containing the source container"""
-	# Check all external windows
-	var external_windows = get_tree().get_nodes_in_group("external_container_windows")
-	for window in external_windows:
-		if window is ContainerTearOffWindow:
-			var tearoff = window as ContainerTearOffWindow
-			var tearoff_container_id = tearoff.container_view.container_id if tearoff.container_view else tearoff.container.container_id
-			if tearoff_container_id == source_container_id:
-				if tearoff.content:
-					tearoff.content.refresh_display()
-				return
-		elif window.has_meta("window_type") and window.get_meta("window_type") == "main_inventory":
-			# Main inventory window
-			if window.has_method("get") and window.get("content"):
-				window.content.refresh_display()
-			return
-		elif window.has_meta("external_container"):
-			# Another InteractableContainer window
-			var external_container = window.get_meta("external_container")
-			if external_container and external_container.container_id == source_container_id:
-				if window.has_method("get") and window.get("content"):
-					window.content.refresh_display()
-				return
-
-
 func _on_container_window_closed():
 	"""Handle container window being closed"""
 	is_container_open = false
@@ -433,42 +346,6 @@ func close_container():
 
 		# Handle cleanup manually since signal is disconnected
 		_on_container_window_closed()
-
-
-func _cleanup_failed_drop(drag_data: Dictionary):
-	"""Clean up failed drag operations"""
-	var source_slot = drag_data.get("source_slot")
-	var source_row = drag_data.get("source_row")
-
-	# Notify source that drop failed
-	if source_slot and source_slot.has_method("_on_external_drop_result"):
-		source_slot._on_external_drop_result(false)
-	elif source_row and source_row.has_method("_on_external_drop_result"):
-		source_row._on_external_drop_result(false)
-
-	# Clean up global drag state
-	var viewport = get_viewport()
-	if viewport and viewport.has_meta("current_drag_data"):
-		viewport.remove_meta("current_drag_data")
-
-	# Clean up any drag previews
-	_cleanup_all_drag_previews()
-
-
-func _cleanup_all_drag_previews():
-	"""Clean up all drag preview elements"""
-	var root = get_tree().root
-	var drag_canvases = []
-
-	# Find all DragCanvas nodes
-	for child in root.get_children():
-		if child is CanvasLayer and child.name == "DragCanvas":
-			drag_canvases.append(child)
-
-	# Clean them up
-	for canvas in drag_canvases:
-		if is_instance_valid(canvas):
-			canvas.queue_free()
 
 
 func get_container() -> InventoryContainer_Base:
@@ -555,3 +432,34 @@ func load_container_state(data: Dictionary):
 	if inventory_container and data.has("items"):
 		if inventory_container.has_method("load_save_data"):
 			inventory_container.load_save_data(data["items"])
+
+
+func _load_persistent_data():
+	"""Load this container's data from the save file if it exists"""
+	if not inventory_manager or not inventory_manager.save_system:
+		return
+
+	var save_path = inventory_manager.save_system.save_file_path
+	if not FileAccess.file_exists(save_path):
+		return
+
+	var file = FileAccess.open(save_path, FileAccess.READ)
+	if not file:
+		return
+
+	var json_string = file.get_as_text()
+	file.close()
+
+	var json = JSON.new()
+	if json.parse(json_string) != OK:
+		return
+
+	var save_data = json.data
+	if not save_data is Dictionary:
+		return
+
+	var containers_data = save_data.get("containers", {})
+	if containers_data.has(container_id):
+		var container_data = containers_data[container_id]
+		if container_data is Dictionary and inventory_container.has_method("from_dict"):
+			inventory_container.from_dict(container_data)
