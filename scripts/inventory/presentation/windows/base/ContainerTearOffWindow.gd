@@ -205,7 +205,7 @@ func _handle_transfer_to_external_tearoff(drag_data: Dictionary, target_containe
 	var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
 
 	if success:
-		# Refresh both windows
+		# Refresh this window (source)
 		if content:
 			content.refresh_display()
 
@@ -300,9 +300,12 @@ func _handle_cross_window_drop(drag_data: Dictionary, target_container: Inventor
 	var success = inventory_manager.transfer_item(item, source_container_id, target_container.container_id, Vector2i(-1, -1), transfer_amount)
 
 	if success:
-		# Refresh this window
+		# Refresh this window (target)
 		if content:
 			content.refresh_display()
+
+		# Find and refresh the SOURCE window
+		_refresh_source_window(source_container_id)
 
 		# Notify source of successful drop
 		if source_slot and source_slot.has_method("_on_external_drop_result"):
@@ -313,6 +316,28 @@ func _handle_cross_window_drop(drag_data: Dictionary, target_container: Inventor
 		_cleanup_failed_drop(drag_data)
 
 	return success
+
+
+func _refresh_source_window(source_container_id: String):
+	"""Find and refresh the window containing the source container"""
+	# Check all external windows
+	var external_windows = get_tree().get_nodes_in_group("external_container_windows")
+	for window in external_windows:
+		if window == self:
+			continue
+
+		if window is ContainerTearOffWindow:
+			var tearoff = window as ContainerTearOffWindow
+			var tearoff_container_id = tearoff.container_view.container_id if tearoff.container_view else tearoff.container.container_id
+			if tearoff_container_id == source_container_id:
+				if tearoff.content:
+					tearoff.content.refresh_display()
+				return
+		elif window.has_meta("window_type") and window.get_meta("window_type") == "main_inventory":
+			# Main inventory window - refresh it
+			if window.has_method("get") and window.get("content"):
+				window.content.refresh_display()
+			return
 
 
 func _on_content_input(event: InputEvent):

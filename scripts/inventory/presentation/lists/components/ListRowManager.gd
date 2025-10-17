@@ -765,6 +765,9 @@ func _on_external_drop_result(success: bool):
 			var list_view = _find_list_view()
 			if list_view:
 				call_deferred("_trigger_list_refresh", list_view)
+		elif item:
+			# Partial transfer - update the quantity display immediately
+			_refresh_display()
 
 
 # Helper methods

@@ -158,6 +158,34 @@ func _on_mouse_exited():
 	tooltip_manager.hide_tooltip()
 
 
+func _on_external_drop_result(success: bool):
+	"""Callback for external drop operations"""
+	if success:
+		# Reset visual state
+		modulate.a = 1.0
+		mouse_filter = Control.MOUSE_FILTER_PASS
+
+		# Clean up drag state
+		if drag_handler:
+			drag_handler.is_dragging = false
+			drag_handler.drag_preview_created = false
+
+		# Check if this slot's item is empty after transfer
+		if item and item.quantity <= 0:
+			# Item fully transferred - make invisible and clean up
+			modulate.a = 0.0
+			mouse_filter = Control.MOUSE_FILTER_IGNORE
+			clear_item()
+
+			# Trigger deferred refresh
+			var grid = _get_inventory_grid()
+			if grid:
+				call_deferred("_trigger_grid_refresh", grid)
+		elif item:
+			# Partial transfer - update the display immediately
+			visuals.update_item_display()
+
+
 func _on_drag_started(source_slot: InventorySlot, drag_item: InventoryItem_Base):
 	"""Handle drag started"""
 	item_drag_started.emit(source_slot, drag_item)

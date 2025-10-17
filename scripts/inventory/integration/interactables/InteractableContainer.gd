@@ -352,24 +352,48 @@ func _handle_cross_window_drop_to_container(drag_data: Dictionary) -> bool:
 	var success = inventory_manager.transfer_item(item, source_container_id, inventory_container.container_id, Vector2i(-1, -1), transfer_amount)
 
 	if success:
-		# Refresh the container window display
+		# Refresh this container window (target)
 		if container_window and container_window.content:
 			container_window.content.refresh_display()
+
+		# Find and refresh the SOURCE window
+		_refresh_source_window(source_container_id)
 
 		# Notify source slot/row that drop was successful
 		if source_slot and source_slot.has_method("_on_external_drop_result"):
 			source_slot._on_external_drop_result(true)
 		elif source_row and source_row.has_method("_on_external_drop_result"):
 			source_row._on_external_drop_result(true)
-
-		# Force refresh of the main inventory window
-		var inventory_integration = get_tree().get_first_node_in_group("inventory_integration")
-		if inventory_integration and inventory_integration.inventory_window and inventory_integration.inventory_window.content:
-			inventory_integration.inventory_window.content.refresh_display()
 	else:
 		_cleanup_failed_drop(drag_data)
 
 	return success
+
+
+func _refresh_source_window(source_container_id: String):
+	"""Find and refresh the window containing the source container"""
+	# Check all external windows
+	var external_windows = get_tree().get_nodes_in_group("external_container_windows")
+	for window in external_windows:
+		if window is ContainerTearOffWindow:
+			var tearoff = window as ContainerTearOffWindow
+			var tearoff_container_id = tearoff.container_view.container_id if tearoff.container_view else tearoff.container.container_id
+			if tearoff_container_id == source_container_id:
+				if tearoff.content:
+					tearoff.content.refresh_display()
+				return
+		elif window.has_meta("window_type") and window.get_meta("window_type") == "main_inventory":
+			# Main inventory window
+			if window.has_method("get") and window.get("content"):
+				window.content.refresh_display()
+			return
+		elif window.has_meta("external_container"):
+			# Another InteractableContainer window
+			var external_container = window.get_meta("external_container")
+			if external_container and external_container.container_id == source_container_id:
+				if window.has_method("get") and window.get("content"):
+					window.content.refresh_display()
+				return
 
 
 func _on_container_window_closed():
