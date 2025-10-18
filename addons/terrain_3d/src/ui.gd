@@ -1,5 +1,6 @@
 # Copyright © 2025 Cory Petkovsek, Roope Palmroos, and Contributors.
 # UI for Terrain3D
+@tool
 extends Node
 
 

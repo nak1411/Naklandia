@@ -1,10 +1,9 @@
 # Copyright © 2025 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Operation Builder for Terrain3D
+@tool
 extends RefCounted
 
-
 const ToolSettings: Script = preload("res://addons/terrain_3d/src/tool_settings.gd")
-
 
 var tool_settings: ToolSettings
 
