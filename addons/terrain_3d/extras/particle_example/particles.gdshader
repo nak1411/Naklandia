@@ -244,12 +244,14 @@ void start() {
 		pos.xz = vec2(100000.0);
 	}
 
-	// Distance culling - removed dynamic fade to eliminate shimmer
 	if (length(camera_position - pos) > max_dist) {
 		pos.y = 0. / 0.;
 		pos.xz = vec2(100000.0);
+	} else {
+		float fade_factor = 1.0 - smoothstep(max_dist * distance_fade_ammount, max_dist + 0.0001, length(camera_position - pos)) + 0.001;
+		scale.y *= fade_factor;
+		offset *= fade_factor;
 	}
-	// REMOVED: Distance fade that was causing scale.y and offset to change dynamically
 
 	// Apply scale
 	TRANSFORM[0] *= scale.x;

@@ -7,6 +7,7 @@
 @tool
 extends Node3D
 
+
 #region settings
 ## Auto set if attached as a child of a Terrain3D node
 @export var terrain: Terrain3D:
@@ -14,13 +15,15 @@ extends Node3D
 		terrain = value
 		_create_grid()
 
+
 ## Distance between instances
-@export_range(0.03125, 2.0, 0.015625) var instance_spacing: float = 0.15:
+@export_range(0.125, 2.0, 0.015625) var instance_spacing: float = 0.5:
 	set(value):
-		instance_spacing = clamp(round(value * 32.0) * 0.015625, 0.03125, 2.0)
+		instance_spacing = clamp(round(value * 64.0) * 0.015625, 0.125, 2.0)
 		rows = maxi(int(cell_width / instance_spacing), 1)
 		amount = rows * rows
 		_set_offsets()
+
 
 ## Width of an individual cell of the grid
 @export_range(8.0, 256.0, 1.0) var cell_width: float = 32.0:
@@ -41,7 +44,8 @@ extends Node3D
 				p.custom_aabb = aabb
 		_set_offsets()
 
-## Grid width. Must be odd.
+
+## Grid width. Must be odd. 
 ## Higher values cull slightly better, draw further out.
 @export_range(1, 15, 2) var grid_width: int = 9:
 	set(value):
@@ -49,6 +53,7 @@ extends Node3D
 		particle_count = 1
 		min_draw_distance = 1.0
 		_create_grid()
+
 
 @export_storage var rows: int = 1
 
@@ -60,6 +65,7 @@ extends Node3D
 		for p in particle_nodes:
 			p.amount = amount
 
+
 @export_range(1, 256, 1) var process_fixed_fps: int = 30:
 	set(value):
 		process_fixed_fps = maxi(value, 1)
@@ -67,24 +73,30 @@ extends Node3D
 			p.fixed_fps = process_fixed_fps
 			p.preprocess = 1.0 / float(process_fixed_fps)
 
+
 ## Access to process material parameters
 @export var process_material: ShaderMaterial
 
 ## The mesh that each particle will render
 @export var mesh: Mesh
 
-@export var shadow_mode: GeometryInstance3D.ShadowCastingSetting = GeometryInstance3D.ShadowCastingSetting.SHADOW_CASTING_SETTING_ON:
+@export var shadow_mode: GeometryInstance3D.ShadowCastingSetting = (
+		GeometryInstance3D.ShadowCastingSetting.SHADOW_CASTING_SETTING_ON):
 	set(value):
 		shadow_mode = value
 		for p in particle_nodes:
 			p.cast_shadow = value
 
+
 ## Override material for the particle mesh
-@export_custom(PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial") var mesh_material_override: Material:
+@export_custom(
+	PROPERTY_HINT_RESOURCE_TYPE,
+	"BaseMaterial3D,ShaderMaterial") var mesh_material_override: Material:
 	set(value):
 		mesh_material_override = value
 		for p in particle_nodes:
 			p.material_override = mesh_material_override
+
 
 @export_group("Info")
 ## The minimum distance that particles will be drawn upto
@@ -93,6 +105,7 @@ extends Node3D
 	set(value):
 		min_draw_distance = float(cell_width * grid_width) * 0.5
 
+
 ## Displays current total particle count based on Cell Width and Instance Spacing
 @export var particle_count: int = 1:
 	set(value):
@@ -100,9 +113,9 @@ extends Node3D
 
 #endregion
 
+
 var offsets: Array[Vector3]
 var last_pos: Vector3 = Vector3.ZERO
-var last_restart_pos: Vector3 = Vector3.ZERO
 var particle_nodes: Array[GPUParticles3D]
 
 
@@ -119,73 +132,18 @@ func _notification(what: int) -> void:
 		_destroy_grid()
 
 
-func _physics_process(_delta: float) -> void:
-	if not terrain:
-		print("[GRASS DEBUG] No terrain found, disabling physics process")
+func _physics_process(delta: float) -> void:
+	if terrain:
+		var camera: Camera3D = terrain.get_camera()
+		if camera:
+			if last_pos.distance_squared_to(camera.global_position) > 1.0:
+				var pos: Vector3 = camera.global_position.snapped(Vector3.ONE)
+				_position_grid(pos)
+				RenderingServer.material_set_param(process_material.get_rid(), "camera_position", pos )
+				last_pos = camera.global_position
+		_update_process_parameters()
+	else:
 		set_physics_process(false)
-		return
-
-	if not process_material or not process_material.get_rid().is_valid():
-		print("[GRASS DEBUG] No valid process_material")
-		return
-
-	var camera: Camera3D = terrain.get_camera()
-	var camera_source: String = "terrain.get_camera()"
-
-	# In editor, try to get editor camera if terrain camera is null
-	if not camera and Engine.is_editor_hint():
-		var vp := get_viewport()
-		if vp:
-			camera = vp.get_camera_3d()
-			camera_source = "editor camera"
-
-	# Fallback: try to find any Camera3D in the scene
-	if not camera:
-		camera = get_viewport().get_camera_3d()
-		camera_source = "viewport camera"
-
-	# If still no camera, try to find player camera by searching the scene tree
-	if not camera:
-		var root = get_tree().root
-		camera = _find_camera_in_children(root)
-		camera_source = "scene tree search"
-
-	if not camera:
-		print("[GRASS DEBUG] No camera found!")
-		return
-
-	var cam_pos: Vector3 = camera.global_position
-
-	# Debug output every 60 frames (~1 second at 60fps)
-	if Engine.get_physics_frames() % 60 == 0:
-		print("[GRASS DEBUG] Camera source: ", camera_source)
-		print("[GRASS DEBUG] Camera position: ", cam_pos)
-		print("[GRASS DEBUG] max_dist: ", process_material.get_shader_parameter("max_dist"))
-		print("[GRASS DEBUG] Last grid reposition at: ", last_pos)
-		print("[GRASS DEBUG] Distance since last reposition: ", last_pos.distance_to(cam_pos))
-
-	# Always update camera position every frame using both methods for reliability
-	process_material.set_shader_parameter("camera_position", cam_pos)
-	RenderingServer.material_set_param(process_material.get_rid(), "camera_position", cam_pos)
-
-	# Only reposition grid when camera moves more than 1 unit
-	if last_pos.distance_squared_to(cam_pos) > 1.0:
-		var snapped_pos: Vector3 = cam_pos.snapped(Vector3.ONE)
-		_position_grid(snapped_pos)
-		last_pos = cam_pos
-		print("[GRASS DEBUG] Grid repositioned to: ", snapped_pos)
-
-	_update_process_parameters()
-
-
-func _find_camera_in_children(node: Node) -> Camera3D:
-	if node is Camera3D:
-		return node
-	for child in node.get_children():
-		var cam = _find_camera_in_children(child)
-		if cam:
-			return cam
-	return null
 
 
 func _create_grid() -> void:
@@ -207,7 +165,7 @@ func _create_grid() -> void:
 		for z in range(-half_grid, half_grid + 1):
 			#var ring: int = maxi(maxi(absi(x), absi(z)), 0)
 			var particle_node = GPUParticles3D.new()
-			particle_node.lifetime = 2.0  # Reduced from 600.0 so culling updates more frequently
+			particle_node.lifetime = 600.0
 			particle_node.amount = amount
 			particle_node.explosiveness = 1.0
 			particle_node.amount_ratio = 1.0
@@ -222,7 +180,7 @@ func _create_grid() -> void:
 			if mesh_material_override:
 				particle_node.material_override = mesh_material_override
 			particle_node.use_fixed_seed = true
-			if x > -half_grid and z > -half_grid:  # Use the same seed across all nodes
+			if (x > -half_grid and z > -half_grid): # Use the same seed across all nodes
 				particle_node.seed = particle_nodes[0].seed
 			self.add_child(particle_node)
 			particle_node.emitting = true
@@ -235,7 +193,11 @@ func _set_offsets() -> void:
 	offsets.clear()
 	for x in range(-half_grid, half_grid + 1):
 		for z in range(-half_grid, half_grid + 1):
-			var offset := Vector3(float(x * rows) * instance_spacing, 0.0, float(z * rows) * instance_spacing)
+			var offset := Vector3(
+				float(x * rows) * instance_spacing,
+				0.0,
+				float(z * rows) * instance_spacing
+			)
 			offsets.append(offset)
 
 
@@ -252,6 +214,7 @@ func _position_grid(pos: Vector3) -> void:
 		var snap = Vector3(pos.x, 0, pos.z).snapped(Vector3.ONE) + offsets[i]
 		node.global_position = (snap / instance_spacing).round() * instance_spacing
 		node.reset_physics_interpolation()
+		node.restart(true) # keep the same seed.
 
 
 func _update_process_parameters() -> void:
@@ -271,13 +234,4 @@ func _update_process_parameters() -> void:
 			RenderingServer.material_set_param(process_rid, "_color_maps", terrain.data.get_color_maps_rid())
 			RenderingServer.material_set_param(process_rid, "instance_spacing", instance_spacing)
 			RenderingServer.material_set_param(process_rid, "instance_rows", rows)
-
-			# Update max_dist using both methods
-			var calculated_dist: float = float(cell_width * grid_width) * 0.5
-			process_material.set_shader_parameter("max_dist", calculated_dist)
-			RenderingServer.material_set_param(process_rid, "max_dist", calculated_dist)
-
-			# Debug output every 60 frames
-			if Engine.get_physics_frames() % 60 == 0:
-				print("[GRASS DEBUG] Updating max_dist to: ", calculated_dist, " (cell_width=", cell_width, ", grid_width=", grid_width, ")")
-				print("[GRASS DEBUG] min_draw_distance property: ", min_draw_distance)
+			RenderingServer.material_set_param(process_rid, "max_dist", min_draw_distance)
