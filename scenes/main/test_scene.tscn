@@ -1,11 +1,13 @@
-[gd_scene load_steps=18 format=3 uid="uid://r45rejc363d"]
+[gd_scene load_steps=25 format=3 uid="uid://r45rejc363d"]
 
 [ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
 [ext_resource type="PackedScene" uid="uid://dvusnrd1ps7xx" path="res://scenes/objects/interactable_container.tscn" id="2_1swwb"]
 [ext_resource type="Texture2D" uid="uid://dl48qo5sl4hqh" path="res://assets/hdri/qwantani_moonrise_puresky_4k.exr" id="2_6i17e"]
 [ext_resource type="PackedScene" uid="uid://b2wfoje26x7fv" path="res://scenes/player/player.tscn" id="2_d2t3o"]
 [ext_resource type="PackedScene" uid="uid://3crjjuj2n4na" path="res://scenes/objects/test_switch.tscn" id="3_ny3xg"]
+[ext_resource type="Terrain3DAssets" uid="uid://dal3jhw6241qg" path="res://demo/data/assets.tres" id="4_33h87"]
 [ext_resource type="Script" uid="uid://criw8ficpl2be" path="res://scripts/ui/core/UIManager.gd" id="4_ny3xg"]
+[ext_resource type="PackedScene" uid="uid://d3sr0a7dxfkr8" path="res://addons/terrain_3d/extras/particle_example/Terrain3DParticles.tscn" id="5_w0gou"]
 [ext_resource type="Script" uid="uid://ve4ia0rua13g" path="res://scripts/world/objects/ItemSpawner.gd" id="6_1swwb"]
 [ext_resource type="Script" uid="uid://bes7x5gnitjur" path="res://scripts/ui/core/PauseMenu.gd" id="6_sa75b"]
 
@@ -47,6 +49,63 @@ size = Vector3(0.2, 4, 20)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_buypi"]
 size = Vector3(0.2, 4, 20)
+
+[sub_resource type="Gradient" id="Gradient_fwrtk"]
+offsets = PackedFloat32Array(0.2, 1)
+colors = PackedColorArray(1, 1, 1, 1, 0, 0, 0, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_egbwy"]
+noise_type = 2
+frequency = 0.03
+cellular_jitter = 3.0
+cellular_return_type = 0
+domain_warp_enabled = true
+domain_warp_type = 1
+domain_warp_amplitude = 50.0
+domain_warp_fractal_type = 2
+domain_warp_fractal_lacunarity = 1.5
+domain_warp_fractal_gain = 1.0
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_fhs52"]
+seamless = true
+color_ramp = SubResource("Gradient_fwrtk")
+noise = SubResource("FastNoiseLite_egbwy")
+
+[sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_m0jab"]
+_shader_parameters = {
+&"auto_base_texture": 0,
+&"auto_height_reduction": 0.1,
+&"auto_overlay_texture": 1,
+&"auto_slope": 1.0,
+&"bias_distance": 512.0,
+&"blend_sharpness": 0.5,
+&"depth_blur": 0.0,
+&"dual_scale_far": 170.0,
+&"dual_scale_near": 100.0,
+&"dual_scale_reduction": 0.3,
+&"dual_scale_texture": 0,
+&"enable_macro_variation": true,
+&"enable_projection": true,
+&"flat_terrain_normals": false,
+&"macro_variation1": Color(1, 1, 1, 1),
+&"macro_variation2": Color(1, 1, 1, 1),
+&"macro_variation_slope": 0.333,
+&"mipmap_bias": 1.0,
+&"noise1_angle": 0.0,
+&"noise1_offset": Vector2(0.5, 0.5),
+&"noise1_scale": 0.04,
+&"noise2_scale": 0.076,
+&"noise_texture": SubResource("NoiseTexture2D_fhs52"),
+&"projection_threshold": 0.8,
+&"tri_scale_reduction": 0.3
+}
+auto_shader = true
+dual_scaling = true
+
+[sub_resource type="RibbonTrailMesh" id="RibbonTrailMesh_88wbq"]
+shape = 0
+section_length = 0.18
+section_segments = 1
 
 [sub_resource type="BoxMesh" id="BoxMesh_njel3"]
 size = Vector3(3, 0.2, 3)
@@ -108,6 +167,24 @@ mesh = SubResource("BoxMesh_8pr8v")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Level/Wall2"]
 shape = SubResource("BoxShape3D_buypi")
+
+[node name="Terrain3D" type="Terrain3D" parent="Level"]
+data_directory = "res://demo/data"
+material = SubResource("Terrain3DMaterial_m0jab")
+assets = ExtResource("4_33h87")
+collision_mask = 3
+top_level = true
+metadata/_edit_lock_ = true
+
+[node name="Terrain3DParticles" parent="Level/Terrain3D" node_paths=PackedStringArray("terrain") instance=ExtResource("5_w0gou")]
+terrain = NodePath("..")
+instance_spacing = 0.125
+cell_width = 27.0
+rows = 216
+amount = 46656
+mesh = SubResource("RibbonTrailMesh_88wbq")
+min_draw_distance = 67.5
+particle_count = 1166400
 
 [node name="TestObjects" type="Node" parent="."]
 
