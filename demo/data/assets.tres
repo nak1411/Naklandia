@@ -44,12 +44,12 @@ roughness = -0.05
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_od0q7"]
 name = "Grass"
 id = 1
-albedo_color = Color(0.67451, 0.74902, 0.686275, 1)
+albedo_color = Color(0.699382, 0.739775, 0.689922, 1)
 albedo_texture = ExtResource("3_g8f2m")
 normal_texture = ExtResource("4_aw5y1")
 normal_depth = 1.0
 ao_strength = 2.0
-uv_scale = 0.2
+uv_scale = 0.5
 detiling_rotation = 0.161
 
 [resource]

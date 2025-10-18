@@ -1,4 +1,4 @@
-[gd_scene load_steps=25 format=3 uid="uid://4n4mxsp7nbyr"]
+[gd_scene load_steps=25 format=3 uid="uid://u68ixamg76uy"]
 
 [ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
 [ext_resource type="PackedScene" uid="uid://dvusnrd1ps7xx" path="res://scenes/objects/interactable_container.tscn" id="2_1swwb"]
@@ -20,12 +20,12 @@ sky_material = SubResource("PanoramaSkyMaterial_6mm6u")
 
 [sub_resource type="Environment" id="Environment_coq8p"]
 background_mode = 2
-background_energy_multiplier = 1.01
+background_energy_multiplier = 2.0
 sky = SubResource("Sky_sasra")
 ambient_light_source = 3
 reflected_light_source = 2
 tonemap_mode = 3
-tonemap_exposure = 0.3
+tonemap_exposure = 0.5
 ssao_enabled = true
 ssil_enabled = true
 sdfgi_enabled = true
@@ -38,7 +38,7 @@ adjustment_contrast = 1.14
 adjustment_saturation = 1.58
 
 [sub_resource type="BoxMesh" id="BoxMesh_2nij2"]
-size = Vector3(20, 0.2, 20)
+size = Vector3(20, 0.4, 20)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_7cbxl"]
 size = Vector3(20, 0.2, 20)
@@ -110,6 +110,7 @@ _shader_parameters = {
 world_background = 2
 auto_shader = true
 dual_scaling = true
+show_navigation = true
 
 [sub_resource type="RibbonTrailMesh" id="RibbonTrailMesh_88wbq"]
 shape = 0
@@ -186,6 +187,7 @@ material = SubResource("Terrain3DMaterial_m0jab")
 assets = ExtResource("4_33h87")
 label_size = 33
 collision_mask = 3
+show_navigation = true
 top_level = true
 metadata/_edit_lock_ = true
 
@@ -205,7 +207,7 @@ mesh = SubResource("BoxMesh_njel3")
 shape = SubResource("BoxShape3D_vr1i5")
 
 [node name="Player" parent="." instance=ExtResource("2_d2t3o")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.29586, 0)
 
 [node name="TestSwitch" parent="." instance=ExtResource("3_ny3xg")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.47241, 1.5, 0)

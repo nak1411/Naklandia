@@ -2,9 +2,10 @@
 
 shader_type spatial;
 
-render_mode skip_vertex_transform, cull_disabled, blend_mix;
+render_mode skip_vertex_transform, cull_disabled, blend_mix, unshaded, depth_draw_opaque;
 
 uniform vec2 wind_direction = vec2(1.0, 1.0);
+uniform float depth_offset : hint_range(0.0, 0.01, 0.0001) = 0.001;
 
 varying vec4 data;
 
@@ -30,8 +31,7 @@ void vertex() {
 	// Get wind force and scale from process()
 	float scale = pow(INSTANCE_CUSTOM[3] * INSTANCE_CUSTOM[3], 0.707);
 	float force = INSTANCE_CUSTOM[2] * data[2] * scale;
-	// Add some cheap jitter at high wind values
-	force -= fract(force * 256.0) * force * 0.05;
+	// REMOVED: Jitter that was causing sparkles
 	// Curve the result
 	force = pow(force, 0.707);
 
@@ -47,22 +47,21 @@ void vertex() {
 	data[3] = force;
 
 	VERTEX = (VIEW_MATRIX * vec4(w_vertex, 1.0)).xyz;
-	NORMAL = MODELVIEW_NORMAL_MATRIX * NORMAL;
-	BINORMAL = MODELVIEW_NORMAL_MATRIX * BINORMAL;
-	TANGENT = MODELVIEW_NORMAL_MATRIX * TANGENT;
+	
+	// Apply depth offset to prevent Z-fighting when viewing from above
+	VERTEX.z += depth_offset;
 }
 
 void fragment() {
 	// Hard coded color.
-	ALBEDO = vec3(0.20, 0.22, 0.05) * (data[2] * 0.5 + 0.5);
-	ALBEDO.rg *= (data.rg * 0.3 + 0.9);
+	ALBEDO = vec3(0.20, 0.24, 0.1) * (data[2] * 0.5 + 0.5);
+	ALBEDO.rg *= (data.rg * 0.5 + 1.0);
 	ALBEDO *= pow(COLOR.rgb, vec3(2.2));
-	// Modify roughness / specular based on wind force for added detail
-	float spec_rough = clamp(max(data[2], data[3]), 0., 1.);
-	ROUGHNESS = 1. - spec_rough;
-	SPECULAR = clamp(spec_rough * 0.25, 0., .15);
-
-	BACKLIGHT = vec3(0.33);
+	
+	// Clamp brightness to prevent glow contribution
+	// Keep all values well below glow threshold (typically 1.0)
+	ALBEDO = clamp(ALBEDO, vec3(0.0), vec3(0.5));
+	
 	#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
 	ALBEDO = pow(ALBEDO, vec3(0.4));
 	#endif
