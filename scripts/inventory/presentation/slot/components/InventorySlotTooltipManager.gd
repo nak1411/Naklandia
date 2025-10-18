@@ -98,7 +98,7 @@ func show_tooltip():
 	var slot_local_to_window = slot_global_pos - window_global_pos
 
 	# Calculate tooltip position below the slot
-	var tooltip_pos = slot_local_to_window + Vector2((slot.slot_size.x - tooltip.size.x) / 2, slot.slot_size.y + 5)  # Center horizontally  # Position below with 5px gap
+	var tooltip_pos = slot_local_to_window + Vector2((slot.slot_size.x - tooltip.size.x) / 2, slot.slot_size.y + 40)  # Center horizontally  # Position below with 40px gap
 
 	# Ensure tooltip stays within window bounds
 	var window_rect = Rect2(Vector2.ZERO, inventory_window.size)
