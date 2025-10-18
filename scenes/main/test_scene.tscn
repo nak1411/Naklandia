@@ -10,6 +10,7 @@
 [ext_resource type="PackedScene" uid="uid://d3sr0a7dxfkr8" path="res://addons/terrain_3d/extras/particle_example/Terrain3DParticles.tscn" id="5_w0gou"]
 [ext_resource type="Script" uid="uid://ve4ia0rua13g" path="res://scripts/world/objects/ItemSpawner.gd" id="6_1swwb"]
 [ext_resource type="Script" uid="uid://bes7x5gnitjur" path="res://scripts/ui/core/PauseMenu.gd" id="6_sa75b"]
+[ext_resource type="Script" uid="uid://bp7r4ppgq1m0g" path="res://addons/terrain_3d/extras/particle_example/terrain_3d_particles.gd" id="6_w0gou"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_6mm6u"]
 panorama = ExtResource("2_6i17e")
@@ -102,11 +103,6 @@ _shader_parameters = {
 auto_shader = true
 dual_scaling = true
 
-[sub_resource type="RibbonTrailMesh" id="RibbonTrailMesh_88wbq"]
-shape = 0
-section_length = 0.18
-section_segments = 1
-
 [sub_resource type="BoxMesh" id="BoxMesh_njel3"]
 size = Vector3(3, 0.2, 3)
 
@@ -136,6 +132,7 @@ environment = SubResource("Environment_coq8p")
 [node name="Level" type="Node" parent="."]
 
 [node name="Floor" type="StaticBody3D" parent="Level"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.0314054, 0)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Level/Floor"]
 extra_cull_margin = 16.0
@@ -145,7 +142,7 @@ mesh = SubResource("BoxMesh_2nij2")
 shape = SubResource("BoxShape3D_7cbxl")
 
 [node name="Wall1" type="StaticBody3D" parent="Level"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 2, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 2.03141, 0)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Level/Wall1"]
 mesh = SubResource("BoxMesh_8pr8v")
@@ -160,7 +157,7 @@ container_name = "Item Crate"
 auto_generate_id = false
 
 [node name="Wall2" type="StaticBody3D" parent="Level"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 2, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 2.03141, 0)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Level/Wall2"]
 mesh = SubResource("BoxMesh_8pr8v")
@@ -172,19 +169,18 @@ shape = SubResource("BoxShape3D_buypi")
 data_directory = "res://demo/data"
 material = SubResource("Terrain3DMaterial_m0jab")
 assets = ExtResource("4_33h87")
-collision_mask = 3
 top_level = true
 metadata/_edit_lock_ = true
 
 [node name="Terrain3DParticles" parent="Level/Terrain3D" node_paths=PackedStringArray("terrain") instance=ExtResource("5_w0gou")]
+script = ExtResource("6_w0gou")
 terrain = NodePath("..")
 instance_spacing = 0.125
-cell_width = 27.0
-rows = 216
-amount = 46656
-mesh = SubResource("RibbonTrailMesh_88wbq")
-min_draw_distance = 67.5
-particle_count = 1166400
+cell_width = 32.0
+rows = 256
+amount = 65536
+min_draw_distance = 80.0
+particle_count = 1638400
 
 [node name="TestObjects" type="Node" parent="."]
 
