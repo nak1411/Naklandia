@@ -14,6 +14,7 @@ signal container_closed
 @export var grid_width: int = 5
 @export var grid_height: int = 8
 @export var container_type: ContainerTypes.Type = ContainerTypes.Type.LOOT_CONTAINER
+@export var interaction_radius: float = 3.0
 
 @export_group("Container Persistence")
 @export var auto_generate_id: bool = true
@@ -42,127 +43,14 @@ func _ready():
 	if interaction_text == "Interact":
 		interaction_text = "Open " + container_name
 
-	# Enable input handling for drops
-	set_process_input(true)
-
 	# Find managers with delay to ensure scene is ready
 	call_deferred("_delayed_setup")
 
 
-func _exit_tree():
-	"""Save container state when node exits tree"""
-	if persistent and inventory_manager and inventory_container:
-		print("[InteractableContainer] _exit_tree called for: ", container_id)
-		print("  Container has ", inventory_container.items.size(), " items")
-		print("  Manually saving inventory...")
-		inventory_manager.save_inventory()
-
-
-func _input(event: InputEvent):
-	"""Handle drops onto this container"""
-	if not event is InputEventMouseButton:
-		return
-
-	var mouse_event = event as InputEventMouseButton
-	if mouse_event.button_index != MOUSE_BUTTON_LEFT or mouse_event.pressed:
-		return
-
-	# Check if mouse is over this interactable
-	if not _is_mouse_over():
-		return
-
-	# Check for active drag data
-	var viewport = get_viewport()
-	if not viewport or not viewport.has_meta("current_drag_data"):
-		return
-
-	var drag_data = viewport.get_meta("current_drag_data")
-	_handle_drop(drag_data)
-	get_viewport().set_input_as_handled()
-
-
-func _is_mouse_over() -> bool:
-	"""Check if mouse is over this interactable"""
-	# For 3D interactables, check if there's an active interaction from the player
-	# This is a simple proximity check - the InteractionSystem handles the actual raycasting
-	var player = get_player_reference()
-	if not player:
-		return false
-
-	# Check distance to player
-	var distance = global_position.distance_to(player.global_position)
-	return distance < 5.0  # Reasonable interaction range
-
-
-func _handle_drop(drag_data: Dictionary) -> bool:
-	"""Handle item being dropped onto this container"""
-	if not inventory_container or not inventory_manager:
-		return false
-
-	var source_slot = drag_data.get("source_slot")
-	var source_row = drag_data.get("source_row")
-	var item: InventoryItem_Base
-
-	# Get the item being dragged
-	if source_slot:
-		item = source_slot.item
-	elif source_row:
-		item = source_row.item
-	else:
-		return false
-
-	if not item:
-		return false
-
-	# Get source container ID
-	var source_container_id = ""
-	if source_slot and source_slot.has_method("get_container_id"):
-		source_container_id = source_slot.get_container_id()
-	elif source_row and source_row.has_method("_get_container_id"):
-		source_container_id = source_row._get_container_id()
-
-	# Don't transfer to same container
-	if source_container_id == inventory_container.container_id:
-		return false
-
-	# Calculate transfer amount
-	var available_volume = inventory_container.get_available_volume()
-	var max_transferable = int(available_volume / item.volume) if item.volume > 0 else item.quantity
-	var transfer_amount = min(item.quantity, max_transferable)
-
-	if transfer_amount <= 0:
-		return false
-
-	# Transfer the item
-	var success = inventory_manager.transfer_item(item, source_container_id, inventory_container.container_id, Vector2i(-1, -1), transfer_amount)
-
-	if success:
-		# Immediately save if persistent
-		if persistent and inventory_manager:
-			inventory_manager.save_inventory()
-
-		# Notify source that drop was successful
-		if source_slot and source_slot.has_method("_on_external_drop_result"):
-			source_slot._on_external_drop_result(true)
-		elif source_row and source_row.has_method("_on_external_drop_result"):
-			source_row._on_external_drop_result(true)
-
-		# Refresh any open window for this container
-		if container_window and is_instance_valid(container_window):
-			if container_window.content:
-				container_window.content.refresh_display()
-
-	# Clear drag data
-	var viewport = get_viewport()
-	if viewport:
-		viewport.remove_meta("current_drag_data")
-
-	return success
-
-	# Clear drag data
-	viewport.remove_meta("current_drag_data")
-
-	return success
+func _process(_delta: float):
+	# Check distance if container is open
+	if is_container_open:
+		_check_player_distance()
 
 
 func _delayed_setup():
@@ -288,32 +176,33 @@ func _setup_container():
 		if persistent:
 			_load_persistent_data()
 
-	# Ensure the container is accessible
-	var requires_docking = inventory_container.get("requires_docking")
-	if requires_docking == null:
-		requires_docking = false
+	# Ensure the container is not auto-opened or shown in main inventory
+	inventory_container.requires_docking = true
 
-	if requires_docking:
-		inventory_container.requires_docking = false
 
-	# Fix the active_containers list
-	var active_containers = inventory_manager.get("active_containers")
-	if active_containers != null:
-		active_containers.clear()
-		for container_id_key in inventory_manager.containers.keys():
-			var container = inventory_manager.containers[container_id_key]
-			var container_requires_docking = container.get("requires_docking")
-			if container_requires_docking == null:
-				container_requires_docking = false
+func _check_player_distance():
+	"""Check if player is within interaction radius"""
+	var player = get_player_reference()
+	if not player or not is_container_open:
+		return
 
-			if not container_requires_docking and not container.has_meta("is_tearoff_view"):
-				active_containers.append(container_id_key)
+	var distance = global_position.distance_to(player.global_position)
+
+	if distance > interaction_radius:
+		close_container()
 
 
 func interact() -> bool:
 	"""Override interact to open container window"""
 	if not super.interact():
 		return false
+
+	# Check distance before allowing interaction
+	var player = get_player_reference()
+	if player:
+		var distance = global_position.distance_to(player.global_position)
+		if distance > interaction_radius:
+			return false
 
 	# Prevent rapid multiple interactions
 	if is_container_open:
@@ -325,8 +214,6 @@ func interact() -> bool:
 		call_deferred("_delayed_setup")
 		return false
 
-	# Set a brief flag to prevent multiple rapid interactions
-	is_container_open = true
 	_open_container_window()
 	return true
 
@@ -371,9 +258,9 @@ func _open_container_window():
 	# Add to scene via UIManager or fallback
 	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
 	if ui_managers.size() > 0:
-		var ui_mgr = ui_managers[0]
-		if ui_mgr.has_method("add_tearoff_window"):
-			ui_mgr.add_tearoff_window(container_window)
+		var ui_manager_ref = ui_managers[0]
+		if ui_manager_ref.has_method("add_tearoff_window"):
+			ui_manager_ref.add_tearoff_window(container_window)
 	else:
 		# Fallback: create canvas layer
 		var canvas = CanvasLayer.new()
@@ -432,6 +319,10 @@ func _on_container_window_closed():
 	"""Handle container window being closed"""
 	is_container_open = false
 
+	# Save the container data when window closes
+	if inventory_manager and inventory_manager.has_method("save_inventory"):
+		inventory_manager.save_inventory()
+
 	# Clean up external container registration
 	if container_window and is_instance_valid(container_window):
 		container_window.remove_from_group("external_container_windows")
@@ -453,18 +344,8 @@ func _on_container_window_closed():
 func close_container():
 	"""Manually close the container window"""
 	if container_window and is_instance_valid(container_window):
-		# Disconnect signal first
-		if container_window.has_signal("window_closed") and container_window.window_closed.is_connected(_on_container_window_closed):
-			container_window.window_closed.disconnect(_on_container_window_closed)
-
-		# Close the window
-		if container_window.has_method("close_window"):
-			container_window.close_window()
-		else:
-			container_window.queue_free()
-
-		# Handle cleanup manually since signal is disconnected
-		_on_container_window_closed()
+		# Queue free to trigger proper cleanup and signal emission
+		container_window.queue_free()
 
 
 func get_container() -> InventoryContainer_Base:
@@ -490,13 +371,7 @@ func add_item_to_container(item: InventoryItem_Base) -> bool:
 	if not inventory_container:
 		return false
 
-	var result = inventory_container.add_item(item)
-
-	# Immediately save if persistent
-	if result and persistent and inventory_manager:
-		inventory_manager.save_inventory()
-
-	return result
+	return inventory_container.add_item(item)
 
 
 func remove_item_from_container(item: InventoryItem_Base) -> bool:
@@ -504,13 +379,7 @@ func remove_item_from_container(item: InventoryItem_Base) -> bool:
 	if not inventory_container:
 		return false
 
-	var result = inventory_container.remove_item(item)
-
-	# Immediately save if persistent
-	if result and persistent and inventory_manager:
-		inventory_manager.save_inventory()
-
-	return result
+	return inventory_container.remove_item(item)
 
 
 func get_container_data() -> Dictionary:

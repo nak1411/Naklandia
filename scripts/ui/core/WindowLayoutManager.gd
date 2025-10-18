@@ -411,10 +411,12 @@ func save_tearoff_window_states():
 	var tearoff_windows: Array[Window_Base] = []
 	for window in all_windows:
 		var window_type = window.get_meta("window_type", "")
-		if window_type == "tearoff":
+		# Skip interactable container windows - they should not be saved
+		var is_interactable = window.get_meta("is_interactable_container", false)
+		if window_type == "tearoff" and not is_interactable:
 			tearoff_windows.append(window)
 
-	# ALWAYS clear old tearoff sections and rebuild them
+	# ALWAYS clear old tearoff sections and rebuild from scratch
 	_clear_tearoff_sections(config)
 
 	# Save currently open tearoff windows
@@ -504,6 +506,10 @@ func _restore_tearoff_window(config: ConfigFile, section: String) -> bool:
 	# Find the container in inventory manager
 	var container = inventory_manager.get_container(container_id)
 	if not container:
+		return false
+
+	# Skip interactable containers (they have requires_docking = true)
+	if container.get("requires_docking") == true:
 		return false
 
 	# Get saved properties
