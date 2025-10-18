@@ -102,6 +102,7 @@ extends Node3D
 
 var offsets: Array[Vector3]
 var last_pos: Vector3 = Vector3.ZERO
+var last_restart_pos: Vector3 = Vector3.ZERO
 var particle_nodes: Array[GPUParticles3D]
 
 
@@ -118,28 +119,53 @@ func _notification(what: int) -> void:
 		_destroy_grid()
 
 
-func _physics_process(delta: float) -> void:
+func _physics_process(_delta: float) -> void:
 	if not terrain:
+		print("[GRASS DEBUG] No terrain found, disabling physics process")
 		set_physics_process(false)
 		return
 
+	if not process_material or not process_material.get_rid().is_valid():
+		print("[GRASS DEBUG] No valid process_material")
+		return
+
 	var camera: Camera3D = terrain.get_camera()
+	var camera_source: String = "terrain.get_camera()"
 
 	# In editor, try to get editor camera if terrain camera is null
 	if not camera and Engine.is_editor_hint():
 		var vp := get_viewport()
 		if vp:
 			camera = vp.get_camera_3d()
+			camera_source = "editor camera"
+
+	# Fallback: try to find any Camera3D in the scene
+	if not camera:
+		camera = get_viewport().get_camera_3d()
+		camera_source = "viewport camera"
+
+	# If still no camera, try to find player camera by searching the scene tree
+	if not camera:
+		var root = get_tree().root
+		camera = _find_camera_in_children(root)
+		camera_source = "scene tree search"
 
 	if not camera:
-		return
-
-	if not process_material or not process_material.get_rid().is_valid():
+		print("[GRASS DEBUG] No camera found!")
 		return
 
 	var cam_pos: Vector3 = camera.global_position
 
-	# Always update camera position every frame
+	# Debug output every 60 frames (~1 second at 60fps)
+	if Engine.get_physics_frames() % 60 == 0:
+		print("[GRASS DEBUG] Camera source: ", camera_source)
+		print("[GRASS DEBUG] Camera position: ", cam_pos)
+		print("[GRASS DEBUG] max_dist: ", process_material.get_shader_parameter("max_dist"))
+		print("[GRASS DEBUG] Last grid reposition at: ", last_pos)
+		print("[GRASS DEBUG] Distance since last reposition: ", last_pos.distance_to(cam_pos))
+
+	# Always update camera position every frame using both methods for reliability
+	process_material.set_shader_parameter("camera_position", cam_pos)
 	RenderingServer.material_set_param(process_material.get_rid(), "camera_position", cam_pos)
 
 	# Only reposition grid when camera moves more than 1 unit
@@ -147,8 +173,19 @@ func _physics_process(delta: float) -> void:
 		var snapped_pos: Vector3 = cam_pos.snapped(Vector3.ONE)
 		_position_grid(snapped_pos)
 		last_pos = cam_pos
+		print("[GRASS DEBUG] Grid repositioned to: ", snapped_pos)
 
 	_update_process_parameters()
+
+
+func _find_camera_in_children(node: Node) -> Camera3D:
+	if node is Camera3D:
+		return node
+	for child in node.get_children():
+		var cam = _find_camera_in_children(child)
+		if cam:
+			return cam
+	return null
 
 
 func _create_grid() -> void:
@@ -170,7 +207,7 @@ func _create_grid() -> void:
 		for z in range(-half_grid, half_grid + 1):
 			#var ring: int = maxi(maxi(absi(x), absi(z)), 0)
 			var particle_node = GPUParticles3D.new()
-			particle_node.lifetime = 600.0
+			particle_node.lifetime = 2.0  # Reduced from 600.0 so culling updates more frequently
 			particle_node.amount = amount
 			particle_node.explosiveness = 1.0
 			particle_node.amount_ratio = 1.0
@@ -234,4 +271,13 @@ func _update_process_parameters() -> void:
 			RenderingServer.material_set_param(process_rid, "_color_maps", terrain.data.get_color_maps_rid())
 			RenderingServer.material_set_param(process_rid, "instance_spacing", instance_spacing)
 			RenderingServer.material_set_param(process_rid, "instance_rows", rows)
-			RenderingServer.material_set_param(process_rid, "max_dist", min_draw_distance)
+
+			# Update max_dist using both methods
+			var calculated_dist: float = float(cell_width * grid_width) * 0.5
+			process_material.set_shader_parameter("max_dist", calculated_dist)
+			RenderingServer.material_set_param(process_rid, "max_dist", calculated_dist)
+
+			# Debug output every 60 frames
+			if Engine.get_physics_frames() % 60 == 0:
+				print("[GRASS DEBUG] Updating max_dist to: ", calculated_dist, " (cell_width=", cell_width, ", grid_width=", grid_width, ")")
+				print("[GRASS DEBUG] min_draw_distance property: ", min_draw_distance)
