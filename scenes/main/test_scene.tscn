@@ -110,7 +110,6 @@ _shader_parameters = {
 world_background = 2
 auto_shader = true
 dual_scaling = true
-show_region_grid = true
 
 [sub_resource type="RibbonTrailMesh" id="RibbonTrailMesh_88wbq"]
 shape = 0
@@ -186,9 +185,7 @@ data_directory = "res://demo/data"
 material = SubResource("Terrain3DMaterial_m0jab")
 assets = ExtResource("4_33h87")
 label_size = 33
-show_grid = true
 collision_mask = 3
-show_region_grid = true
 top_level = true
 metadata/_edit_lock_ = true
 
