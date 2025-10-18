@@ -196,7 +196,6 @@ func _position_grid(pos: Vector3) -> void:
 		var snap = Vector3(pos.x, 0, pos.z).snapped(Vector3.ONE) + offsets[i]
 		node.global_position = (snap / instance_spacing).round() * instance_spacing
 		node.reset_physics_interpolation()
-		node.restart(true)  # keep the same seed.
 
 
 func _update_process_parameters() -> void:

@@ -37,9 +37,12 @@ last_shadow_lod = 3
 name = "Cliff"
 albedo_texture = ExtResource("2_y3ibi")
 normal_texture = ExtResource("3_adagb")
-normal_depth = 1.0
+normal_depth = 1.777
 ao_strength = 2.0
-roughness = -0.05
+roughness = 0.686
+uv_scale = 0.3
+detiling_rotation = 0.04
+detiling_shift = 0.13
 
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_od0q7"]
 name = "Grass"
@@ -47,10 +50,12 @@ id = 1
 albedo_color = Color(0.67451, 0.74902, 0.686275, 1)
 albedo_texture = ExtResource("4_e6edf")
 normal_texture = ExtResource("5_cmr6o")
-normal_depth = 1.0
-ao_strength = 2.0
-uv_scale = 0.2
-detiling_rotation = 0.161
+normal_depth = 1.449
+ao_strength = 0.0
+roughness = 1.0
+uv_scale = 0.3
+detiling_rotation = 0.325
+detiling_shift = 0.096
 
 [resource]
 mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_2qf8x"), SubResource("Terrain3DMeshAsset_or12t")])
