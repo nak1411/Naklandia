@@ -119,17 +119,36 @@ func _notification(what: int) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if terrain:
-		var camera: Camera3D = terrain.get_camera()
-		if camera:
-			if last_pos.distance_squared_to(camera.global_position) > 1.0:
-				var pos: Vector3 = camera.global_position.snapped(Vector3.ONE)
-				_position_grid(pos)
-				RenderingServer.material_set_param(process_material.get_rid(), "camera_position", pos)
-				last_pos = camera.global_position
-		_update_process_parameters()
-	else:
+	if not terrain:
 		set_physics_process(false)
+		return
+
+	var camera: Camera3D = terrain.get_camera()
+
+	# In editor, try to get editor camera if terrain camera is null
+	if not camera and Engine.is_editor_hint():
+		var vp := get_viewport()
+		if vp:
+			camera = vp.get_camera_3d()
+
+	if not camera:
+		return
+
+	if not process_material or not process_material.get_rid().is_valid():
+		return
+
+	var cam_pos: Vector3 = camera.global_position
+
+	# Always update camera position every frame
+	RenderingServer.material_set_param(process_material.get_rid(), "camera_position", cam_pos)
+
+	# Only reposition grid when camera moves more than 1 unit
+	if last_pos.distance_squared_to(cam_pos) > 1.0:
+		var snapped_pos: Vector3 = cam_pos.snapped(Vector3.ONE)
+		_position_grid(snapped_pos)
+		last_pos = cam_pos
+
+	_update_process_parameters()
 
 
 func _create_grid() -> void:

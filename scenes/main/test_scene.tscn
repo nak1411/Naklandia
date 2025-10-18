@@ -812,12 +812,11 @@ metadata/_edit_lock_ = true
 
 [node name="Terrain3DParticles" parent="Level/Terrain3D" node_paths=PackedStringArray("terrain") instance=ExtResource("5_w0gou")]
 terrain = NodePath("..")
-instance_spacing = 0.078125
 cell_width = 32.0
-rows = 409
-amount = 167281
+rows = 128
+amount = 16384
 min_draw_distance = 80.0
-particle_count = 4182025
+particle_count = 409600
 
 [node name="TestObjects" type="Node" parent="."]
 
