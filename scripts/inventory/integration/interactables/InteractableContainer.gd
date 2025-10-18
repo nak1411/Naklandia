@@ -221,16 +221,20 @@ func interact() -> bool:
 func _open_container_window():
 	"""Open container window using the existing tearoff system"""
 	# Prevent multiple windows from opening
-	if container_window and is_instance_valid(container_window):
+	if container_window and is_instance_valid(container_window) and not container_window.is_queued_for_deletion():
 		container_window.visible = true
 		container_window.move_to_front()
 		return
+
+	# Clear invalid reference
+	if container_window and (not is_instance_valid(container_window) or container_window.is_queued_for_deletion()):
+		container_window = null
 
 	# Also check if tearoff manager already has this container
 	var main_inventory_window = await _get_main_inventory_window()
 	if main_inventory_window and main_inventory_window.tearoff_manager:
 		var existing_tearoff = main_inventory_window.tearoff_manager.get_tearoff_window(inventory_container)
-		if existing_tearoff and is_instance_valid(existing_tearoff):
+		if existing_tearoff and is_instance_valid(existing_tearoff) and not existing_tearoff.is_queued_for_deletion():
 			container_window = existing_tearoff
 			is_container_open = true
 			container_window.move_to_front()
@@ -271,6 +275,10 @@ func _open_container_window():
 
 	# Show the window
 	container_window.show_window()
+
+	# Mark as interactable container window (don't save window state)
+	container_window.set_meta("is_interactable_container", true)
+	container_window.set_meta("interactable_container_id", container_id)
 
 	# Register as external container window for cross-window drops
 	container_window.add_to_group("external_container_windows")
@@ -317,19 +325,24 @@ func _get_main_inventory_window() -> InventoryWindow:
 
 func _on_container_window_closed():
 	"""Handle container window being closed"""
+	# Clear state
 	is_container_open = false
 
 	# Save the container data when window closes
 	if inventory_manager and inventory_manager.has_method("save_inventory"):
 		inventory_manager.save_inventory()
 
-	# Clean up external container registration
+	# Clean up external container registration if window still exists
 	if container_window and is_instance_valid(container_window):
-		container_window.remove_from_group("external_container_windows")
+		if container_window.is_in_group("external_container_windows"):
+			container_window.remove_from_group("external_container_windows")
 
 		# Disconnect signal if connected
 		if container_window.has_signal("window_closed") and container_window.window_closed.is_connected(_on_container_window_closed):
 			container_window.window_closed.disconnect(_on_container_window_closed)
+
+	# Clear reference
+	container_window = null
 
 	# Re-enable player input
 	var player = get_player_reference()
@@ -338,14 +351,18 @@ func _on_container_window_closed():
 
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	container_closed.emit()
-	container_window = null
 
 
 func close_container():
 	"""Manually close the container window"""
 	if container_window and is_instance_valid(container_window):
+		# Clear state immediately
+		is_container_open = false
+		var window_to_close = container_window
+		container_window = null
+
 		# Queue free to trigger proper cleanup and signal emission
-		container_window.queue_free()
+		window_to_close.queue_free()
 
 
 func get_container() -> InventoryContainer_Base:
