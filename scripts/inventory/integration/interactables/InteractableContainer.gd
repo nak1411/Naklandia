@@ -230,9 +230,14 @@ func _open_container_window():
 	if container_window and (not is_instance_valid(container_window) or container_window.is_queued_for_deletion()):
 		container_window = null
 
-	# Also check if tearoff manager already has this container
+	# Get main inventory window
 	var main_inventory_window = await _get_main_inventory_window()
-	if main_inventory_window and main_inventory_window.tearoff_manager:
+	if not main_inventory_window:
+		push_error("Cannot find main inventory window!")
+		return
+
+	# Check if tearoff manager already has this container
+	if main_inventory_window.tearoff_manager:
 		var existing_tearoff = main_inventory_window.tearoff_manager.get_tearoff_window(inventory_container)
 		if existing_tearoff and is_instance_valid(existing_tearoff) and not existing_tearoff.is_queued_for_deletion():
 			container_window = existing_tearoff
@@ -240,41 +245,31 @@ func _open_container_window():
 			container_window.move_to_front()
 			return
 
-	if not main_inventory_window:
-		push_error("Cannot find main inventory window!")
-		return
+	# Use tearoff manager to create window properly
+	if main_inventory_window.tearoff_manager:
+		# Center on screen
+		var viewport = get_viewport()
+		var window_pos = Vector2(100, 100)
+		if viewport:
+			var screen_size = viewport.get_visible_rect().size
+			var window_size = Vector2(500, 400)
+			window_pos = (screen_size - window_size) / 2
 
-	# Create new container window through tearoff manager
-	# The tearoff manager doesn't have a public API for this, so we create the window directly
-	container_window = ContainerTearOffWindow.new(inventory_container, main_inventory_window)
-	container_window.name = "InteractableContainer_" + container_id
+		# Create through tearoff manager (prevents duplicates)
+		main_inventory_window.tearoff_manager._create_tearoff_window(inventory_container, window_pos, Vector2(500, 400))
 
-	# Setup the window
-	container_window.set_inventory_manager(inventory_manager)
+		# Wait a frame for window to be created
+		await get_tree().process_frame
 
-	# Position at center of screen
-	var viewport = get_viewport()
-	if viewport:
-		var screen_size = viewport.get_visible_rect().size
-		var window_size = Vector2(500, 400)
-		container_window.position = (screen_size - window_size) / 2
+		# Get the newly created window
+		container_window = main_inventory_window.tearoff_manager.get_tearoff_window(inventory_container)
 
-	# Add to scene via UIManager or fallback
-	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
-	if ui_managers.size() > 0:
-		var ui_manager_ref = ui_managers[0]
-		if ui_manager_ref.has_method("add_tearoff_window"):
-			ui_manager_ref.add_tearoff_window(container_window)
+		if not container_window:
+			push_error("Failed to create tearoff window through manager!")
+			return
 	else:
-		# Fallback: create canvas layer
-		var canvas = CanvasLayer.new()
-		canvas.name = "InteractableContainerLayer"
-		canvas.layer = 100
-		get_tree().current_scene.add_child(canvas)
-		canvas.add_child(container_window)
-
-	# Show the window
-	container_window.show_window()
+		push_error("Tearoff manager not available!")
+		return
 
 	# Mark as interactable container window (don't save window state)
 	container_window.set_meta("is_interactable_container", true)
