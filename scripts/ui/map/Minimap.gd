@@ -35,9 +35,36 @@ func _setup_minimap_viewport():
 	render_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(render_viewport)
 
+	# Create simplified environment for minimap (no shadows, flat unlighted color)
+	var minimap_env = Environment.new()
+	minimap_env.background_mode = Environment.BG_COLOR
+	minimap_env.background_color = Color(0.1, 0.1, 0.1, 1.0)
+	minimap_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	minimap_env.ambient_light_color = Color(1.0, 1.0, 1.0, 1.0)
+	minimap_env.ambient_light_energy = 100.0
+	minimap_env.ssao_enabled = false
+	minimap_env.sdfgi_enabled = false
+	minimap_env.glow_enabled = false
+	minimap_env.volumetric_fog_enabled = false
+	minimap_env.ssil_enabled = false
+	minimap_env.ssr_enabled = false
+
+	var world_env = WorldEnvironment.new()
+	world_env.environment = minimap_env
+	render_viewport.add_child(world_env)
+
+	# Add directional light with no shadows for flat unlit appearance
+	var dir_light = DirectionalLight3D.new()
+	dir_light.light_energy = 1.0
+	dir_light.shadow_enabled = false
+	dir_light.rotation_degrees = Vector3(-90, 0, 0)
+	render_viewport.add_child(dir_light)
+
 	minimap_camera = Camera3D.new()
 	minimap_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	minimap_camera.size = 50.0 / zoom_level
+	# Cull mask: exclude layer 2 (grass particles)
+	minimap_camera.cull_mask = 0b11111111111111111101
 	render_viewport.add_child(minimap_camera)
 
 	minimap_texture = ImageTexture.new()

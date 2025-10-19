@@ -27,6 +27,8 @@ var camera_pivot: Node3D
 # Rendering
 var render_viewport: SubViewport
 var map_camera: Camera3D
+var directional_light: DirectionalLight3D
+var light_original_shadow_state: bool = true
 
 # UI Elements
 var map_container: Control
@@ -88,7 +90,7 @@ func _setup_map_viewport():
 	render_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(render_viewport)
 
-	# Create simplified environment for map (no shadows, no post-processing)
+	# Create simplified environment for map (no shadows, flat unlighted color)
 	var map_env = Environment.new()
 	map_env.background_mode = Environment.BG_COLOR
 	map_env.background_color = Color(0.05, 0.05, 0.05, 1.0)
@@ -99,6 +101,8 @@ func _setup_map_viewport():
 	map_env.sdfgi_enabled = false
 	map_env.glow_enabled = false
 	map_env.volumetric_fog_enabled = false
+	map_env.ssil_enabled = false
+	map_env.ssr_enabled = false
 
 	var world_env = WorldEnvironment.new()
 	world_env.environment = map_env
@@ -111,7 +115,25 @@ func _setup_map_viewport():
 	map_camera.cull_mask = 0b11111111111111111101
 	render_viewport.add_child(map_camera)
 
+	# Find the DirectionalLight3D in the scene
+	_find_directional_light()
+
 	current_zoom = default_zoom
+
+
+func _find_directional_light():
+	var scene_root = get_tree().current_scene
+	directional_light = _find_node_by_type(scene_root, "DirectionalLight3D")
+
+
+func _find_node_by_type(node: Node, type_name: String) -> Node:
+	if node.get_class() == type_name:
+		return node
+	for child in node.get_children():
+		var result = _find_node_by_type(child, type_name)
+		if result:
+			return result
+	return null
 
 
 func _find_player_reference():
@@ -263,6 +285,11 @@ func open_map():
 		var look_target = Vector3(player_pos.x, 0, player_pos.z)
 		map_camera.look_at(look_target, Vector3.BACK)
 
+	# Disable shadows on the main DirectionalLight3D
+	if directional_light:
+		light_original_shadow_state = directional_light.shadow_enabled
+		directional_light.shadow_enabled = false
+
 	map_opened.emit()
 
 
@@ -271,6 +298,11 @@ func close_map():
 	visible = false
 	is_dragging = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+	# Restore shadows on the main DirectionalLight3D
+	if directional_light:
+		directional_light.shadow_enabled = light_original_shadow_state
+
 	map_closed.emit()
 
 
