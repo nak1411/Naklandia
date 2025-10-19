@@ -33,6 +33,11 @@ var drag_start_pos: Vector2 = Vector2.ZERO
 var drag_start_offset: Vector2 = Vector2.ZERO
 var right_click_pos: Vector2 = Vector2.ZERO
 
+# Markers
+var map_markers: Array[Dictionary] = []
+var marker_color: Color = Color(1.0, 0.0, 0.0, 1.0)
+var marker_size: float = 8.0
+
 # References
 var player: Node3D
 var camera: Camera3D
@@ -194,6 +199,9 @@ func _draw():
 	if player:
 		_draw_player_marker()
 
+	# Draw map markers
+	_draw_map_markers()
+
 
 func _draw_grid():
 	if not map_camera:
@@ -337,6 +345,9 @@ func _show_context_menu(global_pos: Vector2):
 		context_menu.add_menu_item("reset_view", "Reset View")
 		context_menu.add_separator()
 		context_menu.add_menu_item("place_marker", "Place Marker Here")
+		if not map_markers.is_empty():
+			context_menu.add_menu_item("remove_last_marker", "Remove Last Marker")
+			context_menu.add_menu_item("clear_markers", "Clear All Markers")
 
 		context_menu.show_context_menu(global_pos, {"click_position": right_click_pos})
 
@@ -356,6 +367,10 @@ func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _co
 			_on_reset_pressed()
 		"place_marker":
 			_place_marker_at_position(_context_data.get("click_position", Vector2.ZERO))
+		"remove_last_marker":
+			_remove_last_marker()
+		"clear_markers":
+			_clear_all_markers()
 
 
 func _center_on_player():
@@ -374,15 +389,66 @@ func _place_marker_at_position(click_pos: Vector2):
 	var camera_pos = map_camera.global_position
 	var pixels_per_unit = size.y / map_camera.size
 
-	# Calculate offset from center
+	# Calculate offset from center (inverse of drawing formula)
 	var offset_x = (size.x / 2.0 - click_pos.x) / pixels_per_unit
 	var offset_z = (size.y / 2.0 - click_pos.y) / pixels_per_unit
 
-	var world_x = camera_pos.x - offset_x
-	var world_z = camera_pos.z - offset_z
+	var world_x = camera_pos.x + offset_x
+	var world_z = camera_pos.z + offset_z
 
-	# Placeholder for marker placement logic
-	pass
+	# Create marker
+	var marker = {"position": Vector3(world_x, 0, world_z), "label": "Marker " + str(map_markers.size() + 1), "color": marker_color}
+
+	map_markers.append(marker)
+	queue_redraw()
+
+
+func _draw_map_markers():
+	if not map_camera or map_markers.is_empty():
+		return
+
+	var camera_pos = map_camera.global_position
+	var pixels_per_unit = size.y / map_camera.size
+
+	for marker in map_markers:
+		var marker_pos: Vector3 = marker.position
+		var marker_label: String = marker.label
+		var marker_col: Color = marker.get("color", marker_color)
+
+		# Calculate screen position
+		var offset_x = marker_pos.x - camera_pos.x
+		var offset_z = marker_pos.z - camera_pos.z
+
+		var screen_x = size.x / 2.0 - offset_x * pixels_per_unit
+		var screen_y = size.y / 2.0 - offset_z * pixels_per_unit
+
+		# Only draw if visible on screen
+		if screen_x >= -marker_size and screen_x <= size.x + marker_size and screen_y >= -marker_size and screen_y <= size.y + marker_size:
+			var center = Vector2(screen_x, screen_y)
+
+			# Draw marker cross
+			var half_size = marker_size
+			draw_line(center + Vector2(-half_size, 0), center + Vector2(half_size, 0), marker_col, 2.0)
+			draw_line(center + Vector2(0, -half_size), center + Vector2(0, half_size), marker_col, 2.0)
+
+			# Draw marker circle
+			draw_circle(center, marker_size, marker_col, false, 2.0)
+
+			# Draw label
+			if current_zoom > 0.08:
+				var label_pos = center + Vector2(marker_size + 5, 5)
+				draw_string(ThemeDB.fallback_font, label_pos, marker_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, marker_col)
+
+
+func _remove_last_marker():
+	if not map_markers.is_empty():
+		map_markers.pop_back()
+		queue_redraw()
+
+
+func _clear_all_markers():
+	map_markers.clear()
+	queue_redraw()
 
 
 func _on_close_pressed():
