@@ -33,13 +33,11 @@ func _setup_minimap_viewport():
 	render_viewport.size = Vector2i(minimap_size)
 	render_viewport.transparent_bg = true
 	render_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	render_viewport.debug_draw = SubViewport.DEBUG_DRAW_UNSHADED
 	add_child(render_viewport)
 
 	minimap_camera = Camera3D.new()
 	minimap_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	minimap_camera.size = 50.0 / zoom_level
-	minimap_camera.cull_mask = 1
 	render_viewport.add_child(minimap_camera)
 
 	minimap_texture = ImageTexture.new()
@@ -59,7 +57,8 @@ func _process(_delta):
 	if player and minimap_camera:
 		var player_pos = player.global_position
 		minimap_camera.global_position = Vector3(player_pos.x, player_pos.y + 50, player_pos.z)
-		minimap_camera.look_at(player_pos, Vector3.UP)
+		var look_target = Vector3(player_pos.x, player_pos.y, player_pos.z)
+		minimap_camera.look_at(look_target, Vector3.BACK)
 
 	queue_redraw()
 
@@ -84,10 +83,10 @@ func _draw_player_marker(center: Vector2):
 	var rotation: float = 0.0
 
 	if player:
-		rotation = -player.global_rotation.y - PI - PI / 2
+		rotation = -player.global_rotation.y - PI
 
 	var points = PackedVector2Array(
-		[center + Vector2(-half_size, half_size).rotated(rotation), center + Vector2(half_size, half_size).rotated(rotation), center + Vector2(0, -half_size * 1.5).rotated(rotation)]
+		[center + Vector2(0, -half_size * 1.5).rotated(rotation), center + Vector2(-half_size, half_size).rotated(rotation), center + Vector2(half_size, half_size).rotated(rotation)]
 	)
 
 	draw_colored_polygon(points, player_color)

@@ -3,6 +3,7 @@ extends Control
 signal map_closed
 signal map_opened
 
+# Map configuration
 @export var default_zoom: float = 0.1
 @export var min_zoom: float = 0.05
 @export var max_zoom: float = 0.5
@@ -10,25 +11,24 @@ signal map_opened
 @export var background_color: Color = Color(0.05, 0.05, 0.05, 0.95)
 @export var player_color: Color = Color(0.0, 1.0, 0.0, 1.0)
 @export var player_marker_size: float = 12.0
-@export var brightness_boost: float = 2.5
-@export var contrast: float = 0.4
 
+# State
 var is_map_open: bool = false
 var current_zoom: float = 0.1
 var is_dragging: bool = false
 var drag_start_pos: Vector2 = Vector2.ZERO
 var drag_start_offset: Vector2 = Vector2.ZERO
 
+# References
 var player: Node3D
 var camera: Camera3D
 var camera_pivot: Node3D
 
+# Rendering
 var render_viewport: SubViewport
 var map_camera: Camera3D
-var viewport_display: TextureRect
-var map_shader: ShaderMaterial
-var overlay: Control
 
+# UI Elements
 @onready var map_container: Control = $MapContainer
 @onready var close_button: Button = $CloseButton
 @onready var zoom_in_button: Button = $ZoomInButton
@@ -86,102 +86,14 @@ func _setup_map_viewport():
 	render_viewport.size = Vector2i(get_viewport_rect().size)
 	render_viewport.transparent_bg = true
 	render_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	render_viewport.debug_draw = SubViewport.DEBUG_DRAW_UNSHADED
 	add_child(render_viewport)
 
 	map_camera = Camera3D.new()
 	map_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	map_camera.size = 100.0 / default_zoom
-	map_camera.cull_mask = 1
 	render_viewport.add_child(map_camera)
 
-	_setup_map_shader()
-
 	current_zoom = default_zoom
-
-
-func _setup_map_shader():
-	var shader_code = """shader_type canvas_item;
-
-uniform float brightness_boost = 1.5;
-uniform float contrast = 1.2;
-
-vec3 get_terrain_color(float luminance) {
-	vec3 water = vec3(0.2, 0.3, 0.5);
-	vec3 sand = vec3(0.8, 0.75, 0.6);
-	vec3 grass = vec3(0.4, 0.5, 0.3);
-	vec3 dirt = vec3(0.5, 0.4, 0.3);
-	vec3 rock = vec3(0.55, 0.55, 0.55);
-	vec3 snow = vec3(0.85, 0.85, 0.9);
-	
-	vec3 color;
-	
-	if (luminance < 0.2) {
-		color = mix(water, sand, smoothstep(0.0, 0.2, luminance));
-	} else if (luminance < 0.4) {
-		color = mix(sand, grass, smoothstep(0.2, 0.4, luminance));
-	} else if (luminance < 0.6) {
-		color = mix(grass, dirt, smoothstep(0.4, 0.6, luminance));
-	} else if (luminance < 0.75) {
-		color = mix(dirt, rock, smoothstep(0.6, 0.75, luminance));
-	} else {
-		color = mix(rock, snow, smoothstep(0.75, 1.0, luminance));
-	}
-	
-	return color;
-}
-
-void fragment() {
-	vec4 tex = texture(TEXTURE, UV);
-	float lum = dot(tex.rgb, vec3(0.99, 0.187, 0.114));
-	lum = (lum - 0.5) * contrast + 0.5;
-	lum *= brightness_boost;
-	lum = clamp(lum, 0.0, 1.0);
-	COLOR = vec4(get_terrain_color(lum), 1.0);
-}
-"""
-
-	var terrain_shader = Shader.new()
-	terrain_shader.code = shader_code
-	map_shader = ShaderMaterial.new()
-	map_shader.shader = terrain_shader
-	map_shader.set_shader_parameter("brightness_boost", brightness_boost)
-	map_shader.set_shader_parameter("contrast", contrast)
-
-	viewport_display = TextureRect.new()
-	viewport_display.material = map_shader
-	viewport_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	viewport_display.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	viewport_display.stretch_mode = TextureRect.STRETCH_SCALE
-	map_container.add_child(viewport_display)
-
-	overlay = Control.new()
-	overlay.name = "Overlay"
-	overlay.anchor_right = 1.0
-	overlay.anchor_bottom = 1.0
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.draw.connect(_draw_overlay)
-	map_container.add_child(overlay)
-
-	var shader = Shader.new()
-	shader.code = shader_code
-	map_shader = ShaderMaterial.new()
-	map_shader.shader = shader
-
-	viewport_display = TextureRect.new()
-	viewport_display.material = map_shader
-	viewport_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	viewport_display.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	viewport_display.stretch_mode = TextureRect.STRETCH_SCALE
-	map_container.add_child(viewport_display)
-
-	overlay = Control.new()
-	overlay.name = "Overlay"
-	overlay.anchor_right = 1.0
-	overlay.anchor_bottom = 1.0
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.draw.connect(_draw_overlay)
-	map_container.add_child(overlay)
 
 
 func _find_player_reference():
@@ -210,14 +122,7 @@ func _input(event):
 
 func _process(_delta):
 	if is_map_open:
-		# Update shader parameters in case they changed
-		if map_shader:
-			map_shader.set_shader_parameter("brightness_boost", brightness_boost)
-			map_shader.set_shader_parameter("contrast", contrast)
-
 		queue_redraw()
-		if overlay:
-			overlay.queue_redraw()
 
 
 func _draw():
@@ -227,20 +132,14 @@ func _draw():
 	var rect = Rect2(Vector2.ZERO, size)
 	draw_rect(rect, background_color, true)
 
-	if render_viewport and render_viewport.get_texture() and viewport_display:
-		viewport_display.texture = render_viewport.get_texture()
-		viewport_display.size = size
-		viewport_display.position = Vector2.ZERO
+	if render_viewport and render_viewport.get_texture():
+		draw_texture_rect(render_viewport.get_texture(), rect, false)
+
+	if player:
+		_draw_player_marker()
 
 
-func _draw_overlay():
-	if not is_map_open or not player:
-		return
-
-	_draw_player_marker_on(overlay)
-
-
-func _draw_player_marker_on(control: Control):
+func _draw_player_marker():
 	if not player or not map_camera:
 		return
 
@@ -260,14 +159,15 @@ func _draw_player_marker_on(control: Control):
 	var rotation: float = 0.0
 
 	if player:
-		rotation = -player.global_rotation.y - PI - PI / 2
+		rotation = -player.global_rotation.y - PI
 
 	var points = PackedVector2Array(
-		[center + Vector2(-half_size, half_size).rotated(rotation), center + Vector2(half_size, half_size).rotated(rotation), center + Vector2(0, -half_size * 1.5).rotated(rotation)]
+		[center + Vector2(0, -half_size * 1.5).rotated(rotation), center + Vector2(-half_size, half_size).rotated(rotation), center + Vector2(half_size, half_size).rotated(rotation)]
 	)
 
-	control.draw_colored_polygon(points, player_color)
-	control.draw_circle(center, player_marker_size + 2, Color(1.0, 1.0, 1.0, 0.5), false, 2.0)
+	draw_colored_polygon(points, player_color)
+
+	draw_circle(center, player_marker_size + 2, Color(1.0, 1.0, 1.0, 0.5), false, 2.0)
 
 
 func _on_map_gui_input(event):
@@ -294,7 +194,8 @@ func _on_map_gui_input(event):
 			var new_x = drag_start_offset.x - delta.y / pixels_per_unit
 
 			map_camera.global_position = Vector3(new_x, map_camera.global_position.y, new_z)
-			map_camera.look_at(Vector3(new_x, 0, new_z), Vector3.UP)
+			var look_target = Vector3(new_x, 0, new_z)
+			map_camera.look_at(look_target, Vector3.BACK)
 
 
 func _on_close_pressed():
@@ -313,7 +214,8 @@ func _on_reset_pressed():
 	if player and map_camera:
 		var player_pos = player.global_position
 		map_camera.global_position = Vector3(player_pos.x, map_camera.global_position.y, player_pos.z)
-		map_camera.look_at(player_pos, Vector3.UP)
+		var look_target = Vector3(player_pos.x, 0, player_pos.z)
+		map_camera.look_at(look_target, Vector3.BACK)
 
 	current_zoom = default_zoom
 	if map_camera:
@@ -340,7 +242,8 @@ func open_map():
 	if player and map_camera:
 		var player_pos = player.global_position
 		map_camera.global_position = Vector3(player_pos.x, player_pos.y + 100, player_pos.z)
-		map_camera.look_at(player_pos, Vector3.UP)
+		var look_target = Vector3(player_pos.x, 0, player_pos.z)
+		map_camera.look_at(look_target, Vector3.BACK)
 
 	map_opened.emit()
 
