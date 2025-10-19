@@ -38,6 +38,10 @@ var map_markers: Array[Dictionary] = []
 var marker_color: Color = Color(1.0, 0.0, 0.0, 1.0)
 var marker_size: float = 8.0
 
+# Waypoints
+var waypoint_nodes: Array[Node3D] = []
+var waypoint_container: Node3D
+
 # References
 var player: Node3D
 var camera: Camera3D
@@ -61,6 +65,7 @@ func _ready():
 	_setup_ui()
 	_setup_map_viewport()
 	_setup_context_menu()
+	call_deferred("_setup_waypoint_container")
 	_find_player_reference()
 	_connect_signals()
 
@@ -151,6 +156,33 @@ func _setup_context_menu():
 	context_menu.add_menu_item("place_marker", "Place Marker Here")
 
 
+func _setup_waypoint_container():
+	# Find or create waypoint container in the world
+	var existing_container = get_tree().get_first_node_in_group("waypoint_container")
+	if existing_container:
+		waypoint_container = existing_container
+		print("Found existing waypoint container at: ", waypoint_container.get_path())
+	else:
+		# Get the actual game scene (not the UI scene)
+		var scene_root = get_tree().current_scene
+		if not scene_root:
+			scene_root = get_tree().root.get_child(get_tree().root.get_child_count() - 1)
+
+		print("Scene root: ", scene_root.name, " at path: ", scene_root.get_path())
+
+		waypoint_container = Node3D.new()
+		waypoint_container.name = "WaypointContainer"
+		waypoint_container.add_to_group("waypoint_container")
+
+		# Add to the scene root
+		scene_root.add_child(waypoint_container)
+
+		# Verify it was added
+		await get_tree().process_frame
+		print("Created new waypoint container at: ", waypoint_container.get_path())
+		print("Container is in tree: ", waypoint_container.is_inside_tree())
+
+
 func _find_player_reference():
 	var player_node = get_tree().get_first_node_in_group("player")
 	if player_node:
@@ -225,47 +257,33 @@ func _draw_grid():
 
 	# Draw major grid lines
 	if major_grid_spacing > 0:
-		_draw_grid_lines(world_min_x, world_max_x, world_min_z, world_max_z, major_grid_spacing, major_grid_color, major_grid_width, pixels_per_unit, camera_pos, show_grid_labels)
+		_draw_grid_lines(world_min_x, world_max_x, world_min_z, world_max_z, major_grid_spacing, major_grid_color, major_grid_width, pixels_per_unit, camera_pos, true)
 
 
-func _draw_grid_lines(
-	world_min_x: float, world_max_x: float, world_min_z: float, world_max_z: float, spacing: float, color: Color, width: float, pixels_per_unit: float, camera_pos: Vector3, draw_labels: bool
-):
-	# Calculate grid line positions snapped to spacing
-	var start_x = floor(world_min_x / spacing) * spacing
-	var start_z = floor(world_min_z / spacing) * spacing
-
-	# Draw vertical lines (along Z axis)
+func _draw_grid_lines(min_x: float, max_x: float, min_z: float, max_z: float, spacing: float, color: Color, width: float, pixels_per_unit: float, camera_pos: Vector3, show_labels: bool):
+	# Vertical lines (X axis)
+	var start_x = floor(min_x / spacing) * spacing
 	var x = start_x
-	while x <= world_max_x:
-		var offset_x = x - camera_pos.x
-		var screen_x = size.x / 2.0 - offset_x * pixels_per_unit
+	while x <= max_x:
+		var screen_x = size.x / 2.0 - (x - camera_pos.x) * pixels_per_unit
+		draw_line(Vector2(screen_x, 0), Vector2(screen_x, size.y), color, width)
 
-		if screen_x >= 0 and screen_x <= size.x:
-			draw_line(Vector2(screen_x, 0), Vector2(screen_x, size.y), color, width)
-
-			# Draw label for major grid lines
-			if draw_labels:
-				var label_text = str(int(x))
-				var label_pos = Vector2(screen_x + 5, 20)
-				draw_string(ThemeDB.fallback_font, label_pos, label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, grid_label_size, grid_label_color)
+		if show_labels and show_grid_labels:
+			var label = str(int(x))
+			draw_string(ThemeDB.fallback_font, Vector2(screen_x + 5, 15), label, HORIZONTAL_ALIGNMENT_LEFT, -1, grid_label_size, grid_label_color)
 
 		x += spacing
 
-	# Draw horizontal lines (along X axis)
+	# Horizontal lines (Z axis)
+	var start_z = floor(min_z / spacing) * spacing
 	var z = start_z
-	while z <= world_max_z:
-		var offset_z = z - camera_pos.z
-		var screen_y = size.y / 2.0 - offset_z * pixels_per_unit
+	while z <= max_z:
+		var screen_y = size.y / 2.0 - (z - camera_pos.z) * pixels_per_unit
+		draw_line(Vector2(0, screen_y), Vector2(size.x, screen_y), color, width)
 
-		if screen_y >= 0 and screen_y <= size.y:
-			draw_line(Vector2(0, screen_y), Vector2(size.x, screen_y), color, width)
-
-			# Draw label for major grid lines
-			if draw_labels:
-				var label_text = str(int(z))
-				var label_pos = Vector2(5, screen_y - 5)
-				draw_string(ThemeDB.fallback_font, label_pos, label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, grid_label_size, grid_label_color)
+		if show_labels and show_grid_labels:
+			var label = str(int(z))
+			draw_string(ThemeDB.fallback_font, Vector2(5, screen_y - 5), label, HORIZONTAL_ALIGNMENT_LEFT, -1, grid_label_size, grid_label_color)
 
 		z += spacing
 
@@ -274,18 +292,17 @@ func _draw_player_marker():
 	if not player or not map_camera:
 		return
 
-	var player_pos = player.global_position
 	var camera_pos = map_camera.global_position
+	var player_pos = player.global_position
+	var pixels_per_unit = size.y / map_camera.size
 
 	var offset_x = player_pos.x - camera_pos.x
 	var offset_z = player_pos.z - camera_pos.z
 
-	var pixels_per_unit = size.y / map_camera.size
+	var center_x = size.x / 2.0 - offset_x * pixels_per_unit
+	var center_y = size.y / 2.0 - offset_z * pixels_per_unit
 
-	var screen_x = size.x / 2.0 - offset_x * pixels_per_unit
-	var screen_y = size.y / 2.0 - offset_z * pixels_per_unit
-
-	var center = Vector2(screen_x, screen_y)
+	var center = Vector2(center_x, center_y)
 	var half_size = player_marker_size / 2.0
 	var rotation: float = 0.0
 
@@ -396,11 +413,54 @@ func _place_marker_at_position(click_pos: Vector2):
 	var world_x = camera_pos.x + offset_x
 	var world_z = camera_pos.z + offset_z
 
+	# Use player's Y position or a default height
+	var world_y = 0.0
+	if player:
+		world_y = player.global_position.y
+
 	# Create marker
-	var marker = {"position": Vector3(world_x, 0, world_z), "label": "Marker " + str(map_markers.size() + 1), "color": marker_color}
+	var marker = {"position": Vector3(world_x, world_y, world_z), "label": "Marker " + str(map_markers.size() + 1), "color": marker_color}
 
 	map_markers.append(marker)
+
+	# Spawn 3D waypoint (async call)
+	_spawn_waypoint(marker)
+
+	print("Marker placed at: ", marker.position)
+
 	queue_redraw()
+
+
+func _spawn_waypoint(marker_data: Dictionary):
+	if not waypoint_container or not waypoint_container.is_inside_tree():
+		await _setup_waypoint_container()
+
+	print("Spawning waypoint: ", marker_data)
+	print("Waypoint container position: ", waypoint_container.global_position)
+	print("Waypoint container path: ", waypoint_container.get_path())
+	print("Container in tree: ", waypoint_container.is_inside_tree())
+
+	var Waypoint3D = load("res://scripts/ui/map/Waypoint3D.gd")
+	var waypoint = Waypoint3D.new()
+	waypoint.name = "Waypoint_" + str(waypoint_nodes.size())
+
+	# Set position BEFORE adding to scene as local position
+	var target_pos = Vector3(marker_data.position.x, marker_data.position.y + 1.0, marker_data.position.z)
+	waypoint.position = target_pos
+	print("Setting waypoint local position to: ", target_pos)
+
+	# Set waypoint data
+	waypoint.set_waypoint_data(marker_data.label, marker_data.color)
+
+	# Add to scene
+	waypoint_container.add_child(waypoint)
+
+	waypoint_nodes.append(waypoint)
+
+	print("Waypoint local position: ", waypoint.position)
+	print("Waypoint global position: ", waypoint.global_position)
+	print("Waypoint path: ", waypoint.get_path())
+	print("Total waypoints: ", waypoint_nodes.size())
 
 
 func _draw_map_markers():
@@ -443,11 +503,25 @@ func _draw_map_markers():
 func _remove_last_marker():
 	if not map_markers.is_empty():
 		map_markers.pop_back()
+
+		# Remove corresponding waypoint
+		if not waypoint_nodes.is_empty():
+			var waypoint = waypoint_nodes.pop_back()
+			if is_instance_valid(waypoint):
+				waypoint.queue_free()
+
 		queue_redraw()
 
 
 func _clear_all_markers():
 	map_markers.clear()
+
+	# Remove all waypoints
+	for waypoint in waypoint_nodes:
+		if is_instance_valid(waypoint):
+			waypoint.queue_free()
+	waypoint_nodes.clear()
+
 	queue_redraw()
 
 

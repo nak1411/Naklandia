@@ -5,13 +5,17 @@ const MAP_ACTION = "toggle_map"
 
 # References
 var minimap_layer: CanvasLayer
+var compass_layer: CanvasLayer
 var map_layer: CanvasLayer
 var minimap: Control
+var compass_bar: Control
 var full_map: Control
 
 
 func _ready():
+	add_to_group("map_manager")
 	_setup_input_actions()
+	_setup_compass_layer()
 	_setup_minimap_layer()
 	_setup_map_layer()
 
@@ -22,6 +26,28 @@ func _setup_input_actions():
 		var event = InputEventKey.new()
 		event.keycode = KEY_M
 		InputMap.action_add_event(MAP_ACTION, event)
+
+
+func _setup_compass_layer():
+	compass_layer = CanvasLayer.new()
+	compass_layer.name = "CompassLayer"
+	compass_layer.layer = 100
+	add_child(compass_layer)
+
+	var CompassBar = load("res://scripts/ui/map/CompassBar.gd")
+	compass_bar = CompassBar.new()
+	compass_bar.name = "CompassBar"
+
+	# Use anchors to center the compass horizontally at the top
+	compass_bar.anchor_left = 0.5
+	compass_bar.anchor_right = 0.5
+	compass_bar.anchor_top = 0.0
+	compass_bar.offset_left = -400.0  # Half of compass_width (800/2)
+	compass_bar.offset_right = 400.0
+	compass_bar.offset_top = 10.0
+	compass_bar.offset_bottom = 70.0  # 10 + compass_height (60)
+
+	compass_layer.add_child(compass_bar)
 
 
 func _setup_minimap_layer():
@@ -83,12 +109,16 @@ func close_map():
 func _on_map_opened():
 	if minimap:
 		minimap.visible = false
+	if compass_bar:
+		compass_bar.visible = false
 	_set_player_input_enabled(false)
 
 
 func _on_map_closed():
 	if minimap:
 		minimap.visible = true
+	if compass_bar:
+		compass_bar.visible = true
 	_set_player_input_enabled(true)
 
 
@@ -104,6 +134,11 @@ func _set_player_input_enabled(enabled: bool):
 func set_minimap_visible(is_visible: bool):
 	if minimap:
 		minimap.visible = is_visible
+
+
+func set_compass_visible(is_visible: bool):
+	if compass_bar:
+		compass_bar.visible = is_visible
 
 
 func set_minimap_zoom(zoom: float):

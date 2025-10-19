@@ -9,11 +9,14 @@ extends Control
 @export var player_color: Color = Color(0.0, 1.0, 0.0, 1.0)
 @export var player_marker_size: float = 8.0
 @export var north_indicator_color: Color = Color(1.0, 0.0, 0.0, 1.0)
+@export var marker_icon_color: Color = Color(1.0, 0.0, 0.0, 1.0)
+@export var marker_size: float = 6.0
 
 # References
 var player: Node3D
 var camera: Camera3D
 var camera_pivot: Node3D
+var map_manager: Node
 
 # Minimap texture
 var minimap_image: Image
@@ -26,6 +29,7 @@ func _ready():
 	custom_minimum_size = minimap_size
 	_setup_minimap_viewport()
 	_find_player_reference()
+	_find_map_manager()
 
 
 func _setup_minimap_viewport():
@@ -80,6 +84,12 @@ func _find_player_reference():
 			camera_pivot = player.get_node("CameraPivot")
 
 
+func _find_map_manager():
+	var map_managers = get_tree().get_nodes_in_group("map_manager")
+	if map_managers.size() > 0:
+		map_manager = map_managers[0]
+
+
 func _process(_delta):
 	if player and minimap_camera:
 		var player_pos = player.global_position
@@ -99,6 +109,7 @@ func _draw():
 		draw_texture_rect(render_viewport.get_texture(), rect, false)
 
 	var center = minimap_size / 2.0
+	_draw_map_markers(center)
 	_draw_player_marker(center)
 	_draw_north_indicator(center)
 
@@ -123,6 +134,67 @@ func _draw_north_indicator(center: Vector2):
 	var north_pos = center + Vector2(0, -minimap_size.y / 2.0 + 15)
 	draw_circle(north_pos, 3, north_indicator_color)
 	draw_string(ThemeDB.fallback_font, north_pos + Vector2(-3, -5), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, north_indicator_color)
+
+
+func _draw_map_markers(center: Vector2):
+	if not player or not minimap_camera or not map_manager:
+		return
+
+	var map_ui = _get_map_ui()
+	if not map_ui:
+		return
+
+	# Check if map_ui has the map_markers property
+	if not "map_markers" in map_ui:
+		return
+
+	var markers = map_ui.map_markers
+	if markers.is_empty():
+		return
+
+	var camera_pos = minimap_camera.global_position
+	var player_pos = player.global_position
+	var pixels_per_unit = minimap_size.y / minimap_camera.size
+
+	for marker in markers:
+		var marker_pos: Vector3 = marker.position
+		var marker_col: Color = marker.get("color", marker_icon_color)
+
+		# Calculate offset from player (who is at center)
+		var offset_x = marker_pos.x - player_pos.x
+		var offset_z = marker_pos.z - player_pos.z
+
+		# Convert to screen coordinates (relative to center) - negate Z to flip
+		var screen_offset_x = -offset_x * pixels_per_unit
+		var screen_offset_z = -offset_z * pixels_per_unit
+
+		var marker_screen_pos = center + Vector2(screen_offset_x, screen_offset_z)
+
+		# Only draw if within minimap bounds
+		if marker_screen_pos.x < 0 or marker_screen_pos.x > minimap_size.x:
+			continue
+		if marker_screen_pos.y < 0 or marker_screen_pos.y > minimap_size.y:
+			continue
+
+		# Draw marker as diamond
+		var half_marker = marker_size / 2.0
+		var points = PackedVector2Array(
+			[marker_screen_pos + Vector2(0, -half_marker), marker_screen_pos + Vector2(half_marker, 0), marker_screen_pos + Vector2(0, half_marker), marker_screen_pos + Vector2(-half_marker, 0)]
+		)
+
+		draw_colored_polygon(points, marker_col)
+		draw_polyline(points + PackedVector2Array([points[0]]), Color.WHITE, 1.0)
+
+
+func _get_map_ui():
+	if not map_manager:
+		return null
+
+	# Check if map_manager has full_map property
+	if not "full_map" in map_manager:
+		return null
+
+	return map_manager.full_map
 
 
 func set_zoom(new_zoom: float):
