@@ -145,16 +145,6 @@ func _setup_context_menu():
 	context_menu.name = "MapContextMenu"
 	add_child(context_menu)
 
-	# Add menu items
-	context_menu.add_menu_item("center_player", "Center on Player")
-	context_menu.add_menu_item("toggle_grid", "Toggle Grid")
-	context_menu.add_separator()
-	context_menu.add_menu_item("zoom_in", "Zoom In")
-	context_menu.add_menu_item("zoom_out", "Zoom Out")
-	context_menu.add_menu_item("reset_view", "Reset View")
-	context_menu.add_separator()
-	context_menu.add_menu_item("place_marker", "Place Marker Here")
-
 
 func _setup_waypoint_container():
 	# Find or create waypoint container in the world
@@ -418,8 +408,8 @@ func _place_marker_at_position(click_pos: Vector2):
 	if player:
 		world_y = player.global_position.y
 
-	# Create marker
-	var marker = {"position": Vector3(world_x, world_y, world_z), "label": "Marker " + str(map_markers.size() + 1), "color": marker_color}
+	# Create marker with alphabetical label
+	var marker = {"position": Vector3(world_x, world_y, world_z), "label": _get_marker_label(map_markers.size()), "color": marker_color}
 
 	map_markers.append(marker)
 
@@ -559,6 +549,20 @@ func _zoom_out():
 	current_zoom = clamp(current_zoom - zoom_step, min_zoom, max_zoom)
 	if map_camera:
 		map_camera.size = 100.0 / current_zoom
+
+
+func _get_marker_label(index: int) -> String:
+	var label = ""
+	var temp_index = index
+
+	while true:
+		label = char(65 + (temp_index % 26)) + label
+		temp_index = int(temp_index / 26)
+		if temp_index == 0:
+			break
+		temp_index -= 1
+
+	return label
 
 
 func open_map():
