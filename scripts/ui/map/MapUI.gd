@@ -31,6 +31,7 @@ var current_zoom: float = 0.1
 var is_dragging: bool = false
 var drag_start_pos: Vector2 = Vector2.ZERO
 var drag_start_offset: Vector2 = Vector2.ZERO
+var right_click_pos: Vector2 = Vector2.ZERO
 
 # References
 var player: Node3D
@@ -47,12 +48,14 @@ var close_button: Button
 var zoom_in_button: Button
 var zoom_out_button: Button
 var reset_button: Button
+var context_menu: ContextMenu_Base
 
 
 func _ready():
 	visible = false
 	_setup_ui()
 	_setup_map_viewport()
+	_setup_context_menu()
 	_find_player_reference()
 	_connect_signals()
 
@@ -127,6 +130,22 @@ func _setup_map_viewport():
 	current_zoom = default_zoom
 
 
+func _setup_context_menu():
+	context_menu = ContextMenu_Base.new()
+	context_menu.name = "MapContextMenu"
+	add_child(context_menu)
+
+	# Add menu items
+	context_menu.add_menu_item("center_player", "Center on Player")
+	context_menu.add_menu_item("toggle_grid", "Toggle Grid")
+	context_menu.add_separator()
+	context_menu.add_menu_item("zoom_in", "Zoom In")
+	context_menu.add_menu_item("zoom_out", "Zoom Out")
+	context_menu.add_menu_item("reset_view", "Reset View")
+	context_menu.add_separator()
+	context_menu.add_menu_item("place_marker", "Place Marker Here")
+
+
 func _find_player_reference():
 	var player_node = get_tree().get_first_node_in_group("player")
 	if player_node:
@@ -143,6 +162,9 @@ func _connect_signals():
 	zoom_out_button.pressed.connect(_on_zoom_out_pressed)
 	reset_button.pressed.connect(_on_reset_pressed)
 	map_container.gui_input.connect(_on_map_gui_input)
+
+	if context_menu:
+		context_menu.item_selected.connect(_on_context_menu_item_selected)
 
 
 func _input(event):
@@ -281,6 +303,10 @@ func _on_map_gui_input(event):
 					drag_start_offset = Vector2(map_camera.global_position.x, map_camera.global_position.z)
 			else:
 				is_dragging = false
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			if event.pressed:
+				right_click_pos = event.position
+				_show_context_menu(event.global_position)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_zoom_in()
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
@@ -297,6 +323,66 @@ func _on_map_gui_input(event):
 			map_camera.global_position = Vector3(new_x, map_camera.global_position.y, new_z)
 			var look_target = Vector3(new_x, 0, new_z)
 			map_camera.look_at(look_target, Vector3.BACK)
+
+
+func _show_context_menu(global_pos: Vector2):
+	if context_menu:
+		# Update the toggle grid menu item text based on current state
+		context_menu.clear_items()
+		context_menu.add_menu_item("center_player", "Center on Player")
+		context_menu.add_menu_item("toggle_grid", "Hide Grid" if show_grid else "Show Grid")
+		context_menu.add_separator()
+		context_menu.add_menu_item("zoom_in", "Zoom In")
+		context_menu.add_menu_item("zoom_out", "Zoom Out")
+		context_menu.add_menu_item("reset_view", "Reset View")
+		context_menu.add_separator()
+		context_menu.add_menu_item("place_marker", "Place Marker Here")
+
+		context_menu.show_context_menu(global_pos, {"click_position": right_click_pos})
+
+
+func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _context_data: Dictionary):
+	match item_id:
+		"center_player":
+			_center_on_player()
+		"toggle_grid":
+			show_grid = not show_grid
+			queue_redraw()
+		"zoom_in":
+			_zoom_in()
+		"zoom_out":
+			_zoom_out()
+		"reset_view":
+			_on_reset_pressed()
+		"place_marker":
+			_place_marker_at_position(_context_data.get("click_position", Vector2.ZERO))
+
+
+func _center_on_player():
+	if player and map_camera:
+		var player_pos = player.global_position
+		map_camera.global_position = Vector3(player_pos.x, map_camera.global_position.y, player_pos.z)
+		var look_target = Vector3(player_pos.x, 0, player_pos.z)
+		map_camera.look_at(look_target, Vector3.BACK)
+
+
+func _place_marker_at_position(click_pos: Vector2):
+	# Convert screen position to world position
+	if not map_camera:
+		return
+
+	var camera_pos = map_camera.global_position
+	var pixels_per_unit = size.y / map_camera.size
+
+	# Calculate offset from center
+	var offset_x = (size.x / 2.0 - click_pos.x) / pixels_per_unit
+	var offset_z = (size.y / 2.0 - click_pos.y) / pixels_per_unit
+
+	var world_x = camera_pos.x - offset_x
+	var world_z = camera_pos.z - offset_z
+
+	# Placeholder for marker placement logic
+	pass
 
 
 func _on_close_pressed():
