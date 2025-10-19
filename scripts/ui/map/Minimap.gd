@@ -33,11 +33,13 @@ func _setup_minimap_viewport():
 	render_viewport.size = Vector2i(minimap_size)
 	render_viewport.transparent_bg = true
 	render_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	render_viewport.debug_draw = SubViewport.DEBUG_DRAW_UNSHADED
 	add_child(render_viewport)
 
 	minimap_camera = Camera3D.new()
 	minimap_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	minimap_camera.size = 50.0 / zoom_level
+	minimap_camera.cull_mask = 1
 	render_viewport.add_child(minimap_camera)
 
 	minimap_texture = ImageTexture.new()
@@ -81,11 +83,9 @@ func _draw_player_marker(center: Vector2):
 	var half_size = player_marker_size / 2.0
 	var rotation: float = 0.0
 
-	# Negate rotation and add 90 degree offset
 	if player:
 		rotation = -player.global_rotation.y - PI - PI / 2
 
-	# Draw arrow pointing up, then rotate it
 	var points = PackedVector2Array(
 		[center + Vector2(-half_size, half_size).rotated(rotation), center + Vector2(half_size, half_size).rotated(rotation), center + Vector2(0, -half_size * 1.5).rotated(rotation)]
 	)

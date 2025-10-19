@@ -182,7 +182,7 @@ mesh = SubResource("BoxMesh_8pr8v")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Level/Wall2"]
 shape = SubResource("BoxShape3D_buypi")
 
-[node name="Terrain3D" type="Terrain3D" parent="Level"]
+[node name="Terrain3D" type="Terrain3D" parent="Level" groups=["terrain"]]
 data_directory = "res://demo/data"
 material = SubResource("Terrain3DMaterial_m0jab")
 assets = ExtResource("4_33h87")
