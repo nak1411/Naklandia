@@ -29,11 +29,11 @@ var render_viewport: SubViewport
 var map_camera: Camera3D
 
 # UI Elements
-@onready var map_container: Control = $MapContainer
-@onready var close_button: Button = $CloseButton
-@onready var zoom_in_button: Button = $ZoomInButton
-@onready var zoom_out_button: Button = $ZoomOutButton
-@onready var reset_button: Button = $ResetButton
+var map_container: Control
+var close_button: Button
+var zoom_in_button: Button
+var zoom_out_button: Button
+var reset_button: Button
 
 
 func _ready():
