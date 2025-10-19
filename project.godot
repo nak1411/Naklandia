@@ -21,7 +21,7 @@ config/icon="res://icon.svg"
 UiDebuggerAutoload="*res://scripts/debug/UIDebuggerAutoload.gd"
 WindowSnappingManager="*res://scripts/ui/core/WindowSnappingManager.gd"
 WindowLayoutManager="*res://scripts/ui/core/WindowLayoutManager.gd"
-NotificationManager="*res://scripts/ui/notification_manager.gd"
+NotificationManager="*res://scripts/ui/notifications/notification_manager.gd"
 
 [display]
 
