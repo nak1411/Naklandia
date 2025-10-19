@@ -12,6 +12,19 @@ signal map_opened
 @export var player_color: Color = Color(0.0, 1.0, 0.0, 1.0)
 @export var player_marker_size: float = 12.0
 
+# Grid configuration
+@export_group("Grid Settings")
+@export var show_grid: bool = true
+@export var major_grid_spacing: float = 100.0
+@export var minor_grid_spacing: float = 10.0
+@export var major_grid_color: Color = Color(0.5, 0.5, 0.5, 0.6)
+@export var minor_grid_color: Color = Color(0.3, 0.3, 0.3, 0.4)
+@export var major_grid_width: float = 2.0
+@export var minor_grid_width: float = 1.0
+@export var show_grid_labels: bool = true
+@export var grid_label_color: Color = Color(0.8, 0.8, 0.8, 0.9)
+@export var grid_label_size: int = 12
+
 # State
 var is_map_open: bool = false
 var current_zoom: float = 0.1
@@ -27,8 +40,6 @@ var camera_pivot: Node3D
 # Rendering
 var render_viewport: SubViewport
 var map_camera: Camera3D
-var directional_light: DirectionalLight3D
-var light_original_shadow_state: bool = true
 
 # UI Elements
 var map_container: Control
@@ -90,7 +101,7 @@ func _setup_map_viewport():
 	render_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(render_viewport)
 
-	# Create simplified environment for map (no shadows, flat unlighted color)
+	# Create simplified environment for map (no shadows, no post-processing)
 	var map_env = Environment.new()
 	map_env.background_mode = Environment.BG_COLOR
 	map_env.background_color = Color(0.05, 0.05, 0.05, 1.0)
@@ -101,8 +112,6 @@ func _setup_map_viewport():
 	map_env.sdfgi_enabled = false
 	map_env.glow_enabled = false
 	map_env.volumetric_fog_enabled = false
-	map_env.ssil_enabled = false
-	map_env.ssr_enabled = false
 
 	var world_env = WorldEnvironment.new()
 	world_env.environment = map_env
@@ -115,25 +124,7 @@ func _setup_map_viewport():
 	map_camera.cull_mask = 0b11111111111111111101
 	render_viewport.add_child(map_camera)
 
-	# Find the DirectionalLight3D in the scene
-	_find_directional_light()
-
 	current_zoom = default_zoom
-
-
-func _find_directional_light():
-	var scene_root = get_tree().current_scene
-	directional_light = _find_node_by_type(scene_root, "DirectionalLight3D")
-
-
-func _find_node_by_type(node: Node, type_name: String) -> Node:
-	if node.get_class() == type_name:
-		return node
-	for child in node.get_children():
-		var result = _find_node_by_type(child, type_name)
-		if result:
-			return result
-	return null
 
 
 func _find_player_reference():
@@ -175,8 +166,78 @@ func _draw():
 	if render_viewport and render_viewport.get_texture():
 		draw_texture_rect(render_viewport.get_texture(), rect, false)
 
+	if show_grid:
+		_draw_grid()
+
 	if player:
 		_draw_player_marker()
+
+
+func _draw_grid():
+	if not map_camera:
+		return
+
+	var camera_pos = map_camera.global_position
+	var pixels_per_unit = size.y / map_camera.size
+
+	# Calculate visible world bounds
+	var half_width = map_camera.size * (size.x / size.y) / 2.0
+	var half_height = map_camera.size / 2.0
+
+	var world_min_x = camera_pos.x - half_width
+	var world_max_x = camera_pos.x + half_width
+	var world_min_z = camera_pos.z - half_height
+	var world_max_z = camera_pos.z + half_height
+
+	# Draw minor grid lines first
+	if minor_grid_spacing > 0 and current_zoom > 0.15:
+		_draw_grid_lines(world_min_x, world_max_x, world_min_z, world_max_z, minor_grid_spacing, minor_grid_color, minor_grid_width, pixels_per_unit, camera_pos, false)
+
+	# Draw major grid lines
+	if major_grid_spacing > 0:
+		_draw_grid_lines(world_min_x, world_max_x, world_min_z, world_max_z, major_grid_spacing, major_grid_color, major_grid_width, pixels_per_unit, camera_pos, show_grid_labels)
+
+
+func _draw_grid_lines(
+	world_min_x: float, world_max_x: float, world_min_z: float, world_max_z: float, spacing: float, color: Color, width: float, pixels_per_unit: float, camera_pos: Vector3, draw_labels: bool
+):
+	# Calculate grid line positions snapped to spacing
+	var start_x = floor(world_min_x / spacing) * spacing
+	var start_z = floor(world_min_z / spacing) * spacing
+
+	# Draw vertical lines (along Z axis)
+	var x = start_x
+	while x <= world_max_x:
+		var offset_x = x - camera_pos.x
+		var screen_x = size.x / 2.0 - offset_x * pixels_per_unit
+
+		if screen_x >= 0 and screen_x <= size.x:
+			draw_line(Vector2(screen_x, 0), Vector2(screen_x, size.y), color, width)
+
+			# Draw label for major grid lines
+			if draw_labels:
+				var label_text = str(int(x))
+				var label_pos = Vector2(screen_x + 5, 20)
+				draw_string(ThemeDB.fallback_font, label_pos, label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, grid_label_size, grid_label_color)
+
+		x += spacing
+
+	# Draw horizontal lines (along X axis)
+	var z = start_z
+	while z <= world_max_z:
+		var offset_z = z - camera_pos.z
+		var screen_y = size.y / 2.0 - offset_z * pixels_per_unit
+
+		if screen_y >= 0 and screen_y <= size.y:
+			draw_line(Vector2(0, screen_y), Vector2(size.x, screen_y), color, width)
+
+			# Draw label for major grid lines
+			if draw_labels:
+				var label_text = str(int(z))
+				var label_pos = Vector2(5, screen_y - 5)
+				draw_string(ThemeDB.fallback_font, label_pos, label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, grid_label_size, grid_label_color)
+
+		z += spacing
 
 
 func _draw_player_marker():
@@ -285,11 +346,6 @@ func open_map():
 		var look_target = Vector3(player_pos.x, 0, player_pos.z)
 		map_camera.look_at(look_target, Vector3.BACK)
 
-	# Disable shadows on the main DirectionalLight3D
-	if directional_light:
-		light_original_shadow_state = directional_light.shadow_enabled
-		directional_light.shadow_enabled = false
-
 	map_opened.emit()
 
 
@@ -298,11 +354,6 @@ func close_map():
 	visible = false
 	is_dragging = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-
-	# Restore shadows on the main DirectionalLight3D
-	if directional_light:
-		directional_light.shadow_enabled = light_original_shadow_state
-
 	map_closed.emit()
 
 
