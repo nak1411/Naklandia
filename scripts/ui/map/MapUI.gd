@@ -88,9 +88,27 @@ func _setup_map_viewport():
 	render_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(render_viewport)
 
+	# Create simplified environment for map (no shadows, no post-processing)
+	var map_env = Environment.new()
+	map_env.background_mode = Environment.BG_COLOR
+	map_env.background_color = Color(0.05, 0.05, 0.05, 1.0)
+	map_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	map_env.ambient_light_color = Color(1.0, 1.0, 1.0, 1.0)
+	map_env.ambient_light_energy = 1.0
+	map_env.ssao_enabled = false
+	map_env.sdfgi_enabled = false
+	map_env.glow_enabled = false
+	map_env.volumetric_fog_enabled = false
+
+	var world_env = WorldEnvironment.new()
+	world_env.environment = map_env
+	render_viewport.add_child(world_env)
+
 	map_camera = Camera3D.new()
 	map_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	map_camera.size = 100.0 / default_zoom
+	# Cull mask: exclude layer 2 (grass particles)
+	map_camera.cull_mask = 0b11111111111111111101
 	render_viewport.add_child(map_camera)
 
 	current_zoom = default_zoom
