@@ -151,8 +151,8 @@ func _draw_player_marker():
 
 	var pixels_per_unit = size.y / map_camera.size
 
-	var screen_x = size.x / 2.0 - offset_z * pixels_per_unit
-	var screen_y = size.y / 2.0 + offset_x * pixels_per_unit
+	var screen_x = size.x / 2.0 - offset_x * pixels_per_unit
+	var screen_y = size.y / 2.0 - offset_z * pixels_per_unit
 
 	var center = Vector2(screen_x, screen_y)
 	var half_size = player_marker_size / 2.0
@@ -190,8 +190,8 @@ func _on_map_gui_input(event):
 			var delta = event.position - drag_start_pos
 			var pixels_per_unit = size.x / map_camera.size
 
-			var new_z = drag_start_offset.y + delta.x / pixels_per_unit
-			var new_x = drag_start_offset.x - delta.y / pixels_per_unit
+			var new_z = drag_start_offset.y + delta.y / pixels_per_unit
+			var new_x = drag_start_offset.x + delta.x / pixels_per_unit
 
 			map_camera.global_position = Vector3(new_x, map_camera.global_position.y, new_z)
 			var look_target = Vector3(new_x, 0, new_z)
