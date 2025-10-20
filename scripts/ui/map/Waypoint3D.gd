@@ -27,11 +27,11 @@ func _setup_waypoint_visuals():
 	sprite.shaded = false
 	sprite.pixel_size = 0.01
 
-	# Create diamond texture
+	# Create diamond texture - use WHITE so modulation works correctly
 	var img = Image.create(32, 32, false, Image.FORMAT_RGBA8)
 	img.fill(Color.TRANSPARENT)
 
-	# Draw diamond shape
+	# Draw diamond shape in white
 	for y in range(32):
 		for x in range(32):
 			var center_x = 16.0
@@ -43,14 +43,14 @@ func _setup_waypoint_visuals():
 			if (dx + dy) < 14:
 				var dist = (dx + dy) / 14.0
 				var alpha = 1.0 - (dist * 0.3)  # Fade from center
-				var color = waypoint_color
+				# Use WHITE color - the modulate will apply the actual color
+				var color = Color.WHITE
 				color.a = alpha
 				img.set_pixel(x, y, color)
 
 	var texture = ImageTexture.create_from_image(img)
 	sprite.texture = texture
 	sprite.modulate = waypoint_color
-	sprite.modulate.a = 1.0
 	sprite.position.y = float_height
 
 	marker_mesh = sprite  # Store reference
@@ -118,17 +118,17 @@ func _process(_delta):
 
 			# Apply alpha to all visual elements
 			if label_3d:
-				var label_color = label_3d.modulate
+				var label_color = waypoint_color
 				label_color.a = alpha
 				label_3d.modulate = label_color
 
 			if distance_label:
-				var dist_color = distance_label.modulate
+				var dist_color = Color.WHITE
 				dist_color.a = alpha
 				distance_label.modulate = dist_color
 
 			if marker_mesh:
-				var sprite_color = marker_mesh.modulate
+				var sprite_color = waypoint_color
 				sprite_color.a = alpha
 				marker_mesh.modulate = sprite_color
 

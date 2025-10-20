@@ -37,6 +37,8 @@ var right_click_pos: Vector2 = Vector2.ZERO
 var map_markers: Array[Dictionary] = []
 var marker_color: Color = Color(1.0, 0.0, 0.0, 1.0)
 var marker_size: float = 8.0
+var selected_marker_index: int = -1
+var hovered_marker_index: int = -1
 
 # Waypoints
 var waypoint_nodes: Array[Node3D] = []
@@ -308,41 +310,61 @@ func _draw_player_marker():
 	draw_circle(center, player_marker_size + 2, Color(1.0, 1.0, 1.0, 0.5), false, 2.0)
 
 
-func _on_map_gui_input(event):
+func _on_map_gui_input(event: InputEvent):
+	if not is_map_open:
+		return
+
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				is_dragging = true
-				drag_start_pos = event.position
-				if map_camera:
-					drag_start_offset = Vector2(map_camera.global_position.x, map_camera.global_position.z)
+				var clicked_marker = _get_marker_at_position(event.position)
+				if clicked_marker >= 0:
+					selected_marker_index = clicked_marker
+					queue_redraw()
+				else:
+					selected_marker_index = -1
+					is_dragging = true
+					drag_start_pos = event.position
+					if map_camera:
+						drag_start_offset = Vector2(map_camera.global_position.x, map_camera.global_position.z)
 			else:
 				is_dragging = false
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			if event.pressed:
 				right_click_pos = event.position
-				_show_context_menu(event.global_position)
+				var clicked_marker = _get_marker_at_position(event.position)
+				if clicked_marker >= 0:
+					selected_marker_index = clicked_marker
+					_show_marker_context_menu(event.global_position, clicked_marker)
+				else:
+					selected_marker_index = -1
+					_show_context_menu(event.global_position)
+				queue_redraw()
 		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_zoom_in()
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_zoom_out()
 
-	elif event is InputEventMouseMotion and is_dragging:
-		if map_camera:
-			var delta = event.position - drag_start_pos
-			var pixels_per_unit = size.x / map_camera.size
+	elif event is InputEventMouseMotion:
+		if not is_dragging:
+			hovered_marker_index = _get_marker_at_position(event.position)
+			queue_redraw()
 
-			var new_z = drag_start_offset.y + delta.y / pixels_per_unit
-			var new_x = drag_start_offset.x + delta.x / pixels_per_unit
+		if is_dragging:
+			if map_camera:
+				var delta = event.position - drag_start_pos
+				var pixels_per_unit = size.x / map_camera.size
 
-			map_camera.global_position = Vector3(new_x, map_camera.global_position.y, new_z)
-			var look_target = Vector3(new_x, 0, new_z)
-			map_camera.look_at(look_target, Vector3.BACK)
+				var new_z = drag_start_offset.y + delta.y / pixels_per_unit
+				var new_x = drag_start_offset.x + delta.x / pixels_per_unit
+
+				map_camera.global_position = Vector3(new_x, map_camera.global_position.y, new_z)
+				var look_target = Vector3(new_x, 0, new_z)
+				map_camera.look_at(look_target, Vector3.BACK)
 
 
 func _show_context_menu(global_pos: Vector2):
 	if context_menu:
-		# Update the toggle grid menu item text based on current state
 		context_menu.clear_items()
 		context_menu.add_menu_item("center_player", "Center on Player")
 		context_menu.add_menu_item("toggle_grid", "Hide Grid" if show_grid else "Show Grid")
@@ -357,6 +379,23 @@ func _show_context_menu(global_pos: Vector2):
 			context_menu.add_menu_item("clear_markers", "Clear All Markers")
 
 		context_menu.show_context_menu(global_pos, {"click_position": right_click_pos})
+
+
+func _show_marker_context_menu(global_pos: Vector2, marker_index: int):
+	if context_menu and marker_index >= 0 and marker_index < map_markers.size():
+		context_menu.clear_items()
+		context_menu.add_menu_item("rename_waypoint", "Rename Waypoint")
+		context_menu.add_menu_item("change_color", "Change Color")
+		context_menu.add_menu_item("delete_waypoint", "Delete Waypoint")
+		context_menu.add_separator()
+		context_menu.add_menu_item("center_player", "Center on Player")
+		context_menu.add_menu_item("toggle_grid", "Hide Grid" if show_grid else "Show Grid")
+		context_menu.add_separator()
+		context_menu.add_menu_item("zoom_in", "Zoom In")
+		context_menu.add_menu_item("zoom_out", "Zoom Out")
+		context_menu.add_menu_item("reset_view", "Reset View")
+
+		context_menu.show_context_menu(global_pos, {"click_position": right_click_pos, "marker_index": marker_index})
 
 
 func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _context_data: Dictionary):
@@ -378,6 +417,12 @@ func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _co
 			_remove_last_marker()
 		"clear_markers":
 			_clear_all_markers()
+		"rename_waypoint":
+			_rename_waypoint(_context_data.get("marker_index", -1))
+		"change_color":
+			_change_waypoint_color(_context_data.get("marker_index", -1))
+		"delete_waypoint":
+			_delete_waypoint(_context_data.get("marker_index", -1))
 
 
 func _center_on_player():
@@ -408,8 +453,8 @@ func _place_marker_at_position(click_pos: Vector2):
 	if player:
 		world_y = player.global_position.y
 
-	# Create marker with alphabetical label
-	var marker = {"position": Vector3(world_x, world_y, world_z), "label": _get_marker_label(map_markers.size()), "color": marker_color}
+	# Create marker
+	var marker = {"position": Vector3(world_x, world_y, world_z), "label": "Marker " + str(map_markers.size() + 1), "color": marker_color}
 
 	map_markers.append(marker)
 
@@ -460,7 +505,8 @@ func _draw_map_markers():
 	var camera_pos = map_camera.global_position
 	var pixels_per_unit = size.y / map_camera.size
 
-	for marker in map_markers:
+	for i in range(map_markers.size()):
+		var marker = map_markers[i]
 		var marker_pos: Vector3 = marker.position
 		var marker_label: String = marker.label
 		var marker_col: Color = marker.get("color", marker_color)
@@ -476,18 +522,172 @@ func _draw_map_markers():
 		if screen_x >= -marker_size and screen_x <= size.x + marker_size and screen_y >= -marker_size and screen_y <= size.y + marker_size:
 			var center = Vector2(screen_x, screen_y)
 
+			# Determine marker appearance based on state
+			var is_selected = i == selected_marker_index
+			var is_hovered = i == hovered_marker_index
+			var draw_color = marker_col
+			var draw_width = 2.0
+			var draw_marker_size = marker_size
+
+			# Modify appearance for selection/hover
+			if is_selected:
+				draw_color = draw_color.lightened(0.3)
+				draw_width = 3.0
+				draw_marker_size = marker_size * 1.3
+			elif is_hovered:
+				draw_color = draw_color.lightened(0.15)
+				draw_width = 2.5
+
 			# Draw marker cross
-			var half_size = marker_size
-			draw_line(center + Vector2(-half_size, 0), center + Vector2(half_size, 0), marker_col, 2.0)
-			draw_line(center + Vector2(0, -half_size), center + Vector2(0, half_size), marker_col, 2.0)
+			var half_size = draw_marker_size
+			draw_line(center + Vector2(-half_size, 0), center + Vector2(half_size, 0), draw_color, draw_width)
+			draw_line(center + Vector2(0, -half_size), center + Vector2(0, half_size), draw_color, draw_width)
 
 			# Draw marker circle
-			draw_circle(center, marker_size, marker_col, false, 2.0)
+			draw_circle(center, draw_marker_size, draw_color, false, draw_width)
+
+			# Draw selection highlight
+			if is_selected:
+				draw_circle(center, draw_marker_size + 4, Color(1.0, 1.0, 1.0, 0.5), false, 1.0)
 
 			# Draw label
 			if current_zoom > 0.08:
-				var label_pos = center + Vector2(marker_size + 5, 5)
-				draw_string(ThemeDB.fallback_font, label_pos, marker_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, marker_col)
+				var label_pos = center + Vector2(draw_marker_size + 5, 5)
+				draw_string(ThemeDB.fallback_font, label_pos, marker_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, draw_color)
+
+
+func _get_marker_at_position(screen_pos: Vector2) -> int:
+	if not map_camera or map_markers.is_empty():
+		return -1
+
+	var camera_pos = map_camera.global_position
+	var pixels_per_unit = size.y / map_camera.size
+	var click_radius = marker_size * 1.5
+
+	for i in range(map_markers.size()):
+		var marker = map_markers[i]
+		var marker_pos: Vector3 = marker.position
+
+		# Calculate screen position
+		var offset_x = marker_pos.x - camera_pos.x
+		var offset_z = marker_pos.z - camera_pos.z
+
+		var screen_x = size.x / 2.0 - offset_x * pixels_per_unit
+		var screen_y = size.y / 2.0 - offset_z * pixels_per_unit
+
+		var center = Vector2(screen_x, screen_y)
+		var distance = screen_pos.distance_to(center)
+
+		if distance <= click_radius:
+			return i
+
+	return -1
+
+
+func _rename_waypoint(marker_index: int):
+	if marker_index < 0 or marker_index >= map_markers.size():
+		return
+
+	var marker = map_markers[marker_index]
+	var waypoint = waypoint_nodes[marker_index] if marker_index < waypoint_nodes.size() else null
+
+	# Create a simple dialog for text input
+	var dialog = AcceptDialog.new()
+	dialog.title = "Rename Waypoint"
+	dialog.dialog_text = "Enter new name:"
+	dialog.size = Vector2(300, 150)
+
+	var line_edit = LineEdit.new()
+	line_edit.text = marker.label
+	line_edit.select_all()
+	dialog.add_child(line_edit)
+
+	# Center dialog on screen
+	var viewport_size = get_viewport().get_visible_rect().size
+	dialog.position = Vector2i((viewport_size.x - dialog.size.x) / 2, (viewport_size.y - dialog.size.y) / 2)
+
+	# Connect signals
+	dialog.confirmed.connect(
+		func():
+			var new_name = line_edit.text.strip_edges()
+			if new_name != "":
+				marker.label = new_name
+				if is_instance_valid(waypoint):
+					waypoint.set_waypoint_data(new_name, marker.color)
+				queue_redraw()
+	)
+
+	dialog.close_requested.connect(func(): dialog.queue_free())
+
+	dialog.canceled.connect(func(): dialog.queue_free())
+
+	# Add to scene and show
+	add_child(dialog)
+	dialog.popup_centered()
+	await get_tree().process_frame
+	line_edit.grab_focus()
+
+
+func _change_waypoint_color(marker_index: int):
+	if marker_index < 0 or marker_index >= map_markers.size():
+		return
+
+	var marker = map_markers[marker_index]
+	var waypoint = waypoint_nodes[marker_index] if marker_index < waypoint_nodes.size() else null
+
+	# Create a color picker dialog
+	var dialog = AcceptDialog.new()
+	dialog.title = "Change Waypoint Color"
+	dialog.size = Vector2(400, 450)
+
+	var color_picker = ColorPicker.new()
+	color_picker.color = marker.color
+	color_picker.can_add_swatches = false
+	dialog.add_child(color_picker)
+
+	# Center dialog on screen
+	var viewport_size = get_viewport().get_visible_rect().size
+	dialog.position = Vector2i((viewport_size.x - dialog.size.x) / 2, (viewport_size.y - dialog.size.y) / 2)
+
+	# Connect signals
+	dialog.confirmed.connect(
+		func():
+			var new_color = color_picker.color
+			marker.color = new_color
+			if is_instance_valid(waypoint):
+				waypoint.set_waypoint_data(marker.label, new_color)
+			queue_redraw()
+			dialog.queue_free()
+	)
+
+	dialog.close_requested.connect(func(): dialog.queue_free())
+
+	dialog.canceled.connect(func(): dialog.queue_free())
+
+	# Add to scene and show
+	add_child(dialog)
+	dialog.popup_centered()
+
+
+func _delete_waypoint(marker_index: int):
+	if marker_index < 0 or marker_index >= map_markers.size():
+		return
+
+	# Remove marker from array
+	map_markers.remove_at(marker_index)
+
+	# Remove corresponding waypoint
+	if marker_index < waypoint_nodes.size():
+		var waypoint = waypoint_nodes[marker_index]
+		if is_instance_valid(waypoint):
+			waypoint.queue_free()
+		waypoint_nodes.remove_at(marker_index)
+
+	# Clear selection
+	selected_marker_index = -1
+	hovered_marker_index = -1
+
+	queue_redraw()
 
 
 func _remove_last_marker():
@@ -500,6 +700,12 @@ func _remove_last_marker():
 			if is_instance_valid(waypoint):
 				waypoint.queue_free()
 
+		# Clear selection if last marker was selected
+		if selected_marker_index >= map_markers.size():
+			selected_marker_index = -1
+		if hovered_marker_index >= map_markers.size():
+			hovered_marker_index = -1
+
 		queue_redraw()
 
 
@@ -511,6 +717,9 @@ func _clear_all_markers():
 		if is_instance_valid(waypoint):
 			waypoint.queue_free()
 	waypoint_nodes.clear()
+
+	selected_marker_index = -1
+	hovered_marker_index = -1
 
 	queue_redraw()
 
@@ -549,20 +758,6 @@ func _zoom_out():
 	current_zoom = clamp(current_zoom - zoom_step, min_zoom, max_zoom)
 	if map_camera:
 		map_camera.size = 100.0 / current_zoom
-
-
-func _get_marker_label(index: int) -> String:
-	var label = ""
-	var temp_index = index
-
-	while true:
-		label = char(65 + (temp_index % 26)) + label
-		temp_index = int(temp_index / 26)
-		if temp_index == 0:
-			break
-		temp_index -= 1
-
-	return label
 
 
 func open_map():
