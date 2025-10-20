@@ -146,14 +146,27 @@ func _draw_marker_icon(pos: Vector2, color: Color, distance: float, label: Strin
 	# Draw label below marker
 	var label_font_size = 12
 	var label_string_size = ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, label_font_size)
-	draw_string(ThemeDB.fallback_font, Vector2(pos.x - label_string_size.x / 2.0, pos.y + icon_size + 18), label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_font_size, Color.WHITE)
+	var label_pos = Vector2(pos.x - label_string_size.x / 2.0, pos.y + icon_size + 18)
+
+	# Draw outline
+	for offset in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+		draw_string(ThemeDB.fallback_font, label_pos + offset, label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_font_size, Color.BLACK)
+
+	# Draw label
+	draw_string(ThemeDB.fallback_font, label_pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_font_size, Color.WHITE)
 
 	# Draw distance below marker
 	var distance_text = str(int(distance)) + "m"
 	var font_size = 12
 	var string_size = ThemeDB.fallback_font.get_string_size(distance_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+	var distance_pos = Vector2(pos.x - string_size.x / 2.0, pos.y + icon_size + 30)
 
-	draw_string(ThemeDB.fallback_font, Vector2(pos.x - string_size.x / 2.0, pos.y + icon_size + 30), distance_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
+	# Draw outline
+	for offset in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+		draw_string(ThemeDB.fallback_font, distance_pos + offset, distance_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.BLACK)
+
+	# Draw distance
+	draw_string(ThemeDB.fallback_font, distance_pos, distance_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
 
 
 func _draw_center_marker():
