@@ -1,7 +1,7 @@
 extends Control
 
 # Compass configuration
-@export var compass_height: float = 60.0
+@export var compass_height: float = 20.0
 @export var compass_width: float = 800.0
 @export var background_color: Color = Color(0.1, 0.1, 0.1, 0.7)
 @export var border_color: Color = Color(0.3, 0.3, 0.3, 0.8)
@@ -48,7 +48,6 @@ func _draw():
 	draw_rect(rect, background_color, true)
 
 	# Draw compass elements
-	_draw_compass_ticks()
 	_draw_cardinal_directions()
 	_draw_map_markers()
 	_draw_center_marker()
@@ -57,38 +56,11 @@ func _draw():
 	draw_rect(rect, border_color, false, border_width)
 
 
-func _draw_compass_ticks():
-	if not player:
-		return
-
-	var center_y = compass_height / 2.0
-	var pixels_per_degree = compass_width / 120.0
-
-	var player_deg = rad_to_deg(player_rotation)
-	# Add 180 to match minimap coordinate system
-	var start_angle = (player_deg + 180.0) - 60.0
-
-	for i in range(-60, 61, 5):
-		var angle = start_angle + i
-		var normalized_angle = fmod(angle + 360.0, 360.0)
-
-		var x_pos = compass_width / 2.0 + (i * pixels_per_degree)
-
-		if x_pos < 0 or x_pos > compass_width:
-			continue
-
-		var is_major = int(normalized_angle) % 45 == 0
-		var tick_height = 15.0 if is_major else 8.0
-		var tick_width = 2.0 if is_major else 1.0
-
-		draw_line(Vector2(x_pos, center_y - tick_height / 2.0), Vector2(x_pos, center_y + tick_height / 2.0), tick_color, tick_width)
-
-
 func _draw_cardinal_directions():
 	if not player:
 		return
 
-	var center_y = compass_height / 2.0
+	var center_y = compass_height + 7
 	var pixels_per_degree = compass_width / 120.0
 
 	var player_deg = rad_to_deg(-player_rotation)
@@ -163,7 +135,7 @@ func _draw_map_markers():
 
 
 func _draw_marker_icon(pos: Vector2, color: Color, distance: float, label: String):
-	var icon_size = 6.0
+	var icon_size = 4.0
 
 	# Draw diamond shape
 	var points = PackedVector2Array([pos + Vector2(0, -icon_size), pos + Vector2(icon_size, 0), pos + Vector2(0, icon_size), pos + Vector2(-icon_size, 0)])
@@ -171,32 +143,25 @@ func _draw_marker_icon(pos: Vector2, color: Color, distance: float, label: Strin
 	draw_colored_polygon(points, color)
 	draw_polyline(points + PackedVector2Array([points[0]]), Color.WHITE, 1.0)
 
-	# Draw label above marker
-	var label_font_size = 10
+	# Draw label below marker
+	var label_font_size = 12
 	var label_string_size = ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, label_font_size)
-	draw_string(ThemeDB.fallback_font, Vector2(pos.x - label_string_size.x / 2.0, pos.y - icon_size - 2), label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_font_size, Color.WHITE)
+	draw_string(ThemeDB.fallback_font, Vector2(pos.x - label_string_size.x / 2.0, pos.y + icon_size + 18), label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_font_size, Color.WHITE)
 
 	# Draw distance below marker
 	var distance_text = str(int(distance)) + "m"
-	var font_size = 10
+	var font_size = 12
 	var string_size = ThemeDB.fallback_font.get_string_size(distance_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
 
-	draw_string(ThemeDB.fallback_font, Vector2(pos.x - string_size.x / 2.0, pos.y + icon_size + 12), distance_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+	draw_string(ThemeDB.fallback_font, Vector2(pos.x - string_size.x / 2.0, pos.y + icon_size + 30), distance_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
 
 
 func _draw_center_marker():
 	var center = Vector2(compass_width / 2.0, compass_height / 2.0)
-	var marker_height = 20.0
+	var marker_height = 10.0
 
 	# Draw vertical line indicator in center
-	draw_line(Vector2(center.x, center.y - marker_height), Vector2(center.x, center.y + marker_height), center_marker_color, 3.0)
-
-	# Draw small triangle at bottom
-	var tri_size = 4.0
-	var tri_points = PackedVector2Array(
-		[Vector2(center.x, center.y + marker_height), Vector2(center.x - tri_size, center.y + marker_height - tri_size * 1.5), Vector2(center.x + tri_size, center.y + marker_height - tri_size * 1.5)]
-	)
-	draw_colored_polygon(tri_points, center_marker_color)
+	draw_line(Vector2(center.x, center.y - marker_height), Vector2(center.x, center.y + marker_height), center_marker_color, 1.0)
 
 
 func _get_map_ui():
