@@ -98,6 +98,10 @@ func _process(_delta):
 	if player:
 		var distance = global_position.distance_to(player.global_position)
 
+		# Scale based on distance to maintain constant screen size
+		var scale_factor = distance * 0.1
+		scale = Vector3.ONE * scale_factor
+
 		# Update distance label
 		var distance_label = get_node_or_null("DistanceLabel")
 		if distance_label:
