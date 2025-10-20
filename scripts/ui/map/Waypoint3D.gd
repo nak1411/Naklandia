@@ -64,10 +64,10 @@ func _setup_waypoint_visuals():
 	label_3d.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label_3d.no_depth_test = true
 	label_3d.modulate = waypoint_color
-	label_3d.outline_size = 12
+	label_3d.outline_size = 4
 	label_3d.outline_modulate = Color(0, 0, 0, 0.9)
 	label_3d.position = Vector3(0, float_height + 1.0, 0)
-	label_3d.font_size = 32
+	label_3d.font_size = 24
 
 	add_child(label_3d)
 
@@ -79,10 +79,10 @@ func _setup_waypoint_visuals():
 	distance_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	distance_label.no_depth_test = true
 	distance_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
-	distance_label.outline_size = 10
+	distance_label.outline_size = 4
 	distance_label.outline_modulate = Color(0, 0, 0, 0.9)
 	distance_label.position = Vector3(0, float_height + 0.5, 0)
-	distance_label.font_size = 24
+	distance_label.font_size = 18
 
 	add_child(distance_label)
 
