@@ -135,6 +135,7 @@ func _draw_map_markers():
 
 	for marker in markers:
 		var marker_pos: Vector3 = marker.position
+		var marker_label: String = marker.label
 		var marker_col: Color = marker.get("color", marker_icon_color)
 
 		var distance = player_pos.distance_to(marker_pos)
@@ -158,10 +159,10 @@ func _draw_map_markers():
 
 		var x_pos = compass_width / 2.0 + (-relative_angle * pixels_per_degree)
 
-		_draw_marker_icon(Vector2(x_pos, center_y), marker_col, distance)
+		_draw_marker_icon(Vector2(x_pos, center_y), marker_col, distance, marker_label)
 
 
-func _draw_marker_icon(pos: Vector2, color: Color, distance: float):
+func _draw_marker_icon(pos: Vector2, color: Color, distance: float, label: String):
 	var icon_size = 6.0
 
 	# Draw diamond shape
@@ -169,6 +170,11 @@ func _draw_marker_icon(pos: Vector2, color: Color, distance: float):
 
 	draw_colored_polygon(points, color)
 	draw_polyline(points + PackedVector2Array([points[0]]), Color.WHITE, 1.0)
+
+	# Draw label above marker
+	var label_font_size = 10
+	var label_string_size = ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, label_font_size)
+	draw_string(ThemeDB.fallback_font, Vector2(pos.x - label_string_size.x / 2.0, pos.y - icon_size - 2), label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_font_size, Color.WHITE)
 
 	# Draw distance below marker
 	var distance_text = str(int(distance)) + "m"

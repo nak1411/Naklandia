@@ -158,6 +158,7 @@ func _draw_map_markers(center: Vector2):
 
 	for marker in markers:
 		var marker_pos: Vector3 = marker.position
+		var marker_label: String = marker.label
 		var marker_col: Color = marker.get("color", marker_icon_color)
 
 		# Calculate offset from player (who is at center)
@@ -184,6 +185,18 @@ func _draw_map_markers(center: Vector2):
 
 		draw_colored_polygon(points, marker_col)
 		draw_polyline(points + PackedVector2Array([points[0]]), Color.WHITE, 1.0)
+
+		# Draw label in center of marker with outline for visibility
+		var font_size = 10
+		var string_size = ThemeDB.fallback_font.get_string_size(marker_label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+		var label_pos = Vector2(marker_screen_pos.x - string_size.x / 2.0, marker_screen_pos.y + 4)
+
+		# Draw outline
+		for offset in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+			draw_string(ThemeDB.fallback_font, label_pos + offset, marker_label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.BLACK)
+
+		# Draw label
+		draw_string(ThemeDB.fallback_font, label_pos, marker_label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
 
 
 func _get_map_ui():
