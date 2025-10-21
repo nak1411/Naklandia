@@ -95,7 +95,7 @@ func _start_fade_out():
 	tween.set_ease(Tween.EASE_IN)
 
 	tween.tween_property(self, "modulate:a", 0.0, FADE_OUT_DURATION)
-	tween.tween_property(self, "position:x", position.x + SLIDE_DISTANCE, FADE_OUT_DURATION)
+	tween.tween_property(self, "position:x", position.x - SLIDE_DISTANCE, FADE_OUT_DURATION)
 
 	await tween.finished
 	notification_finished.emit()

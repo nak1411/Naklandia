@@ -24,12 +24,12 @@ func _setup_ui():
 
 	notification_container = VBoxContainer.new()
 	notification_container.name = "NotificationContainer"
-	notification_container.anchor_left = 1.0
-	notification_container.anchor_right = 1.0
+	notification_container.anchor_left = 0.0
+	notification_container.anchor_right = 0.0
 	notification_container.anchor_top = 0.0
 	notification_container.anchor_bottom = 0.0
-	notification_container.offset_left = -320
-	notification_container.offset_right = -20
+	notification_container.offset_left = 20
+	notification_container.offset_right = 320
 	notification_container.offset_top = 20
 	notification_container.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	notification_container.add_theme_constant_override("separation", NOTIFICATION_SPACING)
