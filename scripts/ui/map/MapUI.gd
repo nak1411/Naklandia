@@ -9,7 +9,7 @@ signal map_opened
 @export var max_zoom: float = 0.5
 @export var zoom_step: float = 0.05
 @export var background_color: Color = Color(0.05, 0.05, 0.05, 0.95)
-@export var player_color: Color = Color(0.0, 1.0, 0.0, 1.0)
+@export var player_color: Color = Color(0.0, 0.0, 1.0, 1.0)
 @export var player_marker_size: float = 12.0
 
 # Grid configuration
@@ -17,13 +17,13 @@ signal map_opened
 @export var show_grid: bool = true
 @export var major_grid_spacing: float = 100.0
 @export var minor_grid_spacing: float = 10.0
-@export var major_grid_color: Color = Color(0.5, 0.5, 0.5, 0.6)
-@export var minor_grid_color: Color = Color(0.3, 0.3, 0.3, 0.4)
-@export var major_grid_width: float = 2.0
+@export var major_grid_color: Color = Color(0.0, 0.0, 0.0, 1.0)
+@export var minor_grid_color: Color = Color(0.3, 0.3, 0.3, 1.0)
+@export var major_grid_width: float = 1.0
 @export var minor_grid_width: float = 1.0
 @export var show_grid_labels: bool = true
-@export var grid_label_color: Color = Color(0.8, 0.8, 0.8, 0.9)
-@export var grid_label_size: int = 12
+@export var grid_label_color: Color = Color(0.0, 0.0, 0.0, 1.0)
+@export var grid_label_size: int = 18
 
 # State
 var is_map_open: bool = false
@@ -307,7 +307,7 @@ func _draw_player_marker():
 
 	draw_colored_polygon(points, player_color)
 
-	draw_circle(center, player_marker_size + 2, Color(1.0, 1.0, 1.0, 0.5), false, 2.0)
+	draw_circle(center, player_marker_size + 2, Color(0.8, 0.8, 0.8, 1.0), false, 2.0)
 
 
 func _on_map_gui_input(event: InputEvent):
