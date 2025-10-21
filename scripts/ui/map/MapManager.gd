@@ -106,6 +106,13 @@ func close_map():
 		full_map.close_map()
 
 
+func is_map_open() -> bool:
+	"""Check if the map is currently open"""
+	if full_map:
+		return full_map.is_map_open
+	return false
+
+
 func _on_map_opened():
 	if minimap:
 		minimap.visible = false

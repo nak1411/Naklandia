@@ -42,7 +42,7 @@ func setup_ui_debugger():
 	"""Set up the UI debugger"""
 	ui_debugger = CanvasLayer.new()
 	ui_debugger.name = "UIDebugger"
-	ui_debugger.layer = 200  # Higher than pause layer for visibility
+	ui_debugger.layer = 250  # Higher than pause layer for visibility
 	add_child(ui_debugger)
 
 
@@ -62,13 +62,13 @@ func setup_canvas_layers():
 	# Create inventory canvas layer
 	inventory_canvas = CanvasLayer.new()
 	inventory_canvas.name = "InventoryCanvas"
-	inventory_canvas.layer = 50
+	inventory_canvas.layer = 110
 	add_child(inventory_canvas)
 
 	# Create pause canvas layer (highest priority)
 	pause_canvas = CanvasLayer.new()
 	pause_canvas.name = "PauseCanvas"
-	pause_canvas.layer = 100
+	pause_canvas.layer = 200
 	add_child(pause_canvas)
 
 
@@ -153,7 +153,7 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 
 	match window_type:
 		"main_inventory":
-			canvas.layer = 50  # Use inventory layer
+			canvas.layer = 110  # Use inventory layer
 			inventory_canvas.add_child(canvas)
 		"tearoff":
 			# FIX: Add tearoff windows directly to scene tree with their own layer
@@ -163,7 +163,7 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 			add_child(canvas)  # Changed from inventory_canvas.add_child(canvas)
 		"dialog":
 			# Dialogs use the highest priority pause canvas
-			canvas.layer = 100 + active_windows.size()
+			canvas.layer = 200 + active_windows.size()
 			pause_canvas.add_child(canvas)
 
 	# Set the metadata BEFORE adding the window to canvas
@@ -249,7 +249,7 @@ func _update_window_layers():
 
 	# FIXED: Assign layers based on position in window_stack
 	# Windows later in the stack (more recently focused) get higher layers
-	var base_layer = 50
+	var base_layer = 120
 
 	for i in range(window_stack.size()):
 		var window = window_stack[i]

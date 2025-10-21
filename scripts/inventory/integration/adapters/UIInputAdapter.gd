@@ -46,8 +46,20 @@ func _input(event):
 		# Don't handle inventory toggle when text input is active
 		return
 
-	# SIMPLIFIED: Just toggle inventory regardless of current mode
+	# Check if map is open and prevent inventory toggle
 	if event.is_action_pressed("toggle_inventory"):
+		# Check if map is currently open
+		var map_managers = get_tree().get_nodes_in_group("map_manager")
+		if map_managers.size() > 0:
+			var map_manager = map_managers[0]
+			if map_manager.has_method("is_map_open") and map_manager.is_map_open():
+				# Map is open - don't allow inventory to open
+				return
+			# Alternative check if is_map_open method doesn't exist
+			if map_manager.full_map and map_manager.full_map.is_map_open:
+				# Map is open - don't allow inventory to open
+				return
+
 		if event_bus:
 			# Check if main inventory window is currently open
 			var integration = _find_inventory_integration()
@@ -57,143 +69,48 @@ func _input(event):
 			else:
 				# Main inventory is closed - open it
 				event_bus.emit_inventory_opened()
+
 		get_viewport().set_input_as_handled()
 
 
-# Input mode management
-func set_input_mode(mode: String):
-	"""Set the current input mode"""
-	if input_mode != mode:
-		var old_mode = input_mode
-		input_mode = mode
-
-		if event_bus:
-			event_bus.emit_signal("ui_input_mode_changed", mode)
-
-		_handle_input_mode_change(old_mode, mode)
-
-
-func _handle_input_mode_change(_old_mode: String, new_mode: String):
-	"""Handle input mode transitions"""
-	match new_mode:
-		"inventory":
-			_enable_inventory_input()
-		"game":
-			_enable_game_input()
-		"menu":
-			_enable_menu_input()
-
-
-func _enable_inventory_input():
-	"""Configure input for inventory mode"""
-	# Set mouse mode for inventory interaction
-	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-
-	# Disable game input actions
-	if connected_ui_manager:
-		var crosshair = connected_ui_manager.get_crosshair()
-		if crosshair:
-			crosshair.set_visible(false)
-
-
-func _enable_game_input():
-	"""Configure input for game mode"""
-	# Set mouse mode for game interaction
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-
-	# Enable game input actions
-	if connected_ui_manager:
-		var crosshair = connected_ui_manager.get_crosshair()
-		if crosshair:
-			crosshair.set_visible(true)
-
-
-func _enable_menu_input():
-	"""Configure input for menu mode"""
-	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-
-
-# Event handlers
-func _on_inventory_opened():
-	"""Handle inventory opening"""
-	set_input_mode("inventory")
-
-	# Show inventory UI layer
-	if connected_ui_manager:
-		connected_ui_manager.show_inventory_layer()
-
-
-func _on_inventory_closed():
-	"""Handle inventory closing - SIMPLIFIED"""
-	# Always check what UI windows remain after this close event
-	await get_tree().process_frame  # Wait for window cleanup to complete
-
-	var should_switch_to_game = true
-
-	if connected_ui_manager and connected_ui_manager.has_method("get_all_windows"):
-		var remaining_windows = connected_ui_manager.get_all_windows()
-		var valid_windows = remaining_windows.filter(func(w): return is_instance_valid(w) and w.visible)
-
-		if valid_windows.size() > 0:
-			should_switch_to_game = false
-
-	if should_switch_to_game:
-		set_input_mode("game")
-
-	# Hide main inventory UI layer (tearoffs have their own layers)
-	if connected_ui_manager:
-		connected_ui_manager.hide_inventory_layer()
-
-
-func _on_ui_focus_changed(has_focus: bool):
-	"""Handle UI focus changes"""
-	if event_bus:
-		# Emit focus state to other systems
-		event_bus.emit_ui_focus_changed(has_focus)
-
-
-func _on_layer_visibility_changed(layer_name: String, visible: bool):
-	"""Handle UI layer visibility changes"""
-	if event_bus:
-		# Fix: Use a method call instead of emitting a non-existent signal
-		if event_bus.has_method("emit_ui_layer_changed"):
-			event_bus.emit_ui_layer_changed(layer_name, visible)
-
-
-func set_drag_in_progress(dragging: bool):
-	"""Enable/disable input processing during drag operations"""
-	drag_in_progress = dragging
-
-
-func set_input_processing_enabled(enabled: bool):
-	"""Enable/disable input processing"""
-	input_processing_enabled = enabled
-	set_process_unhandled_input(enabled)
-
-
-func _find_inventory_integration() -> InventoryIntegration:
-	"""Find the inventory integration in the scene"""
-	var scene_root = get_tree().current_scene
-	return _find_integration_recursive(scene_root)
-
-
-func _find_integration_recursive(node: Node) -> InventoryIntegration:
-	if node is InventoryIntegration:
-		return node
-
-	for child in node.get_children():
-		var result = _find_integration_recursive(child)
-		if result:
-			return result
+func _find_inventory_integration():
+	"""Find the inventory integration node"""
+	var integrations = get_tree().get_nodes_in_group("inventory_integration")
+	if integrations.size() > 0:
+		return integrations[0]
 	return null
 
 
-# Public interface
-func get_input_mode() -> String:
-	"""Get current input mode"""
-	return input_mode
+func _on_inventory_opened():
+	"""Handle inventory opened event"""
+	input_mode = "inventory"
 
 
-func is_ui_input_active() -> bool:
-	"""Check if UI input is currently active"""
-	return input_mode != "game"
+func _on_inventory_closed():
+	"""Handle inventory closed event"""
+	input_mode = "game"
+
+
+func _on_ui_focus_changed(_has_focus: bool):
+	"""Handle UI focus changes"""
+	pass
+
+
+func _on_layer_visibility_changed(_layer_name: String, _visible: bool):
+	"""Handle layer visibility changes from UI manager"""
+	pass
+
+
+func set_input_processing_enabled(enabled: bool):
+	"""Enable or disable input processing"""
+	input_processing_enabled = enabled
+
+
+func is_drag_in_progress() -> bool:
+	"""Check if a drag operation is in progress"""
+	return drag_in_progress
+
+
+func set_drag_in_progress(dragging: bool):
+	"""Set drag in progress state"""
+	drag_in_progress = dragging
