@@ -59,6 +59,7 @@ var close_button: Button
 var zoom_in_button: Button
 var zoom_out_button: Button
 var reset_button: Button
+var toggle_grid_button: Button
 var context_menu: ContextMenu_Base
 
 
@@ -107,6 +108,13 @@ func _setup_ui():
 	reset_button.position = Vector2(110, 50)
 	reset_button.size = Vector2(60, 40)
 	add_child(reset_button)
+
+	toggle_grid_button = Button.new()
+	toggle_grid_button.name = "ToggleGridButton"
+	toggle_grid_button.text = "Toggle Grid"
+	toggle_grid_button.position = Vector2(120, 10)
+	toggle_grid_button.size = Vector2(40, 30)
+	add_child(toggle_grid_button)
 
 
 func _setup_map_viewport():
@@ -190,6 +198,7 @@ func _connect_signals():
 	zoom_in_button.pressed.connect(_on_zoom_in_pressed)
 	zoom_out_button.pressed.connect(_on_zoom_out_pressed)
 	reset_button.pressed.connect(_on_reset_pressed)
+	toggle_grid_button.pressed.connect(_on_toggle_grid_pressed)
 	map_container.gui_input.connect(_on_map_gui_input)
 
 	if context_menu:
@@ -367,7 +376,6 @@ func _show_context_menu(global_pos: Vector2):
 	if context_menu:
 		context_menu.clear_items()
 		context_menu.add_menu_item("center_player", "Center on Player")
-		context_menu.add_menu_item("toggle_grid", "Hide Grid" if show_grid else "Show Grid")
 		context_menu.add_separator()
 		context_menu.add_menu_item("zoom_in", "Zoom In")
 		context_menu.add_menu_item("zoom_out", "Zoom Out")
@@ -375,7 +383,6 @@ func _show_context_menu(global_pos: Vector2):
 		context_menu.add_separator()
 		context_menu.add_menu_item("place_marker", "Place Marker Here")
 		if not map_markers.is_empty():
-			context_menu.add_menu_item("remove_last_marker", "Remove Last Marker")
 			context_menu.add_menu_item("clear_markers", "Clear All Markers")
 
 		context_menu.show_context_menu(global_pos, {"click_position": right_click_pos})
@@ -389,7 +396,6 @@ func _show_marker_context_menu(global_pos: Vector2, marker_index: int):
 		context_menu.add_menu_item("delete_waypoint", "Delete Waypoint")
 		context_menu.add_separator()
 		context_menu.add_menu_item("center_player", "Center on Player")
-		context_menu.add_menu_item("toggle_grid", "Hide Grid" if show_grid else "Show Grid")
 		context_menu.add_separator()
 		context_menu.add_menu_item("zoom_in", "Zoom In")
 		context_menu.add_menu_item("zoom_out", "Zoom Out")
@@ -402,9 +408,6 @@ func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _co
 	match item_id:
 		"center_player":
 			_center_on_player()
-		"toggle_grid":
-			show_grid = not show_grid
-			queue_redraw()
 		"zoom_in":
 			_zoom_in()
 		"zoom_out":
@@ -413,8 +416,6 @@ func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _co
 			_on_reset_pressed()
 		"place_marker":
 			_place_marker_at_position(_context_data.get("click_position", Vector2.ZERO))
-		"remove_last_marker":
-			_remove_last_marker()
 		"clear_markers":
 			_clear_all_markers()
 		"rename_waypoint":
@@ -595,7 +596,7 @@ func _rename_waypoint(marker_index: int):
 	var dialog = AcceptDialog.new()
 	dialog.title = "Rename Waypoint"
 	dialog.dialog_text = "Enter new name:"
-	dialog.size = Vector2(300, 150)
+	dialog.size = Vector2(300, 100)
 
 	var line_edit = LineEdit.new()
 	line_edit.text = marker.label
@@ -690,25 +691,6 @@ func _delete_waypoint(marker_index: int):
 	queue_redraw()
 
 
-func _remove_last_marker():
-	if not map_markers.is_empty():
-		map_markers.pop_back()
-
-		# Remove corresponding waypoint
-		if not waypoint_nodes.is_empty():
-			var waypoint = waypoint_nodes.pop_back()
-			if is_instance_valid(waypoint):
-				waypoint.queue_free()
-
-		# Clear selection if last marker was selected
-		if selected_marker_index >= map_markers.size():
-			selected_marker_index = -1
-		if hovered_marker_index >= map_markers.size():
-			hovered_marker_index = -1
-
-		queue_redraw()
-
-
 func _clear_all_markers():
 	map_markers.clear()
 
@@ -746,6 +728,10 @@ func _on_reset_pressed():
 	current_zoom = default_zoom
 	if map_camera:
 		map_camera.size = 100.0 / current_zoom
+
+
+func _on_toggle_grid_pressed():
+	_toggle_grid()
 
 
 func _zoom_in():
@@ -787,3 +773,8 @@ func toggle_map():
 		close_map()
 	else:
 		open_map()
+
+
+func _toggle_grid():
+	show_grid = not show_grid
+	queue_redraw()
