@@ -1,7 +1,7 @@
 # scripts/inventory/shared/constants/ItemTypes.gd
 class_name ItemTypes
 
-enum Type { MISCELLANEOUS, WEAPON, ARMOR, CONSUMABLE, RESOURCE, BLUEPRINT, MODULE, SHIP, CONTAINER, AMMUNITION, IMPLANT, SKILL_BOOK }
+enum Type { MISCELLANEOUS, WEAPON, ARMOR, CONSUMABLE, RESOURCE, BLUEPRINT, MODULE, SHIP, CONTAINER, AMMUNITION, IMPLANT, SKILL_BOOK, TOOL }
 
 
 # Helper methods for type management
@@ -29,6 +29,8 @@ static func get_type_name(type: Type) -> String:
 			return "Implant"
 		Type.SKILL_BOOK:
 			return "Skill Book"
+		Type.TOOL:
+			return "Tool"
 		_:
 			return "Miscellaneous"
 
