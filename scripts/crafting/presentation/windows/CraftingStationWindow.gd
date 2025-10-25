@@ -130,12 +130,17 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 	panel_style.border_width_top = 2
 	panel_style.border_width_bottom = 2
 	panel_style.border_color = Color(0.3, 0.3, 0.3)
+	# Add content margin padding
+	panel_style.content_margin_left = 16
+	panel_style.content_margin_right = 16
+	panel_style.content_margin_top = 12
+	panel_style.content_margin_bottom = 12
 	crafting_panel.add_theme_stylebox_override("panel", panel_style)
 	parent.add_child(crafting_panel)
 
 	var vbox = VBoxContainer.new()
 	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	vbox.add_theme_constant_override("separation", 8)
+	vbox.add_theme_constant_override("separation", 12)
 	crafting_panel.add_child(vbox)
 
 	# Recipe info
@@ -144,6 +149,11 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 	recipe_info_label.fit_content = true
 	recipe_info_label.scroll_active = false
 	recipe_info_label.custom_minimum_size = Vector2(0, 80)
+	# Add text padding through margins
+	recipe_info_label.add_theme_constant_override("text_margin_left", 8)
+	recipe_info_label.add_theme_constant_override("text_margin_right", 8)
+	recipe_info_label.add_theme_constant_override("text_margin_top", 8)
+	recipe_info_label.add_theme_constant_override("text_margin_bottom", 8)
 	vbox.add_child(recipe_info_label)
 
 	# Requirements
@@ -151,7 +161,12 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 	requirements_label.bbcode_enabled = true
 	requirements_label.fit_content = true
 	requirements_label.scroll_active = false
-	requirements_label.custom_minimum_size = Vector2(0, 100)
+	requirements_label.custom_minimum_size = Vector2(0, 120)
+	# Add text padding for materials list
+	requirements_label.add_theme_constant_override("text_margin_left", 12)
+	requirements_label.add_theme_constant_override("text_margin_right", 12)
+	requirements_label.add_theme_constant_override("text_margin_top", 10)
+	requirements_label.add_theme_constant_override("text_margin_bottom", 10)
 	vbox.add_child(requirements_label)
 
 	# Start button
@@ -393,19 +408,19 @@ func _update_recipe_info():
 	info_text += "Failure Risk: %.1f%%" % (selected_recipe.failure_risk * 100)
 	recipe_info_label.text = info_text
 
-	# Requirements
+	# Requirements with better formatting
 	var req_text = "[b]Required Materials:[/b]\n"
 	for mat in selected_recipe.required_materials:
 		var has_enough = crafting_manager.check_material_availability(mat.material_id, mat.quantity)
 		var color = "[color=green]" if has_enough else "[color=red]"
-		req_text += "%s%s x%d[/color]\n" % [color, mat.material_name, mat.quantity]
+		req_text += "  %s• %s x%d[/color]\n" % [color, mat.material_name, mat.quantity]
 
 	req_text += "\n[b]Required Tools:[/b]\n"
 	for tool in selected_recipe.required_tools:
 		var has_tool = crafting_manager.check_tool_availability(tool.tool_id)
 		var color = "[color=green]" if has_tool else "[color=red]"
 		var optional_text = " (Optional)" if tool.optional else ""
-		req_text += "%s%s%s[/color]\n" % [color, tool.tool_name, optional_text]
+		req_text += "  %s• %s%s[/color]\n" % [color, tool.tool_name, optional_text]
 
 	requirements_label.text = req_text
 
@@ -457,10 +472,34 @@ func _connect_process_signals():
 	current_process.progress_updated.connect(_on_progress_updated)
 
 
-func _on_stage_started(stage_index: int):
+func _on_stage_started(_stage_index: int):
 	"""Handle stage start"""
 	_update_stage_display()
 	_create_stage_interactions()
+
+
+func _on_stage_completed(_stage_index: int, _quality: float):
+	"""Handle stage completion"""
+	_clear_interactions()
+
+
+func _on_stage_failed(_stage_index: int, reason: String):
+	"""Handle stage failure"""
+	var failure_label = Label.new()
+	failure_label.text = "Stage Failed: %s" % reason
+	failure_label.add_theme_color_override("font_color", Color.RED)
+	failure_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	interaction_container.add_child(failure_label)
+
+
+func _on_process_completed(output_items: Array):
+	"""Handle process completion"""
+	interaction_timer.stop()
+	interaction_panel.visible = false
+	process_panel.visible = false
+	output_panel.visible = true
+
+	_display_output(output_items)
 
 
 func _update_stage_display():
@@ -468,471 +507,105 @@ func _update_stage_display():
 	if not current_process:
 		return
 
-	var stage = current_process.get_current_stage()
-	if not stage:
+	var current_stage = current_process.get_current_stage()
+	if not current_stage:
+		stage_label.text = "Stage: Complete"
 		return
 
-	stage_label.text = "Stage %d/%d: %s" % [current_process.current_stage_index + 1, current_process.recipe.crafting_stages.size(), stage.stage_name]
+	stage_label.text = "Stage %d/%d: %s" % [current_process.current_stage_index + 1, current_process.recipe.crafting_stages.size(), current_stage.stage_name]
 
-	stage_description.text = "[center]%s[/center]" % stage.description
+	var desc_text = "[b]%s[/b]\n" % current_stage.stage_name
+	desc_text += current_stage.description
+	stage_description.text = desc_text
 
 
 func _create_stage_interactions():
-	"""Create interactive elements for current stage"""
-	# Clear existing interactions
+	"""Create interaction buttons for current stage"""
+	_clear_interactions()
+
+	if not current_process:
+		return
+
+	var current_stage = current_process.get_current_stage()
+	if not current_stage:
+		return
+
+	# Create buttons for each action
+	if current_stage.required_actions:
+		for action in current_stage.required_actions:
+			_create_interaction_button(action)
+
+
+func _create_interaction_button(action: CraftingRecipe.StageAction):
+	"""Create a button for a stage action"""
+	var button = Button.new()
+	button.text = "%s" % action.action_name
+	button.custom_minimum_size = Vector2(0, 50)
+	button.pressed.connect(_on_interaction_pressed.bind(action, button))
+
+	# Store button reference
+	active_interactions[action] = {"button": button, "press_count": 0}
+
+	interaction_container.add_child(button)
+
+
+func _on_interaction_pressed(action: CraftingRecipe.StageAction, button: Button):
+	"""Handle interaction button press"""
+	if not current_process:
+		return
+
+	var interaction_data = active_interactions.get(action)
+	if not interaction_data:
+		return
+
+	# Increment press count
+	interaction_data["press_count"] += 1
+
+	# Update button text
+	button.text = "%s (Completed)" % action.action_name
+
+	# Mark as complete
+	button.disabled = true
+	button.modulate = Color.GREEN
+
+	# Auto-advance stage after interaction
+	current_process.complete_current_stage(1.0)
+
+
+func _clear_interactions():
+	"""Clear all interaction buttons"""
 	for child in interaction_container.get_children():
 		child.queue_free()
+
 	active_interactions.clear()
-
-	var stage = current_process.get_current_stage()
-	if not stage or stage.required_actions.is_empty():
-		# Auto-complete stage if no interactions
-		var label = Label.new()
-		label.text = "Processing automatically..."
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		interaction_container.add_child(label)
-		return
-
-	# Create controls for each action
-	for action in stage.required_actions:
-		_create_action_control(action)
-
-
-func _create_action_control(action: CraftingRecipe.StageAction):
-	"""Create a control for a stage action"""
-	var action_panel = Panel.new()
-	action_panel.custom_minimum_size = Vector2(0, 100)
-
-	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.15, 0.15, 0.15)
-	panel_style.border_width_left = 1
-	panel_style.border_width_right = 1
-	panel_style.border_width_top = 1
-	panel_style.border_width_bottom = 1
-	panel_style.border_color = Color(0.3, 0.3, 0.3)
-	action_panel.add_theme_stylebox_override("panel", panel_style)
-	interaction_container.add_child(action_panel)
-
-	var vbox = VBoxContainer.new()
-	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	vbox.add_theme_constant_override("separation", 8)
-	action_panel.add_child(vbox)
-
-	# Action title
-	var title = Label.new()
-	title.text = action.action_name
-	title.add_theme_font_size_override("font_size", 14)
-	vbox.add_child(title)
-
-	match action.action_type:
-		CraftingRecipe.StageAction.ActionType.BUTTON_PRESS:
-			_create_button_action(vbox, action)
-		CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST:
-			_create_slider_action(vbox, action)
-		CraftingRecipe.StageAction.ActionType.TEMPERATURE_CONTROL:
-			_create_temperature_control(vbox, action)
-		CraftingRecipe.StageAction.ActionType.PRESSURE_CONTROL:
-			_create_pressure_control(vbox, action)
-		CraftingRecipe.StageAction.ActionType.TIMING_CHALLENGE:
-			_create_timing_challenge(vbox, action)
-
-
-func _create_button_action(parent: VBoxContainer, action: CraftingRecipe.StageAction):
-	"""Create a simple button action"""
-	var button = Button.new()
-	button.text = "Execute Action"
-	button.custom_minimum_size = Vector2(0, 40)
-	button.pressed.connect(_on_action_button_pressed.bind(action))
-	parent.add_child(button)
-
-	active_interactions[action.action_id] = {"type": "button", "completed": false}
-
-
-func _create_slider_action(parent: VBoxContainer, action: CraftingRecipe.StageAction):
-	"""Create a slider adjustment action"""
-	var hbox = HBoxContainer.new()
-	parent.add_child(hbox)
-
-	var value_label = Label.new()
-	value_label.text = "Value: %.1f" % action.optimal_value
-	value_label.custom_minimum_size = Vector2(100, 0)
-	hbox.add_child(value_label)
-
-	var slider = HSlider.new()
-	slider.min_value = action.parameter_min
-	slider.max_value = action.parameter_max
-	slider.value = (action.parameter_min + action.parameter_max) / 2.0
-	slider.step = 0.1
-	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	slider.value_changed.connect(_on_slider_value_changed.bind(action, value_label))
-	hbox.add_child(slider)
-
-	# Optimal range indicator
-	var optimal_label = Label.new()
-	optimal_label.text = "Optimal: %.1f ± %.1f" % [action.optimal_value, action.tolerance]
-	optimal_label.add_theme_font_size_override("font_size", 10)
-	parent.add_child(optimal_label)
-
-	var confirm_button = Button.new()
-	confirm_button.text = "Confirm Setting"
-	confirm_button.pressed.connect(_on_slider_confirmed.bind(action, slider))
-	parent.add_child(confirm_button)
-
-	active_interactions[action.action_id] = {"type": "slider", "value": slider.value, "completed": false}
-
-
-func _create_temperature_control(parent: VBoxContainer, action: CraftingRecipe.StageAction):
-	"""Create a temperature control interface"""
-	var hbox = HBoxContainer.new()
-	parent.add_child(hbox)
-
-	var decrease_button = Button.new()
-	decrease_button.text = "-"
-	decrease_button.custom_minimum_size = Vector2(40, 40)
-	hbox.add_child(decrease_button)
-
-	var temp_label = Label.new()
-	temp_label.text = "Temperature: %.1f°C" % action.optimal_value
-	temp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	temp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hbox.add_child(temp_label)
-
-	var increase_button = Button.new()
-	increase_button.text = "+"
-	increase_button.custom_minimum_size = Vector2(40, 40)
-	hbox.add_child(increase_button)
-
-	var current_temp = action.optimal_value
-
-	decrease_button.pressed.connect(
-		func():
-			current_temp = max(action.parameter_min, current_temp - 5.0)
-			temp_label.text = "Temperature: %.1f°C" % current_temp
-			_update_temp_color(temp_label, current_temp, action)
-			active_interactions[action.action_id]["value"] = current_temp
-	)
-
-	increase_button.pressed.connect(
-		func():
-			current_temp = min(action.parameter_max, current_temp + 5.0)
-			temp_label.text = "Temperature: %.1f°C" % current_temp
-			_update_temp_color(temp_label, current_temp, action)
-			active_interactions[action.action_id]["value"] = current_temp
-	)
-
-	var stabilize_button = Button.new()
-	stabilize_button.text = "Stabilize Temperature"
-	stabilize_button.pressed.connect(_on_temperature_stabilized.bind(action, current_temp))
-	parent.add_child(stabilize_button)
-
-	active_interactions[action.action_id] = {"type": "temperature", "value": current_temp, "completed": false}
-
-
-func _update_temp_color(label: Label, temp: float, action: CraftingRecipe.StageAction):
-	"""Update label color based on temperature accuracy"""
-	var diff = abs(temp - action.optimal_value)
-	if diff <= action.tolerance:
-		label.add_theme_color_override("font_color", Color.GREEN)
-	elif diff <= action.tolerance * 2:
-		label.add_theme_color_override("font_color", Color.YELLOW)
-	else:
-		label.add_theme_color_override("font_color", Color.RED)
-
-
-func _create_pressure_control(parent: VBoxContainer, action: CraftingRecipe.StageAction):
-	"""Create a pressure control interface"""
-	var progress = ProgressBar.new()
-	progress.min_value = action.parameter_min
-	progress.max_value = action.parameter_max
-	progress.value = action.optimal_value
-	progress.show_percentage = false
-	progress.custom_minimum_size = Vector2(0, 30)
-	parent.add_child(progress)
-
-	var pressure_label = Label.new()
-	pressure_label.text = "Pressure: %.2f bar (Target: %.2f ± %.2f)" % [action.optimal_value, action.optimal_value, action.tolerance]
-	pressure_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	parent.add_child(pressure_label)
-
-	var button_box = HBoxContainer.new()
-	button_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	parent.add_child(button_box)
-
-	var vent_button = Button.new()
-	vent_button.text = "Vent Pressure"
-	button_box.add_child(vent_button)
-
-	var increase_button = Button.new()
-	increase_button.text = "Increase Pressure"
-	button_box.add_child(increase_button)
-
-	var confirm_button = Button.new()
-	confirm_button.text = "Confirm Pressure"
-	confirm_button.disabled = true
-	button_box.add_child(confirm_button)
-
-	var current_pressure = action.optimal_value
-
-	vent_button.pressed.connect(
-		func():
-			current_pressure = max(action.parameter_min, current_pressure - 0.5)
-			progress.value = current_pressure
-			pressure_label.text = "Pressure: %.2f bar (Target: %.2f ± %.2f)" % [current_pressure, action.optimal_value, action.tolerance]
-			var in_range = abs(current_pressure - action.optimal_value) <= action.tolerance
-			confirm_button.disabled = not in_range
-			active_interactions[action.action_id]["value"] = current_pressure
-	)
-
-	increase_button.pressed.connect(
-		func():
-			current_pressure = min(action.parameter_max, current_pressure + 0.5)
-			progress.value = current_pressure
-			pressure_label.text = "Pressure: %.2f bar (Target: %.2f ± %.2f)" % [current_pressure, action.optimal_value, action.tolerance]
-			var in_range = abs(current_pressure - action.optimal_value) <= action.tolerance
-			confirm_button.disabled = not in_range
-			active_interactions[action.action_id]["value"] = current_pressure
-	)
-
-	confirm_button.pressed.connect(_on_pressure_confirmed.bind(action, current_pressure))
-
-	active_interactions[action.action_id] = {"type": "pressure", "value": current_pressure, "completed": false}
-
-
-func _create_timing_challenge(parent: VBoxContainer, action: CraftingRecipe.StageAction):
-	"""Create a timing challenge action"""
-	var progress = ProgressBar.new()
-	progress.max_value = 100
-	progress.value = 0
-	progress.show_percentage = false
-	progress.custom_minimum_size = Vector2(0, 40)
-	parent.add_child(progress)
-
-	var instruction_label = Label.new()
-	instruction_label.text = "Press the button when the bar is in the green zone!"
-	instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	parent.add_child(instruction_label)
-
-	var action_button = Button.new()
-	action_button.text = "STOP!"
-	action_button.custom_minimum_size = Vector2(0, 50)
-	parent.add_child(action_button)
-
-	active_interactions[action.action_id] = {"type": "timing", "progress": 0.0, "direction": 1, "completed": false, "progress_bar": progress}
-
-	action_button.pressed.connect(_on_timing_button_pressed.bind(action))
-
-
-func _on_action_button_pressed(action: CraftingRecipe.StageAction):
-	"""Handle button action press"""
-	if not active_interactions.has(action.action_id):
-		return
-
-	active_interactions[action.action_id]["completed"] = true
-	_check_all_actions_complete()
-
-
-func _on_slider_value_changed(value: float, action: CraftingRecipe.StageAction, label: Label):
-	"""Handle slider value change"""
-	label.text = "Value: %.1f" % value
-	if active_interactions.has(action.action_id):
-		active_interactions[action.action_id]["value"] = value
-
-
-func _on_slider_confirmed(action: CraftingRecipe.StageAction, slider: HSlider):
-	"""Handle slider confirmation"""
-	if not active_interactions.has(action.action_id):
-		return
-
-	var value = slider.value
-	var quality = _calculate_action_quality(value, action)
-
-	active_interactions[action.action_id]["completed"] = true
-	active_interactions[action.action_id]["quality"] = quality
-
-	current_process.add_quality_modifier(action.action_id, quality - 1.0)
-
-	_check_all_actions_complete()
-
-
-func _on_temperature_stabilized(action: CraftingRecipe.StageAction, temp: float):
-	"""Handle temperature stabilization"""
-	if not active_interactions.has(action.action_id):
-		return
-
-	var quality = _calculate_action_quality(temp, action)
-
-	active_interactions[action.action_id]["completed"] = true
-	active_interactions[action.action_id]["quality"] = quality
-
-	current_process.add_quality_modifier(action.action_id, quality - 1.0)
-
-	_check_all_actions_complete()
-
-
-func _on_pressure_confirmed(action: CraftingRecipe.StageAction, pressure: float):
-	"""Handle pressure confirmation"""
-	if not active_interactions.has(action.action_id):
-		return
-
-	var quality = _calculate_action_quality(pressure, action)
-
-	active_interactions[action.action_id]["completed"] = true
-	active_interactions[action.action_id]["quality"] = quality
-
-	current_process.add_quality_modifier(action.action_id, quality - 1.0)
-
-	_check_all_actions_complete()
-
-
-func _on_timing_button_pressed(action: CraftingRecipe.StageAction):
-	"""Handle timing challenge button press"""
-	if not active_interactions.has(action.action_id):
-		return
-
-	var data = active_interactions[action.action_id]
-	var progress_value = data["progress"]
-
-	# Green zone is around optimal value
-	var optimal_normalized = (action.optimal_value - action.parameter_min) / (action.parameter_max - action.parameter_min) * 100.0
-	var tolerance_normalized = (action.tolerance / (action.parameter_max - action.parameter_min)) * 100.0
-
-	var quality = 0.0
-	var diff = abs(progress_value - optimal_normalized)
-
-	if diff <= tolerance_normalized:
-		quality = 1.5  # Perfect timing
-	elif diff <= tolerance_normalized * 2:
-		quality = 1.0  # Good timing
-	else:
-		quality = 0.5  # Poor timing
-
-	data["completed"] = true
-	data["quality"] = quality
-
-	current_process.add_quality_modifier(action.action_id, quality - 1.0)
-
-	_check_all_actions_complete()
-
-
-func _calculate_action_quality(value: float, action: CraftingRecipe.StageAction) -> float:
-	"""Calculate quality based on how close value is to optimal"""
-	var diff = abs(value - action.optimal_value)
-
-	if diff <= action.tolerance:
-		return 1.5  # Perfect
-	elif diff <= action.tolerance * 2:
-		return 1.0  # Good
-	elif diff <= action.tolerance * 3:
-		return 0.75  # Acceptable
-	else:
-		return 0.5  # Poor
-
-
-func _check_all_actions_complete():
-	"""Check if all stage actions are complete"""
-	for data in active_interactions.values():
-		if not data["completed"]:
-			return
-
-	# All actions complete - finish stage
-	var avg_quality = 1.0
-	var quality_count = 0
-
-	for data in active_interactions.values():
-		if data.has("quality"):
-			avg_quality += data["quality"]
-			quality_count += 1
-
-	if quality_count > 0:
-		avg_quality /= quality_count
-
-	current_process.complete_current_stage(avg_quality)
 
 
 func _on_interaction_timer_timeout():
-	"""Update crafting progress each tick"""
-	if not current_process or not current_process.is_active:
-		return
-
-	# Update timing challenges
-	for action_id in active_interactions:
-		var data = active_interactions[action_id]
-		if data["type"] == "timing" and not data["completed"]:
-			data["progress"] += data["direction"] * 2.0
-			if data["progress"] >= 100.0 or data["progress"] <= 0.0:
-				data["direction"] *= -1
-			data["progress"] = clamp(data["progress"], 0.0, 100.0)
-			data["progress_bar"].value = data["progress"]
-
-	# Update process
-	current_process.update_progress(interaction_timer.wait_time)
+	"""Update crafting progress"""
+	if current_process:
+		current_process.update_progress(interaction_timer.wait_time)
 
 
-func _on_stage_completed(stage_index: int, quality: float):
-	"""Handle stage completion"""
-	# Clear interactions for next stage
-	for child in interaction_container.get_children():
-		child.queue_free()
-	active_interactions.clear()
-
-
-func _on_stage_failed(stage_index: int):
-	"""Handle stage failure"""
-	interaction_timer.stop()
-	process_panel.visible = false
-	interaction_panel.visible = false
-
-	# Show failure message
-	var dialog = AcceptDialog.new()
-	dialog.dialog_text = "Crafting failed at stage %d!\n%s" % [stage_index + 1, current_process.failure_reason]
-	dialog.title = "Crafting Failed"
-	add_child(dialog)
-	dialog.popup_centered()
-
-	_reset_crafting_ui()
-
-
-func _on_process_completed(output_items: Array, final_quality: float):
-	"""Handle process completion"""
-	interaction_timer.stop()
-	process_panel.visible = false
-	interaction_panel.visible = false
-	output_panel.visible = true
-
-	_display_output(output_items, final_quality)
-
-
-func _display_output(output_items: Array, final_quality: float):
+func _display_output(output_items: Array):
 	"""Display crafting output"""
-	# Clear output grid
+	# Clear previous output
 	for child in output_grid.get_children():
 		child.queue_free()
 
 	# Quality display
-	var quality_panel = Panel.new()
-	quality_panel.custom_minimum_size = Vector2(200, 80)
-	output_grid.add_child(quality_panel)
-
 	var quality_vbox = VBoxContainer.new()
-	quality_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	quality_panel.add_child(quality_vbox)
+	output_grid.add_child(quality_vbox)
 
 	var quality_label = Label.new()
-	quality_label.text = "Final Quality"
+	quality_label.text = "Quality"
 	quality_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	quality_vbox.add_child(quality_label)
 
 	var quality_value = Label.new()
-	quality_value.text = "%.1f%%" % (final_quality * 100)
+	quality_value.text = "%.1f%%" % (current_process.overall_quality * 100)
 	quality_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	quality_value.add_theme_font_size_override("font_size", 24)
-
-	if final_quality >= 1.5:
-		quality_value.add_theme_color_override("font_color", Color.GOLD)
-	elif final_quality >= 1.0:
-		quality_value.add_theme_color_override("font_color", Color.GREEN)
-	else:
-		quality_value.add_theme_color_override("font_color", Color.YELLOW)
+	quality_value.add_theme_font_size_override("font_size", 20)
+	quality_value.add_theme_color_override("font_color", Color.YELLOW)
 
 	quality_vbox.add_child(quality_value)
 
@@ -972,7 +645,7 @@ func _on_collect_output():
 	_reset_crafting_ui()
 
 
-func _on_progress_updated(progress: float):
+func _on_progress_updated(_progress: float):
 	"""Update progress bars"""
 	if not current_process:
 		return
