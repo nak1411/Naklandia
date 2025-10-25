@@ -126,7 +126,7 @@ func _setup_recipe_list_panel(parent: Control):
 	recipe_scroll = ScrollContainer.new()
 	recipe_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	recipe_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	recipe_scroll.clip_contents = true  # ADDED: Clip scroll container
+	recipe_scroll.clip_contents = true
 	vbox.add_child(recipe_scroll)
 
 	recipe_list = VBoxContainer.new()
@@ -138,8 +138,7 @@ func _setup_recipe_list_panel(parent: Control):
 func _setup_recipe_info_panel(parent: VBoxContainer):
 	"""Set up the recipe information display"""
 	crafting_panel = Panel.new()
-	crafting_panel.custom_minimum_size = Vector2(0, 300)
-
+	crafting_panel.custom_minimum_size = Vector2(0, 250)
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.12, 0.12, 0.12)
 	panel_style.border_width_left = 1
