@@ -56,7 +56,7 @@ func _setup_crafting_ui():
 	# Main horizontal split
 	var main_split = HSplitContainer.new()
 	main_split.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main_split.split_offset = 300
+	main_split.split_offset = -100
 	content_area.add_child(main_split)
 
 	# Left side - Recipe list
@@ -82,10 +82,10 @@ func _setup_recipe_list_panel(parent: Control):
 
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.15, 0.15, 0.15)
-	panel_style.border_width_left = 2
-	panel_style.border_width_right = 2
-	panel_style.border_width_top = 2
-	panel_style.border_width_bottom = 2
+	panel_style.border_width_left = 1
+	panel_style.border_width_right = 1
+	panel_style.border_width_top = 1
+	panel_style.border_width_bottom = 1
 	panel_style.border_color = Color(0.3, 0.3, 0.3)
 	recipe_list_panel.add_theme_stylebox_override("panel", panel_style)
 	parent.add_child(recipe_list_panel)

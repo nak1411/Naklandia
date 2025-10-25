@@ -157,13 +157,13 @@ func _update_window_title():
 
 	match current_station_type:
 		"basic_workbench":
-			crafting_window.window_title = "Basic Workbench"
+			crafting_window.set_window_title("Basic Workbench")
 		"advanced_fabricator":
-			crafting_window.window_title = "Advanced Fabricator"
+			crafting_window.set_window_title("Advanced Fabricator")
 		"chemical_station":
-			crafting_window.window_title = "Chemical Laboratory"
+			crafting_window.set_window_title("Chemical Laboratory")
 		_:
-			crafting_window.window_title = "Crafting Station"
+			crafting_window.set_window_title("Crafting Station")
 
 
 func close_crafting_station():
