@@ -307,8 +307,12 @@ func set_crafting_manager(manager: CraftingManager):
 	"""Set the crafting manager and load recipes"""
 	crafting_manager = manager
 	if crafting_manager:
-		# Defer loading recipes until next frame to ensure UI is fully ready
-		call_deferred("_load_available_recipes")
+		# Wait for UI to be fully ready in scene tree
+		if not is_node_ready():
+			await ready
+		# Ensure all child nodes are in scene tree
+		await get_tree().process_frame
+		_load_available_recipes()
 
 
 func _load_available_recipes():

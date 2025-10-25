@@ -109,9 +109,8 @@ func _add_test_item(id: String, name: String, type: ItemTypes.Type, quantity: in
 
 
 func open_crafting_station():
-	"""Open the crafting station window"""
+	"""Open the crafting station UI"""
 	if not ui_manager or not crafting_manager:
-		print("ERROR: UI Manager or Crafting Manager not initialized!")
 		return
 
 	# Create crafting window if it doesn't exist
@@ -119,8 +118,8 @@ func open_crafting_station():
 		crafting_window = CraftingStationWindow.new()
 		crafting_window.name = "CraftingStationWindow"
 
-		# Set the crafting manager
-		crafting_window.set_crafting_manager(crafting_manager)
+		# Set the crafting manager and wait for recipes to load
+		await crafting_window.set_crafting_manager(crafting_manager)
 
 		# Register with UI manager
 		ui_manager.register_window(crafting_window, "dialog")

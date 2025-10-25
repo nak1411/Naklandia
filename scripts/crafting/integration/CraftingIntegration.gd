@@ -12,6 +12,7 @@ var inventory_integration: InventoryIntegration
 # Current station info
 var current_station_type: String = ""
 var current_station_node: Node = null
+var is_crafting_open_flag: bool = false
 
 
 func _ready():
@@ -97,6 +98,11 @@ func open_crafting_station(station_type: String, station_node: Node = null):
 	# Update window title based on station
 	_update_window_title()
 
+	# Disable player input and show mouse
+	_set_player_input_enabled(false)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	is_crafting_open_flag = true
+
 	print("✓ Opened crafting station: %s" % station_type)
 
 
@@ -104,12 +110,44 @@ func _create_crafting_window():
 	"""Create the crafting window"""
 	crafting_window = CraftingStationWindow.new()
 	crafting_window.name = "CraftingStationWindow"
-	crafting_window.set_crafting_manager(crafting_manager)
 
-	# Register with UI manager using dialog type (highest layer)
+	# Register with UI manager
 	ui_manager.register_window(crafting_window, "dialog")
 
+	# Show the window immediately
+	crafting_window.show_window()
+
+	# Connect to window close signal
+	if crafting_window.has_signal("window_closed"):
+		crafting_window.window_closed.connect(_on_crafting_window_closed)
+
+	# Set the crafting manager (async - will populate recipes when ready)
+	crafting_window.set_crafting_manager(crafting_manager)
+
 	print("✓ Created CraftingStationWindow")
+
+
+func _set_player_input_enabled(enabled: bool):
+	"""Enable or disable player input"""
+	var player_node = get_tree().get_first_node_in_group("player")
+	if player_node and player_node.has_method("set_input_enabled"):
+		player_node.set_input_enabled(enabled)
+
+
+func _on_crafting_window_closed():
+	"""Handle crafting window being closed"""
+	# Re-enable player input
+	_set_player_input_enabled(true)
+
+	# Restore mouse mode
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+	# Clear current station
+	current_station_type = ""
+	current_station_node = null
+	is_crafting_open_flag = false
+
+	print("Crafting window closed")
 
 
 func _update_window_title():
@@ -133,13 +171,20 @@ func close_crafting_station():
 	if crafting_window and is_instance_valid(crafting_window):
 		crafting_window.hide_window()
 
+	# Re-enable player input
+	_set_player_input_enabled(true)
+
+	# Restore mouse mode
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
 	current_station_type = ""
 	current_station_node = null
+	is_crafting_open_flag = false
 
 
 func is_crafting_open() -> bool:
 	"""Check if crafting window is open"""
-	return crafting_window and is_instance_valid(crafting_window) and crafting_window.visible
+	return is_crafting_open_flag and crafting_window and is_instance_valid(crafting_window) and crafting_window.visible
 
 
 func get_crafting_manager() -> CraftingManager:
