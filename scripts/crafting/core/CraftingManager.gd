@@ -73,6 +73,64 @@ func _load_recipes():
 func _create_example_recipes():
 	"""Create example crafting recipes for demonstration"""
 
+	# TEST RECIPE - Hybrid Charges from Noxite
+	var hybrid_ammo = CraftingRecipe.new()
+	hybrid_ammo.recipe_id = "recipe_hybrid_charges"
+	hybrid_ammo.recipe_name = "Hybrid Charges"
+	hybrid_ammo.recipe_category = "Ammunition"
+	hybrid_ammo.description = "Manufacture hybrid charges using Noxite as a propellant base."
+	hybrid_ammo.complexity_level = 1
+	hybrid_ammo.estimated_time = 20.0
+	hybrid_ammo.failure_risk = 0.05
+	hybrid_ammo.output_item_id = "ammo_hybrid_charges"
+	hybrid_ammo.output_quantity = 100
+
+	# Materials - Using existing game items
+	var noxite_mat = CraftingRecipe.RecipeMaterial.new()
+	noxite_mat.material_id = "resource_noxite"
+	noxite_mat.material_name = "Noxite"
+	noxite_mat.quantity = 1
+	hybrid_ammo.required_materials.append(noxite_mat)
+
+	# Tools - Using basic workbench tools
+	var basic_tool = CraftingRecipe.RequiredTool.new()
+	basic_tool.tool_id = "basic_hammer"
+	basic_tool.tool_name = "Basic Hammer"
+	basic_tool.quality_impact = 0.05
+	hybrid_ammo.required_tools.append(basic_tool)
+
+	# Crafting stages - Keep it simple for testing
+	var prep_stage = CraftingRecipe.CraftingStage.new()
+	prep_stage.stage_id = "prep"
+	prep_stage.stage_name = "Preparation"
+	prep_stage.description = "Prepare Noxite for processing into ammunition"
+	prep_stage.duration = 10.0
+	prep_stage.stage_type = CraftingRecipe.CraftingStage.StageType.PREPARATION
+	hybrid_ammo.crafting_stages.append(prep_stage)
+
+	var assembly_stage = CraftingRecipe.CraftingStage.new()
+	assembly_stage.stage_id = "assembly"
+	assembly_stage.stage_name = "Assembly"
+	assembly_stage.description = "Form charges and fill with propellant"
+	assembly_stage.duration = 10.0
+	assembly_stage.stage_type = CraftingRecipe.CraftingStage.StageType.ASSEMBLY
+	assembly_stage.success_threshold = 0.5
+
+	# Add simple assembly action for testing
+	var assembly_action = CraftingRecipe.StageAction.new()
+	assembly_action.action_id = "filling"
+	assembly_action.action_name = "Propellant Fill Level"
+	assembly_action.action_type = CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST
+	assembly_action.parameter_min = 0.0
+	assembly_action.parameter_max = 100.0
+	assembly_action.optimal_value = 75.0
+	assembly_action.tolerance = 15.0
+	assembly_stage.required_actions.append(assembly_action)
+
+	hybrid_ammo.crafting_stages.append(assembly_stage)
+
+	all_recipes.append(hybrid_ammo)
+
 	# Simple component recipe
 	var simple_component = CraftingRecipe.new()
 	simple_component.recipe_id = "recipe_basic_component"
@@ -106,21 +164,21 @@ func _create_example_recipes():
 	simple_component.required_tools.append(hammer_tool)
 
 	# Crafting stages
-	var prep_stage = CraftingRecipe.CraftingStage.new()
-	prep_stage.stage_id = "prep"
-	prep_stage.stage_name = "Preparation"
-	prep_stage.description = "Prepare materials and inspect quality"
-	prep_stage.duration = 10.0
-	prep_stage.stage_type = CraftingRecipe.CraftingStage.StageType.PREPARATION
-	simple_component.crafting_stages.append(prep_stage)
+	var prep_stage2 = CraftingRecipe.CraftingStage.new()
+	prep_stage2.stage_id = "prep"
+	prep_stage2.stage_name = "Preparation"
+	prep_stage2.description = "Prepare materials and inspect quality"
+	prep_stage2.duration = 10.0
+	prep_stage2.stage_type = CraftingRecipe.CraftingStage.StageType.PREPARATION
+	simple_component.crafting_stages.append(prep_stage2)
 
-	var assembly_stage = CraftingRecipe.CraftingStage.new()
-	assembly_stage.stage_id = "assembly"
-	assembly_stage.stage_name = "Assembly"
-	assembly_stage.description = "Assemble the component parts"
-	assembly_stage.duration = 15.0
-	assembly_stage.stage_type = CraftingRecipe.CraftingStage.StageType.ASSEMBLY
-	assembly_stage.success_threshold = 0.6
+	var assembly_stage2 = CraftingRecipe.CraftingStage.new()
+	assembly_stage2.stage_id = "assembly"
+	assembly_stage2.stage_name = "Assembly"
+	assembly_stage2.description = "Assemble the component parts"
+	assembly_stage2.duration = 15.0
+	assembly_stage2.stage_type = CraftingRecipe.CraftingStage.StageType.ASSEMBLY
+	assembly_stage2.success_threshold = 0.6
 
 	# Add assembly action
 	var assemble_action = CraftingRecipe.StageAction.new()
@@ -131,9 +189,9 @@ func _create_example_recipes():
 	assemble_action.parameter_max = 100.0
 	assemble_action.optimal_value = 65.0
 	assemble_action.tolerance = 10.0
-	assembly_stage.required_actions.append(assemble_action)
+	assembly_stage2.required_actions.append(assemble_action)
 
-	simple_component.crafting_stages.append(assembly_stage)
+	simple_component.crafting_stages.append(assembly_stage2)
 
 	var finish_stage = CraftingRecipe.CraftingStage.new()
 	finish_stage.stage_id = "finish"
@@ -199,12 +257,12 @@ func _create_example_recipes():
 	circuit_prep.stage_type = CraftingRecipe.CraftingStage.StageType.PREPARATION
 
 	var temp_action = CraftingRecipe.StageAction.new()
-	temp_action.action_id = "preheat"
-	temp_action.action_name = "Preheat PCB"
-	temp_action.action_type = CraftingRecipe.StageAction.ActionType.TEMPERATURE_CONTROL
-	temp_action.parameter_min = 50.0
-	temp_action.parameter_max = 150.0
-	temp_action.optimal_value = 85.0
+	temp_action.action_id = "cleaning"
+	temp_action.action_name = "Cleaning Intensity"
+	temp_action.action_type = CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST
+	temp_action.parameter_min = 0.0
+	temp_action.parameter_max = 100.0
+	temp_action.optimal_value = 80.0
 	temp_action.tolerance = 10.0
 	circuit_prep.required_actions.append(temp_action)
 
@@ -213,15 +271,14 @@ func _create_example_recipes():
 	var circuit_assembly = CraftingRecipe.CraftingStage.new()
 	circuit_assembly.stage_id = "assembly"
 	circuit_assembly.stage_name = "Component Assembly"
-	circuit_assembly.description = "Precisely place and solder electronic components"
-	circuit_assembly.duration = 45.0
+	circuit_assembly.description = "Place and solder electronic components"
+	circuit_assembly.duration = 40.0
 	circuit_assembly.stage_type = CraftingRecipe.CraftingStage.StageType.ASSEMBLY
 	circuit_assembly.success_threshold = 0.7
-	circuit_assembly.can_fail = true
 
 	var precision_action = CraftingRecipe.StageAction.new()
 	precision_action.action_id = "placement"
-	precision_action.action_name = "Component Placement Precision"
+	precision_action.action_name = "Component Placement"
 	precision_action.action_type = CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST
 	precision_action.parameter_min = 0.0
 	precision_action.parameter_max = 100.0
@@ -230,11 +287,11 @@ func _create_example_recipes():
 	circuit_assembly.required_actions.append(precision_action)
 
 	var solder_temp = CraftingRecipe.StageAction.new()
-	solder_temp.action_id = "solder_temp"
+	solder_temp.action_id = "soldering"
 	solder_temp.action_name = "Solder Temperature"
 	solder_temp.action_type = CraftingRecipe.StageAction.ActionType.TEMPERATURE_CONTROL
-	solder_temp.parameter_min = 180.0
-	solder_temp.parameter_max = 350.0
+	solder_temp.parameter_min = 150.0
+	solder_temp.parameter_max = 400.0
 	solder_temp.optimal_value = 260.0
 	solder_temp.tolerance = 15.0
 	circuit_assembly.required_actions.append(solder_temp)
@@ -464,30 +521,34 @@ func check_tool_availability(tool_id: String) -> bool:
 
 
 func start_crafting(recipe: CraftingRecipe) -> CraftingProcess:
-	"""Start a new crafting process"""
+	"""Start a crafting process"""
 	if not can_craft_recipe(recipe):
+		push_warning("Cannot start crafting - missing requirements")
 		return null
 
 	# Consume materials
 	if not _consume_materials(recipe):
+		push_warning("Failed to consume materials")
 		return null
 
 	# Create process
 	var process = CraftingProcess.new(recipe)
-	process.start_process()
-
+	process.used_tools = available_tools.duplicate()
 	active_processes.append(process)
+
+	# Start the process
+	process.start_process()
 	crafting_started.emit(process)
 
 	return process
 
 
 func _consume_materials(recipe: CraftingRecipe) -> bool:
-	"""Consume materials for crafting"""
+	"""Consume materials required for crafting"""
 	if not player_container or not inventory_manager:
 		return false
 
-	# Track consumed items
+	# Track items to remove
 	var to_remove: Array[Dictionary] = []
 
 	for req_mat in recipe.required_materials:
@@ -503,7 +564,7 @@ func _consume_materials(recipe: CraftingRecipe) -> bool:
 				remaining -= consume_amount
 
 		if remaining > 0:
-			return false  # Not enough materials
+			return false
 
 	# Actually remove items
 	for removal in to_remove:
@@ -519,28 +580,94 @@ func _consume_materials(recipe: CraftingRecipe) -> bool:
 	return true
 
 
-func collect_crafting_output(process: CraftingProcess):
-	"""Collect the output from a completed crafting process"""
-	if not process.success or not inventory_manager or not player_container:
+func update_process(process: CraftingProcess, delta: float):
+	"""Update a crafting process"""
+	if not process or not process.is_active or process.is_paused:
 		return
 
-	# Create output items and add to inventory
-	for output_data in process.output_items:
-		var item = InventoryItem_Base.new()
-		item.item_id = output_data.get("item_id", "unknown")
-		item.item_name = output_data.get("item_id", "Unknown Item").capitalize()
-		item.quantity = output_data.get("quantity", 1)
+	var recipe = process.recipe
+	if not recipe or process.current_stage_index >= recipe.crafting_stages.size():
+		return
 
-		# Adjust item properties based on quality
-		var quality = output_data.get("quality", 1.0)
-		if quality > 1.0:
-			item.item_name += " (High Quality)"
-			item.base_value *= quality
+	var current_stage = recipe.crafting_stages[process.current_stage_index]
 
-		# Try to add to inventory
-		if not inventory_manager.add_item_to_container(item, player_container.container_id):
-			# Drop on ground if inventory full
-			print("Inventory full! Item dropped.")
+	# Update progress
+	process.stage_progress += delta / current_stage.duration
+	process.progress_updated.emit(process.stage_progress)
+
+	# Check if stage completed
+	if process.stage_progress >= 1.0:
+		_complete_stage(process)
+
+
+func _complete_stage(process: CraftingProcess):
+	"""Complete the current crafting stage"""
+	var recipe = process.recipe
+	var current_stage = recipe.crafting_stages[process.current_stage_index]
+
+	# Calculate stage quality based on actions
+	var stage_quality = _calculate_stage_quality(process, current_stage)
+	process.stage_qualities[process.current_stage_index] = stage_quality
+
+	process.stage_completed.emit(process.current_stage_index, stage_quality)
+
+	# Move to next stage or complete
+	process.current_stage_index += 1
+	process.stage_progress = 0.0
+
+	if process.current_stage_index >= recipe.crafting_stages.size():
+		_complete_crafting(process)
+	else:
+		process.stage_started.emit(process.current_stage_index)
+
+
+func _calculate_stage_quality(process: CraftingProcess, stage: CraftingRecipe.CraftingStage) -> float:
+	"""Calculate quality for completed stage"""
+	if stage.required_actions.is_empty():
+		return 1.0
+
+	var total_quality = 0.0
+	for action in stage.required_actions:
+		var param_value = process.current_parameters.get(action.action_id, action.optimal_value)
+		var deviation = abs(param_value - action.optimal_value)
+		var quality = 1.0 - (deviation / action.tolerance)
+		total_quality += clamp(quality, 0.0, 1.0)
+
+	return total_quality / stage.required_actions.size()
+
+
+func _complete_crafting(process: CraftingProcess):
+	"""Complete the crafting process and generate output"""
+	# Calculate overall quality
+	var total_quality = 0.0
+	for quality in process.stage_qualities:
+		total_quality += quality
+	process.overall_quality = total_quality / process.stage_qualities.size()
+
+	# Generate output item
+	if inventory_manager and player_container:
+		var output_item = InventoryItem_Base.new()
+		output_item.item_id = process.recipe.output_item_id
+		output_item.item_name = process.recipe.recipe_name
+		output_item.quantity = process.recipe.output_quantity
+		output_item.item_type = ItemTypes.Type.AMMUNITION
+		output_item.volume = 0.025
+		output_item.mass = 0.01
+		output_item.base_value = 10.0
+		output_item.max_stack_size = 999999
+
+		process.output_items.append(output_item)
+		process.success = true
+
+		# Add to inventory - use container.add_item() directly
+		var added = player_container.add_item(output_item)
+		if added:
+			print("✓ Crafting completed: ", process.recipe.recipe_name, " x", process.recipe.output_quantity)
+			print("  Quality: %.1f%%" % (process.overall_quality * 100))
+		else:
+			push_warning("Failed to add crafted item to inventory - container full?")
+	else:
+		push_warning("Item dropped - no inventory available.")
 
 	# Remove from active processes
 	active_processes.erase(process)
