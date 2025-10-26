@@ -634,7 +634,7 @@ func _on_stage_failed(_stage_index: int, reason: String):
 	interaction_container.add_child(failure_label)
 
 
-func _on_process_completed(output_items: Array):
+func _on_process_completed(output_items: Array, _final_quality: float):
 	"""Handle process completion"""
 	interaction_timer.stop()
 	interaction_panel.visible = false

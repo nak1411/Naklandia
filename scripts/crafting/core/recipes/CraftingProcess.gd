@@ -136,6 +136,9 @@ func complete_current_stage(quality: float = 1.0):
 		_fail_process("Stage %d failed quality check" % current_stage_index)
 		return
 
+	# Set progress to 100% so progress bar shows complete
+	stage_progress = 1.0  # ADD THIS LINE
+
 	# Record stage quality
 	stage_qualities[current_stage_index] = quality
 	stage_completed.emit(current_stage_index, quality)

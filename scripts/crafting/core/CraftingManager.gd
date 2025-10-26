@@ -137,162 +137,95 @@ func _create_example_recipes():
 	simple_component.recipe_name = "Basic Component"
 	simple_component.recipe_category = "Components"
 	simple_component.description = "A simple mechanical component crafted from metal."
-	simple_component.complexity_level = 2
+	simple_component.complexity_level = 1
 	simple_component.estimated_time = 30.0
-	simple_component.failure_risk = 0.05
-	simple_component.output_item_id = "basic_component"
+	simple_component.failure_risk = 0.1
+	simple_component.output_item_id = "component_basic"
 	simple_component.output_quantity = 1
 
-	# Materials
 	var metal_mat = CraftingRecipe.RecipeMaterial.new()
-	metal_mat.material_id = "metal_plate"
-	metal_mat.material_name = "Metal Plate"
+	metal_mat.material_id = "material_metal"
+	metal_mat.material_name = "Metal Ingot"
 	metal_mat.quantity = 2
 	simple_component.required_materials.append(metal_mat)
 
-	var screw_mat = CraftingRecipe.RecipeMaterial.new()
-	screw_mat.material_id = "screw"
-	screw_mat.material_name = "Screw"
-	screw_mat.quantity = 4
-	simple_component.required_materials.append(screw_mat)
+	var hammer = CraftingRecipe.RequiredTool.new()
+	hammer.tool_id = "basic_hammer"
+	hammer.tool_name = "Basic Hammer"
+	hammer.quality_impact = 0.1
+	simple_component.required_tools.append(hammer)
 
-	# Tools
-	var hammer_tool = CraftingRecipe.RequiredTool.new()
-	hammer_tool.tool_id = "basic_hammer"
-	hammer_tool.tool_name = "Hammer"
-	hammer_tool.quality_impact = 0.1
-	simple_component.required_tools.append(hammer_tool)
+	var comp_prep = CraftingRecipe.CraftingStage.new()
+	comp_prep.stage_id = "prep"
+	comp_prep.stage_name = "Material Preparation"
+	comp_prep.description = "Prepare and measure the metal"
+	comp_prep.duration = 15.0
+	comp_prep.stage_type = CraftingRecipe.CraftingStage.StageType.PREPARATION
+	simple_component.crafting_stages.append(comp_prep)
 
-	# Crafting stages
-	var prep_stage2 = CraftingRecipe.CraftingStage.new()
-	prep_stage2.stage_id = "prep"
-	prep_stage2.stage_name = "Preparation"
-	prep_stage2.description = "Prepare materials and inspect quality"
-	prep_stage2.duration = 10.0
-	prep_stage2.stage_type = CraftingRecipe.CraftingStage.StageType.PREPARATION
-	simple_component.crafting_stages.append(prep_stage2)
-
-	var assembly_stage2 = CraftingRecipe.CraftingStage.new()
-	assembly_stage2.stage_id = "assembly"
-	assembly_stage2.stage_name = "Assembly"
-	assembly_stage2.description = "Assemble the component parts"
-	assembly_stage2.duration = 15.0
-	assembly_stage2.stage_type = CraftingRecipe.CraftingStage.StageType.ASSEMBLY
-	assembly_stage2.success_threshold = 0.6
-
-	# Add assembly action
-	var assemble_action = CraftingRecipe.StageAction.new()
-	assemble_action.action_id = "assemble"
-	assemble_action.action_name = "Apply Pressure"
-	assemble_action.action_type = CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST
-	assemble_action.parameter_min = 0.0
-	assemble_action.parameter_max = 100.0
-	assemble_action.optimal_value = 65.0
-	assemble_action.tolerance = 10.0
-	assembly_stage2.required_actions.append(assemble_action)
-
-	simple_component.crafting_stages.append(assembly_stage2)
-
-	var finish_stage = CraftingRecipe.CraftingStage.new()
-	finish_stage.stage_id = "finish"
-	finish_stage.stage_name = "Finishing"
-	finish_stage.description = "Polish and inspect the completed component"
-	finish_stage.duration = 5.0
-	finish_stage.stage_type = CraftingRecipe.CraftingStage.StageType.FINALIZATION
-	simple_component.crafting_stages.append(finish_stage)
+	var comp_forge = CraftingRecipe.CraftingStage.new()
+	comp_forge.stage_id = "forge"
+	comp_forge.stage_name = "Forging"
+	comp_forge.description = "Shape the metal component"
+	comp_forge.duration = 25.0
+	comp_forge.stage_type = CraftingRecipe.CraftingStage.StageType.ASSEMBLY
+	simple_component.crafting_stages.append(comp_forge)
 
 	all_recipes.append(simple_component)
 
-	# Advanced electronic circuit recipe
+	# Advanced circuit recipe with multiple complex stages
 	var circuit = CraftingRecipe.new()
 	circuit.recipe_id = "recipe_circuit_board"
-	circuit.recipe_name = "Circuit Board"
+	circuit.recipe_name = "Advanced Circuit Board"
 	circuit.recipe_category = "Electronics"
-	circuit.description = "An advanced electronic circuit board requiring precision assembly."
-	circuit.complexity_level = 6
-	circuit.estimated_time = 90.0
+	circuit.description = "A complex circuit board requiring precision assembly and quality testing."
+	circuit.complexity_level = 3
+	circuit.estimated_time = 120.0
 	circuit.failure_risk = 0.25
-	circuit.output_item_id = "circuit_board"
+	circuit.output_item_id = "component_circuit_advanced"
 	circuit.output_quantity = 1
 
-	# Materials
-	var pcb_mat = CraftingRecipe.RecipeMaterial.new()
-	pcb_mat.material_id = "pcb_blank"
-	pcb_mat.material_name = "PCB Blank"
-	pcb_mat.quantity = 1
-	circuit.required_materials.append(pcb_mat)
+	var silicon_mat = CraftingRecipe.RecipeMaterial.new()
+	silicon_mat.material_id = "material_silicon"
+	silicon_mat.material_name = "Silicon Wafer"
+	silicon_mat.quantity = 1
+	circuit.required_materials.append(silicon_mat)
 
-	var component_mat = CraftingRecipe.RecipeMaterial.new()
-	component_mat.material_id = "electronic_component"
-	component_mat.material_name = "Electronic Components"
-	component_mat.quantity = 10
-	circuit.required_materials.append(component_mat)
+	var conductor_mat = CraftingRecipe.RecipeMaterial.new()
+	conductor_mat.material_id = "material_conductor"
+	conductor_mat.material_name = "Conductive Wire"
+	conductor_mat.quantity = 5
+	circuit.required_materials.append(conductor_mat)
 
-	var solder_mat = CraftingRecipe.RecipeMaterial.new()
-	solder_mat.material_id = "solder"
-	solder_mat.material_name = "Solder"
-	solder_mat.quantity = 5
-	circuit.required_materials.append(solder_mat)
-
-	# Tools
 	var precision_tool = CraftingRecipe.RequiredTool.new()
 	precision_tool.tool_id = "precision_laser"
 	precision_tool.tool_name = "Precision Laser"
-	precision_tool.quality_impact = 0.3
+	precision_tool.quality_impact = 0.2
 	circuit.required_tools.append(precision_tool)
 
-	var scanner_tool = CraftingRecipe.RequiredTool.new()
-	scanner_tool.tool_id = "quality_scanner"
-	scanner_tool.tool_name = "Quality Scanner"
-	scanner_tool.optional = true
-	scanner_tool.quality_impact = 0.2
-	circuit.required_tools.append(scanner_tool)
-
-	# Stages
 	var circuit_prep = CraftingRecipe.CraftingStage.new()
 	circuit_prep.stage_id = "prep"
-	circuit_prep.stage_name = "PCB Preparation"
-	circuit_prep.description = "Clean and prepare the PCB surface"
-	circuit_prep.duration = 15.0
+	circuit_prep.stage_name = "Component Layout"
+	circuit_prep.description = "Arrange and prepare components on the circuit board"
+	circuit_prep.duration = 30.0
 	circuit_prep.stage_type = CraftingRecipe.CraftingStage.StageType.PREPARATION
-
-	var temp_action = CraftingRecipe.StageAction.new()
-	temp_action.action_id = "cleaning"
-	temp_action.action_name = "Cleaning Intensity"
-	temp_action.action_type = CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST
-	temp_action.parameter_min = 0.0
-	temp_action.parameter_max = 100.0
-	temp_action.optimal_value = 80.0
-	temp_action.tolerance = 10.0
-	circuit_prep.required_actions.append(temp_action)
-
 	circuit.crafting_stages.append(circuit_prep)
 
 	var circuit_assembly = CraftingRecipe.CraftingStage.new()
 	circuit_assembly.stage_id = "assembly"
-	circuit_assembly.stage_name = "Component Assembly"
-	circuit_assembly.description = "Place and solder electronic components"
-	circuit_assembly.duration = 40.0
+	circuit_assembly.stage_name = "Precision Assembly"
+	circuit_assembly.description = "Solder components with precise temperature control"
+	circuit_assembly.duration = 45.0
 	circuit_assembly.stage_type = CraftingRecipe.CraftingStage.StageType.ASSEMBLY
 	circuit_assembly.success_threshold = 0.7
 
-	var precision_action = CraftingRecipe.StageAction.new()
-	precision_action.action_id = "placement"
-	precision_action.action_name = "Component Placement"
-	precision_action.action_type = CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST
-	precision_action.parameter_min = 0.0
-	precision_action.parameter_max = 100.0
-	precision_action.optimal_value = 90.0
-	precision_action.tolerance = 5.0
-	circuit_assembly.required_actions.append(precision_action)
-
 	var solder_temp = CraftingRecipe.StageAction.new()
-	solder_temp.action_id = "soldering"
-	solder_temp.action_name = "Solder Temperature"
-	solder_temp.action_type = CraftingRecipe.StageAction.ActionType.TEMPERATURE_CONTROL
-	solder_temp.parameter_min = 150.0
-	solder_temp.parameter_max = 400.0
-	solder_temp.optimal_value = 260.0
+	solder_temp.action_id = "soldering_temp"
+	solder_temp.action_name = "Soldering Temperature"
+	solder_temp.action_type = CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST
+	solder_temp.parameter_min = 0.0
+	solder_temp.parameter_max = 100.0
+	solder_temp.optimal_value = 65.0
 	solder_temp.tolerance = 15.0
 	circuit_assembly.required_actions.append(solder_temp)
 
@@ -334,127 +267,101 @@ func _create_example_recipes():
 	compound.recipe_name = "Advanced Fuel Compound"
 	compound.recipe_category = "Chemistry"
 	compound.description = "A volatile fuel compound requiring precise temperature and pressure control."
-	compound.complexity_level = 8
-	compound.estimated_time = 120.0
-	compound.failure_risk = 0.35
-	compound.output_item_id = "fuel_compound"
+	compound.complexity_level = 4
+	compound.estimated_time = 180.0
+	compound.failure_risk = 0.4
+	compound.output_item_id = "fuel_advanced"
 	compound.output_quantity = 10
 
-	# Materials
-	var base_chem = CraftingRecipe.RecipeMaterial.new()
-	base_chem.material_id = "base_chemical"
-	base_chem.material_name = "Base Chemical"
-	base_chem.quantity = 50
-	compound.required_materials.append(base_chem)
+	var chem_a = CraftingRecipe.RecipeMaterial.new()
+	chem_a.material_id = "chemical_catalyst"
+	chem_a.material_name = "Chemical Catalyst"
+	chem_a.quantity = 2
+	compound.required_materials.append(chem_a)
 
-	var catalyst = CraftingRecipe.RecipeMaterial.new()
-	catalyst.material_id = "catalyst"
-	catalyst.material_name = "Catalyst"
-	catalyst.quantity = 5
-	compound.required_materials.append(catalyst)
+	var chem_b = CraftingRecipe.RecipeMaterial.new()
+	chem_b.material_id = "chemical_base"
+	chem_b.material_name = "Chemical Base"
+	chem_b.quantity = 5
+	compound.required_materials.append(chem_b)
 
-	var stabilizer = CraftingRecipe.RecipeMaterial.new()
-	stabilizer.material_id = "stabilizer"
-	stabilizer.material_name = "Stabilizer"
-	stabilizer.quantity = 10
-	compound.required_materials.append(stabilizer)
+	var heat_tool = CraftingRecipe.RequiredTool.new()
+	heat_tool.tool_id = "heating_element"
+	heat_tool.tool_name = "Heating Element"
+	heat_tool.quality_impact = 0.15
+	compound.required_tools.append(heat_tool)
 
-	# Tools
-	var heating = CraftingRecipe.RequiredTool.new()
-	heating.tool_id = "heating_element"
-	heating.tool_name = "Heating Element"
-	heating.quality_impact = 0.2
-	compound.required_tools.append(heating)
+	var pressure_tool = CraftingRecipe.RequiredTool.new()
+	pressure_tool.tool_id = "pressure_chamber"
+	pressure_tool.tool_name = "Pressure Chamber"
+	pressure_tool.quality_impact = 0.15
+	compound.required_tools.append(pressure_tool)
 
-	var pressure = CraftingRecipe.RequiredTool.new()
-	pressure.tool_id = "pressure_chamber"
-	pressure.tool_name = "Pressure Chamber"
-	pressure.quality_impact = 0.25
-	compound.required_tools.append(pressure)
+	var chem_prep = CraftingRecipe.CraftingStage.new()
+	chem_prep.stage_id = "prep"
+	chem_prep.stage_name = "Chemical Preparation"
+	chem_prep.description = "Measure and prepare chemical components"
+	chem_prep.duration = 30.0
+	chem_prep.stage_type = CraftingRecipe.CraftingStage.StageType.PREPARATION
+	compound.crafting_stages.append(chem_prep)
 
-	# Stages
-	var mix_stage = CraftingRecipe.CraftingStage.new()
-	mix_stage.stage_id = "mixing"
-	mix_stage.stage_name = "Chemical Mixing"
-	mix_stage.description = "Mix base chemicals in precise ratios"
-	mix_stage.duration = 30.0
-	mix_stage.stage_type = CraftingRecipe.CraftingStage.StageType.PREPARATION
+	var chem_reaction = CraftingRecipe.CraftingStage.new()
+	chem_reaction.stage_id = "reaction"
+	chem_reaction.stage_name = "Chemical Reaction"
+	chem_reaction.description = "Carefully control temperature and pressure during the reaction"
+	chem_reaction.duration = 90.0
+	chem_reaction.stage_type = CraftingRecipe.CraftingStage.StageType.ASSEMBLY
+	chem_reaction.success_threshold = 0.8
+	chem_reaction.can_fail = true
 
-	var mix_ratio = CraftingRecipe.StageAction.new()
-	mix_ratio.action_id = "mix_ratio"
-	mix_ratio.action_name = "Mixing Ratio"
-	mix_ratio.action_type = CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST
-	mix_ratio.parameter_min = 0.0
-	mix_ratio.parameter_max = 100.0
-	mix_ratio.optimal_value = 75.0
-	mix_ratio.tolerance = 8.0
-	mix_stage.required_actions.append(mix_ratio)
-
-	compound.crafting_stages.append(mix_stage)
-
-	var reaction_stage = CraftingRecipe.CraftingStage.new()
-	reaction_stage.stage_id = "reaction"
-	reaction_stage.stage_name = "Chemical Reaction"
-	reaction_stage.description = "Heat and pressurize the mixture to initiate reaction"
-	reaction_stage.duration = 60.0
-	reaction_stage.stage_type = CraftingRecipe.CraftingStage.StageType.ASSEMBLY
-	reaction_stage.success_threshold = 0.75
-	reaction_stage.can_fail = true
-
-	var heat_control = CraftingRecipe.StageAction.new()
-	heat_control.action_id = "heat"
-	heat_control.action_name = "Reaction Temperature"
-	heat_control.action_type = CraftingRecipe.StageAction.ActionType.TEMPERATURE_CONTROL
-	heat_control.parameter_min = 100.0
-	heat_control.parameter_max = 500.0
-	heat_control.optimal_value = 320.0
-	heat_control.tolerance = 25.0
-	reaction_stage.required_actions.append(heat_control)
+	var temp_control = CraftingRecipe.StageAction.new()
+	temp_control.action_id = "temperature"
+	temp_control.action_name = "Temperature Control"
+	temp_control.action_type = CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST
+	temp_control.parameter_min = 0.0
+	temp_control.parameter_max = 100.0
+	temp_control.optimal_value = 72.0
+	temp_control.tolerance = 10.0
+	chem_reaction.required_actions.append(temp_control)
 
 	var pressure_control = CraftingRecipe.StageAction.new()
 	pressure_control.action_id = "pressure"
-	pressure_control.action_name = "Reaction Pressure"
-	pressure_control.action_type = CraftingRecipe.StageAction.ActionType.PRESSURE_CONTROL
-	pressure_control.parameter_min = 1.0
-	pressure_control.parameter_max = 10.0
-	pressure_control.optimal_value = 6.5
-	pressure_control.tolerance = 0.8
-	reaction_stage.required_actions.append(pressure_control)
+	pressure_control.action_name = "Pressure Regulation"
+	pressure_control.action_type = CraftingRecipe.StageAction.ActionType.SLIDER_ADJUST
+	pressure_control.parameter_min = 0.0
+	pressure_control.parameter_max = 100.0
+	pressure_control.optimal_value = 60.0
+	pressure_control.tolerance = 12.0
+	chem_reaction.required_actions.append(pressure_control)
 
-	compound.crafting_stages.append(reaction_stage)
+	compound.crafting_stages.append(chem_reaction)
 
-	var refine_stage = CraftingRecipe.CraftingStage.new()
-	refine_stage.stage_id = "refinement"
-	refine_stage.stage_name = "Compound Refinement"
-	refine_stage.description = "Cool and stabilize the fuel compound"
-	refine_stage.duration = 20.0
-	refine_stage.stage_type = CraftingRecipe.CraftingStage.StageType.REFINEMENT
+	var chem_stabilize = CraftingRecipe.CraftingStage.new()
+	chem_stabilize.stage_id = "stabilize"
+	chem_stabilize.stage_name = "Stabilization"
+	chem_stabilize.description = "Cool and stabilize the compound"
+	chem_stabilize.duration = 40.0
+	chem_stabilize.stage_type = CraftingRecipe.CraftingStage.StageType.QUALITY_CHECK
+	compound.crafting_stages.append(chem_stabilize)
 
-	var cool_control = CraftingRecipe.StageAction.new()
-	cool_control.action_id = "cooling"
-	cool_control.action_name = "Cooling Rate"
-	cool_control.action_type = CraftingRecipe.StageAction.ActionType.TEMPERATURE_CONTROL
-	cool_control.parameter_min = 20.0
-	cool_control.parameter_max = 200.0
-	cool_control.optimal_value = 45.0
-	cool_control.tolerance = 12.0
-	refine_stage.required_actions.append(cool_control)
-
-	compound.crafting_stages.append(refine_stage)
-
-	var stabilize_stage = CraftingRecipe.CraftingStage.new()
-	stabilize_stage.stage_id = "stabilization"
-	stabilize_stage.stage_name = "Final Stabilization"
-	stabilize_stage.description = "Add stabilizer and finalize the compound"
-	stabilize_stage.duration = 10.0
-	stabilize_stage.stage_type = CraftingRecipe.CraftingStage.StageType.FINALIZATION
-	compound.crafting_stages.append(stabilize_stage)
+	var chem_package = CraftingRecipe.CraftingStage.new()
+	chem_package.stage_id = "package"
+	chem_package.stage_name = "Safe Packaging"
+	chem_package.description = "Package the volatile compound safely"
+	chem_package.duration = 20.0
+	chem_package.stage_type = CraftingRecipe.CraftingStage.StageType.FINALIZATION
+	compound.crafting_stages.append(chem_package)
 
 	all_recipes.append(compound)
 
 	# Discover all recipes by default for demo
 	for recipe in all_recipes:
 		discovered_recipes.append(recipe.recipe_id)
+
+
+func get_all_recipes() -> Array[CraftingRecipe]:
+	"""Get all available recipes"""
+	return all_recipes
 
 
 func get_available_recipes() -> Array[CraftingRecipe]:
@@ -482,6 +389,32 @@ func _station_supports_recipe(recipe: CraftingRecipe) -> bool:
 			return recipe.recipe_category == "Chemistry"
 		_:
 			return false
+
+
+func get_recipes_by_category(category: String) -> Array[CraftingRecipe]:
+	"""Get recipes filtered by category"""
+	var filtered: Array[CraftingRecipe] = []
+	for recipe in all_recipes:
+		if recipe.recipe_category == category:
+			filtered.append(recipe)
+	return filtered
+
+
+func get_craftable_recipes() -> Array[CraftingRecipe]:
+	"""Get recipes that can currently be crafted"""
+	if not player_container:
+		return []
+
+	var available_materials: Dictionary = {}
+	for item in player_container.items:
+		available_materials[item.item_id] = item.quantity
+
+	var craftable: Array[CraftingRecipe] = []
+	for recipe in all_recipes:
+		if recipe.can_craft(available_materials, available_tools):
+			craftable.append(recipe)
+
+	return craftable
 
 
 func can_craft_recipe(recipe: CraftingRecipe) -> bool:
@@ -521,9 +454,8 @@ func check_tool_availability(tool_id: String) -> bool:
 
 
 func start_crafting(recipe: CraftingRecipe) -> CraftingProcess:
-	"""Start a crafting process"""
-	if not can_craft_recipe(recipe):
-		push_warning("Cannot start crafting - missing requirements")
+	"""Begin crafting a recipe"""
+	if not recipe:
 		return null
 
 	# Consume materials
@@ -591,13 +523,20 @@ func update_process(process: CraftingProcess, delta: float):
 
 	var current_stage = recipe.crafting_stages[process.current_stage_index]
 
-	# Update progress
-	process.stage_progress += delta / current_stage.duration
-	process.progress_updated.emit(process.stage_progress)
+	# CRITICAL FIX: Check if stage has required actions that need player input
+	var has_required_actions = current_stage.required_actions and not current_stage.required_actions.is_empty()
 
-	# Check if stage completed
-	if process.stage_progress >= 1.0:
-		_complete_stage(process)
+	# Only progress stages WITHOUT required actions
+	# Stages with required actions are completely paused until player interacts
+	if not has_required_actions:
+		# Update progress
+		process.stage_progress += delta / current_stage.duration
+		process.progress_updated.emit(process.stage_progress)
+
+		# Check if stage completed
+		if process.stage_progress >= 1.0:
+			_complete_stage(process)
+	# If stage has required actions, do nothing - wait for player to click the button
 
 
 func _complete_stage(process: CraftingProcess):
@@ -644,70 +583,68 @@ func _complete_crafting(process: CraftingProcess):
 		total_quality += quality
 	process.overall_quality = total_quality / process.stage_qualities.size()
 
-	# Generate output item
-	if inventory_manager and player_container:
-		var output_item = InventoryItem_Base.new()
-		output_item.item_id = process.recipe.output_item_id
-		output_item.item_name = process.recipe.recipe_name
-		output_item.quantity = process.recipe.output_quantity
-		output_item.item_type = ItemTypes.Type.AMMUNITION
-		output_item.volume = 0.025
-		output_item.mass = 0.01
-		output_item.base_value = 10.0
-		output_item.max_stack_size = 999999
+	process.success = true
 
-		process.output_items.append(output_item)
-		process.success = true
+	print("✓ Crafting completed: ", process.recipe.recipe_name, " x", process.recipe.output_quantity)
+	print("  Quality: %.1f%%" % (process.overall_quality * 100))
 
-		# Add to inventory - use container.add_item() directly
-		var added = player_container.add_item(output_item)
-		if added:
-			print("✓ Crafting completed: ", process.recipe.recipe_name, " x", process.recipe.output_quantity)
-			print("  Quality: %.1f%%" % (process.overall_quality * 100))
-		else:
-			push_warning("Failed to add crafted item to inventory - container full?")
-	else:
-		push_warning("Item dropped - no inventory available.")
+	# Generate output items as Dictionary (will be converted to actual items when collected)
+	if process.output_items.is_empty():
+		var output_data = {"item_id": process.recipe.output_item_id, "quantity": process.recipe.output_quantity, "quality": process.overall_quality}
+		process.output_items.append(output_data)
 
-	# Remove from active processes
-	active_processes.erase(process)
+	# Emit completion signal (items will be added when player clicks collect)
+	process.process_completed.emit(process.output_items, process.overall_quality)
 	crafting_completed.emit(process)
 
 
-func discover_recipe(recipe_id: String):
-	"""Discover a new recipe"""
-	if not recipe_id in discovered_recipes:
-		discovered_recipes.append(recipe_id)
+func collect_crafting_output(process: CraftingProcess):
+	"""Clean up after collecting crafted items and add them to inventory"""
+	if not process:
+		return
 
-		var recipe = _get_recipe_by_id(recipe_id)
-		if recipe:
-			recipe_discovered.emit(recipe)
+	# Add items to inventory now
+	if inventory_manager and player_container and process.output_items.size() > 0:
+		for output_item in process.output_items:
+			# Check if it's already an InventoryItem_Base or if it's a Dictionary
+			if output_item is InventoryItem_Base:
+				# Already a proper item object
+				var added = player_container.add_item(output_item)
+				if added:
+					print("✓ Collected: ", output_item.item_name, " x", output_item.quantity)
+				else:
+					push_warning("Failed to add item to inventory - container full?")
+			elif output_item is Dictionary:
+				# Need to create actual item from dictionary
+				var item = InventoryItem_Base.new()
+				item.item_id = output_item.get("item_id", "")
+				item.item_name = process.recipe.recipe_name
+				item.quantity = output_item.get("quantity", 1)
+				item.item_type = ItemTypes.Type.AMMUNITION
+				item.volume = 0.025
+				item.mass = 0.01
+				item.base_value = 10.0
+				item.max_stack_size = 999999
+
+				var added = player_container.add_item(item)
+				if added:
+					print("✓ Collected: ", item.item_name, " x", item.quantity)
+				else:
+					push_warning("Failed to add item to inventory - container full?")
+
+	# Remove from active processes
+	if process in active_processes:
+		active_processes.erase(process)
 
 
-func _get_recipe_by_id(recipe_id: String) -> CraftingRecipe:
-	"""Get recipe by ID"""
-	for recipe in all_recipes:
-		if recipe.recipe_id == recipe_id:
-			return recipe
-	return null
+func cancel_process(process: CraftingProcess):
+	"""Cancel an active crafting process"""
+	if process in active_processes:
+		process.cancel_process()
+		active_processes.erase(process)
+		crafting_failed.emit(process)
 
 
-func add_recipe(recipe: CraftingRecipe):
-	"""Add a new recipe to the system"""
-	if not recipe in all_recipes:
-		all_recipes.append(recipe)
-
-
-func get_recipe_by_id(recipe_id: String) -> CraftingRecipe:
-	"""Public method to get recipe by ID"""
-	return _get_recipe_by_id(recipe_id)
-
-
-func get_all_recipes() -> Array[CraftingRecipe]:
-	"""Get all recipes (discovered or not)"""
-	return all_recipes
-
-
-func is_recipe_discovered(recipe_id: String) -> bool:
-	"""Check if recipe is discovered"""
-	return recipe_id in discovered_recipes
+func get_active_processes() -> Array[CraftingProcess]:
+	"""Get all active crafting processes"""
+	return active_processes
