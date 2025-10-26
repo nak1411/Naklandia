@@ -34,6 +34,7 @@ var current_process: CraftingProcess = null
 # Interaction elements
 var active_interactions: Dictionary = {}
 var interaction_timer: Timer
+var advanced_via_button: bool = false
 
 
 func _ready():
@@ -187,20 +188,13 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 	# Start button - SEPARATE, underneath the panel
 	start_craft_button = Button.new()
 	start_craft_button.text = "Start Crafting"
-	start_craft_button.custom_minimum_size = Vector2(200, 40)
-	start_craft_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	start_craft_button.custom_minimum_size = Vector2(0, 50)
 	start_craft_button.disabled = true
-	start_craft_button.focus_mode = Control.FOCUS_NONE
 	start_craft_button.pressed.connect(_on_start_crafting_pressed)
 
-	# Style the button to match other UI buttons
+	# Style the button to match
 	var normal_style = StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.2, 0.2, 0.2, 1.0)
-	normal_style.border_width_left = 1
-	normal_style.border_width_right = 1
-	normal_style.border_width_top = 1
-	normal_style.border_width_bottom = 1
-	normal_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	normal_style.bg_color = Color(0.2, 0.3, 0.4)
 	normal_style.content_margin_left = 8
 	normal_style.content_margin_right = 8
 	normal_style.content_margin_top = 8
@@ -208,12 +202,7 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 	normal_style.set_corner_radius_all(0)
 
 	var hover_style = StyleBoxFlat.new()
-	hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
-	hover_style.border_width_left = 1
-	hover_style.border_width_right = 1
-	hover_style.border_width_top = 1
-	hover_style.border_width_bottom = 1
-	hover_style.border_color = Color(0.5, 0.5, 0.5, 1.0)
+	hover_style.bg_color = Color(0.25, 0.35, 0.5)
 	hover_style.content_margin_left = 8
 	hover_style.content_margin_right = 8
 	hover_style.content_margin_top = 8
@@ -221,12 +210,7 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 	hover_style.set_corner_radius_all(0)
 
 	var pressed_style = StyleBoxFlat.new()
-	pressed_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)
-	pressed_style.border_width_left = 1
-	pressed_style.border_width_right = 1
-	pressed_style.border_width_top = 1
-	pressed_style.border_width_bottom = 1
-	pressed_style.border_color = Color(0.5, 0.5, 0.5, 1.0)
+	pressed_style.bg_color = Color(0.15, 0.25, 0.35)
 	pressed_style.content_margin_left = 8
 	pressed_style.content_margin_right = 8
 	pressed_style.content_margin_top = 8
@@ -234,12 +218,7 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 	pressed_style.set_corner_radius_all(0)
 
 	var disabled_style = StyleBoxFlat.new()
-	disabled_style.bg_color = Color(0.15, 0.15, 0.15, 1.0)
-	disabled_style.border_width_left = 1
-	disabled_style.border_width_right = 1
-	disabled_style.border_width_top = 1
-	disabled_style.border_width_bottom = 1
-	disabled_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
+	disabled_style.bg_color = Color(0.1, 0.1, 0.1)
 	disabled_style.content_margin_left = 8
 	disabled_style.content_margin_right = 8
 	disabled_style.content_margin_top = 8
@@ -462,28 +441,25 @@ func _populate_recipe_list():
 		var recipe_button = Button.new()
 		recipe_button.text = recipe.recipe_name
 		recipe_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		recipe_button.custom_minimum_size = Vector2(0, 20)
-		recipe_button.focus_mode = Control.FOCUS_NONE  # Remove white focus outline
+		recipe_button.custom_minimum_size = Vector2(0, 40)
 		recipe_button.pressed.connect(_on_recipe_selected.bind(recipe))
 
-		# Color code by complexity
+		# Style based on complexity
 		var complexity_color = _get_complexity_color(recipe.complexity_level)
 
-		# Normal style - matches container list
 		var normal_style = StyleBoxFlat.new()
-		normal_style.bg_color = Color(0.12, 0.12, 0.12, 1.0)  # Dark background like container list
-		normal_style.border_width_left = 3  # Keep left border for complexity color
+		normal_style.bg_color = Color(0.2, 0.2, 0.2, 1.0)
+		normal_style.border_width_left = 3
 		normal_style.border_color = complexity_color
 		normal_style.content_margin_left = 8
 		normal_style.content_margin_right = 8
 		normal_style.content_margin_top = 8
 		normal_style.content_margin_bottom = 8
-		normal_style.set_corner_radius_all(0)  # No rounded corners
+		normal_style.set_corner_radius_all(0)
 		recipe_button.add_theme_stylebox_override("normal", normal_style)
 
-		# Hover style - lighter background
 		var hover_style = StyleBoxFlat.new()
-		hover_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)  # Lighter on hover
+		hover_style.bg_color = Color(0.25, 0.25, 0.3, 1.0)  # Slightly lighter
 		hover_style.border_width_left = 3
 		hover_style.border_color = complexity_color
 		hover_style.content_margin_left = 8
@@ -493,7 +469,7 @@ func _populate_recipe_list():
 		hover_style.set_corner_radius_all(0)
 		recipe_button.add_theme_stylebox_override("hover", hover_style)
 
-		# Pressed/Selected style - even lighter
+		# Pressed style - even lighter
 		var pressed_style = StyleBoxFlat.new()
 		pressed_style.bg_color = Color(0.3, 0.35, 0.4, 1.0)  # Selected color
 		pressed_style.border_width_left = 3
@@ -595,6 +571,7 @@ func _on_start_crafting_pressed():
 func _setup_process_ui():
 	"""Set up UI for active crafting process"""
 	crafting_panel.visible = false
+	start_craft_button.visible = false
 	recipe_list_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Disable during crafting
 	process_panel.visible = true
 	interaction_panel.visible = true
@@ -617,12 +594,24 @@ func _connect_process_signals():
 func _on_stage_started(_stage_index: int):
 	"""Handle stage start"""
 	_update_stage_display()
-	_create_stage_interactions()
+
+	# Only create interactions if we didn't just advance via button click
+	if not advanced_via_button:
+		_create_stage_interactions()
+	else:
+		# Reset flag for future stages
+		advanced_via_button = false
 
 
 func _on_stage_completed(_stage_index: int, _quality: float):
 	"""Handle stage completion"""
 	_clear_interactions()
+
+	# Check if there's a next stage
+	if current_process.current_stage_index < current_process.recipe.crafting_stages.size():
+		# There's a next stage - it will be started automatically by CraftingProcess
+		# The timer will handle showing interactions if needed
+		pass
 
 
 func _on_stage_failed(_stage_index: int, reason: String):
@@ -678,6 +667,19 @@ func _create_stage_interactions():
 			_create_interaction_button(action)
 
 
+func _create_next_stage_interactions(next_stage: CraftingRecipe.CraftingStage):
+	"""Create interaction buttons for next stage (before advancing to it)"""
+	_clear_interactions()
+
+	if not next_stage:
+		return
+
+	# Create buttons for each action in next stage
+	if next_stage.required_actions:
+		for action in next_stage.required_actions:
+			_create_interaction_button(action)
+
+
 func _create_interaction_button(action: CraftingRecipe.StageAction):
 	"""Create a button for a stage action"""
 	var button = Button.new()
@@ -700,17 +702,10 @@ func _on_interaction_pressed(action: CraftingRecipe.StageAction, button: Button)
 	if not interaction_data:
 		return
 
-	# Increment press count
-	interaction_data["press_count"] += 1
+	# Mark that we're advancing via button click
+	advanced_via_button = true
 
-	# Update button text
-	button.text = "%s (Completed)" % action.action_name
-
-	# Mark as complete
-	button.disabled = true
-	button.modulate = Color.GREEN
-
-	# Auto-advance stage after interaction
+	# Advance to next stage immediately
 	current_process.complete_current_stage(1.0)
 
 
@@ -726,6 +721,30 @@ func _on_interaction_timer_timeout():
 	"""Update crafting progress"""
 	if current_process and crafting_manager:
 		crafting_manager.update_process(current_process, interaction_timer.wait_time)
+
+		# Check if stage timer reached 100%
+		if current_process.stage_progress >= 1.0:
+			var current_stage = current_process.get_current_stage()
+			if current_stage:
+				# Check if current stage has required actions
+				if current_stage.required_actions and not current_stage.required_actions.is_empty():
+					# Current stage has actions - shouldn't happen in this flow but handle it
+					pass
+				else:
+					# Current stage has no actions - check if NEXT stage has actions
+					var next_stage_index = current_process.current_stage_index + 1
+					if next_stage_index < current_process.recipe.crafting_stages.size():
+						var next_stage = current_process.recipe.crafting_stages[next_stage_index]
+						if next_stage.required_actions and not next_stage.required_actions.is_empty():
+							# Next stage has actions - show them and wait for button click
+							if active_interactions.is_empty():
+								_create_next_stage_interactions(next_stage)
+						else:
+							# Next stage has no actions - auto-complete current stage
+							current_process.complete_current_stage(1.0)
+					else:
+						# No next stage - this is the final stage, complete it
+						current_process.complete_current_stage(1.0)
 
 
 func _display_output(output_items: Array):
@@ -811,6 +830,7 @@ func _reset_crafting_ui():
 	selected_recipe = null
 
 	crafting_panel.visible = true
+	start_craft_button.visible = true
 	recipe_list_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	process_panel.visible = false
 	interaction_panel.visible = false
