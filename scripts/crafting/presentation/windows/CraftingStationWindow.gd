@@ -259,7 +259,7 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 func _setup_process_panel(parent: VBoxContainer):
 	"""Set up the active crafting process display"""
 	process_panel = Panel.new()
-	process_panel.custom_minimum_size = Vector2(0, 200)
+	process_panel.custom_minimum_size = Vector2(0, 280)
 	process_panel.visible = false
 
 	var panel_style = StyleBoxFlat.new()
@@ -272,10 +272,20 @@ func _setup_process_panel(parent: VBoxContainer):
 	process_panel.add_theme_stylebox_override("panel", panel_style)
 	parent.add_child(process_panel)
 
+	# Add MarginContainer for proper padding - SAME AS RECIPE INFO PANEL
+	var margin_container = MarginContainer.new()
+	margin_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin_container.add_theme_constant_override("margin_left", 8)
+	margin_container.add_theme_constant_override("margin_right", 8)
+	margin_container.add_theme_constant_override("margin_top", 8)
+	margin_container.add_theme_constant_override("margin_bottom", 8)
+	process_panel.add_child(margin_container)
+
 	var vbox = VBoxContainer.new()
-	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 8)
-	process_panel.add_child(vbox)
+	margin_container.add_child(vbox)
 
 	# Stage label
 	stage_label = Label.new()
@@ -335,45 +345,64 @@ func _setup_interaction_panel(parent: VBoxContainer):
 
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.18, 0.18, 0.18)
-	panel_style.border_width_left = 2
-	panel_style.border_width_right = 2
-	panel_style.border_width_top = 2
-	panel_style.border_width_bottom = 2
+	panel_style.border_width_left = 1
+	panel_style.border_width_right = 1
+	panel_style.border_width_top = 1
+	panel_style.border_width_bottom = 1
 	panel_style.border_color = Color(0.4, 0.4, 0.4)
 	interaction_panel.add_theme_stylebox_override("panel", panel_style)
 	parent.add_child(interaction_panel)
 
+	# Add MarginContainer for proper padding - SAME AS RECIPE INFO PANEL
+	var margin_container = MarginContainer.new()
+	margin_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin_container.add_theme_constant_override("margin_left", 8)
+	margin_container.add_theme_constant_override("margin_right", 8)
+	margin_container.add_theme_constant_override("margin_top", 8)
+	margin_container.add_theme_constant_override("margin_bottom", 8)
+	interaction_panel.add_child(margin_container)
+
 	var scroll = ScrollContainer.new()
 	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	interaction_panel.add_child(scroll)
+	margin_container.add_child(scroll)
 
 	interaction_container = VBoxContainer.new()
 	interaction_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	interaction_container.add_theme_constant_override("separation", 12)
+	interaction_container.add_theme_constant_override("separation", 8)
 	scroll.add_child(interaction_container)
 
 
 func _setup_output_panel(parent: VBoxContainer):
 	"""Set up the output display panel"""
 	output_panel = Panel.new()
-	output_panel.custom_minimum_size = Vector2(0, 150)
+	output_panel.custom_minimum_size = Vector2(0, 200)
 	output_panel.visible = false
 
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.1, 0.2, 0.1)
-	panel_style.border_width_left = 2
-	panel_style.border_width_right = 2
-	panel_style.border_width_top = 2
-	panel_style.border_width_bottom = 2
+	panel_style.border_width_left = 1
+	panel_style.border_width_right = 1
+	panel_style.border_width_top = 1
+	panel_style.border_width_bottom = 1
 	panel_style.border_color = Color(0.2, 0.6, 0.2)
 	output_panel.add_theme_stylebox_override("panel", panel_style)
 	parent.add_child(output_panel)
 
+	# Add MarginContainer for proper padding - SAME AS RECIPE INFO PANEL
+	var margin_container = MarginContainer.new()
+	margin_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin_container.add_theme_constant_override("margin_left", 8)
+	margin_container.add_theme_constant_override("margin_right", 8)
+	margin_container.add_theme_constant_override("margin_top", 8)
+	margin_container.add_theme_constant_override("margin_bottom", 8)
+	output_panel.add_child(margin_container)
+
 	var vbox = VBoxContainer.new()
-	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 8)
-	output_panel.add_child(vbox)
+	margin_container.add_child(vbox)
 
 	var title = Label.new()
 	title.text = "Crafting Complete!"
