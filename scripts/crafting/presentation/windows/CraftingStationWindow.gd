@@ -724,8 +724,8 @@ func _clear_interactions():
 
 func _on_interaction_timer_timeout():
 	"""Update crafting progress"""
-	if current_process:
-		current_process.update_progress(interaction_timer.wait_time)
+	if current_process and crafting_manager:
+		crafting_manager.update_process(current_process, interaction_timer.wait_time)
 
 
 func _display_output(output_items: Array):
