@@ -1,6 +1,5 @@
-# CraftingIntegration.gd - Main integration point for crafting system
+# CraftingIntegration.gd - Simplified crafting integration for player
 # Attach this to your Player node
-# Place in: scripts/crafting/integration/CraftingIntegration.gd
 class_name CraftingIntegration
 extends Node
 
@@ -9,9 +8,6 @@ var crafting_window: CraftingStationWindow
 var ui_manager: UIManager
 var inventory_integration: InventoryIntegration
 
-# Current station info
-var current_station_type: String = ""
-var current_station_node: Node = null
 var is_crafting_open_flag: bool = false
 
 
@@ -22,13 +18,8 @@ func _ready():
 
 func _initialize_crafting_system():
 	"""Initialize crafting system after other systems are ready"""
-	# Get existing managers
 	_get_manager_references()
-
-	# Create crafting manager
 	_create_crafting_manager()
-
-	# Connect to inventory system
 	_connect_to_inventory()
 
 	print("✓ Crafting system initialized")
@@ -45,7 +36,7 @@ func _get_manager_references():
 		push_warning("CraftingIntegration: No UI Manager found")
 
 	# Get Inventory Integration from player
-	var player = get_parent()  # Assumes this is attached to player
+	var player = get_parent()
 	if player:
 		inventory_integration = player.get_node_or_null("InventoryIntegration")
 		if inventory_integration:
@@ -66,104 +57,66 @@ func _connect_to_inventory():
 	"""Connect crafting to inventory system"""
 	if inventory_integration and inventory_integration.inventory_manager:
 		crafting_manager.set_inventory_manager(inventory_integration.inventory_manager)
-		print("✓ Connected to InventoryManager")
+		print("✓ Connected crafting to inventory")
 	else:
-		push_warning("CraftingIntegration: No inventory manager found - crafting won't work")
+		push_warning("CraftingIntegration: Could not connect to inventory")
 
 
-# PUBLIC API
+func open_crafting_station(_station_type: String = "", _station_node: Node = null):
+	"""Open the crafting window (station parameters ignored in simplified system)"""
+	print("=== open_crafting_station called ===")
 
-
-func open_crafting_station(station_type: String, station_node: Node = null):
-	"""Open crafting station of specified type"""
-	if not ui_manager:
-		push_error("CraftingIntegration: No UIManager - cannot open crafting window")
+	if not ui_manager or not crafting_manager:
+		push_warning("Cannot open crafting - missing managers")
+		push_warning("  ui_manager: %s" % str(ui_manager))
+		push_warning("  crafting_manager: %s" % str(crafting_manager))
 		return
 
-	if not crafting_manager:
-		push_error("CraftingIntegration: No CraftingManager - system not initialized")
-		return
-
-	# Set current station
-	current_station_type = station_type
-	current_station_node = station_node
-	crafting_manager.set_active_station(station_type)
-
-	# Create or show window
+	# Create crafting window if it doesn't exist
 	if not crafting_window or not is_instance_valid(crafting_window):
-		_create_crafting_window()
-	else:
+		print("Creating new crafting window...")
+		crafting_window = CraftingStationWindow.new()
+		crafting_window.name = "CraftingStationWindow"
+
+		# Register with UI manager FIRST (adds to scene tree)
+		print("Registering window with UI manager...")
+		ui_manager.register_window(crafting_window, "dialog")
+
+		# Wait for window to be ready in scene tree
+		if not crafting_window.is_node_ready():
+			print("Waiting for window ready...")
+			await crafting_window.ready
+
+		# Wait one more frame to ensure UI is fully built
+		await get_tree().process_frame
+
+		print("Window is ready, setting crafting manager...")
+		# Now set the crafting manager
+		await crafting_window.set_crafting_manager(crafting_manager)
+
+		# Connect to window closed signal
+		if not crafting_window.window_closed.is_connected(_on_crafting_window_closed):
+			crafting_window.window_closed.connect(_on_crafting_window_closed)
+
+		# EXPLICITLY SHOW THE WINDOW
+		print("Showing window...")
 		crafting_window.show_window()
 
-	# Update window title based on station
-	_update_window_title()
+		print("✓ Crafting window created and initialized")
+	else:
+		print("Showing existing crafting window...")
+		crafting_window.show_window()
+		crafting_window.refresh_display()
 
-	# Disable player input and show mouse
-	_set_player_input_enabled(false)
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	is_crafting_open_flag = true
 
-	print("✓ Opened crafting station: %s" % station_type)
+	# Disable player input
+	_set_player_input_enabled(false)
 
+	# Show mouse
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
-func _create_crafting_window():
-	"""Create the crafting window"""
-	crafting_window = CraftingStationWindow.new()
-	crafting_window.name = "CraftingStationWindow"
-
-	# Register with UI manager
-	ui_manager.register_window(crafting_window, "dialog")
-
-	# Show the window immediately
-	crafting_window.show_window()
-
-	# Connect to window close signal
-	if crafting_window.has_signal("window_closed"):
-		crafting_window.window_closed.connect(_on_crafting_window_closed)
-
-	# Set the crafting manager (async - will populate recipes when ready)
-	crafting_window.set_crafting_manager(crafting_manager)
-
-	print("✓ Created CraftingStationWindow")
-
-
-func _set_player_input_enabled(enabled: bool):
-	"""Enable or disable player input"""
-	var player_node = get_tree().get_first_node_in_group("player")
-	if player_node and player_node.has_method("set_input_enabled"):
-		player_node.set_input_enabled(enabled)
-
-
-func _on_crafting_window_closed():
-	"""Handle crafting window being closed"""
-	# Re-enable player input
-	_set_player_input_enabled(true)
-
-	# Restore mouse mode
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-
-	# Clear current station
-	current_station_type = ""
-	current_station_node = null
-	is_crafting_open_flag = false
-
-	print("Crafting window closed")
-
-
-func _update_window_title():
-	"""Update window title based on station type"""
-	if not crafting_window:
-		return
-
-	match current_station_type:
-		"basic_workbench":
-			crafting_window.set_window_title("Basic Workbench")
-		"advanced_fabricator":
-			crafting_window.set_window_title("Advanced Fabricator")
-		"chemical_station":
-			crafting_window.set_window_title("Chemical Laboratory")
-		_:
-			crafting_window.set_window_title("Crafting Station")
+	print("✓ Crafting window opened, visible=%s" % str(crafting_window.visible))
 
 
 func close_crafting_station():
@@ -171,15 +124,26 @@ func close_crafting_station():
 	if crafting_window and is_instance_valid(crafting_window):
 		crafting_window.hide_window()
 
-	# Re-enable player input
 	_set_player_input_enabled(true)
-
-	# Restore mouse mode
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
-	current_station_type = ""
-	current_station_node = null
 	is_crafting_open_flag = false
+
+
+func _on_crafting_window_closed():
+	"""Handle crafting window being closed"""
+	_set_player_input_enabled(true)
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	is_crafting_open_flag = false
+
+	print("Crafting window closed")
+
+
+func _set_player_input_enabled(enabled: bool):
+	"""Enable/disable player input"""
+	var player = get_parent()
+	if player and player.has_method("set_input_enabled"):
+		player.set_input_enabled(enabled)
 
 
 func is_crafting_open() -> bool:
@@ -190,9 +154,6 @@ func is_crafting_open() -> bool:
 func get_crafting_manager() -> CraftingManager:
 	"""Get the crafting manager"""
 	return crafting_manager
-
-
-# RECIPE MANAGEMENT
 
 
 func discover_recipe(recipe_id: String):
@@ -207,63 +168,20 @@ func add_custom_recipe(recipe: CraftingRecipe):
 		crafting_manager.add_recipe(recipe)
 
 
-# STATION INTERACTION
-
-
-func can_use_station(station_type: String) -> bool:
-	"""Check if player can use this station type - extend with your skill system"""
-	# TODO: Add skill checks, unlock requirements, etc.
+func can_use_station(_station_type: String) -> bool:
+	"""Check if player can use this station type - stub for backward compatibility"""
+	# In the simplified system, all stations are usable
+	# Extend this with your skill/unlock system if needed
 	return true
 
 
-# DEBUG / TESTING
-
-
-func add_test_materials():
-	"""Add test materials for testing crafting - call this from debug menu"""
-	if not inventory_integration or not inventory_integration.inventory_manager:
-		push_warning("Cannot add test materials - no inventory manager")
-		return
-
-	var inventory_manager = inventory_integration.inventory_manager
-	var player_inventory = inventory_manager.get_player_inventory()
-
-	if not player_inventory:
-		push_warning("Cannot add test materials - no player inventory")
-		return
-
-	# Helper to create and add items
-	var add_item = func(id: String, name: String, qty: int):
-		var item = InventoryItem_Base.new()
-		item.item_id = id
-		item.item_name = name
-		item.quantity = qty
-		item.max_stack_size = 999
-		item.volume = 0.1
-		item.mass = 0.1
-		item.item_type = ItemTypes.Type.RESOURCE
-		item.base_value = 10.0
-		inventory_manager.add_item_to_container(item, player_inventory.container_id)
-
-	# Add materials for example recipes
-	add_item.call("metal_plate", "Metal Plate", 10)
-	add_item.call("screw", "Screw", 20)
-	add_item.call("pcb_blank", "PCB Blank", 5)
-	add_item.call("electronic_component", "Electronic Component", 50)
-	add_item.call("solder", "Solder", 30)
-	add_item.call("base_chemical", "Base Chemical", 200)
-	add_item.call("catalyst", "Catalyst", 20)
-	add_item.call("stabilizer", "Stabilizer", 50)
-
-	print("✓ Added crafting test materials to player inventory")
-
-
-func discover_all_recipes():
-	"""Discover all recipes for testing"""
-	if not crafting_manager:
-		return
-
-	for recipe in crafting_manager.get_all_recipes():
-		crafting_manager.discover_recipe(recipe.recipe_id)
-
-	print("✓ Discovered all recipes (%d total)" % crafting_manager.get_all_recipes().size())
+func _input(event):
+	"""Handle input for opening/closing crafting"""
+	if event is InputEventKey and event.pressed and not event.echo:
+		# Press 'C' to toggle crafting
+		if event.keycode == KEY_C:
+			if is_crafting_open():
+				close_crafting_station()
+			else:
+				open_crafting_station()
+			get_viewport().set_input_as_handled()
