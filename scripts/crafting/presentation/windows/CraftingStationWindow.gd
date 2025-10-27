@@ -6,10 +6,15 @@ extends Window_Base
 var recipe_list_panel: Panel
 var recipe_list: VBoxContainer
 var recipe_scroll: ScrollContainer
+var top_spacer: Control
+var bottom_spacer: Control
+var recipe_separator: HSeparator
 
 var crafting_panel: Panel
 var recipe_info_label: RichTextLabel
 var requirements_label: RichTextLabel
+var recipe_name_label: RichTextLabel
+var recipe_details_label: RichTextLabel
 var start_craft_button: Button
 
 var process_panel: Panel
@@ -157,16 +162,48 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 
 	var scroll_vbox = VBoxContainer.new()
 	scroll_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll_vbox.custom_minimum_size = Vector2(0, 400)
 	scroll_vbox.add_theme_constant_override("separation", 8)
 	scroll.add_child(scroll_vbox)
 
-	# Recipe info
+	top_spacer = Control.new()
+	top_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll_vbox.add_child(top_spacer)
+
+	# Recipe name header
+	recipe_name_label = RichTextLabel.new()
+	recipe_name_label.bbcode_enabled = true
+	recipe_name_label.fit_content = true
+	recipe_name_label.scroll_active = false
+	recipe_name_label.visible = false
+	scroll_vbox.add_child(recipe_name_label)
+
+	# Separator under recipe name
+	recipe_separator = HSeparator.new()
+	recipe_separator.visible = false
+	scroll_vbox.add_child(recipe_separator)
+
+	# Recipe details (description and output)
+	recipe_details_label = RichTextLabel.new()
+	recipe_details_label.bbcode_enabled = true
+	recipe_details_label.fit_content = true
+	recipe_details_label.scroll_active = false
+	recipe_details_label.visible = false
+	scroll_vbox.add_child(recipe_details_label)
+
+	# Recipe info (placeholder text only)
 	recipe_info_label = RichTextLabel.new()
 	recipe_info_label.bbcode_enabled = true
 	recipe_info_label.fit_content = true
 	recipe_info_label.scroll_active = false
 	recipe_info_label.text = "[center]Select a recipe to begin crafting[/center]"
 	scroll_vbox.add_child(recipe_info_label)
+
+	# Bottom spacer for vertical centering
+	bottom_spacer = Control.new()
+	bottom_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll_vbox.add_child(bottom_spacer)
 
 	# Requirements
 	requirements_label = RichTextLabel.new()
@@ -412,17 +449,32 @@ func _update_recipe_display():
 
 	if not selected_recipe:
 		recipe_info_label.text = "[center]Select a recipe to begin crafting[/center]"
+		recipe_info_label.visible = true
+		recipe_name_label.visible = false
+		recipe_details_label.visible = false
 		requirements_label.text = ""
+		requirements_label.visible = false
+		recipe_separator.visible = false
+		top_spacer.visible = true
+		bottom_spacer.visible = true
 		if start_craft_button:
 			start_craft_button.disabled = true
 		_hide_process_and_output_panels()
 		return
 
 	# Display recipe info
-	var info_text = "[center][font_size=24][b]%s[/b][/font_size][/center]\n\n" % selected_recipe.recipe_name
-	info_text += "[color=gray]%s[/color]\n\n" % selected_recipe.description
-	info_text += "[b]Output:[/b] %s x%d" % [selected_recipe.recipe_name, selected_recipe.output_quantity]
-	recipe_info_label.text = info_text
+	top_spacer.visible = false
+	bottom_spacer.visible = false
+	requirements_label.visible = true
+	recipe_separator.visible = true
+	recipe_info_label.visible = false
+	recipe_name_label.visible = true
+	recipe_details_label.visible = true
+	recipe_name_label.text = "[center][font_size=24][b]%s[/b][/font_size][/center]" % selected_recipe.recipe_name
+
+	var details_text = "[color=gray]%s[/color]\n\n" % selected_recipe.description
+	details_text += "[b]Output:[/b] %s x%d" % [selected_recipe.recipe_name, selected_recipe.output_quantity]
+	recipe_details_label.text = details_text
 
 	# Display requirements
 	var can_craft = crafting_manager.can_craft_recipe(selected_recipe)
@@ -437,6 +489,7 @@ func _update_recipe_display():
 		req_text += "[color=%s]• %s: %d/%d[/color]\n" % [color, req_mat.material_name, available, req_mat.quantity]
 
 	requirements_label.text = req_text
+	requirements_label.visible = true
 	if start_craft_button:
 		start_craft_button.disabled = not can_craft
 
