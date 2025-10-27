@@ -2,20 +2,33 @@
 class_name AmmoPickup
 extends PickupableItem
 
-@export var ammo_name: String = "Hybrid Charges"
+@export var ammo_name: String = "Hybrid Charges"  # For backward compatibility with scenes
+@export var item_id: String = "ammo_hybrid_charges"
+@export var pickup_quantity: int = 100
 
 
 func _configure_item_properties():
-	# Set consistent properties for all ammo pickups
-	item_id_override = "ammo_hybrid_charges"
-	item_type_override = ItemTypes.Type.AMMUNITION
-	item_name_override = "Hybrid Charges"
-	item_description_override = "Standard ammunition for hybrid weapon systems."
-	item_volume_override = 0.025
-	item_mass_override = 0.01
-	item_value_override = 1000.0
-	item_quantity = 100
-	icon_path_override = "res://assets/textures/ui/icons/ammo.png"
+	var item_database = get_node_or_null("/root/ItemDatabase")
+	if not item_database:
+		push_error("AmmoPickup: ItemDatabase singleton not found! Make sure it's set up as an AutoLoad.")
+		return
+
+	var item_def = item_database.get_item(item_id)
+
+	if not item_def:
+		push_error("AmmoPickup: Item not found in database: " + item_id)
+		return
+
+	item_id_override = item_def.item_id
+	item_type_override = item_def.item_type
+	item_name_override = item_def.name
+	item_description_override = item_def.description
+	item_volume_override = item_def.volume
+	item_mass_override = item_def.mass
+	item_value_override = item_def.value
+	item_quantity = pickup_quantity
+	icon_path_override = item_def.icon_path
+	max_stack_size_override = item_def.max_stack_size
 
 
 func _generate_item_data():

@@ -2,21 +2,34 @@
 class_name ResourcePickup
 extends PickupableItem
 
-@export var resource_name: String = "Pickupable Resource"
-@export var resource_quantity: int = 500
+@export var resource_name: String = "Pickupable Resource"  # For backward compatibility with scenes
+@export var resource_quantity: int = 500  # For backward compatibility with scenes
+@export var item_id: String = "resource_noxite"
+@export var pickup_quantity: int = 1
 
 
 func _configure_item_properties():
-	# Set consistent properties for all ammo pickups
-	item_id_override = "resource_noxite"
-	item_type_override = ItemTypes.Type.RESOURCE
-	item_name_override = "Noxite"
-	item_description_override = "A liquid that can be used as a fuel source."
-	item_volume_override = 0.125
-	item_mass_override = 0.1
-	item_value_override = 10.0
-	item_quantity = 1
-	icon_path_override = "res://assets/textures/ui/icons/resource.png"
+	var item_database = get_node_or_null("/root/ItemDatabase")
+	if not item_database:
+		push_error("ResourcePickup: ItemDatabase singleton not found! Make sure it's set up as an AutoLoad.")
+		return
+
+	var item_def = item_database.get_item(item_id)
+
+	if not item_def:
+		push_error("ResourcePickup: Item not found in database: " + item_id)
+		return
+
+	item_id_override = item_def.item_id
+	item_type_override = item_def.item_type
+	item_name_override = item_def.name
+	item_description_override = item_def.description
+	item_volume_override = item_def.volume
+	item_mass_override = item_def.mass
+	item_value_override = item_def.value
+	item_quantity = pickup_quantity
+	icon_path_override = item_def.icon_path
+	max_stack_size_override = item_def.max_stack_size
 
 
 func _generate_item_data():

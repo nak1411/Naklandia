@@ -2,20 +2,33 @@
 class_name BlueprintPickup
 extends PickupableItem
 
-@export var blueprint_name: String = "Pickupable Module"
+@export var blueprint_name: String = "Pickupable Blueprint"  # For backward compatibility with scenes
+@export var item_id: String = "blueprint_hybrid_charges"
+@export var pickup_quantity: int = 1
 
 
 func _configure_item_properties():
-	# Set consistent properties for all ammo pickups
-	item_id_override = "blueprint_hybrid_charges"
-	item_type_override = ItemTypes.Type.BLUEPRINT
-	item_name_override = "Hybrid Charge Blueprint"
-	item_description_override = "Blueprint for manufacturing Hybrid Charges."
-	item_volume_override = 0.015
-	item_mass_override = 0.01
-	item_value_override = 100000.0
-	item_quantity = 1
-	icon_path_override = "res://assets/textures/ui/icons/blueprint.png"
+	var item_database = get_node_or_null("/root/ItemDatabase")
+	if not item_database:
+		push_error("BlueprintPickup: ItemDatabase singleton not found! Make sure it's set up as an AutoLoad.")
+		return
+
+	var item_def = item_database.get_item(item_id)
+
+	if not item_def:
+		push_error("BlueprintPickup: Item not found in database: " + item_id)
+		return
+
+	item_id_override = item_def.item_id
+	item_type_override = item_def.item_type
+	item_name_override = item_def.name
+	item_description_override = item_def.description
+	item_volume_override = item_def.volume
+	item_mass_override = item_def.mass
+	item_value_override = item_def.value
+	item_quantity = pickup_quantity
+	icon_path_override = item_def.icon_path
+	max_stack_size_override = item_def.max_stack_size
 
 
 func _generate_item_data():

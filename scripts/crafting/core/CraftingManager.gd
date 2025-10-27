@@ -34,27 +34,21 @@ func _load_recipes():
 
 func _create_basic_recipes():
 	"""Create basic crafting recipes"""
-	# Simple Tool Recipe
+	# Hybrid Charges Recipe
 	var simple_tool = CraftingRecipe.new()
 	simple_tool.recipe_id = "recipe_hybrid_charges"
-	simple_tool.recipe_name = "Simple Tool"
-	simple_tool.description = "A basic tool crafted from metal plates and screws"
+	simple_tool.recipe_name = "Hybrid Charges"
+	simple_tool.description = "Standard ammunition for hybrid weapon systems"
 	simple_tool.output_item_id = "ammo_hybrid_charges"
 	simple_tool.output_quantity = 100
 	simple_tool.output_item_type = ItemTypes.Type.AMMUNITION
 	simple_tool.is_always_available = true
 
-	var metal_mat = CraftingRecipe.RecipeMaterial.new()
-	metal_mat.material_id = "metal_plate"
-	metal_mat.material_name = "Metal Plate"
-	metal_mat.quantity = 0
-	simple_tool.required_materials.append(metal_mat)
-
-	var screw_mat = CraftingRecipe.RecipeMaterial.new()
-	screw_mat.material_id = "screw"
-	screw_mat.material_name = "Screw"
-	screw_mat.quantity = 0
-	simple_tool.required_materials.append(screw_mat)
+	var noxite_mat = CraftingRecipe.RecipeMaterial.new()
+	noxite_mat.material_id = "resource_noxite"
+	noxite_mat.material_name = "Noxite"
+	noxite_mat.quantity = 1
+	simple_tool.required_materials.append(noxite_mat)
 
 	all_recipes.append(simple_tool)
 
@@ -155,6 +149,10 @@ func craft_recipe(recipe: CraftingRecipe) -> bool:
 		_restore_materials(recipe)
 		return false
 
+	# Save inventory after successful crafting
+	if inventory_manager:
+		inventory_manager.save_inventory()
+
 	crafting_completed.emit(recipe.output_item_id, recipe.output_quantity)
 	return true
 
@@ -225,17 +223,15 @@ func add_recipe(recipe: CraftingRecipe):
 		discovered_recipes.append(recipe.recipe_id)
 
 
-func _complete_crafting(recipe: CraftingRecipe):
+func _complete_crafting(recipe: CraftingRecipe) -> bool:
 	"""Complete the crafting process and generate output"""
-	# Generate output item
 	if inventory_manager and player_container:
-		var output_item = InventoryItem_Base.new()
-		output_item.item_id = recipe.output_item_id
-		output_item.item_name = recipe.recipe_name
-		output_item.quantity = recipe.output_quantity
-		output_item.item_type = recipe.output_item_type
-		output_item.volume = 0.025
-		output_item.mass = 0.01
-		output_item.base_value = 10.0
-		output_item.max_stack_size = 999999
+		var output_item = ItemDatabase.create_item_instance(recipe.output_item_id, recipe.output_quantity)
+
+		if not output_item:
+			push_error("CraftingManager: Failed to create item from database: " + recipe.output_item_id)
+			return false
+
 		player_container.add_item(output_item)
+		return true
+	return false

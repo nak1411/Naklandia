@@ -2,20 +2,33 @@
 class_name ModulePickup
 extends PickupableItem
 
-@export var module_name: String = "Pickupable Module"
+@export var module_name: String = "Pickupable Module"  # For backward compatibility with scenes
+@export var item_id: String = "module_gauss_turret"
+@export var pickup_quantity: int = 1
 
 
 func _configure_item_properties():
-	# Set consistent properties for all ammo pickups
-	item_id_override = "module_gauss_turret"
-	item_type_override = ItemTypes.Type.MODULE
-	item_name_override = "Gauss Turret"
-	item_description_override = "Turret firing a high velocity solid charge."
-	item_volume_override = 3.62
-	item_mass_override = 0.125
-	item_value_override = 50000.0
-	item_quantity = 1
-	icon_path_override = "res://assets/textures/ui/icons/module.png"
+	var item_database = get_node_or_null("/root/ItemDatabase")
+	if not item_database:
+		push_error("ModulePickup: ItemDatabase singleton not found! Make sure it's set up as an AutoLoad.")
+		return
+
+	var item_def = item_database.get_item(item_id)
+
+	if not item_def:
+		push_error("ModulePickup: Item not found in database: " + item_id)
+		return
+
+	item_id_override = item_def.item_id
+	item_type_override = item_def.item_type
+	item_name_override = item_def.name
+	item_description_override = item_def.description
+	item_volume_override = item_def.volume
+	item_mass_override = item_def.mass
+	item_value_override = item_def.value
+	item_quantity = pickup_quantity
+	icon_path_override = item_def.icon_path
+	max_stack_size_override = item_def.max_stack_size
 
 
 func _generate_item_data():

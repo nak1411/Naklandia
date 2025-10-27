@@ -1,4 +1,4 @@
-[gd_scene load_steps=27 format=3 uid="uid://u68ixamg76uy"]
+[gd_scene load_steps=26 format=3 uid="uid://u68ixamg76uy"]
 
 [ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
 [ext_resource type="PackedScene" uid="uid://dvusnrd1ps7xx" path="res://scenes/objects/interactable_container.tscn" id="2_1swwb"]
@@ -9,7 +9,6 @@
 [ext_resource type="Script" uid="uid://criw8ficpl2be" path="res://scripts/ui/core/UIManager.gd" id="4_ny3xg"]
 [ext_resource type="PackedScene" uid="uid://d3sr0a7dxfkr8" path="res://addons/terrain_3d/extras/particle_example/Terrain3DParticles.tscn" id="5_w0gou"]
 [ext_resource type="Script" uid="uid://ve4ia0rua13g" path="res://scripts/world/objects/ItemSpawner.gd" id="6_1swwb"]
-[ext_resource type="PackedScene" uid="uid://5hdutnpp3tc4" path="res://scenes/objects/crafting_station.tscn" id="6_m0jab"]
 [ext_resource type="Script" uid="uid://bes7x5gnitjur" path="res://scripts/ui/core/PauseMenu.gd" id="6_sa75b"]
 [ext_resource type="Script" uid="uid://ymb36pafa48d" path="res://scripts/ui/map/MapManager.gd" id="11_w0gou"]
 
@@ -197,10 +196,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.97332, 0.63141, -5.31083)
 container_id = "item_crate"
 container_name = "Item Crate"
 auto_generate_id = false
-
-[node name="CraftingStation" parent="Level" instance=ExtResource("6_m0jab")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.737356, 0.964513, -5.42474)
-station_name = "Basic Workbench"
 
 [node name="TestObjects" type="Node" parent="."]
 
