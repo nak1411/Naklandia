@@ -36,12 +36,12 @@ func _create_basic_recipes():
 	"""Create basic crafting recipes"""
 	# Simple Tool Recipe
 	var simple_tool = CraftingRecipe.new()
-	simple_tool.recipe_id = "recipe_simple_tool"
+	simple_tool.recipe_id = "recipe_hybrid_charges"
 	simple_tool.recipe_name = "Simple Tool"
 	simple_tool.description = "A basic tool crafted from metal plates and screws"
-	simple_tool.output_item_id = "simple_tool"
-	simple_tool.output_quantity = 1
-	simple_tool.output_item_type = ItemTypes.Type.TOOL
+	simple_tool.output_item_id = "ammo_hybrid_charges"
+	simple_tool.output_quantity = 100
+	simple_tool.output_item_type = ItemTypes.Type.AMMUNITION
 	simple_tool.is_always_available = true
 
 	var metal_mat = CraftingRecipe.RecipeMaterial.new()
@@ -149,7 +149,7 @@ func craft_recipe(recipe: CraftingRecipe) -> bool:
 		return false
 
 	# Add output to inventory
-	if not _add_output_to_inventory(recipe):
+	if not _complete_crafting(recipe):
 		crafting_failed.emit("Inventory full")
 		# Try to restore materials
 		_restore_materials(recipe)
@@ -223,3 +223,19 @@ func add_recipe(recipe: CraftingRecipe):
 	all_recipes.append(recipe)
 	if recipe.is_always_available:
 		discovered_recipes.append(recipe.recipe_id)
+
+
+func _complete_crafting(recipe: CraftingRecipe):
+	"""Complete the crafting process and generate output"""
+	# Generate output item
+	if inventory_manager and player_container:
+		var output_item = InventoryItem_Base.new()
+		output_item.item_id = recipe.output_item_id
+		output_item.item_name = recipe.recipe_name
+		output_item.quantity = recipe.output_quantity
+		output_item.item_type = recipe.output_item_type
+		output_item.volume = 0.025
+		output_item.mass = 0.01
+		output_item.base_value = 10.0
+		output_item.max_stack_size = 999999
+		player_container.add_item(output_item)
