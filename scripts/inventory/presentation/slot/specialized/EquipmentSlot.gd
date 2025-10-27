@@ -32,9 +32,20 @@ func _ready():
 
 
 func set_item(new_item: InventoryItem_Base):
-	"""Override to maintain visible background"""
+	"""Override to maintain visible background and hide name/quantity"""
 	super.set_item(new_item)
 	_ensure_background_visible()
+
+	# Hide item name label
+	if visuals and visuals.item_name_label:
+		visuals.item_name_label.visible = false
+
+	# Hide quantity display in equipment slots
+	if visuals:
+		if visuals.quantity_label:
+			visuals.quantity_label.visible = false
+		if visuals.quantity_bg:
+			visuals.quantity_bg.visible = false
 
 
 func update_item_display():
@@ -47,9 +58,13 @@ func update_item_display():
 
 
 func clear_item():
-	"""Override to maintain visible background"""
+	"""Override to maintain visible background and hide name"""
 	super.clear_item()
 	_ensure_background_visible()
+
+	# CRITICAL: Force hide item name label after parent updates
+	if visuals and visuals.item_name_label:
+		visuals.item_name_label.visible = false
 
 
 func _mouse_enter():
@@ -110,44 +125,33 @@ func drop_data(_at_position: Vector2, data: Variant):
 
 func _setup_equipment_visual():
 	"""Setup equipment-specific visual elements"""
-	print("EquipmentSlot: Setting up visual elements")
-
-	# Ensure slot is visible and in front
 	visible = true
 	modulate = Color(1, 1, 1, 1)
-	z_index = 10  # Ensure it's above other elements
-
-	# CRITICAL: Set mouse filter to STOP, not PASS, so we intercept drag events
+	z_index = 10
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
-	# Remove the item name label from parent (equipment slots don't show names)
+	# Hide item name label
 	if visuals and visuals.item_name_label:
 		visuals.item_name_label.visible = false
-		print("  Hidden item name label")
+		visuals.item_name_label.hide()
+		visuals.item_name_label.position = Vector2(-1000, -1000)
 
-	# Adjust icon to fill more of the slot since we don't have a name area
+	# Hide quantity display
+	if visuals:
+		if visuals.quantity_label:
+			visuals.quantity_label.visible = false
+			visuals.quantity_label.hide()
+		if visuals.quantity_bg:
+			visuals.quantity_bg.visible = false
+			visuals.quantity_bg.hide()
+
+	# Adjust icon to fill the slot
 	if visuals and visuals.item_icon:
 		visuals.item_icon.position = Vector2(2, 2)
 		visuals.item_icon.size = Vector2(60, 60)
-		print("  Adjusted icon size and position")
 
-	# Force a visual update
-	if visuals:
-		visuals.update_item_display()
-		print("  Forced visual update")
-
-	# CRITICAL: Force background visible AFTER any parent updates
 	_ensure_background_visible()
-
-	# Force redraw
 	queue_redraw()
-
-	print("  EquipmentSlot setup complete")
-	print("    visible: ", visible)
-	print("    size: ", size)
-	print("    modulate: ", modulate)
-	print("    mouse_filter: ", mouse_filter)
-	print("    z_index: ", z_index)
 
 
 func can_accept_item(check_item: InventoryItem_Base) -> bool:
