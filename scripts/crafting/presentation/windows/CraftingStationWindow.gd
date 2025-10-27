@@ -33,11 +33,11 @@ var is_crafting: bool = false
 
 
 func _ready():
-	super._ready()
-
 	window_title = "Crafting"
 	default_size = Vector2(1000, 700)
-	min_window_size = Vector2(600, 400)
+	min_window_size = Vector2(800, 600)
+
+	super._ready()
 
 
 func _setup_window_content():
@@ -54,6 +54,7 @@ func _setup_crafting_ui():
 	var main_split = HSplitContainer.new()
 	main_split.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	main_split.split_offset = 200
+	content_area.clip_contents = true
 	content_area.add_child(main_split)
 
 	# Left side - Recipe list
@@ -78,6 +79,7 @@ func _setup_recipe_list_panel(parent: Control):
 	recipe_list_panel = Panel.new()
 	recipe_list_panel.size_flags_horizontal = Control.SIZE_FILL
 	recipe_list_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	recipe_list_panel.clip_contents = true
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.1, 0.1, 0.1)
 	panel_style.border_width_left = 1
@@ -128,7 +130,9 @@ func _setup_recipe_list_panel(parent: Control):
 func _setup_recipe_info_panel(parent: VBoxContainer):
 	"""Set up the recipe information display"""
 	crafting_panel = Panel.new()
-	crafting_panel.custom_minimum_size = Vector2(0, 200)
+	crafting_panel.custom_minimum_size = Vector2(0, 400)
+	crafting_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	crafting_panel.clip_contents = true
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.12, 0.12, 0.12)
 	panel_style.border_width_left = 1
@@ -176,7 +180,7 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 	# Start button - SEPARATE, underneath the panel
 	start_craft_button = Button.new()
 	start_craft_button.text = "Start Crafting"
-	start_craft_button.custom_minimum_size = Vector2(200, 40)
+	start_craft_button.custom_minimum_size = Vector2(300, 40)
 	start_craft_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	start_craft_button.disabled = true
 	start_craft_button.focus_mode = Control.FOCUS_NONE  # Remove white focus outline
@@ -430,14 +434,14 @@ func _update_recipe_display():
 		return
 
 	# Display recipe info
-	var info_text = "[center][font_size=20][b]%s[/b][/font_size][/center]\n\n" % selected_recipe.recipe_name
+	var info_text = "[center][font_size=24][b]%s[/b][/font_size][/center]\n\n" % selected_recipe.recipe_name
 	info_text += "[color=gray]%s[/color]\n\n" % selected_recipe.description
-	info_text += "[b]Output:[/b] %s x%d" % [selected_recipe.output_item_id, selected_recipe.output_quantity]
+	info_text += "[b]Output:[/b] %s x%d" % [selected_recipe.recipe_name, selected_recipe.output_quantity]
 	recipe_info_label.text = info_text
 
 	# Display requirements
 	var can_craft = crafting_manager.can_craft_recipe(selected_recipe)
-	var req_text = "[b]Required Materials:[/b]\n"
+	var req_text = "[b]Required Materials:[/b]\n\n"
 
 	var available_materials = _get_available_materials()
 
