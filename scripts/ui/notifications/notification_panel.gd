@@ -59,6 +59,9 @@ func _set_icon_and_color():
 		"item":
 			border_color = Color(0.4, 0.8, 0.4, 1.0)
 			text_color = Color(0.9, 1.0, 0.9, 1.0)
+		"crafted":
+			border_color = Color(0.8, 0.3, 0.9, 1.0)
+			text_color = Color(0.9, 1.0, 0.9, 1.0)
 		"success":
 			border_color = Color(0.3, 0.8, 0.3, 1.0)
 			text_color = Color(0.8, 1.0, 0.8, 1.0)

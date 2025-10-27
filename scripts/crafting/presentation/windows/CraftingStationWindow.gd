@@ -69,7 +69,6 @@ func _setup_crafting_ui():
 	_setup_recipe_info_panel(right_container)
 	_setup_process_panel(right_container)
 	_setup_interaction_panel(right_container)
-	_setup_output_panel(right_container)
 
 	print("Crafting UI setup complete - recipe_info_label: %s" % str(recipe_info_label))
 
@@ -79,12 +78,8 @@ func _setup_recipe_list_panel(parent: Control):
 	recipe_list_panel = Panel.new()
 	recipe_list_panel.size_flags_horizontal = Control.SIZE_FILL
 	recipe_list_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	recipe_list_panel.size_flags_stretch_ratio = 0.0
-	recipe_list_panel.clip_contents = true
-	recipe_list_panel.custom_minimum_size = Vector2(200, 0)
-
 	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.15, 0.15, 0.15)
+	panel_style.bg_color = Color(0.1, 0.1, 0.1)
 	panel_style.border_width_left = 1
 	panel_style.border_width_right = 1
 	panel_style.border_width_top = 1
@@ -93,22 +88,19 @@ func _setup_recipe_list_panel(parent: Control):
 	recipe_list_panel.add_theme_stylebox_override("panel", panel_style)
 	parent.add_child(recipe_list_panel)
 
-	# Add MarginContainer for padding
-	var margin_container = MarginContainer.new()
-	margin_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin_container.add_theme_constant_override("margin_left", 8)
-	margin_container.add_theme_constant_override("margin_right", 8)
-	margin_container.add_theme_constant_override("margin_top", 8)
-	margin_container.add_theme_constant_override("margin_bottom", 8)
-	margin_container.clip_contents = true
-	recipe_list_panel.add_child(margin_container)
+	var margin = MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	recipe_list_panel.add_child(margin)
 
 	var vbox = VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 4)
-	vbox.clip_contents = true
-	margin_container.add_child(vbox)
+	margin.add_child(vbox)
 
 	# Title
 	var title = Label.new()
@@ -121,24 +113,16 @@ func _setup_recipe_list_panel(parent: Control):
 	var separator = HSeparator.new()
 	vbox.add_child(separator)
 
-	# Scroll container for recipes
 	recipe_scroll = ScrollContainer.new()
 	recipe_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	recipe_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	recipe_scroll.clip_contents = true
+	recipe_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	vbox.add_child(recipe_scroll)
-
-	# Add MarginContainer inside scroll for button padding
-	var scroll_margin = MarginContainer.new()
-	scroll_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll_margin.add_theme_constant_override("margin_left", 4)  # Extra padding for buttons
-	scroll_margin.add_theme_constant_override("margin_right", 4)
-	recipe_scroll.add_child(scroll_margin)
 
 	recipe_list = VBoxContainer.new()
 	recipe_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	recipe_list.add_theme_constant_override("separation", 2)
-	scroll_margin.add_child(recipe_list)
+	recipe_scroll.add_child(recipe_list)
 
 
 func _setup_recipe_info_panel(parent: VBoxContainer):
@@ -198,67 +182,27 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 	start_craft_button.focus_mode = Control.FOCUS_NONE  # Remove white focus outline
 	start_craft_button.pressed.connect(_on_start_craft_pressed)
 
-	# Normal state
-	var normal_style = StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.2, 0.2, 0.2, 1.0)
-	normal_style.border_width_left = 1
-	normal_style.border_width_right = 1
-	normal_style.border_width_top = 1
-	normal_style.border_width_bottom = 1
-	normal_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
-	normal_style.content_margin_left = 8
-	normal_style.content_margin_right = 8
-	normal_style.content_margin_top = 8
-	normal_style.content_margin_bottom = 8
-	normal_style.set_corner_radius_all(0)
-	start_craft_button.add_theme_stylebox_override("normal", normal_style)
+	# Flat button styling
+	var normal = StyleBoxFlat.new()
+	normal.bg_color = Color(0.25, 0.5, 0.25)
+	normal.set_corner_radius_all(0)
+	start_craft_button.add_theme_stylebox_override("normal", normal)
 
-	# Hover state
-	var hover_style = StyleBoxFlat.new()
-	hover_style.bg_color = Color(0.3, 0.3, 0.3, 1.0)
-	hover_style.border_width_left = 1
-	hover_style.border_width_right = 1
-	hover_style.border_width_top = 1
-	hover_style.border_width_bottom = 1
-	hover_style.border_color = Color(0.5, 0.5, 0.5, 1.0)
-	hover_style.content_margin_left = 8
-	hover_style.content_margin_right = 8
-	hover_style.content_margin_top = 8
-	hover_style.content_margin_bottom = 8
-	hover_style.set_corner_radius_all(0)
-	start_craft_button.add_theme_stylebox_override("hover", hover_style)
+	var hover = StyleBoxFlat.new()
+	hover.bg_color = Color(0.3, 0.6, 0.3)
+	hover.set_corner_radius_all(0)
+	start_craft_button.add_theme_stylebox_override("hover", hover)
 
-	# Pressed state
-	var pressed_style = StyleBoxFlat.new()
-	pressed_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)
-	pressed_style.border_width_left = 1
-	pressed_style.border_width_right = 1
-	pressed_style.border_width_top = 1
-	pressed_style.border_width_bottom = 1
-	pressed_style.border_color = Color(0.5, 0.5, 0.5, 1.0)
-	pressed_style.content_margin_left = 8
-	pressed_style.content_margin_right = 8
-	pressed_style.content_margin_top = 8
-	pressed_style.content_margin_bottom = 8
-	pressed_style.set_corner_radius_all(0)
-	start_craft_button.add_theme_stylebox_override("pressed", pressed_style)
+	var pressed = StyleBoxFlat.new()
+	pressed.bg_color = Color(0.2, 0.4, 0.2)
+	pressed.set_corner_radius_all(0)
+	start_craft_button.add_theme_stylebox_override("pressed", pressed)
 
-	# Disabled state
-	var disabled_style = StyleBoxFlat.new()
-	disabled_style.bg_color = Color(0.15, 0.15, 0.15, 1.0)
-	disabled_style.border_width_left = 1
-	disabled_style.border_width_right = 1
-	disabled_style.border_width_top = 1
-	disabled_style.border_width_bottom = 1
-	disabled_style.border_color = Color(0.3, 0.3, 0.3, 1.0)
-	disabled_style.content_margin_left = 8
-	disabled_style.content_margin_right = 8
-	disabled_style.content_margin_top = 8
-	disabled_style.content_margin_bottom = 8
-	disabled_style.set_corner_radius_all(0)
-	start_craft_button.add_theme_stylebox_override("disabled", disabled_style)
+	var disabled = StyleBoxFlat.new()
+	disabled.bg_color = Color(0.2, 0.2, 0.2)
+	disabled.set_corner_radius_all(0)
+	start_craft_button.add_theme_stylebox_override("disabled", disabled)
 
-	# Font colors
 	start_craft_button.add_theme_color_override("font_color", Color.WHITE)
 	start_craft_button.add_theme_color_override("font_disabled_color", Color(0.5, 0.5, 0.5, 1.0))
 
@@ -357,47 +301,6 @@ func _setup_interaction_panel(parent: VBoxContainer):
 	interaction_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	interaction_container.add_theme_constant_override("separation", 8)
 	margin.add_child(interaction_container)
-
-
-func _setup_output_panel(parent: VBoxContainer):
-	"""Set up the output collection panel"""
-	output_panel = Panel.new()
-	output_panel.custom_minimum_size = Vector2(0, 150)
-	output_panel.visible = false
-	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.12, 0.12, 0.12)
-	panel_style.border_width_left = 1
-	panel_style.border_width_right = 1
-	panel_style.border_width_top = 1
-	panel_style.border_width_bottom = 1
-	panel_style.border_color = Color(0.3, 0.3, 0.3)
-	output_panel.add_theme_stylebox_override("panel", panel_style)
-	parent.add_child(output_panel)
-
-	var margin = MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	output_panel.add_child(margin)
-
-	var vbox = VBoxContainer.new()
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 8)
-	margin.add_child(vbox)
-
-	var title = Label.new()
-	title.text = "Crafting Complete!"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 18)
-	vbox.add_child(title)
-
-	output_grid = GridContainer.new()
-	output_grid.columns = 4
-	output_grid.add_theme_constant_override("h_separation", 8)
-	output_grid.add_theme_constant_override("v_separation", 8)
-	vbox.add_child(output_grid)
 
 
 func set_crafting_manager(manager: CraftingManager):
@@ -605,56 +508,21 @@ func _animate_crafting():
 
 
 func _show_crafting_complete():
-	"""Show crafting complete with output"""
+	"""Show crafting complete notification and return to crafting screen"""
+	# Hide process panel
 	process_panel.visible = false
-	output_panel.visible = true
 
-	# Clear output grid
-	for child in output_grid.get_children():
-		child.queue_free()
+	# Show notification
+	_show_crafted_notification()
 
-	# Show output item
-	var item_panel = Panel.new()
-	item_panel.custom_minimum_size = Vector2(150, 80)
-	output_grid.add_child(item_panel)
+	# Reset to allow more crafting
+	_reset_crafting_ui()
 
-	var item_vbox = VBoxContainer.new()
-	item_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	item_panel.add_child(item_vbox)
 
-	var item_label = Label.new()
-	item_label.text = selected_recipe.recipe_name
-	item_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	item_vbox.add_child(item_label)
-
-	var quantity_label = Label.new()
-	quantity_label.text = "x%d" % selected_recipe.output_quantity
-	quantity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	item_vbox.add_child(quantity_label)
-
-	# Collect button
-	var collect_button = Button.new()
-	collect_button.text = "Collect Items"
-	collect_button.custom_minimum_size = Vector2(0, 50)
-
-	# Flat button styling
-	var collect_normal = StyleBoxFlat.new()
-	collect_normal.bg_color = Color(0.2, 0.2, 0.2)
-	collect_normal.set_corner_radius_all(0)
-	collect_button.add_theme_stylebox_override("normal", collect_normal)
-
-	var collect_hover = StyleBoxFlat.new()
-	collect_hover.bg_color = Color(0.25, 0.25, 0.25)
-	collect_hover.set_corner_radius_all(0)
-	collect_button.add_theme_stylebox_override("hover", collect_hover)
-
-	var collect_pressed = StyleBoxFlat.new()
-	collect_pressed.bg_color = Color(0.15, 0.15, 0.15)
-	collect_pressed.set_corner_radius_all(0)
-	collect_button.add_theme_stylebox_override("pressed", collect_pressed)
-
-	collect_button.pressed.connect(_on_collect_output)
-	output_grid.add_child(collect_button)
+func _show_crafted_notification():
+	"""Display notification for crafted item"""
+	var message = "Crafted: %s" % [selected_recipe.recipe_name]
+	NotificationManager.show_item_crafted(message, selected_recipe.output_quantity)
 
 
 func _show_crafting_failed():
@@ -665,31 +533,24 @@ func _show_crafting_failed():
 	_reset_crafting_ui()
 
 
-func _on_collect_output():
-	"""Handle collecting output items"""
-	_reset_crafting_ui()
-
-
 func _reset_crafting_ui():
 	"""Reset UI to initial state"""
 	is_crafting = false
-	selected_recipe = null
 
 	_hide_process_and_output_panels()
 
 	crafting_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	recipe_list_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	recipe_info_label.text = "[center]Select a recipe to begin[/center]"
-	requirements_label.text = ""
-	start_craft_button.disabled = true
+	# Refresh display to update material counts
+	if selected_recipe:
+		_update_recipe_display()
 
 
 func _hide_process_and_output_panels():
 	"""Hide process and output panels"""
 	process_panel.visible = false
 	interaction_panel.visible = false
-	output_panel.visible = false
 
 
 func refresh_display():

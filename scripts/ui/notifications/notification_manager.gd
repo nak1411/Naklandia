@@ -55,6 +55,11 @@ func show_item_pickup(item_name: String, quantity: int = 1):
 	show_notification(message, "item", 2.5)
 
 
+func show_item_crafted(item_name: String, quantity: int = 1):
+	var message = "%s x%d" % [item_name, quantity] if quantity > 1 else item_name
+	show_notification(message, "crafted", 2.5)
+
+
 func show_success(message: String, duration: float = 2.5):
 	show_notification(message, "success", duration)
 
