@@ -457,6 +457,17 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 	# Emit the drop signal first
 	item_dropped_on_slot.emit(slot, target_slot)
 
+	# SPECIAL HANDLING: Equipment slots to inventory slots
+	if slot.container_id == "equipment" and target_slot.container_id != "equipment":
+		# This is handled by EquipmentWindow's signal connections
+		# Just return success if the target slot is valid
+		if not target_slot.has_item():
+			return true
+		var target_item = target_slot.get_item()
+		if slot.get_item().can_stack_with(target_item):
+			return true
+		return false
+
 	# Then handle the actual drop
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:

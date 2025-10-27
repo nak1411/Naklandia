@@ -303,9 +303,12 @@ func _create_slot_in_row(row: HBoxContainer, slot_type: EquipmentSlotType, label
 
 func _on_equipment_slot_clicked(slot: EquipmentSlot, _event: InputEvent, slot_type: EquipmentSlotType):
 	"""Handle equipment slot click"""
-	if slot.has_item():
-		# Unequip item
-		_unequip_item(slot_type)
+	# DON'T unequip on left click - that interferes with dragging
+	# Unequip only happens via:
+	# 1. Right-click context menu
+	# 2. Dragging to inventory
+	# 3. Dedicated unequip buttone
+	pass
 
 
 func _on_equipment_slot_right_clicked(slot: EquipmentSlot, event: InputEvent, slot_type: EquipmentSlotType):

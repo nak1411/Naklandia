@@ -202,10 +202,20 @@ func get_allowed_categories() -> Array[String]:
 	return allowed_categories
 
 
-# Override parent methods to add equipment-specific behavior
 func _on_drag_started(source_slot: InventorySlot, dragged_item: InventoryItem_Base):
-	"""Override to add equipment-specific drag behavior"""
-	super._on_drag_started(source_slot, dragged_item)
+	"""Override to prevent equipment slot from becoming transparent during drag"""
+	# DON'T call super - we don't want any behavior that might hide/fade the item
+
+	# Keep the equipment slot fully visible during drag
+	modulate.a = 1.0
+	mouse_filter = Control.MOUSE_FILTER_STOP
+
+	# Make sure item visual stays visible
+	if visuals and visuals.item_icon:
+		visuals.item_icon.modulate.a = 1.0
+
+	# Emit the signal for other systems
+	item_drag_started.emit(source_slot, dragged_item)
 
 
 func _on_drag_ended(source_slot: InventorySlot, success: bool):
