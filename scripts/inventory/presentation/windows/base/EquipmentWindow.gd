@@ -246,6 +246,13 @@ func _create_slot_in_column(column: VBoxContainer, slot_type: EquipmentSlotType,
 	slot.slot_right_clicked.connect(_on_equipment_slot_right_clicked.bind(slot_type))
 	slot.item_dropped_on_slot.connect(_on_item_dropped_on_equipment.bind(slot_type))
 
+	if slot.drag_handler:
+		slot.drag_handler.item_dropped_on_slot.connect(
+			func(source, target):
+				if source == slot and target.container_id != "equipment":
+					_on_equipment_item_dragged_to_inventory(slot, target, slot_type)
+		)
+
 	print("  Slot fully set up for: ", label_text)
 
 
@@ -326,8 +333,69 @@ func _on_item_dropped_on_equipment(source_slot: InventorySlot, _target_slot: Equ
 		return
 
 	print("  Equipping item...")
+
 	# Equip the item
 	_equip_item(item, slot_type)
+
+	# CRITICAL: Remove the item from the source slot
+	source_slot.clear_item()
+
+	# Make the source slot visually disappear immediately
+	source_slot.modulate.a = 0.0
+	source_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# Clean up drag state on source slot
+	if source_slot.drag_handler:
+		source_slot.drag_handler.is_dragging = false
+		source_slot.drag_handler.drag_preview_created = false
+
+	# Trigger refresh of the source container
+	if inventory_manager:
+		var source_container = inventory_manager.get_container(source_slot.container_id)
+		if source_container:
+			source_container.remove_item(item)
+
+	# Ensure equipment slot visual is correct
+	_target_slot._ensure_background_visible()
+
+	print("  Item equipped and removed from inventory")
+
+
+func _on_equipment_item_dragged_to_inventory(equipment_slot: EquipmentSlot, target_slot: InventorySlot, slot_type: EquipmentSlotType):
+	"""Handle dragging equipped item back to inventory"""
+	print("EquipmentWindow: Item dragged from equipment to inventory")
+
+	if not equipment_slot.has_item():
+		return
+
+	var item = equipment_slot.get_item()
+
+	# Check if the target slot can accept the item
+	if target_slot.has_item():
+		var target_item = target_slot.get_item()
+		if not item.can_stack_with(target_item):
+			print("  Cannot drop on occupied slot")
+			return
+
+	# Check if inventory has space
+	if not inventory_manager:
+		return
+
+	var target_container = inventory_manager.get_container(target_slot.container_id)
+	if not target_container:
+		return
+
+	if not target_container.can_add_item(item):
+		print("  Inventory doesn't have space")
+		return
+
+	# Unequip the item
+	_unequip_item(slot_type)
+
+	# Add to inventory
+	target_slot.set_item(item)
+
+	print("  Item unequipped and moved to inventory")
 
 
 func _can_equip_in_slot(item: InventoryItem_Base, slot_type: EquipmentSlotType) -> bool:

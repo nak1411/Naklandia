@@ -151,4 +151,24 @@ func create_item_instance(item_id: String, quantity: int = 1) -> InventoryItem_B
 	item.max_stack_size = item_def.max_stack_size
 	item.quantity = quantity
 
+	# CRITICAL: Set equipment_category metadata
+	_set_equipment_category(item)
+
 	return item
+
+
+func _set_equipment_category(item: InventoryItem_Base):
+	"""Set equipment_category metadata based on item type"""
+	match item.item_type:
+		ItemTypes.Type.WEAPON:
+			item.set_meta("equipment_category", "weapon")
+		ItemTypes.Type.TOOL:
+			item.set_meta("equipment_category", "tool")
+		ItemTypes.Type.ARMOR:
+			item.set_meta("equipment_category", "armor")
+		ItemTypes.Type.AMMUNITION:
+			item.set_meta("equipment_category", "ammunition")
+		ItemTypes.Type.IMPLANT:
+			item.set_meta("equipment_category", "accessory")
+		_:
+			pass

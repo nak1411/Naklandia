@@ -13,6 +13,7 @@ var slot_type_label: Label
 func _ready():
 	# Set equipment container ID before parent initialization
 	container_id = "equipment"
+	add_to_group("equipment_slots")
 
 	# Adjust slot size for equipment (square slots) BEFORE parent init
 	slot_size = Vector2(64, 64)
@@ -34,6 +35,15 @@ func set_item(new_item: InventoryItem_Base):
 	"""Override to maintain visible background"""
 	super.set_item(new_item)
 	_ensure_background_visible()
+
+
+func update_item_display():
+	"""Override to prevent item name from showing in equipment slots"""
+	if visuals:
+		visuals.update_item_display()
+		# CRITICAL: Always hide item name in equipment slots
+		if visuals.item_name_label:
+			visuals.item_name_label.visible = false
 
 
 func clear_item():
@@ -195,14 +205,23 @@ func _on_drag_started(source_slot: InventorySlot, dragged_item: InventoryItem_Ba
 
 
 func _on_drag_ended(source_slot: InventorySlot, success: bool):
-	"""Override to add equipment-specific drag end behavior"""
+	"""Override to restore equipment slot visuals after drag"""
 	super._on_drag_ended(source_slot, success)
+	# Force restore equipment slot background
+	call_deferred("_ensure_background_visible")
 
 
 func set_highlighted(highlighted: bool):
 	"""Override to maintain visible background"""
-	super.set_highlighted(highlighted)
+	is_highlighted = highlighted
 	_ensure_background_visible()
+
+	# Update outline without changing background
+	if visuals and visuals.outline_overlay:
+		if highlighted and has_item():
+			visuals._show_outline()
+		else:
+			visuals._hide_outline()
 
 
 func set_selected(selected: bool):
@@ -214,19 +233,24 @@ func set_selected(selected: bool):
 func _ensure_background_visible():
 	"""Force the background to always be visible for equipment slots"""
 	if not visuals or not visuals.background_panel:
-		print("  WARNING: Cannot ensure background - visuals or background_panel missing")
 		return
 
 	visuals.background_panel.visible = true
+
+	# Create fresh style box each time to prevent modifications
 	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color(0.15, 0.15, 0.15, 1.0)  # Fully opaque
+	style_box.bg_color = Color(0.15, 0.15, 0.15, 1.0)
 	style_box.border_width_left = 2
 	style_box.border_width_right = 2
 	style_box.border_width_top = 2
 	style_box.border_width_bottom = 2
 	style_box.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	style_box.corner_radius_top_left = 4
+	style_box.corner_radius_top_right = 4
+	style_box.corner_radius_bottom_left = 4
+	style_box.corner_radius_bottom_right = 4
+
 	visuals.background_panel.add_theme_stylebox_override("panel", style_box)
-	print("  Background forced visible with alpha 1.0")
 
 
 # Equipment-specific helper methods

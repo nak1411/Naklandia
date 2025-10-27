@@ -489,7 +489,49 @@ func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 		if slot._attempt_drop_on_container_list(end_position):
 			return true
 
-	# REMOVE external window checking - let window _input() methods handle cross-window drops
+	# Check for equipment slot drops
+	if _attempt_drop_on_equipment_slot(end_position):
+		return true
+
+	return false
+
+
+func _attempt_drop_on_equipment_slot(end_position: Vector2) -> bool:
+	"""Check if we're dropping on an equipment slot"""
+	if not slot or not slot.has_item():
+		return false
+
+	# Find all EquipmentSlot nodes in the scene tree
+	var equipment_slots = slot.get_tree().get_nodes_in_group("equipment_slots")
+	if equipment_slots.is_empty():
+		return false
+
+	var source_item = slot.get_item()
+	var drag_data = {"item": source_item, "source_slot": slot}
+
+	# Check each equipment slot
+	for equipment_slot in equipment_slots:
+		if not is_instance_valid(equipment_slot):
+			continue
+
+		if not equipment_slot.visible or not equipment_slot.is_inside_tree():
+			continue
+
+		# Check if drop position is within this equipment slot's bounds
+		var slot_rect = Rect2(equipment_slot.global_position, equipment_slot.size)
+		if slot_rect.has_point(end_position):
+			print("Found equipment slot at drop position: ", equipment_slot.name)
+
+			# Check if the item can be equipped
+			if not equipment_slot.can_drop_data(end_position, drag_data):
+				print("Equipment slot rejected the item")
+				continue
+
+			# Perform the drop
+			equipment_slot.drop_data(end_position, drag_data)
+			print("Item drop handled by equipment slot")
+			return true
+
 	return false
 
 

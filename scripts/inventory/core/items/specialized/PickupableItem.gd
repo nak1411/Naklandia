@@ -64,6 +64,26 @@ func _generate_item_data():
 	if not icon_path_override.is_empty():
 		item_data.icon_path = icon_path_override
 
+	# CRITICAL: Set equipment_category metadata
+	_set_equipment_category(item_data)
+
+
+func _set_equipment_category(item: InventoryItem_Base):
+	"""Set equipment_category metadata based on item type"""
+	match item.item_type:
+		ItemTypes.Type.WEAPON:
+			item.set_meta("equipment_category", "weapon")
+		ItemTypes.Type.TOOL:
+			item.set_meta("equipment_category", "tool")
+		ItemTypes.Type.ARMOR:
+			item.set_meta("equipment_category", "armor")
+		ItemTypes.Type.AMMUNITION:
+			item.set_meta("equipment_category", "ammunition")
+		ItemTypes.Type.IMPLANT:
+			item.set_meta("equipment_category", "accessory")
+		_:
+			pass
+
 
 func _perform_interaction() -> bool:
 	if not item_data:
