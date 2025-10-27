@@ -40,6 +40,12 @@ func _ready():
 
 func _initialize_items():
 	"""Initialize all item definitions"""
+
+	# TOOLS
+	_register_item(
+		ItemDefinition.new("wrench", "Wrench", "A wrench used to construct various items and structures.", ItemTypes.Type.TOOL, 0.05, 0.1, 50.0, "res://assets/textures/ui/icons/wrench.png")
+	)
+
 	# AMMUNITION
 	_register_item(
 		ItemDefinition.new(

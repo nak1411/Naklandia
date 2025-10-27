@@ -36,12 +36,12 @@ func _create_basic_recipes():
 	"""Create basic crafting recipes"""
 	# Hybrid Charges Recipe
 	var simple_tool = CraftingRecipe.new()
-	simple_tool.recipe_id = "recipe_hybrid_charges"
-	simple_tool.recipe_name = "Hybrid Charges"
-	simple_tool.description = "Standard ammunition for hybrid weapon systems"
-	simple_tool.output_item_id = "ammo_hybrid_charges"
-	simple_tool.output_quantity = 100
-	simple_tool.output_item_type = ItemTypes.Type.AMMUNITION
+	simple_tool.recipe_id = "recipe_wrench"
+	simple_tool.recipe_name = "Wrench"
+	simple_tool.description = "Creates a wrench used for contructing items and structures."
+	simple_tool.output_item_id = "wrench"
+	simple_tool.output_quantity = 1
+	simple_tool.output_item_type = ItemTypes.Type.TOOL
 	simple_tool.is_always_available = true
 
 	var noxite_mat = CraftingRecipe.RecipeMaterial.new()
