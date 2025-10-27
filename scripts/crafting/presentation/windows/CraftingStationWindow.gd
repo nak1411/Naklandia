@@ -15,7 +15,6 @@ var start_craft_button: Button
 var process_panel: Panel
 var stage_label: Label
 var progress_bar: ProgressBar
-var overall_progress_bar: ProgressBar
 var quality_indicator: ProgressBar
 var stage_description: RichTextLabel
 
@@ -130,7 +129,7 @@ func _setup_recipe_list_panel(parent: Control):
 func _setup_recipe_info_panel(parent: VBoxContainer):
 	"""Set up the recipe information display"""
 	crafting_panel = Panel.new()
-	crafting_panel.custom_minimum_size = Vector2(0, 400)
+	crafting_panel.custom_minimum_size = Vector2(0, 120)
 	crafting_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	crafting_panel.clip_contents = true
 	var panel_style = StyleBoxFlat.new()
@@ -180,7 +179,7 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 	# Start button - SEPARATE, underneath the panel
 	start_craft_button = Button.new()
 	start_craft_button.text = "Start Crafting"
-	start_craft_button.custom_minimum_size = Vector2(300, 40)
+	start_craft_button.custom_minimum_size = Vector2(200, 40)
 	start_craft_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	start_craft_button.disabled = true
 	start_craft_button.focus_mode = Control.FOCUS_NONE  # Remove white focus outline
@@ -216,7 +215,8 @@ func _setup_recipe_info_panel(parent: VBoxContainer):
 func _setup_process_panel(parent: VBoxContainer):
 	"""Set up the crafting process display"""
 	process_panel = Panel.new()
-	process_panel.custom_minimum_size = Vector2(0, 150)
+	process_panel.custom_minimum_size = Vector2(0, 100)
+	process_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	process_panel.visible = false
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.12, 0.12, 0.12)
@@ -253,17 +253,6 @@ func _setup_process_panel(parent: VBoxContainer):
 	progress_bar.show_percentage = false
 	progress_bar.custom_minimum_size = Vector2(0, 20)
 	vbox.add_child(progress_bar)
-
-	# Overall progress
-	var overall_label = Label.new()
-	overall_label.text = "Overall Progress"
-	overall_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(overall_label)
-
-	overall_progress_bar = ProgressBar.new()
-	overall_progress_bar.show_percentage = true
-	overall_progress_bar.custom_minimum_size = Vector2(0, 24)
-	vbox.add_child(overall_progress_bar)
 
 	# Quality indicator
 	var quality_label = Label.new()
@@ -498,7 +487,6 @@ func _show_crafting_process():
 	process_panel.visible = true
 	stage_label.text = "Crafting %s..." % selected_recipe.recipe_name
 	progress_bar.value = 0
-	overall_progress_bar.value = 0
 	quality_indicator.value = 100
 
 
@@ -506,8 +494,7 @@ func _animate_crafting():
 	"""Animate the crafting process"""
 	var tween = create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(progress_bar, "value", 100, 0.5)
-	tween.tween_property(overall_progress_bar, "value", 100, 0.5)
+	tween.tween_property(progress_bar, "value", 100, 2.5)
 	await tween.finished
 
 

@@ -231,7 +231,7 @@ spawn_mode = 1
 spawn_interval = 1.0
 auto_spawn = true
 max_spawned_items = 5
-designated_item_types = Array[String](["AmmoPickup"])
+designated_item_types = Array[String](["ResourcePickup"])
 spawn_height = 1.0
 
 [node name="InventoryIntegration" type="Node" parent="."]
