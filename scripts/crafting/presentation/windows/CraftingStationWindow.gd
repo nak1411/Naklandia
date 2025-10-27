@@ -362,23 +362,61 @@ func _populate_recipe_list():
 	# Add recipe buttons
 	for recipe in available_recipes:
 		var recipe_button = Button.new()
-		recipe_button.text = recipe.recipe_name
-		recipe_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		recipe_button.custom_minimum_size = Vector2(0, 40)  # FIXED: was 20, now 40 to fit padding
-		recipe_button.focus_mode = Control.FOCUS_NONE  # Remove white focus outline
+		recipe_button.text = ""  # Clear text, we'll use custom layout
+		recipe_button.custom_minimum_size = Vector2(0, 40)
+		recipe_button.focus_mode = Control.FOCUS_NONE
 		recipe_button.pressed.connect(_on_recipe_selected.bind(recipe))
 
-		# Color code by complexity - safely get complexity_level
-		var complexity_level = 1
-		if "complexity_level" in recipe:
-			complexity_level = recipe.complexity_level
-		var complexity_color = _get_complexity_color(complexity_level)
+		# Color code by material availability
+		var availability_color = _get_material_availability_color(recipe)
+
+		# Create custom layout with icon and label - centered vertically
+		var hbox = HBoxContainer.new()
+		hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hbox.add_theme_constant_override("separation", 8)
+		hbox.alignment = BoxContainer.ALIGNMENT_BEGIN
+		recipe_button.add_child(hbox)
+
+		# Add small spacer for padding from left border
+		var spacer = Control.new()
+		spacer.custom_minimum_size = Vector2(4, 0)
+		spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hbox.add_child(spacer)
+
+		# Add icon - get from ItemDatabase using output_item_id
+		var icon_rect = TextureRect.new()
+		icon_rect.custom_minimum_size = Vector2(32, 32)
+		icon_rect.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		icon_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		# Look up item in database to get icon path
+		var item_database = get_node_or_null("/root/ItemDatabase")
+		if item_database and not recipe.output_item_id.is_empty():
+			var item_def = item_database.get_item(recipe.output_item_id)
+			if item_def and not item_def.icon_path.is_empty():
+				if ResourceLoader.exists(item_def.icon_path):
+					var icon_texture = load(item_def.icon_path)
+					if icon_texture:
+						icon_rect.texture = icon_texture
+
+		hbox.add_child(icon_rect)
+
+		# Add label
+		var label = Label.new()
+		label.text = recipe.recipe_name
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hbox.add_child(label)
 
 		# Normal style - matches container list
 		var normal_style = StyleBoxFlat.new()
 		normal_style.bg_color = Color(0.12, 0.12, 0.12, 1.0)  # Dark background like container list
 		normal_style.border_width_left = 3  # Keep left border for complexity color
-		normal_style.border_color = complexity_color
+		normal_style.border_color = availability_color
 		normal_style.content_margin_left = 8
 		normal_style.content_margin_right = 8
 		normal_style.content_margin_top = 8
@@ -390,7 +428,7 @@ func _populate_recipe_list():
 		var hover_style = StyleBoxFlat.new()
 		hover_style.bg_color = Color(0.25, 0.25, 0.25, 1.0)  # Lighter on hover
 		hover_style.border_width_left = 3
-		hover_style.border_color = complexity_color
+		hover_style.border_color = availability_color
 		hover_style.content_margin_left = 8
 		hover_style.content_margin_right = 8
 		hover_style.content_margin_top = 8
@@ -402,7 +440,7 @@ func _populate_recipe_list():
 		var pressed_style = StyleBoxFlat.new()
 		pressed_style.bg_color = Color(0.3, 0.35, 0.4, 1.0)  # Selected color
 		pressed_style.border_width_left = 3
-		pressed_style.border_color = complexity_color
+		pressed_style.border_color = availability_color
 		pressed_style.content_margin_left = 8
 		pressed_style.content_margin_right = 8
 		pressed_style.content_margin_top = 8
@@ -416,17 +454,26 @@ func _populate_recipe_list():
 		recipe_list.add_child(recipe_button)
 
 
-func _get_complexity_color(level: int) -> Color:
-	"""Get color for complexity level"""
-	match level:
-		1, 2:
-			return Color.GREEN
-		3, 4, 5:
-			return Color.YELLOW
-		6, 7, 8:
-			return Color.ORANGE
-		_:
-			return Color.RED
+func _get_material_availability_color(recipe: CraftingRecipe) -> Color:
+	"""Get color based on material availability"""
+	var available_materials = _get_available_materials()
+	var has_count = 0
+	var total_count = recipe.required_materials.size()
+
+	if total_count == 0:
+		return Color.GREEN
+
+	for req_mat in recipe.required_materials:
+		var available = available_materials.get(req_mat.material_id, 0)
+		if available >= req_mat.quantity:
+			has_count += 1
+
+	if has_count == total_count:
+		return Color.GREEN  # Has all materials
+	elif has_count > 0:
+		return Color.YELLOW  # Has some materials
+	else:
+		return Color.RED  # Has no materials
 
 
 func _on_recipe_selected(recipe: CraftingRecipe):
