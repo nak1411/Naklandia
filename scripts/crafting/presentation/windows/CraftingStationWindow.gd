@@ -485,6 +485,7 @@ func _show_crafting_process():
 	recipe_list_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	process_panel.visible = true
+	start_craft_button.visible = false
 	stage_label.text = "Crafting %s..." % selected_recipe.recipe_name
 	progress_bar.value = 0
 	quality_indicator.value = 100
@@ -532,6 +533,7 @@ func _reset_crafting_ui():
 
 	crafting_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	recipe_list_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	start_craft_button.visible = true
 
 	# Refresh display to update material counts
 	if selected_recipe:
@@ -542,6 +544,7 @@ func _hide_process_and_output_panels():
 	"""Hide process and output panels"""
 	process_panel.visible = false
 	interaction_panel.visible = false
+	start_craft_button.visible = true
 
 
 func refresh_display():
