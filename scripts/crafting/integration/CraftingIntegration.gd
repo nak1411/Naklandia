@@ -179,7 +179,7 @@ func _input(event):
 	"""Handle input for opening/closing crafting"""
 	if event is InputEventKey and event.pressed and not event.echo:
 		# Press 'C' to toggle crafting
-		if event.keycode == KEY_C:
+		if event.keycode == KEY_Q:
 			if is_crafting_open():
 				close_crafting_station()
 			else:

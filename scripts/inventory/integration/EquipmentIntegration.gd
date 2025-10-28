@@ -158,7 +158,7 @@ func _input(event):
 	"""Handle input for opening/closing equipment"""
 	if event is InputEventKey and event.pressed and not event.echo:
 		# Press 'E' to toggle equipment window
-		if event.keycode == KEY_E:
+		if event.keycode == KEY_C:
 			if is_equipment_open():
 				close_equipment_window()
 			else:

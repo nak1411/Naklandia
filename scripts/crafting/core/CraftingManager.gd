@@ -35,62 +35,22 @@ func _load_recipes():
 func _create_basic_recipes():
 	"""Create basic crafting recipes"""
 	# Hybrid Charges Recipe
-	var simple_tool = CraftingRecipe.new()
-	simple_tool.recipe_id = "recipe_wrench"
-	simple_tool.recipe_name = "Wrench"
-	simple_tool.description = "Creates a wrench used for contructing items and structures."
-	simple_tool.output_item_id = "wrench"
-	simple_tool.output_quantity = 1
-	simple_tool.output_item_type = ItemTypes.Type.TOOL
-	simple_tool.is_always_available = true
+	var wrench = CraftingRecipe.new()
+	wrench.recipe_id = "recipe_wrench"
+	wrench.recipe_name = "Wrench"
+	wrench.description = "Creates a wrench used for contructing items and structures."
+	wrench.output_item_id = "wrench"
+	wrench.output_quantity = 1
+	wrench.output_item_type = ItemTypes.Type.TOOL
+	wrench.is_always_available = true
 
 	var noxite_mat = CraftingRecipe.RecipeMaterial.new()
 	noxite_mat.material_id = "resource_noxite"
 	noxite_mat.material_name = "Noxite"
 	noxite_mat.quantity = 1
-	simple_tool.required_materials.append(noxite_mat)
+	wrench.required_materials.append(noxite_mat)
 
-	all_recipes.append(simple_tool)
-
-	# Basic Component Recipe
-	var basic_component = CraftingRecipe.new()
-	basic_component.recipe_id = "recipe_basic_component"
-	basic_component.recipe_name = "Basic Component"
-	basic_component.description = "A simple component made from raw materials"
-	basic_component.output_item_id = "basic_component"
-	basic_component.output_quantity = 1
-	basic_component.is_always_available = true
-
-	var metal_mat2 = CraftingRecipe.RecipeMaterial.new()
-	metal_mat2.material_id = "metal_plate"
-	metal_mat2.material_name = "Metal Plate"
-	metal_mat2.quantity = 1
-	basic_component.required_materials.append(metal_mat2)
-
-	all_recipes.append(basic_component)
-
-	# Repair Kit Recipe
-	var repair_kit = CraftingRecipe.new()
-	repair_kit.recipe_id = "recipe_repair_kit"
-	repair_kit.recipe_name = "Repair Kit"
-	repair_kit.description = "Emergency repair kit for quick fixes"
-	repair_kit.output_item_id = "repair_kit"
-	repair_kit.output_quantity = 1
-	repair_kit.is_always_available = true
-
-	var metal_mat3 = CraftingRecipe.RecipeMaterial.new()
-	metal_mat3.material_id = "metal_plate"
-	metal_mat3.material_name = "Metal Plate"
-	metal_mat3.quantity = 3
-	repair_kit.required_materials.append(metal_mat3)
-
-	var component_mat = CraftingRecipe.RecipeMaterial.new()
-	component_mat.material_id = "basic_component"
-	component_mat.material_name = "Basic Component"
-	component_mat.quantity = 2
-	repair_kit.required_materials.append(component_mat)
-
-	all_recipes.append(repair_kit)
+	all_recipes.append(wrench)
 
 	# Discover all always-available recipes by default
 	for recipe in all_recipes:
