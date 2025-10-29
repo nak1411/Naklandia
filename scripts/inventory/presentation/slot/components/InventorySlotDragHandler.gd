@@ -377,6 +377,11 @@ func _clear_slot_highlighting():
 
 func _handle_drag_end(end_position: Vector2):
 	"""Handle the end of a drag operation"""
+	print("InventorySlotDragHandler._handle_drag_end called")
+	print("  Slot: ", slot.name if slot else "NULL")
+	print("  Slot container_id: ", slot.container_id if slot else "NULL")
+	print("  End position: ", end_position)
+
 	# Re-enable integration input processing after drag
 	var ui_adapter = _get_ui_input_adapter()
 	if ui_adapter:
@@ -396,10 +401,14 @@ func _handle_drag_end(end_position: Vector2):
 	if not target_slot:
 		target_slot = _find_best_drop_slot(end_position)
 
+	print("  Target slot found: ", target_slot.name if target_slot else "NULL")
+
 	if target_slot and target_slot != slot:
-		drop_successful = _attempt_drop_on_slot(target_slot)
+		print("  Attempting drop on target slot...")
+		drop_successful = _attempt_drop_on_slot(target_slot, end_position)
 	else:
 		# Try other targets
+		print("  No target slot, trying other targets...")
 		drop_successful = _attempt_drop_on_other_targets(end_position)
 
 	# If drop failed, make sure we don't leave drag data hanging around
@@ -449,7 +458,7 @@ func _find_slot_at_position(global_pos: Vector2) -> InventorySlot:
 	return null
 
 
-func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
+func _attempt_drop_on_slot(target_slot: InventorySlot, end_position: Vector2) -> bool:
 	"""Attempt to drop item on another slot"""
 	if not target_slot or not slot.has_item():
 		return false
@@ -459,16 +468,38 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 
 	# SPECIAL HANDLING: Equipment slots to inventory slots
 	if slot.container_id == "equipment" and target_slot.container_id != "equipment":
-		# This is handled by EquipmentWindow's signal connections
-		# Just return success if the target slot is valid
-		if not target_slot.has_item():
-			return true
-		var target_item = target_slot.get_item()
-		if slot.get_item().can_stack_with(target_item):
-			return true
-		return false
+		# Find the equipment window to properly unequip
+		var equipment_window = _find_equipment_window()
+		if not equipment_window:
+			print("ERROR: Could not find equipment window")
+			return false
 
-	# Then handle the actual drop
+		# Find which equipment slot type this is
+		var slot_type = _find_equipment_slot_type(equipment_window)
+		if slot_type == null:
+			print("ERROR: Could not find equipment slot type")
+			return false
+
+		var item = slot.get_item()
+		print("Unequipping ", item.item_name, " from equipment to inventory")
+
+		# Check if target slot can accept the item
+		if target_slot.has_item():
+			var target_item = target_slot.get_item()
+			if not item.can_stack_with(target_item):
+				print("ERROR: Target slot cannot accept item (occupied, no stack)")
+				return false
+
+		# Perform the unequip through the equipment window
+		equipment_window._unequip_item(slot_type)
+
+		# Add to target inventory slot
+		target_slot.set_item(item)
+
+		print("Successfully unequipped and moved to inventory")
+		return true
+
+	# Then handle the actual drop for regular inventory slots
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
 		return false
@@ -486,6 +517,16 @@ func _attempt_drop_on_slot(target_slot: InventorySlot) -> bool:
 
 func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 	"""Attempt to drop on other valid targets"""
+	# SPECIAL HANDLING: Equipment slots to inventory grid (empty area)
+	if slot.container_id == "equipment":
+		print("Dragging from equipment, checking for inventory grid drop")
+		var grid = _get_inventory_grid()
+		if grid:
+			var grid_rect = Rect2(grid.global_position, grid.size)
+			if grid_rect.has_point(end_position):
+				print("  Drop is over inventory grid!")
+				return _handle_equipment_to_inventory_drop(grid, end_position)
+
 	# Check virtual content area
 	var grid = _get_inventory_grid()
 	if grid and grid.enable_virtual_scrolling and grid.virtual_content:
@@ -544,6 +585,58 @@ func _attempt_drop_on_equipment_slot(end_position: Vector2) -> bool:
 			return true
 
 	return false
+
+
+func _handle_equipment_to_inventory_drop(grid: InventoryGrid, end_position: Vector2) -> bool:
+	"""Handle dropping from equipment to inventory grid"""
+	if not slot or not slot.has_item():
+		return false
+
+	# Find the equipment window
+	var equipment_window = _find_equipment_window()
+	if not equipment_window:
+		print("  ERROR: Could not find equipment window")
+		return false
+
+	# Find which equipment slot type this is
+	var slot_type = _find_equipment_slot_type(equipment_window)
+	if slot_type == null:
+		print("  ERROR: Could not find equipment slot type")
+		return false
+
+	var item = slot.get_item()
+	print("  Unequipping ", item.item_name, " to inventory")
+
+	# Get the inventory manager
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		print("  ERROR: No inventory manager")
+		return false
+
+	# Try to find an empty slot or create one
+	var target_container = inventory_manager.get_container(grid.container_id)
+	if not target_container:
+		print("  ERROR: No target container")
+		return false
+
+	if not target_container.can_add_item(item):
+		print("  ERROR: Inventory doesn't have space")
+		return false
+
+	# Unequip the item
+	equipment_window._unequip_item(slot_type)
+
+	# Add to inventory (let the manager find a spot)
+	var success = inventory_manager.add_item_to_container(item, grid.container_id)
+
+	if success:
+		print("  Successfully unequipped and moved to inventory")
+		# Refresh the grid display
+		grid.refresh_display()
+		return true
+	else:
+		print("  ERROR: Failed to add item to inventory")
+		return false
 
 
 func _get_inventory_grid():
@@ -610,6 +703,29 @@ func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
 		var result = _find_inventory_manager_recursive(child)
 		if result:
 			return result
+
+	return null
+
+
+func _find_equipment_window():
+	"""Find the EquipmentWindow in the scene tree"""
+	var current = slot.get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "EquipmentWindow":
+			return current
+		current = current.get_parent()
+	return null
+
+
+func _find_equipment_slot_type(equipment_window):
+	"""Find which equipment slot type this slot corresponds to"""
+	if not equipment_window or not equipment_window.equipment_slots:
+		return null
+
+	# Search through equipment_slots dictionary to find which type this slot is
+	for slot_type in equipment_window.equipment_slots:
+		if equipment_window.equipment_slots[slot_type] == slot:
+			return slot_type
 
 	return null
 

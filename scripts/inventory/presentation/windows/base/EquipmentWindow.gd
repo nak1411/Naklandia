@@ -49,6 +49,39 @@ func _gui_input(event: InputEvent):
 					return
 
 
+func _unhandled_input(event: InputEvent):
+	"""Handle unhandled input"""
+	if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		print("EquipmentWindow _unhandled_input called at: ", event.global_position)
+
+		var viewport = get_viewport()
+		if viewport and viewport.has_meta("current_drag_data"):
+			var drag_data = viewport.get_meta("current_drag_data")
+			var source_slot = drag_data.get("source_slot")
+
+			# Check if this is a drag from our equipment slots
+			if source_slot and source_slot.container_id == "equipment":
+				print("EquipmentWindow: Detected equipment drag release")
+
+				# Check if dropping over inventory window
+				var inventory_window = _find_inventory_window()
+				if inventory_window:
+					var inv_rect = Rect2(inventory_window.global_position, inventory_window.size)
+					if inv_rect.has_point(event.global_position):
+						print("  Release is over inventory window, letting it handle the drop")
+						# Don't set as handled - let the slot's drag handler process this
+						return
+
+		var my_rect = Rect2(global_position, size)
+		if my_rect.has_point(event.global_position):
+			print("EquipmentWindow would handle this input")
+
+
+func _find_inventory_window():
+	"""Find the inventory window"""
+	return get_tree().get_first_node_in_group("inventory_window")
+
+
 func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bool:
 	"""Handle dropping items on equipment slots"""
 	print("EquipmentWindow: _handle_equipment_drop called at ", drop_position)
@@ -249,8 +282,16 @@ func _create_slot_in_column(column: VBoxContainer, slot_type: EquipmentSlotType,
 	if slot.drag_handler:
 		slot.drag_handler.item_dropped_on_slot.connect(
 			func(source, target):
+				print("SIGNAL FIRED: item_dropped_on_slot")
+				print("  source: ", source.name if source else "NULL")
+				print("  target: ", target.name if target else "NULL")
+				print("  source == slot: ", source == slot)
+				print("  target.container_id: ", target.container_id if target else "NULL")
 				if source == slot and target.container_id != "equipment":
+					print("  Calling _on_equipment_item_dragged_to_inventory")
 					_on_equipment_item_dragged_to_inventory(slot, target, slot_type)
+				else:
+					print("  NOT calling _on_equipment_item_dragged_to_inventory")
 		)
 
 	print("  Slot fully set up for: ", label_text)
@@ -366,12 +407,17 @@ func _on_item_dropped_on_equipment(source_slot: InventorySlot, _target_slot: Equ
 
 func _on_equipment_item_dragged_to_inventory(equipment_slot: EquipmentSlot, target_slot: InventorySlot, slot_type: EquipmentSlotType):
 	"""Handle dragging equipped item back to inventory"""
-	print("EquipmentWindow: Item dragged from equipment to inventory")
+	print("EquipmentWindow: _on_equipment_item_dragged_to_inventory called!")
+	print("  Equipment slot: ", equipment_slot.name)
+	print("  Target slot: ", target_slot.name if target_slot else "NULL")
+	print("  Target container_id: ", target_slot.container_id if target_slot else "NULL")
 
 	if not equipment_slot.has_item():
+		print("  Equipment slot has no item!")
 		return
 
 	var item = equipment_slot.get_item()
+	print("  Item to unequip: ", item.item_name)
 
 	# Check if the target slot can accept the item
 	if target_slot.has_item():
@@ -382,10 +428,12 @@ func _on_equipment_item_dragged_to_inventory(equipment_slot: EquipmentSlot, targ
 
 	# Check if inventory has space
 	if not inventory_manager:
+		print("  No inventory manager!")
 		return
 
 	var target_container = inventory_manager.get_container(target_slot.container_id)
 	if not target_container:
+		print("  No target container!")
 		return
 
 	if not target_container.can_add_item(item):
@@ -393,12 +441,13 @@ func _on_equipment_item_dragged_to_inventory(equipment_slot: EquipmentSlot, targ
 		return
 
 	# Unequip the item
+	print("  Calling _unequip_item...")
 	_unequip_item(slot_type)
 
 	# Add to inventory
 	target_slot.set_item(item)
 
-	print("  Item unequipped and moved to inventory")
+	print("  Item unequipped and moved to inventory successfully")
 
 
 func _can_equip_in_slot(item: InventoryItem_Base, slot_type: EquipmentSlotType) -> bool:
