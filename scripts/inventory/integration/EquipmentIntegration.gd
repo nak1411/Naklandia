@@ -73,6 +73,12 @@ func open_equipment_window():
 		if inventory_integration and inventory_integration.inventory_manager:
 			equipment_window.set_inventory_manager(inventory_integration.inventory_manager)
 
+			# Register equipment window with save system for persistence
+			var inv_manager = inventory_integration.inventory_manager
+			if inv_manager.save_system:
+				inv_manager.save_system.set_equipment_window(equipment_window)
+				print("✓ Equipment window registered with save system")
+
 		# Connect to window closed signal
 		if not equipment_window.window_closed.is_connected(_on_equipment_window_closed):
 			equipment_window.window_closed.connect(_on_equipment_window_closed)

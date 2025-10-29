@@ -638,3 +638,78 @@ func refresh_display():
 			slot.set_item(equipped_items[slot_type])
 		else:
 			slot.clear_item()
+
+
+# Save/Load Equipment State
+func to_dict() -> Dictionary:
+	"""Serialize equipment state to dictionary"""
+	var data = {"equipped_items": {}}
+
+	# Serialize each equipped item
+	for slot_type in equipped_items:
+		var item = equipped_items[slot_type]
+		if item and item.has_method("to_dict"):
+			# Store both slot type (as int) and item data
+			data.equipped_items[str(slot_type)] = item.to_dict()
+
+	return data
+
+
+func from_dict(data: Dictionary):
+	"""Deserialize equipment state from dictionary"""
+	# Clear current equipment
+	clear_all_equipment()
+
+	# Load equipped items
+	var equipped_data = data.get("equipped_items", {})
+	for slot_type_str in equipped_data:
+		var slot_type = int(slot_type_str)
+		var item_data = equipped_data[slot_type_str]
+
+		# Reconstruct the item
+		var item = _reconstruct_item_from_dict(item_data)
+		if item:
+			# Equip the item
+			equipped_items[slot_type] = item
+			if slot_type in equipment_slots:
+				equipment_slots[slot_type].set_item(item)
+
+	print("EquipmentWindow: Loaded ", equipped_data.size(), " equipped items")
+
+
+func _reconstruct_item_from_dict(item_data: Dictionary) -> InventoryItem_Base:
+	"""Reconstruct an item from serialized data"""
+	var item_id = item_data.get("item_id", "")
+
+	if item_id.is_empty():
+		push_error("EquipmentWindow: Item data missing item_id!")
+		return null
+
+	# Try to get the item database
+	var item_database = null
+
+	# Try AutoLoad singleton first (most likely)
+	if has_node("/root/ItemDatabase"):
+		item_database = get_node("/root/ItemDatabase")
+
+	# Try group lookup as fallback
+	if not item_database:
+		var databases = get_tree().get_nodes_in_group("item_database")
+		if not databases.is_empty():
+			item_database = databases[0]
+
+	if not item_database:
+		push_error("EquipmentWindow: Could not find ItemDatabase (tried AutoLoad and groups)")
+		return null
+
+	# Create item instance from item_id
+	var item = item_database.create_item_instance(item_id)
+	if not item:
+		push_error("EquipmentWindow: Failed to create item with id: ", item_id)
+		return null
+
+	# Restore item data (quantity, etc.)
+	if item.has_method("from_dict"):
+		item.from_dict(item_data)
+
+	return item
