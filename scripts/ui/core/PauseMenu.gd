@@ -19,7 +19,7 @@ var settings_menu: SettingsMenu
 
 func _ready():
 	# Set up the canvas layer to render above everything
-	layer = 100  # Very high layer to ensure it's above inventory
+	layer = 300  # Very high layer to ensure it's above all windows (inventory at 110, equipment/crafting at 120+, dialogs at 200+)
 	visible = false
 	process_mode = Node.PROCESS_MODE_ALWAYS
 

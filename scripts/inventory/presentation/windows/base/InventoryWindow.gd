@@ -647,40 +647,23 @@ func _on_window_closed():
 	"""Handle main inventory window being closed"""
 
 	# Check if there are tearoff windows that should remain open
-	var should_restore_input = true
-	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
-	if ui_managers.size() > 0:
-		var ui_manager = ui_managers[0]
-		if ui_manager.has_method("get_all_windows"):
-			var remaining_windows = ui_manager.get_all_windows()
-			# Filter out this main inventory window since it's closing
-			var other_windows = remaining_windows.filter(func(w): return w != self and is_instance_valid(w))
-
-			# Check if there are tearoff windows remaining
-			var tearoff_windows = other_windows.filter(func(w): return w.get_meta("window_type", "") == "tearoff")
-
-			if tearoff_windows.size() > 0:
-				should_restore_input = false
-
 	# Find the inventory integration and close properly
 	var integration = _find_inventory_integration(get_tree().current_scene)
 	if integration:
 		# ALWAYS set inventory as closed when main window closes
 		integration.is_inventory_open = false
 
-		# Handle input restoration based on tearoff windows
-		if should_restore_input:
-			integration._set_player_input_enabled(true)
-			integration.inventory_toggled.emit(false)
-			if integration.event_bus:
-				integration.event_bus.emit_inventory_closed()
+		# Let the integration handle input restoration based on ALL open windows
+		# This will be triggered by Window_Base.hide_window() -> notify_ui_window_closed()
+		integration.inventory_toggled.emit(false)
+		if integration.event_bus:
+			integration.event_bus.emit_inventory_closed()
 
 		# Save position
 		integration._save_window_position()
 	else:
 		# Fallback if integration not found
-		if should_restore_input:
-			_reenable_player_input_fallback()
+		_reenable_player_input_fallback()
 
 
 func _save_inventory_state():

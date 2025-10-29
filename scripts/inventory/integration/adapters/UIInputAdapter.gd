@@ -40,6 +40,10 @@ func _input(event):
 	if not event is InputEventKey or not input_processing_enabled:
 		return
 
+	# Check if game is paused - don't allow inventory toggle
+	if get_tree().paused:
+		return
+
 	# Check if any LineEdit (like search field) has focus
 	var focused_control = get_viewport().gui_get_focus_owner()
 	if focused_control is LineEdit:

@@ -40,6 +40,9 @@ func _ready():
 	# Then setup original inventory system
 	call_deferred("_setup_original_inventory_system")
 
+	# Set up periodic window checking to track all UI windows
+	call_deferred("_setup_window_tracking")
+
 
 func _setup_integration_layer():
 	"""Setup the integration layer components"""
@@ -99,6 +102,35 @@ func _connect_integration_layer():
 	if event_bus:
 		event_bus.inventory_opened.connect(_on_inventory_opened_event)
 		event_bus.inventory_closed.connect(_on_inventory_closed_event)
+
+
+func _setup_window_tracking():
+	"""Set up tracking for all UI windows to manage input/cursor centrally"""
+	var ui_manager = _get_ui_manager()
+	if ui_manager and ui_manager.has_signal("window_focused"):
+		# Connect to window signals to track visibility changes
+		if not ui_manager.window_closed.is_connected(_on_any_window_closed):
+			ui_manager.window_closed.connect(_on_any_window_closed)
+
+	print("[InventoryIntegration] Window tracking set up")
+
+
+func _on_any_window_closed(window: Window_Base):
+	"""Called whenever ANY window closes - check if we should restore input"""
+	var window_name = "null"
+	var window_type = "unknown"
+	if is_instance_valid(window):
+		window_name = window.name
+		window_type = window.get_meta("window_type", "unknown")
+	print("[InventoryIntegration] Window closed signal received: ", window_name, " (type: ", window_type, ")")
+
+	# Check if we should restore input based on remaining windows
+	if _should_restore_player_input():
+		print("[InventoryIntegration] Restoring input after window close")
+		_set_player_input_enabled(true)
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	else:
+		print("[InventoryIntegration] NOT restoring input - other windows still open")
 
 
 func _connect_external_signals():
@@ -195,6 +227,8 @@ func _on_inventory_closed_event():
 
 func _show_inventory():
 	"""Show the inventory window"""
+	print("[InventoryIntegration] _show_inventory called")
+
 	# Check if inventory window was destroyed and recreate if needed
 	if not inventory_window or not is_instance_valid(inventory_window):
 		await _recreate_inventory_window()
@@ -212,14 +246,15 @@ func _show_inventory():
 			inventory_window.content.select_container(filtered_containers[0])
 
 	is_inventory_open = true
+
+	# ALWAYS disable input and show cursor when opening inventory
+	# The window tracking will prevent re-enabling when other windows are still open
+	print("[InventoryIntegration] Disabling player input and showing cursor")
+	_set_player_input_enabled(false)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
 	inventory_window.visible = true
 	inventory_window.move_to_front()
-
-	# Disable player input
-	_set_player_input_enabled(false)
-
-	# Set mouse mode
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 	# Emit signal
 	inventory_toggled.emit(true)
@@ -289,6 +324,8 @@ func _recreate_inventory_window():
 
 func _hide_inventory():
 	"""Hide the inventory window"""
+	print("[InventoryIntegration] _hide_inventory called")
+
 	if not inventory_window:
 		return
 
@@ -298,11 +335,15 @@ func _hide_inventory():
 	# Save position
 	_save_window_position()
 
-	# Re-enable player input
-	_set_player_input_enabled(true)
-
-	# Restore mouse mode
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# Only restore player input and hide cursor if NO other UI windows are open
+	if _should_restore_player_input():
+		print("[InventoryIntegration] Restoring player input and hiding cursor")
+		# Re-enable player input
+		_set_player_input_enabled(true)
+		# Restore mouse mode
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	else:
+		print("[InventoryIntegration] NOT restoring input - other windows still open")
 
 	# Emit signal
 	inventory_toggled.emit(false)
@@ -359,6 +400,42 @@ func _set_player_input_enabled(enabled: bool):
 	var player_node = get_tree().get_first_node_in_group("player")
 	if player_node and player_node.has_method("set_input_enabled"):
 		player_node.set_input_enabled(enabled)
+
+
+func _get_ui_manager():
+	"""Get UIManager instance"""
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		return ui_managers[0]
+	return null
+
+
+func _should_restore_player_input() -> bool:
+	"""Check if player input should be restored (no UI windows open)"""
+	var ui_manager = _get_ui_manager()
+	if not ui_manager:
+		print("[InventoryIntegration] No UI manager found, safe to restore input")
+		return true  # No UI manager, safe to restore
+
+	# Check if any UI windows are still open
+	var all_windows = ui_manager.get_all_windows()
+	var ui_windows_open = 0
+
+	for window in all_windows:
+		if not is_instance_valid(window):
+			continue
+
+		# Only count visible windows
+		if window.visible:
+			var window_type = window.get_meta("window_type", "")
+			# Count all window types that require input disabled
+			if window_type in ["main_inventory", "tearoff", "dialog", "crafting", "character", "equipment"]:
+				ui_windows_open += 1
+				print("[InventoryIntegration] Found open window: ", window.name, " (type: ", window_type, ")")
+
+	var should_restore = ui_windows_open == 0
+	print("[InventoryIntegration] Open UI windows: ", ui_windows_open, " - Should restore input: ", should_restore)
+	return should_restore
 
 
 func _load_and_apply_position():
@@ -445,3 +522,5 @@ func get_inventory_window() -> InventoryWindow:
 func is_inventory_window_open() -> bool:
 	"""Check if inventory window is open"""
 	return is_inventory_open
+
+

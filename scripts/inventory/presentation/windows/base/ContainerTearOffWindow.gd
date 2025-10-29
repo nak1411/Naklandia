@@ -688,29 +688,8 @@ func _on_window_closed():
 		item_actions.close_all_dialogs()
 		item_actions.cleanup()
 
-	# CRITICAL FIX: Only emit inventory_closed if ALL UI windows are closing
-	# AND the main inventory is also gone
-	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
-	if ui_managers.size() > 0:
-		var ui_manager = ui_managers[0]
-		if ui_manager.has_method("get_all_windows"):
-			var remaining_windows = ui_manager.get_all_windows()
-			# Filter out this window since it's closing
-			var other_windows = remaining_windows.filter(func(w): return w != self and is_instance_valid(w))
-
-			# Check if main inventory is still open
-			var has_main_inventory = other_windows.any(func(w): return w.get_meta("window_type", "") == "main_inventory")
-
-			# Only restore input if NO windows are left at all
-			if other_windows.size() == 0:
-				var integration = _find_inventory_integration(get_tree().current_scene)
-				if integration:
-					integration._set_player_input_enabled(true)
-					integration.inventory_toggled.emit(false)
-					if integration.event_bus:
-						integration.event_bus.emit_inventory_closed()
-				else:
-					Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# Let the integration handle input restoration based on ALL open windows
+	# This will be triggered by Window_Base.hide_window() -> notify_ui_window_closed()
 
 	# Only try to reattach if parent window still existsi
 	if parent_window and is_instance_valid(parent_window):

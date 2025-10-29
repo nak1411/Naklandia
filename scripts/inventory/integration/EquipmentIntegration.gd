@@ -50,23 +50,38 @@ func open_equipment_window():
 		push_warning("Cannot open equipment - missing UI manager")
 		return
 
+	# Debug logging
+	if equipment_window:
+		if is_instance_valid(equipment_window):
+			print("Equipment window exists: is_valid=true visible=", equipment_window.visible)
+		else:
+			print("Equipment window exists but is NOT valid")
+	else:
+		print("Equipment window is null")
+
 	# Create equipment window if it doesn't exist
 	if not equipment_window or not is_instance_valid(equipment_window):
 		print("Creating new equipment window...")
 		equipment_window = EquipmentWindow.new()
 		equipment_window.name = "EquipmentWindow"
+		print("  Window created, reference: ", equipment_window)
 
-		# Register with UI manager
+		# Register with UI manager as "equipment" type (persistent window)
 		print("Registering window with UI manager...")
-		ui_manager.register_window(equipment_window, "dialog")
+		var canvas = ui_manager.register_window(equipment_window, "equipment")
+		print("  Window registered, got canvas: ", canvas)
+		if canvas:
+			print("  Canvas layer:", canvas.layer, " visible:", canvas.visible)
+		print("  Window reference after registration: ", equipment_window)
+		print("  Window is_valid after registration: ", is_instance_valid(equipment_window))
 
 		# Wait for window to be ready
-		if not equipment_window.is_node_ready():
-			print("Waiting for window ready...")
-			await equipment_window.ready
+		print("  Checking if window is ready: is_node_ready=", equipment_window.is_node_ready(), " is_inside_tree=", equipment_window.is_inside_tree())
 
-		# Wait one more frame to ensure UI is fully built
+		# The window should be ready after being added to the scene tree by UIManager
+		# Just wait one frame for UI setup to complete
 		await get_tree().process_frame
+		print("  After one frame - is_node_ready=", equipment_window.is_node_ready())
 
 		print("Window is ready, setting inventory manager...")
 		# Set the inventory manager
@@ -85,13 +100,23 @@ func open_equipment_window():
 
 		# Show the window
 		print("Showing window...")
+		print("  Before show - visible:", equipment_window.visible, " position:", equipment_window.position, " size:", equipment_window.size)
 		equipment_window.show_window()
+		print("  After show - visible:", equipment_window.visible, " position:", equipment_window.position, " size:", equipment_window.size)
+		print("  Parent:", equipment_window.get_parent())
+		print("  Is inside tree:", equipment_window.is_inside_tree())
 
 		print("✓ Equipment window created and initialized")
 	else:
 		print("Showing existing equipment window...")
+		# Debug: Check equipment state before showing
+		print("  Equipment count before show:", equipment_window.equipped_items.size())
+		print("  Window position before show:", equipment_window.position)
 		equipment_window.show_window()
 		equipment_window.refresh_display()
+		# Debug: Check equipment state after refresh
+		print("  Equipment count after refresh:", equipment_window.equipped_items.size())
+		print("  Window position after refresh:", equipment_window.position)
 
 	is_equipment_open_flag = true
 
@@ -108,20 +133,34 @@ func close_equipment_window():
 	"""Close the equipment window"""
 	if equipment_window and is_instance_valid(equipment_window):
 		equipment_window.hide_window()
-
-	_set_player_input_enabled(true)
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		# Note: Window_Base.hide_window() will call notify_ui_window_closed()
+		# which will check if input should be restored
 
 	is_equipment_open_flag = false
 
 
 func _on_equipment_window_closed():
-	"""Handle equipment window being closed"""
-	_set_player_input_enabled(true)
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	"""Handle equipment window being closed via X button"""
+	print("=== _on_equipment_window_closed called (X button clicked) ===")
+
+	# Debug: Check window state BEFORE anything else
+	print("  equipment_window reference before: ", equipment_window)
+	if equipment_window:
+		print("  is_instance_valid: ", is_instance_valid(equipment_window))
+		if is_instance_valid(equipment_window):
+			print("  visible: ", equipment_window.visible)
+			print("  is_queued_for_deletion: ", equipment_window.is_queued_for_deletion())
+
+	# UIManager will emit window_closed signal
+	# InventoryIntegration will check if input should be restored
 	is_equipment_open_flag = false
 
-	print("Equipment window closed")
+	# Debug: Check window state AFTER setting flag
+	print("  equipment_window reference after: ", equipment_window)
+	if equipment_window and is_instance_valid(equipment_window):
+		print("  Window still valid after close")
+	else:
+		print("  WARNING: Window is invalid or null after close!")
 
 
 func _set_player_input_enabled(enabled: bool):
@@ -162,8 +201,12 @@ func get_equipped_item(slot_type: EquipmentWindow.EquipmentSlotType) -> Inventor
 
 func _input(event):
 	"""Handle input for opening/closing equipment"""
+	# Don't allow equipment toggle when game is paused
+	if get_tree().paused:
+		return
+
 	if event is InputEventKey and event.pressed and not event.echo:
-		# Press 'E' to toggle equipment window
+		# Press 'C' to toggle equipment window
 		if event.keycode == KEY_C:
 			if is_equipment_open():
 				close_equipment_window()

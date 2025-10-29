@@ -1627,6 +1627,8 @@ func show_window():
 func hide_window():
 	"""Hide the window"""
 	visible = false
+	# Emit the window_closed signal so UIManager can handle it
+	window_closed.emit()
 
 
 func toggle_window():

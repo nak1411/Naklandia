@@ -78,9 +78,9 @@ func open_crafting_station(_station_type: String = "", _station_node: Node = nul
 		crafting_window = CraftingStationWindow.new()
 		crafting_window.name = "CraftingStationWindow"
 
-		# Register with UI manager FIRST (adds to scene tree)
+		# Register with UI manager FIRST (adds to scene tree) as "crafting" type (persistent window)
 		print("Registering window with UI manager...")
-		ui_manager.register_window(crafting_window, "dialog")
+		ui_manager.register_window(crafting_window, "crafting")
 
 		# Wait for window to be ready in scene tree
 		if not crafting_window.is_node_ready():
@@ -123,17 +123,16 @@ func close_crafting_station():
 	"""Close the crafting window"""
 	if crafting_window and is_instance_valid(crafting_window):
 		crafting_window.hide_window()
-
-	_set_player_input_enabled(true)
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		# UIManager will emit window_closed signal
+		# InventoryIntegration will check if input should be restored
 
 	is_crafting_open_flag = false
 
 
 func _on_crafting_window_closed():
 	"""Handle crafting window being closed"""
-	_set_player_input_enabled(true)
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# UIManager will emit window_closed signal
+	# InventoryIntegration will check if input should be restored
 	is_crafting_open_flag = false
 
 	print("Crafting window closed")
@@ -177,8 +176,12 @@ func can_use_station(_station_type: String) -> bool:
 
 func _input(event):
 	"""Handle input for opening/closing crafting"""
+	# Don't allow crafting toggle when game is paused
+	if get_tree().paused:
+		return
+
 	if event is InputEventKey and event.pressed and not event.echo:
-		# Press 'C' to toggle crafting
+		# Press 'Q' to toggle crafting
 		if event.keycode == KEY_Q:
 			if is_crafting_open():
 				close_crafting_station()

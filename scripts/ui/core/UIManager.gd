@@ -165,6 +165,10 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 			# Dialogs use the highest priority pause canvas
 			canvas.layer = 200 + active_windows.size()
 			pause_canvas.add_child(canvas)
+		"equipment", "crafting", "character":
+			# Persistent UI windows - add directly to UIManager with their own layers
+			canvas.layer = 120 + active_windows.size()
+			add_child(canvas)
 
 	# Set the metadata BEFORE adding the window to canvas
 	window.set_meta("window_canvas", canvas)
@@ -320,11 +324,19 @@ func _set_window_focus_state(window: Window_Base, has_focus: bool):
 
 func _on_managed_window_closed(window: Window_Base):
 	"""Handle managed window being closed"""
+	var window_name = "invalid"
+	if is_instance_valid(window):
+		window_name = window.name
+	print("[UIManager] _on_managed_window_closed called for: ", window_name)
 	unregister_window(window)
 
 
 func unregister_window(window: Window_Base):
 	"""Unregister a window from the UI manager"""
+	var window_name = "invalid"
+	if is_instance_valid(window):
+		window_name = window.name
+	print("[UIManager] unregister_window called for: ", window_name)
 
 	var layout_managers = get_tree().get_nodes_in_group("window_layout_manager")
 	if layout_managers.size() > 0:
@@ -333,19 +345,32 @@ func unregister_window(window: Window_Base):
 			layout_manager.disconnect_window_signals(window)
 
 	if window not in active_windows:
+		print("[UIManager] Window not in active_windows list - returning early")
 		return
 
 	var window_type = window.get_meta("window_type", "")
 	var is_main_inventory = window_type == "main_inventory"
-	var is_tearoff = window_type == "tearoff"
+	var is_persistent = window_type in ["main_inventory", "equipment", "crafting", "character"]
+	print("[UIManager] Unregistering window type: ", window_type, " persistent:", is_persistent)
 
-	active_windows.erase(window)
+	# For persistent windows, DON'T remove from active_windows - just remove from stack
+	# This allows them to be tracked even when hidden
+	if not is_persistent:
+		active_windows.erase(window)
+
 	window_stack.erase(window)
 
-	# Clean up canvas
-	var canvas = window.get_meta("window_canvas", null) as CanvasLayer
-	if canvas and is_instance_valid(canvas):
-		canvas.queue_free()
+	# DON'T free the canvas for persistent windows (equipment, crafting, character)
+	# These windows should be reused when reopened to preserve their state
+	# Only free canvas for tearoff and dialog windows that are meant to be temporary
+	var should_free_canvas = window_type in ["tearoff", "dialog"]
+
+	if should_free_canvas:
+		# Clean up canvas for temporary windows
+		var canvas = window.get_meta("window_canvas", null) as CanvasLayer
+		if canvas and is_instance_valid(canvas):
+			canvas.queue_free()
+	# For persistent windows (main_inventory, equipment, crafting), keep the canvas and window alive
 
 	# CRITICAL FIX: If main inventory closes, don't close tearoff windows
 	if is_main_inventory:
