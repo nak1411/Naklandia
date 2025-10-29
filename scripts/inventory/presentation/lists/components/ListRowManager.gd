@@ -686,6 +686,57 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 	return false
 
 
+func _attempt_drop_on_equipment_slots(end_position: Vector2) -> bool:
+	"""Try to drop on equipment slots"""
+	if not item:
+		return false
+
+	# Find all equipment slots in the scene tree
+	var equipment_slots = get_tree().get_nodes_in_group("equipment_slots")
+	if equipment_slots.is_empty():
+		return false
+
+	var drag_data = {"item": item, "source_row": self}
+
+	# Check each equipment slot
+	for equipment_slot in equipment_slots:
+		if not is_instance_valid(equipment_slot):
+			continue
+
+		if not equipment_slot.visible or not equipment_slot.is_inside_tree():
+			continue
+
+		# Check if drop position is within this equipment slot's bounds
+		var slot_rect = Rect2(equipment_slot.global_position, equipment_slot.size)
+		if slot_rect.has_point(end_position):
+			print("ListRowManager: Found equipment slot at drop position: ", equipment_slot.name)
+
+			# Check if the item can be equipped
+			if not equipment_slot.can_drop_data(end_position, drag_data):
+				print("ListRowManager: Equipment slot rejected the item")
+				continue
+
+			# Perform the drop
+			equipment_slot.drop_data(end_position, drag_data)
+			print("ListRowManager: Item drop handled by equipment slot")
+
+			# Remove item from source container
+			var inventory_manager = _get_inventory_manager()
+			if inventory_manager:
+				var source_container = inventory_manager.get_container(_get_container_id())
+				if source_container:
+					source_container.remove_item(item)
+
+					# Refresh the list view
+					var list_view = _find_list_view()
+					if list_view:
+						list_view.refresh_display()
+
+			return true
+
+	return false
+
+
 func _handle_drop_on_slot(target_slot: InventorySlot) -> bool:
 	"""Handle dropping on a specific inventory slot"""
 	var inventory_manager = _get_inventory_manager()
@@ -987,6 +1038,9 @@ func _end_drag():
 
 	if not drop_successful:
 		drop_successful = _attempt_drop_on_container_list(end_position)
+
+	if not drop_successful:
+		drop_successful = _attempt_drop_on_equipment_slots(end_position)
 
 	_cleanup_drag_preview()
 

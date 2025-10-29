@@ -50,6 +50,10 @@ func _ready():
 	# ENABLE CROSS-WINDOW DRAG/DROP
 	set_process_input(true)
 
+	# Add to external container windows group for drag/drop detection
+	add_to_group("external_container_windows")
+	set_meta("window_type", "tearoff")
+
 
 func _input(event: InputEvent):
 	"""Handle input with higher priority for cross-window drops"""
@@ -64,6 +68,12 @@ func _input(event: InputEvent):
 				var drag_data = viewport.get_meta("current_drag_data")
 				var source_slot = drag_data.get("source_slot")
 				var source_row = drag_data.get("source_row")
+
+				# CHECK: Is this an equipment slot drag?
+				if source_slot and source_slot.container_id == "equipment":
+					print("ContainerTearOffWindow: Equipment drag detected - letting drag handler process it")
+					# Let the drag handler process this - don't intercept
+					return
 
 				# Check if drag is from an external source (not our container)
 				var source_container_id = ""
@@ -89,11 +99,11 @@ func _input(event: InputEvent):
 					_cleanup_failed_drop(drag_data)
 					get_viewport().set_input_as_handled()
 					return
-				else:
-					# No valid container ID - block and cleanup
-					_cleanup_failed_drop(drag_data)
-					get_viewport().set_input_as_handled()
-					return
+
+				# No valid container ID - block and cleanup
+				_cleanup_failed_drop(drag_data)
+				get_viewport().set_input_as_handled()
+				return
 
 			# No drag operation active - regular window interaction
 			return

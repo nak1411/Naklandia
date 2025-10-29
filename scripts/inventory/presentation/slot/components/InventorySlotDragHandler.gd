@@ -458,7 +458,7 @@ func _find_slot_at_position(global_pos: Vector2) -> InventorySlot:
 	return null
 
 
-func _attempt_drop_on_slot(target_slot: InventorySlot, end_position: Vector2) -> bool:
+func _attempt_drop_on_slot(target_slot: InventorySlot, _end_position: Vector2) -> bool:
 	"""Attempt to drop item on another slot"""
 	if not target_slot or not slot.has_item():
 		return false
@@ -520,28 +520,52 @@ func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 	print("  [_attempt_drop_on_other_targets] Called at position: ", end_position)
 	print("  [_attempt_drop_on_other_targets] Slot container_id: ", slot.container_id)
 
-	# SPECIAL HANDLING: Equipment slots to inventory grid (empty area)
+	# SPECIAL HANDLING: Equipment slots to inventory grid/list/container-list
 	if slot.container_id == "equipment":
-		print("  [EQUIPMENT DROP] Checking for inventory grid drop")
+		print("  [EQUIPMENT DROP] Checking for inventory drop targets")
 
-		# Search ALL windows for inventory grids, not just parent chain
+		# First check container list (left sidebar) - must search ALL windows, not just parent chain
+		var all_inv_contents = _find_all_inventory_contents()
+		for inv_content in all_inv_contents:
+			if not inv_content or not inv_content.container_list:
+				continue
+
+			var container_list = inv_content.container_list
+			if not container_list.visible or not container_list.is_inside_tree():
+				continue
+
+			var list_rect = Rect2(container_list.global_position, container_list.size)
+			print("  [EQUIPMENT DROP] Checking container list in window, rect: ", list_rect)
+
+			if list_rect.has_point(end_position):
+				print("  [EQUIPMENT DROP] ✓ Drop IS over container list")
+				var local_pos = end_position - container_list.global_position
+				var item_index = container_list.get_item_at_position(local_pos, true)
+				print("  [EQUIPMENT DROP] Container list item index: ", item_index, " / ", inv_content.open_containers.size())
+
+				if item_index >= 0 and item_index < inv_content.open_containers.size():
+					var target_container = inv_content.open_containers[item_index]
+					print("  [EQUIPMENT DROP] Target container: ", target_container.container_name)
+					return _handle_equipment_to_container_drop(target_container, end_position)
+
+		# Then check for inventory grids/list views
 		var all_grids = _find_all_inventory_grids()
-		print("  [EQUIPMENT DROP] Found ", all_grids.size(), " grids")
+		print("  [EQUIPMENT DROP] Found ", all_grids.size(), " display views")
 
 		for grid in all_grids:
 			if not is_instance_valid(grid) or not grid.visible:
 				continue
 
 			var grid_rect = Rect2(grid.global_position, grid.size)
-			print("  [EQUIPMENT DROP] Checking grid: ", grid.container_id)
-			print("  [EQUIPMENT DROP]   Grid rect: ", grid_rect)
+			print("  [EQUIPMENT DROP] Checking view: ", grid.container_id)
+			print("  [EQUIPMENT DROP]   View rect: ", grid_rect)
 			print("  [EQUIPMENT DROP]   Drop position: ", end_position)
 
 			if grid_rect.has_point(end_position):
-				print("  [EQUIPMENT DROP] ✓ Drop IS over grid: ", grid.container_id)
+				print("  [EQUIPMENT DROP] ✓ Drop IS over view: ", grid.container_id)
 				return _handle_equipment_to_inventory_drop(grid, end_position)
 
-		print("  [EQUIPMENT DROP] No grid found at drop position")
+		print("  [EQUIPMENT DROP] No valid drop target found at position")
 
 	# Check virtual content area
 	var grid = _get_inventory_grid()
@@ -604,7 +628,60 @@ func _attempt_drop_on_equipment_slot(end_position: Vector2) -> bool:
 	return false
 
 
-func _handle_equipment_to_inventory_drop(display_view: Node, end_position: Vector2) -> bool:
+func _handle_equipment_to_container_drop(target_container: InventoryContainer_Base, _drop_position: Vector2) -> bool:
+	"""Handle dropping from equipment to a container in the container list"""
+	print("    [_handle_equipment_to_container_drop] Called")
+	print("    [_handle_equipment_to_container_drop] Target container: ", target_container.container_name)
+
+	if not slot or not slot.has_item():
+		print("    [_handle_equipment_to_container_drop] ERROR: No slot or no item")
+		return false
+
+	# Find the equipment window
+	var equipment_window = _find_equipment_window()
+	if not equipment_window:
+		print("    [_handle_equipment_to_container_drop] ERROR: Could not find equipment window")
+		return false
+
+	# Find which equipment slot type this is
+	var slot_type = _find_equipment_slot_type(equipment_window)
+	if slot_type == null:
+		print("    [_handle_equipment_to_container_drop] ERROR: Could not find equipment slot type")
+		return false
+
+	var item = slot.get_item()
+	print("    [_handle_equipment_to_container_drop] Unequipping: ", item.item_name)
+
+	if not target_container.can_add_item(item):
+		print("    [_handle_equipment_to_container_drop] ERROR: Container doesn't have space")
+		return false
+
+	# Unequip the item (this removes it from equipment)
+	print("    [_handle_equipment_to_container_drop] Unequipping item...")
+	equipment_window._unequip_item(slot_type)
+	print("    [_handle_equipment_to_container_drop] Item unequipped")
+
+	# Add to target container
+	print("    [_handle_equipment_to_container_drop] Adding item to container...")
+	var success = target_container.add_item(item)
+	print("    [_handle_equipment_to_container_drop] Add result: ", success)
+
+	if success:
+		print("    [_handle_equipment_to_container_drop] ✓ Successfully transferred")
+		# Refresh the inventory window's display
+		var inv_window = _find_inventory_window()
+		if inv_window and inv_window.content:
+			inv_window.content.refresh_display()
+		return true
+
+	print("    [_handle_equipment_to_container_drop] ERROR: Failed to add item")
+	# Item is lost! Try to re-equip it
+	print("    [_handle_equipment_to_container_drop] Attempting to re-equip item...")
+	equipment_window._equip_item(item, slot_type)
+	return false
+
+
+func _handle_equipment_to_inventory_drop(display_view: Node, _drop_position: Vector2) -> bool:
 	"""Handle dropping from equipment to inventory grid or list view"""
 	print("    [_handle_equipment_to_inventory_drop] Called")
 	print("    [_handle_equipment_to_inventory_drop] Display view: ", display_view.get_script().get_global_name() if display_view.get_script() else "Unknown")
@@ -660,12 +737,12 @@ func _handle_equipment_to_inventory_drop(display_view: Node, end_position: Vecto
 		# Refresh the display - works for both InventoryGrid and InventoryListView
 		display_view.refresh_display()
 		return true
-	else:
-		print("    [_handle_equipment_to_inventory_drop] ERROR: Failed to add item")
-		# Item is lost! Try to re-equip it
-		print("    [_handle_equipment_to_inventory_drop] Attempting to re-equip item...")
-		equipment_window._equip_item(item, slot_type)
-		return false
+
+	print("    [_handle_equipment_to_inventory_drop] ERROR: Failed to add item")
+	# Item is lost! Try to re-equip it
+	print("    [_handle_equipment_to_inventory_drop] Attempting to re-equip item...")
+	equipment_window._equip_item(item, slot_type)
+	return false
 
 
 func _get_inventory_grid():
@@ -707,7 +784,7 @@ func _find_all_inventory_grids() -> Array:
 
 
 func _find_grid_in_window(window: Node) -> Node:
-	"""Recursively find InventoryGrid OR InventoryListView in a window"""
+	"""Recursively find VISIBLE InventoryGrid OR InventoryListView in a window"""
 	if not window:
 		return null
 
@@ -715,7 +792,10 @@ func _find_grid_in_window(window: Node) -> Node:
 	if window.get_script():
 		var global_name = window.get_script().get_global_name()
 		if global_name == "InventoryGrid" or global_name == "InventoryListView":
-			return window
+			# CRITICAL: Only return if it's VISIBLE (to handle grid/list view switching)
+			if window.visible and window.is_inside_tree():
+				return window
+			# Continue searching - this view is hidden
 
 	# Recursively search children
 	for child in window.get_children():
@@ -744,6 +824,48 @@ func _find_inventory_content():
 		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowContent":
 			return current
 		current = current.get_parent()
+	return null
+
+
+func _find_all_inventory_contents() -> Array:
+	"""Find all InventoryWindowContent instances in all inventory windows"""
+	var all_contents = []
+
+	# Find all external container windows (main inventory + tearoff windows)
+	var external_windows = slot.get_tree().get_nodes_in_group("external_container_windows")
+
+	for window in external_windows:
+		if not is_instance_valid(window):
+			continue
+
+		if not window.visible or not window.is_inside_tree():
+			continue
+
+		# Search for InventoryWindowContent in this window
+		var content = _find_content_in_window(window)
+		if content:
+			all_contents.append(content)
+
+	return all_contents
+
+
+func _find_content_in_window(window: Node) -> Node:
+	"""Recursively find InventoryWindowContent in a window"""
+	if not window:
+		return null
+
+	# Check if this node is InventoryWindowContent
+	if window.get_script():
+		var global_name = window.get_script().get_global_name()
+		if global_name == "InventoryWindowContent":
+			return window
+
+	# Recursively search children
+	for child in window.get_children():
+		var result = _find_content_in_window(child)
+		if result:
+			return result
+
 	return null
 
 

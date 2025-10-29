@@ -110,17 +110,71 @@ func drop_data(_at_position: Vector2, data: Variant):
 
 	var source_item = data.get("item") as InventoryItem_Base
 	var source_slot = data.get("source_slot") as InventorySlot
+	var source_row = data.get("source_row")  # ListRowManager
 
 	print("  Source item: ", source_item.item_name if source_item else "NONE")
 	print("  Source slot: ", source_slot.name if source_slot else "NONE")
+	print("  Source row: ", source_row.name if source_row else "NONE")
 
-	if not source_item or not source_slot:
-		print("  Missing item or slot - aborting")
+	if not source_item:
+		print("  Missing item - aborting")
 		return
 
-	# Emit signal that item was dropped on this equipment slot
-	print("  Emitting item_dropped_on_slot signal")
-	item_dropped_on_slot.emit(source_slot, self)
+	# Handle drops from InventorySlot
+	if source_slot:
+		print("  Emitting item_dropped_on_slot signal for slot")
+		item_dropped_on_slot.emit(source_slot, self)
+		return
+
+	# Handle drops from ListRowManager (list view)
+	if source_row:
+		print("  Handling drop from list row")
+		_handle_list_row_drop(source_item, source_row)
+		return
+
+	print("  No valid source - aborting")
+
+
+func _handle_list_row_drop(source_item: InventoryItem_Base, _source_row):
+	"""Handle dropping an item from a list view row"""
+	print("  _handle_list_row_drop called for item: ", source_item.item_name)
+
+	# Find the equipment window to properly equip the item
+	var equipment_window = _find_equipment_window()
+	if not equipment_window:
+		print("  ERROR: Could not find equipment window")
+		return
+
+	# Find which slot type this is
+	var slot_type = _find_equipment_slot_type(equipment_window)
+	if slot_type == null:
+		print("  ERROR: Could not determine slot type")
+		return
+
+	print("  Equipping item in slot type: ", slot_type)
+
+	# Equip the item through the equipment window
+	equipment_window._equip_item(source_item, slot_type)
+
+	print("  Item equipped successfully")
+
+
+func _find_equipment_window():
+	"""Find the EquipmentWindow in the scene tree"""
+	var current = get_parent()
+	while current:
+		if current.get_script() and current.get_script().get_global_name() == "EquipmentWindow":
+			return current
+		current = current.get_parent()
+	return null
+
+
+func _find_equipment_slot_type(equipment_window):
+	"""Find which slot type this equipment slot is"""
+	for slot_type in equipment_window.equipment_slots:
+		if equipment_window.equipment_slots[slot_type] == self:
+			return slot_type
+	return null
 
 
 func _setup_equipment_visual():

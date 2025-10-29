@@ -493,6 +493,14 @@ func _can_equip_in_slot(item: InventoryItem_Base, slot_type: EquipmentSlotType) 
 
 func _equip_item(item: InventoryItem_Base, slot_type: EquipmentSlotType):
 	"""Equip an item in the specified slot"""
+	# CRITICAL: Check if this item is already equipped in another slot
+	for existing_slot_type in equipped_items:
+		if equipped_items[existing_slot_type] == item:
+			print("WARNING: Item ", item.item_name, " is already equipped in ", _get_slot_name(existing_slot_type))
+			print("  Unequipping from ", _get_slot_name(existing_slot_type), " first")
+			_unequip_item(existing_slot_type)
+			break
+
 	# If slot already has item, unequip it first
 	if slot_type in equipped_items and equipped_items[slot_type]:
 		_unequip_item(slot_type)
