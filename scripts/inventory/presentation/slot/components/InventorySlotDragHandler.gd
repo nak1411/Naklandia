@@ -517,15 +517,31 @@ func _attempt_drop_on_slot(target_slot: InventorySlot, end_position: Vector2) ->
 
 func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 	"""Attempt to drop on other valid targets"""
+	print("  [_attempt_drop_on_other_targets] Called at position: ", end_position)
+	print("  [_attempt_drop_on_other_targets] Slot container_id: ", slot.container_id)
+
 	# SPECIAL HANDLING: Equipment slots to inventory grid (empty area)
 	if slot.container_id == "equipment":
-		print("Dragging from equipment, checking for inventory grid drop")
-		var grid = _get_inventory_grid()
-		if grid:
+		print("  [EQUIPMENT DROP] Checking for inventory grid drop")
+
+		# Search ALL windows for inventory grids, not just parent chain
+		var all_grids = _find_all_inventory_grids()
+		print("  [EQUIPMENT DROP] Found ", all_grids.size(), " grids")
+
+		for grid in all_grids:
+			if not is_instance_valid(grid) or not grid.visible:
+				continue
+
 			var grid_rect = Rect2(grid.global_position, grid.size)
+			print("  [EQUIPMENT DROP] Checking grid: ", grid.container_id)
+			print("  [EQUIPMENT DROP]   Grid rect: ", grid_rect)
+			print("  [EQUIPMENT DROP]   Drop position: ", end_position)
+
 			if grid_rect.has_point(end_position):
-				print("  Drop is over inventory grid!")
+				print("  [EQUIPMENT DROP] ✓ Drop IS over grid: ", grid.container_id)
 				return _handle_equipment_to_inventory_drop(grid, end_position)
+
+		print("  [EQUIPMENT DROP] No grid found at drop position")
 
 	# Check virtual content area
 	var grid = _get_inventory_grid()
@@ -545,6 +561,7 @@ func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 	if _attempt_drop_on_equipment_slot(end_position):
 		return true
 
+	print("  [_attempt_drop_on_other_targets] No valid drop target found")
 	return false
 
 
@@ -589,53 +606,63 @@ func _attempt_drop_on_equipment_slot(end_position: Vector2) -> bool:
 
 func _handle_equipment_to_inventory_drop(grid: InventoryGrid, end_position: Vector2) -> bool:
 	"""Handle dropping from equipment to inventory grid"""
+	print("    [_handle_equipment_to_inventory_drop] Called")
+	print("    [_handle_equipment_to_inventory_drop] Grid container_id: ", grid.container_id)
+
 	if not slot or not slot.has_item():
+		print("    [_handle_equipment_to_inventory_drop] ERROR: No slot or no item")
 		return false
 
 	# Find the equipment window
 	var equipment_window = _find_equipment_window()
 	if not equipment_window:
-		print("  ERROR: Could not find equipment window")
+		print("    [_handle_equipment_to_inventory_drop] ERROR: Could not find equipment window")
 		return false
 
 	# Find which equipment slot type this is
 	var slot_type = _find_equipment_slot_type(equipment_window)
 	if slot_type == null:
-		print("  ERROR: Could not find equipment slot type")
+		print("    [_handle_equipment_to_inventory_drop] ERROR: Could not find equipment slot type")
 		return false
 
 	var item = slot.get_item()
-	print("  Unequipping ", item.item_name, " to inventory")
+	print("    [_handle_equipment_to_inventory_drop] Unequipping: ", item.item_name, " qty: ", item.quantity)
 
 	# Get the inventory manager
 	var inventory_manager = _get_inventory_manager()
 	if not inventory_manager:
-		print("  ERROR: No inventory manager")
+		print("    [_handle_equipment_to_inventory_drop] ERROR: No inventory manager")
 		return false
 
-	# Try to find an empty slot or create one
+	# Get target container
 	var target_container = inventory_manager.get_container(grid.container_id)
 	if not target_container:
-		print("  ERROR: No target container")
+		print("    [_handle_equipment_to_inventory_drop] ERROR: No target container")
 		return false
 
 	if not target_container.can_add_item(item):
-		print("  ERROR: Inventory doesn't have space")
+		print("    [_handle_equipment_to_inventory_drop] ERROR: Inventory doesn't have space")
 		return false
 
-	# Unequip the item
+	# Unequip the item (this removes it from equipment)
+	print("    [_handle_equipment_to_inventory_drop] Unequipping item...")
 	equipment_window._unequip_item(slot_type)
+	print("    [_handle_equipment_to_inventory_drop] Item unequipped")
 
-	# Add to inventory (let the manager find a spot)
-	var success = inventory_manager.add_item_to_container(item, grid.container_id)
+	# Now add it directly to the target container (item is already removed from equipment)
+	print("    [_handle_equipment_to_inventory_drop] Adding item to container...")
+	var success = target_container.add_item(item)
+	print("    [_handle_equipment_to_inventory_drop] Add result: ", success)
 
 	if success:
-		print("  Successfully unequipped and moved to inventory")
-		# Refresh the grid display
+		print("    [_handle_equipment_to_inventory_drop] ✓ Successfully transferred")
 		grid.refresh_display()
 		return true
 	else:
-		print("  ERROR: Failed to add item to inventory")
+		print("    [_handle_equipment_to_inventory_drop] ERROR: Failed to add item")
+		# Item is lost! Try to re-equip it
+		print("    [_handle_equipment_to_inventory_drop] Attempting to re-equip item...")
+		equipment_window._equip_item(item, slot_type)
 		return false
 
 
@@ -646,6 +673,52 @@ func _get_inventory_grid():
 		if current.get_script() and current.get_script().get_global_name() == "InventoryGrid":
 			return current
 		current = current.get_parent()
+	return null
+
+
+func _find_all_inventory_grids() -> Array:
+	"""Find all inventory grids in the scene tree (main window + tearoff windows)"""
+	var all_grids = []
+
+	print("    [_find_all_inventory_grids] Searching for inventory grids...")
+
+	# Find all external container windows (main inventory + tearoff windows)
+	var external_windows = slot.get_tree().get_nodes_in_group("external_container_windows")
+	print("    [_find_all_inventory_grids] Found ", external_windows.size(), " external windows")
+
+	for window in external_windows:
+		if not is_instance_valid(window):
+			continue
+
+		if not window.visible or not window.is_inside_tree():
+			print("    [_find_all_inventory_grids] Skipping window (not visible): ", window.name)
+			continue
+
+		print("    [_find_all_inventory_grids] Checking window: ", window.name)
+		var grid = _find_grid_in_window(window)
+		if grid:
+			print("    [_find_all_inventory_grids] ✓ Found grid -> container_id: ", grid.container_id)
+			all_grids.append(grid)
+
+	print("    [_find_all_inventory_grids] Total grids found: ", all_grids.size())
+	return all_grids
+
+
+func _find_grid_in_window(window: Node) -> Node:
+	"""Recursively find InventoryGrid in a window"""
+	if not window:
+		return null
+
+	# Check if this node is an InventoryGrid
+	if window.get_script() and window.get_script().get_global_name() == "InventoryGrid":
+		return window
+
+	# Recursively search children
+	for child in window.get_children():
+		var result = _find_grid_in_window(child)
+		if result:
+			return result
+
 	return null
 
 

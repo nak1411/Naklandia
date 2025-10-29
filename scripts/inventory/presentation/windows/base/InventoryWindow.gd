@@ -54,8 +54,18 @@ func _ready():
 func _input(event: InputEvent):
 	"""Handle cross-window drops to main inventory window"""
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		var window_rect = Rect2(global_position, size)
 		var viewport = get_viewport()
+
+		# CHECK: Is this an equipment slot drag?
+		if viewport and viewport.has_meta("current_drag_data"):
+			var drag_data = viewport.get_meta("current_drag_data")
+			var source_slot = drag_data.get("source_slot")
+
+			if source_slot and source_slot.container_id == "equipment":
+				print("InventoryWindow: Equipment drag detected - letting drag handler process it")
+				# Let the drag handler process this - don't intercept
+				return
+		var window_rect = Rect2(global_position, size)
 
 		# Check if drop is within our window bounds
 		if window_rect.has_point(event.global_position):
@@ -441,22 +451,43 @@ func _get_target_container_for_drop(drop_position: Vector2) -> InventoryContaine
 
 			if item_index >= 0 and item_index < content.open_containers.size():
 				var target = content.open_containers[item_index]
-				print("DEBUG: Found target container: ", target.container_name if target else "null")
+				print("DEBUG: Found target container from list: ", target.container_name if target else "null")
 				return target
 			else:
 				print("DEBUG: Invalid item_index or out of range")
 	else:
 		print("DEBUG: No container_list in content")
 
-	# Check if dropping on the main inventory grid/list area
-	print("DEBUG: Checking current container fallback")
-	if content.has_method("get_current_container"):
-		var current = content.get_current_container()
-		print("DEBUG: Current container: ", current.container_name if current else "null")
-		return current
+	# Check if dropping on the inventory grid area
+	print("DEBUG: Checking if drop is over inventory grid/list view")
+	if content.inventory_grid and content.inventory_grid.visible:
+		var grid_rect = Rect2(content.inventory_grid.global_position, content.inventory_grid.size)
+		print("DEBUG: Inventory grid rect: ", grid_rect)
 
-	print("DEBUG: Returning current_container: ", current_container.container_name if current_container else "null")
-	return current_container
+		if grid_rect.has_point(drop_position):
+			print("DEBUG: Drop IS over inventory grid - returning current container")
+			var current = content.get_current_container() if content.has_method("get_current_container") else current_container
+			print("DEBUG: Current container: ", current.container_name if current else "null")
+			return current
+		else:
+			print("DEBUG: Drop is NOT over inventory grid")
+
+	# Check if dropping on the list view area
+	if content.list_view and content.list_view.visible:
+		var list_view_rect = Rect2(content.list_view.global_position, content.list_view.size)
+		print("DEBUG: List view rect: ", list_view_rect)
+
+		if list_view_rect.has_point(drop_position):
+			print("DEBUG: Drop IS over list view - returning current container")
+			var current = content.get_current_container() if content.has_method("get_current_container") else current_container
+			print("DEBUG: Current container: ", current.container_name if current else "null")
+			return current
+		else:
+			print("DEBUG: Drop is NOT over list view")
+
+	# If we get here, the drop is not over any valid drop area
+	print("DEBUG: Drop is NOT over any valid drop area - returning null")
+	return null
 
 
 func _handle_cross_window_drop_to_main(drag_data: Dictionary, target_container: InventoryContainer_Base) -> bool:
