@@ -44,6 +44,28 @@ func _ready():
 	call_deferred("_setup_window_tracking")
 
 
+func _unhandled_input(event: InputEvent):
+	"""Global handler to catch drops outside any window"""
+	if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var viewport = get_viewport()
+		if viewport and viewport.has_meta("current_drag_data"):
+			var drag_data = viewport.get_meta("current_drag_data")
+			var source_slot = drag_data.get("source_slot")
+
+			print("[InventoryIntegration] Unhandled drop detected - returning item to source")
+
+			# Notify source slot that drop failed
+			if source_slot and source_slot.has_method("_on_external_drop_result"):
+				source_slot._on_external_drop_result(false)
+
+			# Force refresh all inventory displays immediately
+			_refresh_inventory_display()
+
+			# Clean up drag metadata
+			viewport.remove_meta("current_drag_data")
+			get_viewport().set_input_as_handled()
+
+
 func _setup_integration_layer():
 	"""Setup the integration layer components"""
 	# Create event bus first

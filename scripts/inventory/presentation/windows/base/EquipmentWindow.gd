@@ -107,7 +107,18 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 
 			# Check if the item can be equipped in this slot
 			if not _can_equip_in_slot(source_item, slot_type):
-				print("  Item cannot be equipped in this slot type")
+				print("  Item cannot be equipped in this slot type - cancelling drag")
+
+				# Notify source slot that the drop failed so it can restore the item
+				if source_slot.has_method("_on_external_drop_result"):
+					source_slot._on_external_drop_result(false)
+
+				# Force refresh the source container/grid display
+				_force_refresh_inventory_display()
+
+				# Clean up drag data
+				get_viewport().remove_meta("current_drag_data")
+
 				return false
 
 			# Equip the item
@@ -123,7 +134,18 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 
 			return true
 
-	print("  Drop not over any equipment slot")
+	print("  Drop not over any equipment slot - cancelling drag")
+
+	# Notify source slot that the drop failed so it can restore the item
+	if source_slot.has_method("_on_external_drop_result"):
+		source_slot._on_external_drop_result(false)
+
+	# Force refresh the source container/grid display
+	_force_refresh_inventory_display()
+
+	# Clean up drag data
+	get_viewport().remove_meta("current_drag_data")
+
 	return false
 
 
@@ -638,6 +660,16 @@ func refresh_display():
 			slot.set_item(equipped_items[slot_type])
 		else:
 			slot.clear_item()
+
+
+func _force_refresh_inventory_display():
+	"""Force refresh the inventory display when a drag operation is cancelled"""
+	# Find the inventory integration to trigger a refresh
+	var integration_nodes = get_tree().get_nodes_in_group("inventory_integration")
+	if integration_nodes.size() > 0:
+		var integration = integration_nodes[0]
+		if integration.has_method("_refresh_inventory_display"):
+			integration._refresh_inventory_display()
 
 
 # Save/Load Equipment State

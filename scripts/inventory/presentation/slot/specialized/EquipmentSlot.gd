@@ -216,6 +216,11 @@ func can_accept_item(check_item: InventoryItem_Base) -> bool:
 		print("    No item provided")
 		return false
 
+	# Block materials/resources from being equipped
+	if check_item.item_type == ItemTypes.Type.RESOURCE:
+		print("    Item is a RESOURCE - materials cannot be equipped")
+		return false
+
 	# If no allowed categories set, accept any item
 	if allowed_categories.is_empty():
 		print("    No category restrictions - accepting all items")
