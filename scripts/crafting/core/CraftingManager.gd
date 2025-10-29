@@ -44,11 +44,11 @@ func _create_basic_recipes():
 	wrench.output_item_type = ItemTypes.Type.TOOL
 	wrench.is_always_available = true
 
-	var noxite_mat = CraftingRecipe.RecipeMaterial.new()
-	noxite_mat.material_id = "resource_noxite"
-	noxite_mat.material_name = "Noxite"
-	noxite_mat.quantity = 1
-	wrench.required_materials.append(noxite_mat)
+	var iron_ore_mat = CraftingRecipe.RecipeMaterial.new()
+	iron_ore_mat.material_id = "resource_iron_ore"
+	iron_ore_mat.material_name = "Iron Ore"
+	iron_ore_mat.quantity = 1
+	wrench.required_materials.append(iron_ore_mat)
 
 	all_recipes.append(wrench)
 

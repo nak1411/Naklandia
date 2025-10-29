@@ -57,6 +57,18 @@ func _initialize_items():
 	_register_item(
 		ItemDefinition.new("resource_noxite", "Noxite", "A liquid that can be used as a fuel source.", ItemTypes.Type.RESOURCE, 0.125, 0.1, 10.0, "res://assets/textures/ui/icons/resource.png")
 	)
+	_register_item(
+		ItemDefinition.new(
+			"resource_iron_ore",
+			"Iron Ore",
+			"Unrefined metallic mineral used in industrial production. Smelted to produce iron, the base metal for machinery, structures, and tools.",
+			ItemTypes.Type.RESOURCE,
+			0.125,
+			0.1,
+			10.0,
+			"res://assets/textures/ui/icons/iron_ore_slot.png"
+		)
+	)
 
 	_register_item(
 		ItemDefinition.new(
