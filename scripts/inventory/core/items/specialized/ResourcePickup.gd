@@ -4,7 +4,7 @@ extends PickupableItem
 
 @export var resource_name: String = "Pickupable Resource"  # For backward compatibility with scenes
 @export var resource_quantity: int = 500  # For backward compatibility with scenes
-@export var item_id: String = "resource_iron_ore"
+@export var item_id: String = "resource_steel_round_bar"
 @export var pickup_quantity: int = 1
 
 

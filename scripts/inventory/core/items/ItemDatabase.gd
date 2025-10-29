@@ -43,7 +43,16 @@ func _initialize_items():
 
 	# TOOLS
 	_register_item(
-		ItemDefinition.new("wrench", "Wrench", "A wrench used to construct various items and structures.", ItemTypes.Type.TOOL, 0.05, 0.1, 50.0, "res://assets/textures/ui/icons/wrench.png")
+		ItemDefinition.new(
+			"tool_wrench",
+			"Wrench",
+			"Durable hand tool used for assembly, maintenance, and machine calibration.",
+			ItemTypes.Type.TOOL,
+			0.05,
+			0.1,
+			50.0,
+			"res://assets/textures/ui/icons/wrench_slot.png"
+		)
 	)
 
 	# AMMUNITION
@@ -69,10 +78,52 @@ func _initialize_items():
 			"res://assets/textures/ui/icons/iron_ore_slot.png"
 		)
 	)
-
 	_register_item(
 		ItemDefinition.new(
-			"metal_plate", "Metal Plate", "A basic structural component made from refined metal.", ItemTypes.Type.RESOURCE, 0.1, 0.5, 25.0, "res://assets/textures/ui/icons/resource.png"
+			"resource_copper_ore",
+			"Copper Ore",
+			"Unrefined mineral containing traces of copper. Processed through smelting to produce copper ingots for electrical and mechanical applications.",
+			ItemTypes.Type.RESOURCE,
+			0.125,
+			0.1,
+			10.0,
+			"res://assets/textures/ui/icons/copper_ore_slot.png"
+		)
+	)
+	_register_item(
+		ItemDefinition.new(
+			"resource_iron_ingot",
+			"Iron Ingot",
+			"Refined from raw iron ore. A durable, versatile metal used in construction, machinery, and component fabrication.",
+			ItemTypes.Type.RESOURCE,
+			0.125,
+			0.1,
+			10.0,
+			"res://assets/textures/ui/icons/iron_ingot_slot.png"
+		)
+	)
+	_register_item(
+		ItemDefinition.new(
+			"resource_steel_round_bar",
+			"Steel Round Bar",
+			"Alloyed and forged from iron and carbon into cylindrical form. Used in high-strength frameworks, shafts, hardware, and assemblies.",
+			ItemTypes.Type.RESOURCE,
+			0.125,
+			0.1,
+			10.0,
+			"res://assets/textures/ui/icons/steel_round_bar_slot.png"
+		)
+	)
+	_register_item(
+		ItemDefinition.new(
+			"resource_copper_ingot",
+			"Copper Ingot",
+			"Refined from copper ore. A highly conductive metal used in wiring, electronics, and precision components.",
+			ItemTypes.Type.RESOURCE,
+			0.125,
+			0.1,
+			10.0,
+			"res://assets/textures/ui/icons/copper_ingot_slot.png"
 		)
 	)
 

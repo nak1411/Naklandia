@@ -38,17 +38,17 @@ func _create_basic_recipes():
 	var wrench = CraftingRecipe.new()
 	wrench.recipe_id = "recipe_wrench"
 	wrench.recipe_name = "Wrench"
-	wrench.description = "Creates a wrench used for contructing items and structures."
-	wrench.output_item_id = "wrench"
+	wrench.description = "Durable hand tool used for assembly, maintenance, and machine calibration."
+	wrench.output_item_id = "tool_wrench"
 	wrench.output_quantity = 1
 	wrench.output_item_type = ItemTypes.Type.TOOL
 	wrench.is_always_available = true
 
-	var iron_ore_mat = CraftingRecipe.RecipeMaterial.new()
-	iron_ore_mat.material_id = "resource_iron_ore"
-	iron_ore_mat.material_name = "Iron Ore"
-	iron_ore_mat.quantity = 1
-	wrench.required_materials.append(iron_ore_mat)
+	var iron_ingot_mat = CraftingRecipe.RecipeMaterial.new()
+	iron_ingot_mat.material_id = "resource_iron_ingot"
+	iron_ingot_mat.material_name = "Iron Ingot"
+	iron_ingot_mat.quantity = 1
+	wrench.required_materials.append(iron_ingot_mat)
 
 	all_recipes.append(wrench)
 

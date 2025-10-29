@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b5hoxsdaldmvr"
-path="res://.godot/imported/wrench.png-6261bb22374e3381867ac9afe0898d6a.ctex"
+uid="uid://cawb3fbvmngqc"
+path="res://.godot/imported/iron_ingot_slot.png-8b22488ec224368bc4c0ed6a17e1f27f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/textures/ui/icons/wrench.png"
-dest_files=["res://.godot/imported/wrench.png-6261bb22374e3381867ac9afe0898d6a.ctex"]
+source_file="res://assets/textures/ui/icons/iron_ingot_slot.png"
+dest_files=["res://.godot/imported/iron_ingot_slot.png-8b22488ec224368bc4c0ed6a17e1f27f.ctex"]
 
 [params]
 
