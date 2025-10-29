@@ -604,10 +604,11 @@ func _attempt_drop_on_equipment_slot(end_position: Vector2) -> bool:
 	return false
 
 
-func _handle_equipment_to_inventory_drop(grid: InventoryGrid, end_position: Vector2) -> bool:
-	"""Handle dropping from equipment to inventory grid"""
+func _handle_equipment_to_inventory_drop(display_view: Node, end_position: Vector2) -> bool:
+	"""Handle dropping from equipment to inventory grid or list view"""
 	print("    [_handle_equipment_to_inventory_drop] Called")
-	print("    [_handle_equipment_to_inventory_drop] Grid container_id: ", grid.container_id)
+	print("    [_handle_equipment_to_inventory_drop] Display view: ", display_view.get_script().get_global_name() if display_view.get_script() else "Unknown")
+	print("    [_handle_equipment_to_inventory_drop] Display view container_id: ", display_view.container_id)
 
 	if not slot or not slot.has_item():
 		print("    [_handle_equipment_to_inventory_drop] ERROR: No slot or no item")
@@ -635,7 +636,7 @@ func _handle_equipment_to_inventory_drop(grid: InventoryGrid, end_position: Vect
 		return false
 
 	# Get target container
-	var target_container = inventory_manager.get_container(grid.container_id)
+	var target_container = inventory_manager.get_container(display_view.container_id)
 	if not target_container:
 		print("    [_handle_equipment_to_inventory_drop] ERROR: No target container")
 		return false
@@ -656,7 +657,8 @@ func _handle_equipment_to_inventory_drop(grid: InventoryGrid, end_position: Vect
 
 	if success:
 		print("    [_handle_equipment_to_inventory_drop] ✓ Successfully transferred")
-		grid.refresh_display()
+		# Refresh the display - works for both InventoryGrid and InventoryListView
+		display_view.refresh_display()
 		return true
 	else:
 		print("    [_handle_equipment_to_inventory_drop] ERROR: Failed to add item")
@@ -705,13 +707,15 @@ func _find_all_inventory_grids() -> Array:
 
 
 func _find_grid_in_window(window: Node) -> Node:
-	"""Recursively find InventoryGrid in a window"""
+	"""Recursively find InventoryGrid OR InventoryListView in a window"""
 	if not window:
 		return null
 
-	# Check if this node is an InventoryGrid
-	if window.get_script() and window.get_script().get_global_name() == "InventoryGrid":
-		return window
+	# Check if this node is an InventoryGrid OR InventoryListView
+	if window.get_script():
+		var global_name = window.get_script().get_global_name()
+		if global_name == "InventoryGrid" or global_name == "InventoryListView":
+			return window
 
 	# Recursively search children
 	for child in window.get_children():
