@@ -372,19 +372,10 @@ func _hide_inventory():
 
 
 func _refresh_inventory_display():
-	"""Force refresh the inventory display"""
+	"""Force refresh the inventory display - refreshes the CURRENTLY VIEWED container"""
 	if inventory_window and inventory_window.content and inventory_window.visible:
-		# FIX: Synchronize container references before refreshing
-		var correct_container = inventory_manager.get_player_inventory()
-		if correct_container and inventory_window.content.current_container != correct_container:
-			inventory_window.content.current_container = correct_container
-
-			if inventory_window.content.inventory_grid:
-				inventory_window.content.inventory_grid.set_container(correct_container)
-
-			if inventory_window.content.list_view:
-				inventory_window.content.list_view.set_container(correct_container, correct_container.container_id)
-
+		# Simply refresh the current display without changing the container
+		# The user might be viewing cargo hold, personal inventory, or any other container
 		inventory_window.content.refresh_display()
 
 		# Also refresh the specific display mode

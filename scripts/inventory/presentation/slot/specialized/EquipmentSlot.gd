@@ -320,6 +320,22 @@ func _on_drag_ended(source_slot: InventorySlot, success: bool):
 	call_deferred("_ensure_background_visible")
 
 
+func _on_external_drop_result(success: bool):
+	"""Override to ensure quantity labels stay hidden in equipment slots"""
+	# Call parent implementation
+	super._on_external_drop_result(success)
+
+	# CRITICAL: Always hide quantity labels in equipment slots after any drop result
+	if visuals:
+		if visuals.quantity_label:
+			visuals.quantity_label.visible = false
+		if visuals.quantity_bg:
+			visuals.quantity_bg.visible = false
+		# Also hide item name label
+		if visuals.item_name_label:
+			visuals.item_name_label.visible = false
+
+
 func set_highlighted(highlighted: bool):
 	"""Override to maintain visible background"""
 	is_highlighted = highlighted
