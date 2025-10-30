@@ -470,10 +470,9 @@ func _get_material_availability_color(recipe: CraftingRecipe) -> Color:
 
 	if has_count == total_count:
 		return Color.GREEN  # Has all materials
-	elif has_count > 0:
+	if has_count > 0:
 		return Color.YELLOW  # Has some materials
-	else:
-		return Color.RED  # Has no materials
+	return Color.RED  # Has no materials
 
 
 func _on_recipe_selected(recipe: CraftingRecipe):
@@ -630,9 +629,9 @@ func _reset_crafting_ui():
 	recipe_list_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	start_craft_button.visible = true
 
-	# Refresh display to update material counts
+	# Refresh display to update material counts and recipe list colors
 	if selected_recipe:
-		_update_recipe_display()
+		refresh_display()
 
 
 func _hide_process_and_output_panels():
@@ -647,6 +646,7 @@ func refresh_display():
 	# Only refresh if UI is ready
 	if is_node_ready() and recipe_info_label and is_instance_valid(recipe_info_label):
 		if not is_crafting:
+			_populate_recipe_list()  # Refresh recipe list to update color borders
 			_update_recipe_display()
 	else:
 		push_warning("CraftingStationWindow: Cannot refresh - UI not ready")

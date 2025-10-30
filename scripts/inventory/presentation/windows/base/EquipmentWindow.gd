@@ -105,6 +105,23 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 		if slot_rect.has_point(drop_position):
 			print("  Drop is over slot: ", equipment_slot.name)
 
+			# CRITICAL: Check if dropping same item on itself
+			var currently_equipped = equipped_items.get(slot_type)
+			if currently_equipped and currently_equipped == source_item:
+				print("  Same item already equipped in this slot - cancelling drag")
+
+				# Notify source slot that the drop failed so it can restore the item
+				if source_slot.has_method("_on_external_drop_result"):
+					source_slot._on_external_drop_result(false)
+
+				# Force refresh the source container/grid display
+				_force_refresh_inventory_display()
+
+				# Clean up drag data
+				get_viewport().remove_meta("current_drag_data")
+
+				return false
+
 			# Check if the item can be equipped in this slot
 			if not _can_equip_in_slot(source_item, slot_type):
 				print("  Item cannot be equipped in this slot type - cancelling drag")
@@ -121,9 +138,29 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 
 				return false
 
-			# Equip the item
+			# Handle swapping if slot is already occupied
+			var item_to_swap = null
+			if currently_equipped:
+				print("  Slot already has item: ", currently_equipped.item_name, " - will swap")
+				item_to_swap = currently_equipped
+
+			# Equip the new item
 			print("  Equipping item!")
 			_equip_item(source_item, slot_type)
+
+			# If swapping, put the old item in the source location
+			if item_to_swap:
+				print("  Placing swapped item back in source")
+				# Put the old equipped item where the new item came from
+				source_slot.set_item(item_to_swap)
+
+				# Update the source container
+				if source_slot.container_id != "equipment":
+					var source_container = inventory_manager.get_container(source_slot.container_id)
+					if source_container:
+						# Remove the new item and add the old item
+						source_container.remove_item(source_item)
+						source_container.add_item(item_to_swap)
 
 			# Notify source slot of successful drop
 			if source_slot.has_method("_on_external_drop_result"):
@@ -364,14 +401,14 @@ func _create_slot_in_row(row: HBoxContainer, slot_type: EquipmentSlotType, label
 	print("  Slot fully set up for: ", label_text)
 
 
-func _on_equipment_slot_clicked(slot: EquipmentSlot, _event: InputEvent, slot_type: EquipmentSlotType):
+func _on_equipment_slot_clicked(_slot: EquipmentSlot, _event: InputEvent, _slot_type: EquipmentSlotType):
 	"""Handle equipment slot click"""
 	# DON'T unequip on left click - that interferes with dragging
 	# Unequip only happens via:
 	# 1. Right-click context menu
 	# 2. Dragging to inventory
-	# 3. Dedicated unequip buttone
-	pass
+	# 3. Dedicated unequip button
+	return
 
 
 func _on_equipment_slot_right_clicked(slot: EquipmentSlot, event: InputEvent, slot_type: EquipmentSlotType):
@@ -393,6 +430,15 @@ func _on_item_dropped_on_equipment(source_slot: InventorySlot, _target_slot: Equ
 	var item = source_slot.get_item()
 	print("  Item: ", item.item_name)
 
+	# CRITICAL: Check if dropping same item on itself
+	var currently_equipped = equipped_items.get(slot_type)
+	if currently_equipped and currently_equipped == item:
+		print("  Same item already equipped in this slot - cancelling drop")
+		# Restore source slot
+		if source_slot.has_method("_on_external_drop_result"):
+			source_slot._on_external_drop_result(false)
+		return
+
 	# Validate item can be equipped in this slot
 	if not _can_equip_in_slot(item, slot_type):
 		print("  Cannot equip ", item.item_name, " in ", _get_slot_name(slot_type))
@@ -400,31 +446,52 @@ func _on_item_dropped_on_equipment(source_slot: InventorySlot, _target_slot: Equ
 
 	print("  Equipping item...")
 
-	# Equip the item first
+	# Handle swapping if slot is already occupied
+	var item_to_swap = null
+	if currently_equipped:
+		print("  Slot already has item: ", currently_equipped.item_name, " - swapping")
+		item_to_swap = currently_equipped
+
+	# Equip the new item
 	_equip_item(item, slot_type)
 
-	# CRITICAL: Remove the item from the source slot
-	source_slot.clear_item()
+	# If swapping, put the old item in the source location
+	if item_to_swap:
+		print("  Placing swapped item back in source")
+		# Put the old equipped item where the new item came from
+		source_slot.set_item(item_to_swap)
 
-	# Make the source slot visually disappear immediately
-	source_slot.modulate.a = 0.0
-	source_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Update the source container
+		if inventory_manager and source_slot.container_id != "equipment":
+			var source_container = inventory_manager.get_container(source_slot.container_id)
+			if source_container:
+				# Remove the new item and add the old item
+				source_container.remove_item(item)
+				source_container.add_item(item_to_swap)
+	else:
+		# No swap - just remove from source
+		# CRITICAL: Remove the item from the source slot
+		source_slot.clear_item()
+
+		# Make the source slot visually disappear immediately
+		source_slot.modulate.a = 0.0
+		source_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		# Trigger refresh of the source container
+		if inventory_manager:
+			var source_container = inventory_manager.get_container(source_slot.container_id)
+			if source_container:
+				source_container.remove_item(item)
 
 	# Clean up drag state on source slot
 	if source_slot.drag_handler:
 		source_slot.drag_handler.is_dragging = false
 		source_slot.drag_handler.drag_preview_created = false
 
-	# Trigger refresh of the source container
-	if inventory_manager:
-		var source_container = inventory_manager.get_container(source_slot.container_id)
-		if source_container:
-			source_container.remove_item(item)
-
 	# Ensure equipment slot visual is correct
 	_target_slot._ensure_background_visible()
 
-	print("  Item equipped and removed from inventory")
+	print("  Item equipped successfully")
 
 
 func _on_equipment_item_dragged_to_inventory(equipment_slot: EquipmentSlot, target_slot: InventorySlot, slot_type: EquipmentSlotType):
