@@ -561,6 +561,10 @@ func show_destroy_item_confirmation(item: InventoryItem_Base, _slot: InventorySl
 				current_container.remove_item(item)
 				await window_parent.get_tree().process_frame
 				container_refreshed.emit()
+				# Save after item destruction
+				if inventory_manager.save_system:
+					inventory_manager.save_system.save_inventory()
+					print("InventoryItemActions: Saved after item destruction")
 			dialog_window.close_dialog()
 			if window_parent and is_instance_valid(window_parent):
 				window_parent.grab_focus()

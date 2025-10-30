@@ -400,7 +400,7 @@ func _on_item_dropped_on_equipment(source_slot: InventorySlot, _target_slot: Equ
 
 	print("  Equipping item...")
 
-	# Equip the item
+	# Equip the item first
 	_equip_item(item, slot_type)
 
 	# CRITICAL: Remove the item from the source slot
@@ -466,7 +466,12 @@ func _on_equipment_item_dragged_to_inventory(equipment_slot: EquipmentSlot, targ
 	print("  Calling _unequip_item...")
 	_unequip_item(slot_type)
 
-	# Add to inventory
+	# Add to inventory container
+	if not target_container.add_item(item):
+		print("  ERROR: Failed to add item to container!")
+		return
+
+	# Update the slot visually
 	target_slot.set_item(item)
 
 	print("  Item unequipped and moved to inventory successfully")
@@ -546,7 +551,7 @@ func _equip_item(item: InventoryItem_Base, slot_type: EquipmentSlotType):
 	equipment_slots[slot_type].set_item(item)
 
 	# Notify player adapter
-	_notify_item_equipped(item)
+	_notify_item_equipped(item, slot_type)
 
 	print("Equipped ", item.item_name, " in ", _get_slot_name(slot_type))
 
@@ -565,7 +570,7 @@ func _unequip_item(slot_type: EquipmentSlotType):
 	equipped_items.erase(slot_type)
 
 	# Notify player adapter
-	_notify_item_unequipped(item)
+	_notify_item_unequipped(item, slot_type)
 
 	# Return item to inventory would be handled here
 
@@ -604,16 +609,39 @@ func _inspect_item(_item: InventoryItem_Base):
 	return
 
 
-func _notify_item_equipped(_item: InventoryItem_Base):
+func _notify_item_equipped(item: InventoryItem_Base, slot_type: EquipmentSlotType):
 	"""Notify systems that an item was equipped"""
-	# This would notify player adapter, stats system, etc.
-	return
+	# Notify player to update 3D visual
+	var player = get_tree().get_first_node_in_group("player")
+	if player and player.has_method("update_equipment_visual"):
+		player.update_equipment_visual(item, slot_type, true)
+
+	# Defer auto-save to next frame so inventory changes complete first
+	call_deferred("_auto_save_equipment")
 
 
-func _notify_item_unequipped(_item: InventoryItem_Base):
+func _notify_item_unequipped(item: InventoryItem_Base, slot_type: EquipmentSlotType):
 	"""Notify systems that an item was unequipped"""
-	# This would notify player adapter, stats system, etc.
-	return
+	# Notify player to update 3D visual
+	var player = get_tree().get_first_node_in_group("player")
+	if player and player.has_method("update_equipment_visual"):
+		player.update_equipment_visual(item, slot_type, false)
+
+	# Defer auto-save to next frame so inventory changes complete first
+	call_deferred("_auto_save_equipment")
+
+
+func _auto_save_equipment():
+	"""Auto-save equipment state whenever items are equipped/unequipped"""
+	if not inventory_manager:
+		return
+
+	if not inventory_manager.save_system:
+		return
+
+	# Save the entire inventory (including equipment)
+	inventory_manager.save_system.save_inventory()
+	print("EquipmentWindow: Auto-saved equipment state")
 
 
 func _get_slot_name(slot_type: EquipmentSlotType) -> String:
@@ -719,6 +747,9 @@ func from_dict(data: Dictionary):
 			equipped_items[slot_type] = item
 			if slot_type in equipment_slots:
 				equipment_slots[slot_type].set_item(item)
+
+			# Notify visual system when loading from save
+			_notify_item_equipped(item, slot_type)
 
 	print("EquipmentWindow: Loaded ", equipped_data.size(), " equipped items")
 

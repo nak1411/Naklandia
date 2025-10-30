@@ -164,7 +164,15 @@ func remove_equipment_bonuses(bonuses: Dictionary):
 	print("Equipment bonuses removed: ", bonuses)
 
 
-func update_equipment_visual(item_data: Dictionary, equipped: bool):
+func update_equipment_visual(item: InventoryItem_Base, slot_type: int, equipped: bool):
 	"""Update visual equipment on player model"""
-	# This would update 3D model attachments, clothing, etc.
-	print("Equipment visual updated: ", item_data.get("name", "Unknown"), " equipped: ", equipped)
+	if not has_node("EquipmentVisualManager"):
+		push_error("Player: EquipmentVisualManager not found")
+		return
+
+	var visual_mgr = $EquipmentVisualManager
+
+	if equipped:
+		visual_mgr.equip_visual(item, slot_type)
+	else:
+		visual_mgr.unequip_visual(slot_type)

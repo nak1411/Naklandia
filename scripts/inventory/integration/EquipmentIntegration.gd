@@ -98,6 +98,9 @@ func open_equipment_window():
 		if not equipment_window.window_closed.is_connected(_on_equipment_window_closed):
 			equipment_window.window_closed.connect(_on_equipment_window_closed)
 
+		# Sync visuals with any equipment that was loaded from save
+		_sync_equipment_visuals()
+
 		# Show the window
 		print("Showing window...")
 		print("  Before show - visible:", equipment_window.visible, " position:", equipment_window.position, " size:", equipment_window.size)
@@ -161,6 +164,15 @@ func _on_equipment_window_closed():
 		print("  Window still valid after close")
 	else:
 		print("  WARNING: Window is invalid or null after close!")
+
+
+func _sync_equipment_visuals():
+	"""Sync equipment visuals with the equipment window state"""
+	var player = get_parent()
+	if player and player.has_node("EquipmentVisualManager"):
+		var visual_manager = player.get_node("EquipmentVisualManager")
+		if visual_manager.has_method("sync_with_equipment_window"):
+			visual_manager.sync_with_equipment_window(equipment_window)
 
 
 func _set_player_input_enabled(enabled: bool):

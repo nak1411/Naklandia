@@ -42,18 +42,11 @@ func _initialize_items():
 	"""Initialize all item definitions"""
 
 	# TOOLS
-	_register_item(
-		ItemDefinition.new(
-			"tool_wrench",
-			"Wrench",
-			"Durable hand tool used for assembly, maintenance, and machine calibration.",
-			ItemTypes.Type.TOOL,
-			0.05,
-			0.1,
-			50.0,
-			"res://assets/textures/ui/icons/wrench_slot.png"
-		)
+	var wrench_def = ItemDefinition.new(
+		"tool_wrench", "Wrench", "Durable hand tool used for assembly, maintenance, and machine calibration.", ItemTypes.Type.TOOL, 0.05, 0.1, 50.0, "res://assets/textures/ui/icons/wrench_slot.png"
 	)
+	wrench_def.model_path = "res://assets/models/equippable/old_wrench.glb"
+	_register_item(wrench_def)
 
 	# AMMUNITION
 	_register_item(
@@ -217,6 +210,17 @@ func create_item_instance(item_id: String, quantity: int = 1) -> InventoryItem_B
 	# CRITICAL: Set equipment_category metadata
 	_set_equipment_category(item)
 
+	# Set model path if available
+	if not item_def.model_path.is_empty():
+		item.set_meta("model_path", item_def.model_path)
+
+	# Set item-specific attachment transforms and metadata
+	_set_attachment_metadata(item)
+
+	# Debug: Verify metadata was set
+	if item.has_meta("model_path"):
+		print("ItemDatabase: Created ", item.item_id, " with model_path: ", item.get_meta("model_path"))
+
 	return item
 
 
@@ -243,3 +247,12 @@ func _set_equipment_category(item: InventoryItem_Base):
 		_:
 			# All other types are NOT equippable
 			item.set_meta("is_equippable", false)
+
+
+func _set_attachment_metadata(item: InventoryItem_Base):
+	"""Set 3D model attachment metadata for specific items"""
+	match item.item_id:
+		"tool_wrench":
+			# Ensure model path is set
+			item.set_meta("model_path", "res://assets/models/equippable/old_wrench.glb")
+			item.set_meta("equipment_socket", "hand_tool")

@@ -313,6 +313,15 @@ func _on_item_transferred(_item: InventoryItem_Base, _from_container: String, _t
 func _on_transaction_completed(transaction: Dictionary):
 	transaction_completed.emit(transaction)
 
+	# Defer auto-save to next frame so all related operations complete first
+	call_deferred("_deferred_auto_save", transaction.get("type", "unknown"))
+
+
+func _deferred_auto_save(transaction_type: String):
+	"""Deferred auto-save to ensure all operations complete before saving"""
+	save_inventory()
+	print("InventoryManager: Auto-saved after transaction: ", transaction_type)
+
 
 func _on_inventory_saved():
 	inventory_saved.emit()

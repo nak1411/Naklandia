@@ -159,7 +159,7 @@ func is_valid_item() -> bool:
 
 # Serialization helpers
 func to_dict() -> Dictionary:
-	return {
+	var data = {
 		"item_id": item_id,
 		"item_name": item_name,
 		"description": description,
@@ -177,6 +177,15 @@ func to_dict() -> Dictionary:
 		"container_volume": container_volume,
 		"container_type": container_type
 	}
+
+	# Save metadata (for equipment model paths, sockets, etc.)
+	var metadata_dict = {}
+	for meta_key in get_meta_list():
+		metadata_dict[meta_key] = get_meta(meta_key)
+	if not metadata_dict.is_empty():
+		data["metadata"] = metadata_dict
+
+	return data
 
 
 func from_dict(data: Dictionary):
@@ -196,6 +205,12 @@ func from_dict(data: Dictionary):
 	is_container = data.get("is_container") if data.has("is_container") else false
 	container_volume = data.get("container_volume") if data.has("container_volume") else 0.0
 	container_type = data.get("container_type", ContainerTypes.Type.NONE)
+
+	# Restore metadata (for equipment model paths, sockets, etc.)
+	if data.has("metadata"):
+		var metadata_dict = data.get("metadata")
+		for meta_key in metadata_dict:
+			set_meta(meta_key, metadata_dict[meta_key])
 
 
 func get_item_id() -> String:

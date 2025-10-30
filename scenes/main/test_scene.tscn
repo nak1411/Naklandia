@@ -208,7 +208,7 @@ mesh = SubResource("BoxMesh_njel3")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TestObjects/Platform"]
 shape = SubResource("BoxShape3D_vr1i5")
 
-[node name="Player" parent="." groups=["player"] instance=ExtResource("2_d2t3o")]
+[node name="Player" parent="." instance=ExtResource("2_d2t3o")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.29586, 0)
 
 [node name="TestSwitch" parent="." instance=ExtResource("3_ny3xg")]
