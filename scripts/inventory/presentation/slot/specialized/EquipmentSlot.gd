@@ -81,6 +81,12 @@ func can_drop_data(_at_position: Vector2, data: Variant) -> bool:
 	"""Check if we can accept dropped data"""
 	print("EquipmentSlot.can_drop_data called on ", name)
 
+	# CRITICAL: Don't accept drops if equipment window is hidden
+	var equipment_window = _find_equipment_window()
+	if not equipment_window or not equipment_window.visible:
+		print("  Equipment window not visible - rejecting drop")
+		return false
+
 	if not data:
 		print("  No data provided")
 		return false
@@ -103,6 +109,12 @@ func can_drop_data(_at_position: Vector2, data: Variant) -> bool:
 func drop_data(_at_position: Vector2, data: Variant):
 	"""Handle dropped data"""
 	print("EquipmentSlot.drop_data called on ", name)
+
+	# CRITICAL: Don't process drops if equipment window is hidden
+	var equipment_window = _find_equipment_window()
+	if not equipment_window or not equipment_window.visible:
+		print("  Equipment window not visible - aborting drop")
+		return
 
 	if not data:
 		print("  No data provided")
@@ -221,21 +233,45 @@ func can_accept_item(check_item: InventoryItem_Base) -> bool:
 		print("    Item is a RESOURCE - materials cannot be equipped")
 		return false
 
-	# If no allowed categories set, accept any item
-	if allowed_categories.is_empty():
-		print("    No category restrictions - accepting all items")
-		return true
+	# CRITICAL: Check if item is marked as equippable
+	var is_equippable = check_item.get_meta("is_equippable", false)
 
-	# Check if item's category matches any allowed category
+	# FALLBACK: For TOOL and WEAPON types, infer equippable status if not set
+	if not is_equippable:
+		if check_item.item_type == ItemTypes.Type.TOOL or check_item.item_type == ItemTypes.Type.WEAPON:
+			print("    Item is TOOL/WEAPON type - allowing even without explicit equippable flag")
+			is_equippable = true
+		else:
+			print("    Item is not marked as equippable - rejecting")
+			return false
+
+	# Get the item's equipment category
 	var item_category = check_item.get_meta("equipment_category", "")
+
+	# FALLBACK: Infer category from item type if not set
+	if item_category.is_empty():
+		match check_item.item_type:
+			ItemTypes.Type.TOOL:
+				item_category = "tool"
+			ItemTypes.Type.WEAPON:
+				item_category = "weapon"
+			ItemTypes.Type.ARMOR:
+				item_category = "chest"  # Default armor to chest
+
 	print("    Item category: '", item_category, "'")
 	print("    Allowed categories: ", allowed_categories)
 
-	# TEMPORARY: If item has no category, accept it anyway for testing
+	# If item still has no category, reject it
 	if item_category.is_empty():
-		print("    Item has no equipment_category - ACCEPTING FOR TESTING")
-		return true
+		print("    Item has no equipment_category - REJECTING")
+		return false
 
+	# If this slot has no category restrictions, reject (misconfigured slot)
+	if allowed_categories.is_empty():
+		print("    Slot has no category restrictions - REJECTING (misconfigured)")
+		return false
+
+	# Check if item's category matches any allowed category for this slot
 	var is_allowed = item_category in allowed_categories
 	print("    Is allowed: ", is_allowed)
 	return is_allowed

@@ -184,6 +184,19 @@ func _on_external_drop_result(success: bool):
 		elif item:
 			# Partial transfer - update the display immediately
 			visuals.update_item_display()
+	else:
+		# Drop failed - restore visual state and ensure item is visible
+		modulate.a = 1.0
+		mouse_filter = Control.MOUSE_FILTER_PASS
+
+		# Clean up drag state
+		if drag_handler:
+			drag_handler.is_dragging = false
+			drag_handler.drag_preview_created = false
+
+		# Update the display to show the item is still here
+		if item and visuals:
+			visuals.update_item_display()
 
 
 func _on_drag_started(source_slot: InventorySlot, drag_item: InventoryItem_Base):

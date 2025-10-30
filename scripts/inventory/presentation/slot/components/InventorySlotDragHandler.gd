@@ -218,6 +218,13 @@ func _find_best_drop_slot(_mouse_pos: Vector2) -> InventorySlot:
 	if not drag_preview:
 		return null
 
+	# CRITICAL: Check if drop position is within the grid's visible bounds
+	var grid_rect = Rect2(grid.global_position, grid.size)
+	var drop_position = drag_preview.global_position + drag_preview.size / 2
+	if not grid_rect.has_point(drop_position):
+		print("[_find_best_drop_slot] Drop position outside grid bounds - rejecting")
+		return null
+
 	# Create bounding box for the dragged item
 	var preview_rect = Rect2(drag_preview.global_position, drag_preview.size)
 
@@ -411,9 +418,16 @@ func _handle_drag_end(end_position: Vector2):
 		print("  No target slot, trying other targets...")
 		drop_successful = _attempt_drop_on_other_targets(end_position)
 
-	# If drop failed, make sure we don't leave drag data hanging around
+	# If drop failed, notify the source slot and refresh display
 	if not drop_successful:
 		print("DRAG FAILED: Cleaning up at position ", end_position)
+
+		# Notify slot that drop failed - this restores the item
+		if slot and slot.has_method("_on_external_drop_result"):
+			slot._on_external_drop_result(false)
+
+		# Force refresh to update visuals
+		_force_refresh_display()
 
 	# Reset all drag state
 	is_dragging = false
@@ -430,6 +444,41 @@ func _cleanup_drag_data():
 	var viewport = slot.get_viewport()
 	if viewport and viewport.has_meta("current_drag_data"):
 		viewport.remove_meta("current_drag_data")
+
+
+func _force_refresh_display():
+	"""Force refresh the inventory display when a drag fails"""
+	print("[_force_refresh_display] Called - attempting to refresh display")
+
+	# Find the display (grid or list view) and refresh it
+	var grid = _get_inventory_grid()
+	print("[_force_refresh_display] Grid found: ", grid != null)
+	if grid and grid.has_method("refresh_display"):
+		print("[_force_refresh_display] Calling grid.refresh_display()")
+		grid.refresh_display()
+		return
+
+	# Try to find list view if grid not found
+	print("[_force_refresh_display] Grid not found, searching for list view...")
+	var current = slot.get_parent()
+	while current:
+		if current.get_script():
+			var global_name = current.get_script().get_global_name()
+			if global_name == "InventoryListView" and current.has_method("refresh_display"):
+				print("[_force_refresh_display] Found list view, calling refresh_display()")
+				current.refresh_display()
+				return
+		current = current.get_parent()
+
+	# Fallback - try to find any InventoryWindowContent
+	print("[_force_refresh_display] List view not found, searching for content...")
+	var content = _find_inventory_content()
+	print("[_force_refresh_display] Content found: ", content != null)
+	if content and content.has_method("refresh_display"):
+		print("[_force_refresh_display] Calling content.refresh_display()")
+		content.refresh_display()
+	else:
+		print("[_force_refresh_display] ERROR: Could not find any display to refresh!")
 
 
 func _cleanup_all_drag_previews():

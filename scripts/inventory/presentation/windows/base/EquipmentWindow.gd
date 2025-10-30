@@ -480,34 +480,48 @@ func _can_equip_in_slot(item: InventoryItem_Base, slot_type: EquipmentSlotType) 
 		print("    No item provided")
 		return false
 
-	# This would check item type/category matches the slot
-	# For now, simplified version
+	# Block materials/resources from being equipped
+	if item.item_type == ItemTypes.Type.RESOURCE:
+		print("    Item is a RESOURCE - materials cannot be equipped")
+		return false
+
+	# Get the item's equipment category
 	var item_category = item.get_meta("equipment_category", "")
+
+	# FALLBACK: Infer category from item type if not set
+	if item_category.is_empty():
+		match item.item_type:
+			ItemTypes.Type.TOOL:
+				item_category = "tool"
+			ItemTypes.Type.WEAPON:
+				item_category = "weapon"
+			ItemTypes.Type.ARMOR:
+				item_category = "chest"  # Default armor to chest
+			_:
+				# Not a valid equipment type
+				print("    Item has no valid equipment category - REJECTING")
+				return false
+
 	print("    Item: ", item.item_name)
 	print("    Item category: '", item_category, "'")
 	print("    Slot type: ", _get_slot_name(slot_type))
 
-	# TEMPORARY: Accept any item for testing if no category set
-	if item_category.is_empty():
-		print("    No category - ACCEPTING FOR TESTING")
-		return true
-
 	var can_equip = false
 	match slot_type:
 		EquipmentSlotType.HEAD:
-			can_equip = item_category == "head" or item_category == "helmet"
+			can_equip = item_category in ["head", "helmet", "hat"]
 		EquipmentSlotType.CHEST:
-			can_equip = item_category == "chest" or item_category == "armor"
+			can_equip = item_category in ["chest", "armor", "torso"]
 		EquipmentSlotType.LEGS:
-			can_equip = item_category == "legs" or item_category == "pants"
+			can_equip = item_category in ["legs", "pants", "leggings"]
 		EquipmentSlotType.HANDS:
-			can_equip = item_category == "hands" or item_category == "gloves"
+			can_equip = item_category in ["hands", "gloves", "gauntlets"]
 		EquipmentSlotType.FEET:
-			can_equip = item_category == "feet" or item_category == "boots"
+			can_equip = item_category in ["feet", "boots", "shoes"]
 		EquipmentSlotType.WEAPON_PRIMARY, EquipmentSlotType.WEAPON_SECONDARY:
-			can_equip = item_category == "weapon" or item_category == "tool"
+			can_equip = item_category in ["weapon", "tool", "melee", "ranged"]
 		EquipmentSlotType.ACCESSORY_1, EquipmentSlotType.ACCESSORY_2:
-			can_equip = item_category == "accessory"
+			can_equip = item_category in ["accessory", "ring", "amulet", "trinket"]
 
 	print("    Can equip: ", can_equip)
 	return can_equip

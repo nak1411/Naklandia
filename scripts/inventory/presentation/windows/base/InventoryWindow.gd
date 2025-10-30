@@ -122,6 +122,10 @@ func _cleanup_failed_drop(drag_data: Dictionary):
 	elif source_row and source_row.has_method("_on_external_drop_result"):
 		source_row._on_external_drop_result(false)
 
+	# Force immediate visual refresh
+	if content and content.has_method("refresh_display"):
+		content.refresh_display()
+
 	# Clean up global drag state
 	var viewport = get_viewport()
 	if viewport and viewport.has_meta("current_drag_data"):

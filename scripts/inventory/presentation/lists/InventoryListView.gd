@@ -47,6 +47,8 @@ var columns: Array[Dictionary] = [
 
 func _ready():
 	mouse_filter = Control.MOUSE_FILTER_PASS
+	# CRITICAL: Enable clipping to prevent rows from overflowing outside window bounds
+	clip_contents = true
 	_setup_ui()
 
 
@@ -112,6 +114,7 @@ func _setup_ui():
 	scroll_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll_container.clip_contents = true  # Prevent rows from overflowing
 	main_vbox.add_child(scroll_container)
 
 	# Create list container for data rows only

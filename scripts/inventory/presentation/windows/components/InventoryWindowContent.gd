@@ -341,6 +341,7 @@ func _setup_right_panel():
 	grid_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid_container.clip_contents = true  # This will clip the grid content
+	grid_container.mouse_filter = Control.MOUSE_FILTER_STOP  # CRITICAL: Block mouse events from reaching clipped areas
 
 	inventory_area.add_child(grid_container)
 

@@ -90,6 +90,9 @@ func _ready():
 	set_focus_mode(Control.FOCUS_ALL)
 	mouse_filter = Control.MOUSE_FILTER_PASS
 
+	# CRITICAL: Enable clipping to prevent slots from overflowing outside window bounds
+	clip_contents = true
+
 	set_grid_size(25, 20)
 
 	# Create timer for resize complete handling
@@ -816,6 +819,7 @@ func _setup_grid():
 	grid_container.add_theme_constant_override("h_separation", slot_spacing)
 	grid_container.add_theme_constant_override("v_separation", slot_spacing)
 	grid_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	grid_container.clip_contents = true  # Prevent slots from overflowing
 	background_panel.add_child(grid_container)
 
 	# Initialize slots array and available slots

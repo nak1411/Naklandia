@@ -224,14 +224,22 @@ func _set_equipment_category(item: InventoryItem_Base):
 	"""Set equipment_category metadata based on item type"""
 	match item.item_type:
 		ItemTypes.Type.WEAPON:
+			item.set_meta("is_equippable", true)
 			item.set_meta("equipment_category", "weapon")
 		ItemTypes.Type.TOOL:
+			item.set_meta("is_equippable", true)
 			item.set_meta("equipment_category", "tool")
 		ItemTypes.Type.ARMOR:
-			item.set_meta("equipment_category", "armor")
+			item.set_meta("is_equippable", true)
+			# Determine specific armor slot based on item name/properties
+			# For now, default to chest, but this should be more specific
+			item.set_meta("equipment_category", "chest")
 		ItemTypes.Type.AMMUNITION:
-			item.set_meta("equipment_category", "ammunition")
+			# Ammunition is NOT equippable - it's consumed
+			item.set_meta("is_equippable", false)
 		ItemTypes.Type.IMPLANT:
+			item.set_meta("is_equippable", true)
 			item.set_meta("equipment_category", "accessory")
 		_:
-			pass
+			# All other types are NOT equippable
+			item.set_meta("is_equippable", false)
