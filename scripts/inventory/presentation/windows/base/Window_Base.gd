@@ -128,6 +128,9 @@ func _process(_delta):
 
 func _connect_to_ui_manager():
 	"""Connect to UIManager for focus management"""
+	if not is_inside_tree():
+		return
+
 	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
 	if ui_managers.size() > 0:
 		ui_manager = ui_managers[0]
@@ -150,9 +153,10 @@ func _unhandled_input(event: InputEvent):
 
 		if window_rect.has_point(event.global_position):
 			# Check if there's an active drag operation - don't interfere
-			var viewport = get_viewport()
-			if viewport and viewport.has_meta("current_drag_data"):
-				return  # Let drag system handle it
+			if is_inside_tree():
+				var viewport = get_viewport()
+				if viewport and viewport.has_meta("current_drag_data"):
+					return  # Let drag system handle it
 
 			# Don't interfere with resize operations
 			var resize_mode = _get_resize_area_at_position(event.global_position)
@@ -168,7 +172,8 @@ func _unhandled_input(event: InputEvent):
 		# ONLY handle our own window operations, not global drag operations
 		if is_resizing:
 			_end_resize()
-			get_viewport().set_input_as_handled()
+			if is_inside_tree():
+				get_viewport().set_input_as_handled()
 		elif is_dragging:  # This is window dragging, not item dragging
 			is_dragging = false
 			drag_initiated = false
@@ -177,7 +182,8 @@ func _unhandled_input(event: InputEvent):
 			# END DRAG - notify snapping manager
 			if snapping_manager:
 				snapping_manager.end_window_drag(self)
-			get_viewport().set_input_as_handled()
+			if is_inside_tree():
+				get_viewport().set_input_as_handled()
 
 
 func _gui_input(event: InputEvent):
@@ -193,11 +199,13 @@ func _gui_input(event: InputEvent):
 			if resize_mode != ResizeMode.NONE:
 				if mouse_event.pressed:
 					_start_resize(resize_mode, mouse_event.global_position)
-					get_viewport().set_input_as_handled()
+					if is_inside_tree():
+						get_viewport().set_input_as_handled()
 					return  # Stop processing
 				if is_resizing:
 					_end_resize()
-					get_viewport().set_input_as_handled()
+					if is_inside_tree():
+						get_viewport().set_input_as_handled()
 					return  # Stop processing
 
 	# Handle resize motion
@@ -1684,7 +1692,7 @@ func _show_default_options_menu():
 	var dropdown_pos = Vector2(button_pos.x, button_pos.y + options_button.size.y)
 
 	# Only add to scene if it doesn't have a parent
-	if not options_dropdown.get_parent():
+	if not options_dropdown.get_parent() and is_inside_tree():
 		get_viewport().add_child(options_dropdown)
 
 	# Show the menu
@@ -1764,10 +1772,11 @@ func _show_default_transparency_dialog():
 	dialog.add_child(vbox)
 	slider.value_changed.connect(func(value): modulate.a = value)
 
-	get_tree().current_scene.add_child(dialog)
-	dialog.popup_centered()
-	dialog.confirmed.connect(func(): dialog.queue_free())
-	dialog.canceled.connect(func(): dialog.queue_free())
+	if is_inside_tree():
+		get_tree().current_scene.add_child(dialog)
+		dialog.popup_centered()
+		dialog.confirmed.connect(func(): dialog.queue_free())
+		dialog.canceled.connect(func(): dialog.queue_free())
 
 
 # Virtual methods for child classes to override
@@ -1795,7 +1804,8 @@ func _on_title_bar_input(event: InputEvent):
 				mouse_pressed = false
 				is_dragging = false
 				drag_initiated = false
-				get_viewport().set_input_as_handled()
+				if is_inside_tree():
+					get_viewport().set_input_as_handled()
 				return  # Exit early to prevent other logic
 
 			if mouse_event.pressed:
@@ -1848,9 +1858,10 @@ func _on_title_bar_input(event: InputEvent):
 				var new_y = click_start_position.y - (title_bar_height / 2)
 
 				# Clamp to screen bounds
-				var viewport_size = get_viewport().get_visible_rect().size
-				new_x = clampf(new_x, 0, viewport_size.x - restore_size.x)
-				new_y = clampf(new_y, 0, viewport_size.y - restore_size.y)
+				if is_inside_tree():
+					var viewport_size = get_viewport().get_visible_rect().size
+					new_x = clampf(new_x, 0, viewport_size.x - restore_size.x)
+					new_y = clampf(new_y, 0, viewport_size.y - restore_size.y)
 
 				position = Vector2(new_x, new_y)
 
@@ -1871,7 +1882,8 @@ func _on_title_bar_input(event: InputEvent):
 		# Apply the position (snapped or normal)
 		position = new_position
 
-		get_viewport().set_input_as_handled()
+		if is_inside_tree():
+			get_viewport().set_input_as_handled()
 
 
 func _enable_resize_visuals():

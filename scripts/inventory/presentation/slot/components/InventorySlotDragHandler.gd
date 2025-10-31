@@ -60,9 +60,10 @@ func handle_mouse_motion(event: InputEventMouseMotion):
 		drag_preview_created = true
 
 		# Store drag data
-		var viewport = slot.get_viewport()
-		var drag_data = {"source_slot": slot, "item": slot.get_item(), "drag_type": "inventory_item"}
-		viewport.set_meta("current_drag_data", drag_data)
+		if slot.is_inside_tree():
+			var viewport = slot.get_viewport()
+			var drag_data = {"source_slot": slot, "item": slot.get_item(), "drag_type": "inventory_item"}
+			viewport.set_meta("current_drag_data", drag_data)
 
 		# Emit drag started signal
 		drag_started.emit(slot, slot.get_item())
@@ -123,8 +124,13 @@ func _create_drag_preview() -> Control:
 	drag_canvas.layer = 200  # Very high layer to appear above everything
 
 	# CRITICAL FIX: Use slot.get_tree().root instead of get_tree().root
-	slot.get_tree().root.add_child(drag_canvas)
-	drag_canvas.add_child(preview)
+	if slot.is_inside_tree():
+		slot.get_tree().root.add_child(drag_canvas)
+		drag_canvas.add_child(preview)
+	else:
+		# Fallback: Add to slot directly if not in tree yet
+		slot.add_child(drag_canvas)
+		drag_canvas.add_child(preview)
 
 	# Store references for cleanup
 	preview.set_meta("drag_canvas", drag_canvas)
@@ -292,6 +298,9 @@ func _find_best_traditional_slot_with_bounds(preview_rect: Rect2, grid: Inventor
 
 func _get_current_drag_preview() -> Control:
 	"""Get the current drag preview control - FIXED to use root"""
+	if not slot.is_inside_tree():
+		return null
+
 	var root = slot.get_tree().root
 	if not root:
 		return null
@@ -441,6 +450,9 @@ func _handle_drag_end(end_position: Vector2):
 
 func _cleanup_drag_data():
 	"""Clean up drag data after all systems have processed the drop"""
+	if not slot.is_inside_tree():
+		return
+
 	var viewport = slot.get_viewport()
 	if viewport and viewport.has_meta("current_drag_data"):
 		viewport.remove_meta("current_drag_data")
@@ -483,6 +495,9 @@ func _force_refresh_display():
 
 func _cleanup_all_drag_previews():
 	"""Clean up all drag preview elements - FIXED to match ListRowManager pattern"""
+	if not slot.is_inside_tree():
+		return
+
 	var root = slot.get_tree().root
 	var drag_canvases = []
 
@@ -641,6 +656,9 @@ func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 func _attempt_drop_on_equipment_slot(end_position: Vector2) -> bool:
 	"""Check if we're dropping on an equipment slot"""
 	if not slot or not slot.has_item():
+		return false
+
+	if not slot.is_inside_tree():
 		return false
 
 	# Find all EquipmentSlot nodes in the scene tree
@@ -808,6 +826,9 @@ func _find_all_inventory_grids() -> Array:
 	"""Find all inventory grids in the scene tree (main window + tearoff windows)"""
 	var all_grids = []
 
+	if not slot.is_inside_tree():
+		return all_grids
+
 	print("    [_find_all_inventory_grids] Searching for inventory grids...")
 
 	# Find all external container windows (main inventory + tearoff windows)
@@ -857,7 +878,7 @@ func _find_grid_in_window(window: Node) -> Node:
 
 func _get_ui_input_adapter():
 	"""Get reference to UI input adapter"""
-	if not slot:
+	if not slot or not slot.is_inside_tree():
 		return null
 
 	var integration = slot.get_tree().get_first_node_in_group("inventory_integration")
@@ -879,6 +900,9 @@ func _find_inventory_content():
 func _find_all_inventory_contents() -> Array:
 	"""Find all InventoryWindowContent instances in all inventory windows"""
 	var all_contents = []
+
+	if not slot.is_inside_tree():
+		return all_contents
 
 	# Find all external container windows (main inventory + tearoff windows)
 	var external_windows = slot.get_tree().get_nodes_in_group("external_container_windows")
@@ -930,6 +954,9 @@ func _find_inventory_window():
 
 func _get_inventory_manager() -> InventoryManager:
 	"""Find the inventory manager in the scene hierarchy"""
+	if not slot.is_inside_tree():
+		return null
+
 	# First try the parent chain looking for InventoryWindow
 	var current = slot.get_parent()
 	while current:

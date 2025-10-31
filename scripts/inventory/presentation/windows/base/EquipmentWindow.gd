@@ -3,7 +3,9 @@ class_name EquipmentWindow
 extends Window_Base
 
 # Equipment slot types
-enum EquipmentSlotType { HEAD, CHEST, LEGS, HANDS, FEET, WEAPON_PRIMARY, WEAPON_SECONDARY, ACCESSORY_1, ACCESSORY_2 }
+enum EquipmentSlotType {
+	HEAD, CHEST, LEGS, HANDS, FEET, WEAPON_PRIMARY, WEAPON_SECONDARY, ACCESSORY_1, ACCESSORY_2
+}
 
 # UI Components
 var equipment_panel: Panel
@@ -13,6 +15,9 @@ var equipment_slots: Dictionary = {}  # EquipmentSlotType -> EquipmentSlot
 # Data
 var inventory_manager: InventoryManager
 var equipped_items: Dictionary = {}  # EquipmentSlotType -> InventoryItem_Base
+
+# Context menu
+var equipment_context_menu: ContextMenu_Base
 
 
 func _ready():
@@ -24,6 +29,14 @@ func _ready():
 	# Ensure we receive GUI input for drag and drop
 	mouse_filter = Control.MOUSE_FILTER_PASS
 
+	# Initialize styled context menu
+	equipment_context_menu = ContextMenu_Base.new()
+	equipment_context_menu.name = "EquipmentContextMenu"
+	add_child(equipment_context_menu)
+
+	# Connect context menu signals
+	equipment_context_menu.item_selected.connect(_on_equipment_context_menu_selected)
+
 	super._ready()
 
 
@@ -34,6 +47,9 @@ func _setup_window_content():
 
 func _gui_input(event: InputEvent):
 	"""Handle GUI input for drag and drop"""
+	if not is_inside_tree():
+		return
+
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 
@@ -51,7 +67,14 @@ func _gui_input(event: InputEvent):
 
 func _unhandled_input(event: InputEvent):
 	"""Handle unhandled input"""
-	if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	if not is_inside_tree():
+		return
+
+	if (
+		event is InputEventMouseButton
+		and not event.pressed
+		and event.button_index == MOUSE_BUTTON_LEFT
+	):
 		print("EquipmentWindow _unhandled_input called at: ", event.global_position)
 
 		var viewport = get_viewport()
@@ -79,6 +102,8 @@ func _unhandled_input(event: InputEvent):
 
 func _find_inventory_window():
 	"""Find the inventory window"""
+	if not is_inside_tree():
+		return null
 	return get_tree().get_first_node_in_group("inventory_window")
 
 
@@ -118,7 +143,8 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 				_force_refresh_inventory_display()
 
 				# Clean up drag data
-				get_viewport().remove_meta("current_drag_data")
+				if is_inside_tree():
+					get_viewport().remove_meta("current_drag_data")
 
 				return false
 
@@ -134,7 +160,8 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 				_force_refresh_inventory_display()
 
 				# Clean up drag data
-				get_viewport().remove_meta("current_drag_data")
+				if is_inside_tree():
+					get_viewport().remove_meta("current_drag_data")
 
 				return false
 
@@ -167,7 +194,8 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 				source_slot._on_external_drop_result(true)
 
 			# Clean up drag data
-			get_viewport().remove_meta("current_drag_data")
+			if is_inside_tree():
+				get_viewport().remove_meta("current_drag_data")
 
 			return true
 
@@ -181,7 +209,8 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 	_force_refresh_inventory_display()
 
 	# Clean up drag data
-	get_viewport().remove_meta("current_drag_data")
+	if is_inside_tree():
+		get_viewport().remove_meta("current_drag_data")
 
 	return false
 
@@ -295,7 +324,9 @@ func _configure_slot_categories(slot: EquipmentSlot, slot_type: EquipmentSlotTyp
 	print("  Configured categories for ", slot.name, ": ", categories)
 
 
-func _create_slot_in_column(column: VBoxContainer, slot_type: EquipmentSlotType, label_text: String):
+func _create_slot_in_column(
+	column: VBoxContainer, slot_type: EquipmentSlotType, label_text: String
+):
 	"""Create a slot with label in a vertical column"""
 	print("Creating equipment slot: ", label_text)
 
@@ -338,20 +369,8 @@ func _create_slot_in_column(column: VBoxContainer, slot_type: EquipmentSlotType,
 	slot.slot_right_clicked.connect(_on_equipment_slot_right_clicked.bind(slot_type))
 	slot.item_dropped_on_slot.connect(_on_item_dropped_on_equipment.bind(slot_type))
 
-	if slot.drag_handler:
-		slot.drag_handler.item_dropped_on_slot.connect(
-			func(source, target):
-				print("SIGNAL FIRED: item_dropped_on_slot")
-				print("  source: ", source.name if source else "NULL")
-				print("  target: ", target.name if target else "NULL")
-				print("  source == slot: ", source == slot)
-				print("  target.container_id: ", target.container_id if target else "NULL")
-				if source == slot and target.container_id != "equipment":
-					print("  Calling _on_equipment_item_dragged_to_inventory")
-					_on_equipment_item_dragged_to_inventory(slot, target, slot_type)
-				else:
-					print("  NOT calling _on_equipment_item_dragged_to_inventory")
-		)
+	# Defer drag_handler signal connection to ensure slot is fully ready
+	call_deferred("_connect_drag_handler_signals", slot, slot_type)
 
 	print("  Slot fully set up for: ", label_text)
 
@@ -398,10 +417,36 @@ func _create_slot_in_row(row: HBoxContainer, slot_type: EquipmentSlotType, label
 	slot.slot_right_clicked.connect(_on_equipment_slot_right_clicked.bind(slot_type))
 	slot.item_dropped_on_slot.connect(_on_item_dropped_on_equipment.bind(slot_type))
 
+	# Defer drag_handler signal connection to ensure slot is fully ready
+	call_deferred("_connect_drag_handler_signals", slot, slot_type)
+
 	print("  Slot fully set up for: ", label_text)
 
 
-func _on_equipment_slot_clicked(_slot: EquipmentSlot, _event: InputEvent, _slot_type: EquipmentSlotType):
+func _connect_drag_handler_signals(slot: EquipmentSlot, slot_type: EquipmentSlotType):
+	"""Deferred method to connect drag handler signals after slot is fully ready"""
+	if not slot or not is_instance_valid(slot):
+		return
+
+	if slot.drag_handler:
+		slot.drag_handler.item_dropped_on_slot.connect(
+			func(source, target):
+				print("SIGNAL FIRED: item_dropped_on_slot")
+				print("  source: ", source.name if source else "NULL")
+				print("  target: ", target.name if target else "NULL")
+				print("  source == slot: ", source == slot)
+				print("  target.container_id: ", target.container_id if target else "NULL")
+				if source == slot and target.container_id != "equipment":
+					print("  Calling _on_equipment_item_dragged_to_inventory")
+					_on_equipment_item_dragged_to_inventory(slot, target, slot_type)
+				else:
+					print("  NOT calling _on_equipment_item_dragged_to_inventory")
+		)
+
+
+func _on_equipment_slot_clicked(
+	_slot: EquipmentSlot, _event: InputEvent, _slot_type: EquipmentSlotType
+):
 	"""Handle equipment slot click"""
 	# DON'T unequip on left click - that interferes with dragging
 	# Unequip only happens via:
@@ -411,14 +456,21 @@ func _on_equipment_slot_clicked(_slot: EquipmentSlot, _event: InputEvent, _slot_
 	return
 
 
-func _on_equipment_slot_right_clicked(slot: EquipmentSlot, event: InputEvent, slot_type: EquipmentSlotType):
+func _on_equipment_slot_right_clicked(
+	slot: EquipmentSlot, event: InputEvent, slot_type: EquipmentSlotType
+):
 	"""Handle equipment slot right-click"""
 	if slot.has_item():
-		# Show context menu for equipped item
-		_show_equipment_context_menu(slot_type, event.position)
+		# Show context menu for equipped item - use global_position for proper positioning
+		if event is InputEventMouseButton:
+			_show_equipment_context_menu(slot_type, event.global_position)
+		else:
+			_show_equipment_context_menu(slot_type, event.position)
 
 
-func _on_item_dropped_on_equipment(source_slot: InventorySlot, _target_slot: EquipmentSlot, slot_type: EquipmentSlotType):
+func _on_item_dropped_on_equipment(
+	source_slot: InventorySlot, _target_slot: EquipmentSlot, slot_type: EquipmentSlotType
+):
 	"""Handle item dropped on equipment slot"""
 	print("EquipmentWindow._on_item_dropped_on_equipment called")
 	print("  Slot type: ", _get_slot_name(slot_type))
@@ -494,7 +546,9 @@ func _on_item_dropped_on_equipment(source_slot: InventorySlot, _target_slot: Equ
 	print("  Item equipped successfully")
 
 
-func _on_equipment_item_dragged_to_inventory(equipment_slot: EquipmentSlot, target_slot: InventorySlot, slot_type: EquipmentSlotType):
+func _on_equipment_item_dragged_to_inventory(
+	equipment_slot: EquipmentSlot, target_slot: InventorySlot, slot_type: EquipmentSlotType
+):
 	"""Handle dragging equipped item back to inventory"""
 	print("EquipmentWindow: _on_equipment_item_dragged_to_inventory called!")
 	print("  Equipment slot: ", equipment_slot.name)
@@ -604,7 +658,12 @@ func _equip_item(item: InventoryItem_Base, slot_type: EquipmentSlotType):
 	# CRITICAL: Check if this item is already equipped in another slot
 	for existing_slot_type in equipped_items:
 		if equipped_items[existing_slot_type] == item:
-			print("WARNING: Item ", item.item_name, " is already equipped in ", _get_slot_name(existing_slot_type))
+			print(
+				"WARNING: Item ",
+				item.item_name,
+				" is already equipped in ",
+				_get_slot_name(existing_slot_type)
+			)
 			print("  Unequipping from ", _get_slot_name(existing_slot_type), " first")
 			_unequip_item(existing_slot_type)
 			break
@@ -644,30 +703,87 @@ func _unequip_item(slot_type: EquipmentSlotType):
 	print("Unequipped ", item.item_name, " from ", _get_slot_name(slot_type))
 
 
-func _show_equipment_context_menu(slot_type: EquipmentSlotType, menu_position: Vector2):
-	"""Show context menu for equipped item"""
+func _show_equipment_context_menu(slot_type: EquipmentSlotType, click_position: Vector2):
+	"""Show context menu for equipped item with same styling as inventory items"""
 	var item = equipped_items.get(slot_type)
 	if not item:
 		return
 
-	# Create simple popup menu
-	var popup = PopupMenu.new()
-	popup.add_item("Unequip")
-	popup.add_item("Inspect")
-	popup.position = menu_position
-	add_child(popup)
+	var equipment_slot = equipment_slots.get(slot_type)
+	if not equipment_slot:
+		return
 
-	popup.id_pressed.connect(
-		func(id):
-			match id:
-				0:  # Unequip
-					_unequip_item(slot_type)
-				1:  # Inspect
-					_inspect_item(item)
-			popup.queue_free()
-	)
+	# Clear previous items and add equipment-specific options
+	equipment_context_menu.clear_items()
+	equipment_context_menu.add_menu_item("unequip", "Unequip")
+	equipment_context_menu.add_menu_item("inspect", "Inspect")
+	equipment_context_menu.add_separator()
+	equipment_context_menu.add_menu_item("destroy", "Destroy")
 
-	popup.popup()
+	# Show the context menu with equipment context data
+	var context_data = {
+		"item": item, "slot": equipment_slot, "slot_type": slot_type, "action_type": "equipment"
+	}
+
+	# Pass null for parent_window since we're using DisplayServer positioning
+	equipment_context_menu.show_context_menu(click_position, context_data, null)
+
+
+func _on_equipment_context_menu_selected(
+	item_id: String, _item_data: Dictionary, context_data: Dictionary
+):
+	"""Handle equipment context menu selection"""
+	var slot_type = context_data.get("slot_type")
+	var item = context_data.get("item")
+
+	match item_id:
+		"unequip":
+			if slot_type != null and item:
+				_unequip_to_inventory(slot_type, item)
+		"inspect":
+			if item:
+				_inspect_item(item)
+		"destroy":
+			if slot_type != null and item:
+				_destroy_equipped_item(slot_type, item)
+
+
+func _unequip_to_inventory(slot_type: EquipmentSlotType, item: InventoryItem_Base):
+	"""Unequip an item and return it to the player's inventory"""
+	if not inventory_manager:
+		push_error("EquipmentWindow: Cannot unequip - no inventory manager")
+		return
+
+	# Get the player inventory container
+	var player_inventory = inventory_manager.get_container("player_inventory")
+	if not player_inventory:
+		push_error("EquipmentWindow: Cannot unequip - player inventory not found")
+		return
+
+	# Check if inventory has space
+	if not player_inventory.can_add_item(item):
+		push_error("EquipmentWindow: Cannot unequip - inventory is full")
+		# TODO: Show user feedback that inventory is full
+		return
+
+	# Unequip the item (removes from equipment slot)
+	_unequip_item(slot_type)
+
+	# Add to player inventory
+	if player_inventory.add_item(item):
+		print("EquipmentWindow: Unequipped ", item.item_name, " and added to inventory")
+	else:
+		push_error("EquipmentWindow: Failed to add unequipped item to inventory")
+		# Item is now lost! This shouldn't happen since we checked can_add_item
+
+
+func _destroy_equipped_item(slot_type: EquipmentSlotType, item: InventoryItem_Base):
+	"""Destroy an equipped item permanently"""
+	# Unequip the item first
+	_unequip_item(slot_type)
+
+	# Item is now removed from equipment and will be garbage collected
+	print("EquipmentWindow: Destroyed equipped item: ", item.item_name)
 
 
 func _inspect_item(_item: InventoryItem_Base):
@@ -678,6 +794,9 @@ func _inspect_item(_item: InventoryItem_Base):
 
 func _notify_item_equipped(item: InventoryItem_Base, slot_type: EquipmentSlotType):
 	"""Notify systems that an item was equipped"""
+	if not is_inside_tree():
+		return
+
 	# Notify player to update 3D visual
 	var player = get_tree().get_first_node_in_group("player")
 	if player and player.has_method("update_equipment_visual"):
@@ -689,6 +808,9 @@ func _notify_item_equipped(item: InventoryItem_Base, slot_type: EquipmentSlotTyp
 
 func _notify_item_unequipped(item: InventoryItem_Base, slot_type: EquipmentSlotType):
 	"""Notify systems that an item was unequipped"""
+	if not is_inside_tree():
+		return
+
 	# Notify player to update 3D visual
 	var player = get_tree().get_first_node_in_group("player")
 	if player and player.has_method("update_equipment_visual"):
@@ -773,6 +895,9 @@ func refresh_display():
 
 func _force_refresh_inventory_display():
 	"""Force refresh the inventory display when a drag operation is cancelled"""
+	if not is_inside_tree():
+		return
+
 	# Find the inventory integration to trigger a refresh
 	var integration_nodes = get_tree().get_nodes_in_group("inventory_integration")
 	if integration_nodes.size() > 0:
@@ -837,7 +962,7 @@ func _reconstruct_item_from_dict(item_data: Dictionary) -> InventoryItem_Base:
 		item_database = get_node("/root/ItemDatabase")
 
 	# Try group lookup as fallback
-	if not item_database:
+	if not item_database and is_inside_tree():
 		var databases = get_tree().get_nodes_in_group("item_database")
 		if not databases.is_empty():
 			item_database = databases[0]
