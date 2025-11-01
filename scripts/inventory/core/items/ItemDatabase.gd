@@ -17,7 +17,17 @@ class ItemDefinition:
 	var model_path: String  # For future 3D model reference
 	var custom_properties: Dictionary  # For item-specific data (ammo damage, fuel capacity, etc.)
 
-	func _init(id: String, n: String, desc: String, type: ItemTypes.Type, vol: float, m: float, val: float, icon: String, stack: int = 999999):
+	func _init(
+		id: String,
+		n: String,
+		desc: String,
+		type: ItemTypes.Type,
+		vol: float,
+		m: float,
+		val: float,
+		icon: String,
+		stack: int = 999999
+	):
 		item_id = id
 		name = n
 		description = desc
@@ -43,7 +53,14 @@ func _initialize_items():
 
 	# TOOLS
 	var wrench_def = ItemDefinition.new(
-		"tool_wrench", "Wrench", "Durable hand tool used for assembly, maintenance, and machine calibration.", ItemTypes.Type.TOOL, 0.05, 0.1, 50.0, "res://assets/textures/ui/icons/wrench_slot.png"
+		"tool_wrench",
+		"Wrench",
+		"Durable hand tool used for assembly, maintenance, and machine calibration.",
+		ItemTypes.Type.TOOL,
+		0.05,
+		0.1,
+		50.0,
+		"res://assets/textures/ui/icons/wrench_slot.png"
 	)
 	wrench_def.model_path = "res://assets/models/equippable/old_wrench.glb"
 	_register_item(wrench_def)
@@ -51,79 +68,132 @@ func _initialize_items():
 	# AMMUNITION
 	_register_item(
 		ItemDefinition.new(
-			"ammo_hybrid_charges", "Hybrid Charges", "Standard ammunition for hybrid weapon systems.", ItemTypes.Type.AMMUNITION, 0.025, 0.01, 1000.0, "res://assets/textures/ui/icons/ammo.png"
+			"ammo_hybrid_charges",
+			"Hybrid Charges",
+			"Standard ammunition for hybrid weapon systems.",
+			ItemTypes.Type.AMMUNITION,
+			0.025,
+			0.01,
+			1000.0,
+			"res://assets/textures/ui/icons/ammo.png"
 		)
 	)
 
 	# RESOURCES
 	_register_item(
-		ItemDefinition.new("resource_noxite", "Noxite", "A liquid that can be used as a fuel source.", ItemTypes.Type.RESOURCE, 0.125, 0.1, 10.0, "res://assets/textures/ui/icons/resource.png")
-	)
-	_register_item(
 		ItemDefinition.new(
-			"resource_iron_ore",
-			"Iron Ore",
-			"Unrefined metallic mineral used in industrial production. Smelted to produce iron, the base metal for machinery, structures, and tools.",
+			"resource_noxite",
+			"Noxite",
+			"A liquid that can be used as a fuel source.",
 			ItemTypes.Type.RESOURCE,
 			0.125,
 			0.1,
 			10.0,
-			"res://assets/textures/ui/icons/iron_ore_slot.png"
+			"res://assets/textures/ui/icons/resource.png"
 		)
 	)
 	_register_item(
-		ItemDefinition.new(
-			"resource_copper_ore",
-			"Copper Ore",
-			"Unrefined mineral containing traces of copper. Processed through smelting to produce copper ingots for electrical and mechanical applications.",
-			ItemTypes.Type.RESOURCE,
-			0.125,
-			0.1,
-			10.0,
-			"res://assets/textures/ui/icons/copper_ore_slot.png"
+		(
+			ItemDefinition
+			. new(
+				"resource_iron_ore",
+				"Iron Ore",
+				"Unrefined metallic mineral used in industrial production. Smelted to produce iron, the base metal for machinery, structures, and tools.",
+				ItemTypes.Type.RESOURCE,
+				0.125,
+				0.1,
+				10.0,
+				"res://assets/textures/ui/icons/iron_ore_slot.png"
+			)
 		)
 	)
 	_register_item(
-		ItemDefinition.new(
-			"resource_iron_ingot",
-			"Iron Ingot",
-			"Refined from raw iron ore. A durable, versatile metal used in construction, machinery, and component fabrication.",
-			ItemTypes.Type.RESOURCE,
-			0.125,
-			0.1,
-			10.0,
-			"res://assets/textures/ui/icons/iron_ingot_slot.png"
+		(
+			ItemDefinition
+			. new(
+				"resource_copper_ore",
+				"Copper Ore",
+				"Unrefined mineral containing traces of copper. Processed through smelting to produce copper ingots for electrical and mechanical applications.",
+				ItemTypes.Type.RESOURCE,
+				0.125,
+				0.1,
+				10.0,
+				"res://assets/textures/ui/icons/copper_ore_slot.png"
+			)
 		)
 	)
 	_register_item(
-		ItemDefinition.new(
-			"resource_steel_round_bar",
-			"Steel Round Bar",
-			"Alloyed and forged from iron and carbon into cylindrical form. Used in high-strength frameworks, shafts, hardware, and assemblies.",
-			ItemTypes.Type.RESOURCE,
-			0.125,
-			0.1,
-			10.0,
-			"res://assets/textures/ui/icons/steel_round_bar_slot.png"
+		(
+			ItemDefinition
+			. new(
+				"resource_iron_ingot",
+				"Iron Ingot",
+				"Refined from raw iron ore. A durable, versatile metal used in construction, machinery, and component fabrication.",
+				ItemTypes.Type.RESOURCE,
+				0.125,
+				0.1,
+				10.0,
+				"res://assets/textures/ui/icons/iron_ingot_slot.png"
+			)
 		)
 	)
 	_register_item(
-		ItemDefinition.new(
-			"resource_copper_ingot",
-			"Copper Ingot",
-			"Refined from copper ore. A highly conductive metal used in wiring, electronics, and precision components.",
-			ItemTypes.Type.RESOURCE,
-			0.125,
-			0.1,
-			10.0,
-			"res://assets/textures/ui/icons/copper_ingot_slot.png"
+		(
+			ItemDefinition
+			. new(
+				"resource_steel_round_bar",
+				"Steel Round Bar",
+				"Alloyed and forged from iron and carbon into cylindrical form. Used in high-strength frameworks, shafts, hardware, and assemblies.",
+				ItemTypes.Type.RESOURCE,
+				0.125,
+				0.1,
+				10.0,
+				"res://assets/textures/ui/icons/steel_round_bar_slot.png"
+			)
+		)
+	)
+	_register_item(
+		(
+			ItemDefinition
+			. new(
+				"resource_copper_ingot",
+				"Copper Ingot",
+				"Refined from copper ore. A highly conductive metal used in wiring, electronics, and precision components.",
+				ItemTypes.Type.RESOURCE,
+				0.125,
+				0.1,
+				10.0,
+				"res://assets/textures/ui/icons/copper_ingot_slot.png"
+			)
+		)
+	)
+	_register_item(
+		(
+			ItemDefinition
+			. new(
+				"resource_resinwood_log",
+				"Resinwood Log",
+				"A tough, fibrous log streaked with pale blue resin veins. Light yet strong, it’s prized for building and crafting durable structures.",
+				ItemTypes.Type.RESOURCE,
+				0.125,
+				0.1,
+				10.0,
+				"res://assets/textures/ui/icons/resinwood_log_slot.png"
+			)
 		)
 	)
 
 	# MODULES
 	_register_item(
 		ItemDefinition.new(
-			"module_gauss_turret", "Gauss Turret", "Turret firing a high velocity solid charge.", ItemTypes.Type.MODULE, 3.62, 0.125, 50000.0, "res://assets/textures/ui/icons/module.png"
+			"module_gauss_turret",
+			"Gauss Turret",
+			"Turret firing a high velocity solid charge.",
+			ItemTypes.Type.MODULE,
+			3.62,
+			0.125,
+			50000.0,
+			"res://assets/textures/ui/icons/module.png"
 		)
 	)
 
@@ -144,12 +214,28 @@ func _initialize_items():
 	# CRAFTED ITEMS
 	_register_item(
 		ItemDefinition.new(
-			"basic_component", "Basic Component", "A simple component made from raw materials.", ItemTypes.Type.MISCELLANEOUS, 0.05, 0.1, 50.0, "res://assets/textures/ui/icons/resource.png"
+			"basic_component",
+			"Basic Component",
+			"A simple component made from raw materials.",
+			ItemTypes.Type.MISCELLANEOUS,
+			0.05,
+			0.1,
+			50.0,
+			"res://assets/textures/ui/icons/resource.png"
 		)
 	)
 
 	_register_item(
-		ItemDefinition.new("repair_kit", "Repair Kit", "Emergency repair kit for quick fixes.", ItemTypes.Type.MISCELLANEOUS, 0.15, 0.5, 500.0, "res://assets/textures/ui/icons/resource.png")
+		ItemDefinition.new(
+			"repair_kit",
+			"Repair Kit",
+			"Emergency repair kit for quick fixes.",
+			ItemTypes.Type.MISCELLANEOUS,
+			0.15,
+			0.5,
+			500.0,
+			"res://assets/textures/ui/icons/resource.png"
+		)
 	)
 
 
@@ -219,7 +305,12 @@ func create_item_instance(item_id: String, quantity: int = 1) -> InventoryItem_B
 
 	# Debug: Verify metadata was set
 	if item.has_meta("model_path"):
-		print("ItemDatabase: Created ", item.item_id, " with model_path: ", item.get_meta("model_path"))
+		print(
+			"ItemDatabase: Created ",
+			item.item_id,
+			" with model_path: ",
+			item.get_meta("model_path")
+		)
 
 	return item
 

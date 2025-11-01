@@ -186,10 +186,14 @@ func add_recipe(recipe: CraftingRecipe):
 func _complete_crafting(recipe: CraftingRecipe) -> bool:
 	"""Complete the crafting process and generate output"""
 	if inventory_manager and player_container:
-		var output_item = ItemDatabase.create_item_instance(recipe.output_item_id, recipe.output_quantity)
+		var output_item = ItemDatabase.create_item_instance(
+			recipe.output_item_id, recipe.output_quantity
+		)
 
 		if not output_item:
-			push_error("CraftingManager: Failed to create item from database: " + recipe.output_item_id)
+			push_error(
+				"CraftingManager: Failed to create item from database: " + recipe.output_item_id
+			)
 			return false
 
 		player_container.add_item(output_item)

@@ -11,6 +11,7 @@ enum EquipmentSlotType {
 var equipment_panel: Panel
 var equipment_container: VBoxContainer
 var equipment_slots: Dictionary = {}  # EquipmentSlotType -> EquipmentSlot
+var character_preview_panel: Panel  # Reference to the character preview panel
 
 # Data
 var inventory_manager: InventoryManager
@@ -25,6 +26,9 @@ func _ready():
 	default_size = Vector2(480, 520)
 	min_window_size = Vector2(400, 450)
 	can_resize = true
+
+	# Add to equipment_window group so ListRowManager can find us for drag/drop
+	add_to_group("equipment_window")
 
 	# Ensure we receive GUI input for drag and drop
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -95,9 +99,13 @@ func _unhandled_input(event: InputEvent):
 						# Don't set as handled - let the slot's drag handler process this
 						return
 
-		var my_rect = Rect2(global_position, size)
-		if my_rect.has_point(event.global_position):
-			print("EquipmentWindow would handle this input")
+			# Check if dropping within the equipment window bounds
+			var my_rect = Rect2(global_position, size)
+			if my_rect.has_point(event.global_position):
+				print("EquipmentWindow handling drop at: ", event.global_position)
+				# Handle the drop (this includes character preview panel and equipment slots)
+				if _handle_equipment_drop(drag_data, event.global_position):
+					get_viewport().set_input_as_handled()
 
 
 func _find_inventory_window():
@@ -108,17 +116,32 @@ func _find_inventory_window():
 
 
 func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bool:
-	"""Handle dropping items on equipment slots"""
+	"""Handle dropping items on equipment slots or character preview panel"""
 	print("EquipmentWindow: _handle_equipment_drop called at ", drop_position)
 
 	var source_item = drag_data.get("item") as InventoryItem_Base
 	var source_slot = drag_data.get("source_slot") as InventorySlot
+	var source_row = drag_data.get("source_row")  # For list view drops
+	var source_container_id = drag_data.get("container_id", "")  # For list view drops
 
-	if not source_item or not source_slot:
-		print("  No source item or slot")
+	# We need either a slot (grid view) or row (list view)
+	if not source_item or (not source_slot and not source_row):
+		print("  No source item or source (slot/row)")
 		return false
 
 	print("  Source item: ", source_item.item_name)
+	print("  Source type: ", "slot" if source_slot else "row" if source_row else "unknown")
+
+	# Check if dropped on character preview panel for auto-equip
+	if character_preview_panel and is_instance_valid(character_preview_panel):
+		var preview_rect = Rect2(
+			character_preview_panel.global_position, character_preview_panel.size
+		)
+		if preview_rect.has_point(drop_position):
+			print("  Drop is on character preview panel - auto-equipping")
+			return _auto_equip_item(
+				source_item, source_slot, source_row, source_container_id, drag_data
+			)
 
 	# Check each equipment slot to see if the drop position is over it
 	for slot_type in equipment_slots:
@@ -136,8 +159,10 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 				print("  Same item already equipped in this slot - cancelling drag")
 
 				# Notify source slot that the drop failed so it can restore the item
-				if source_slot.has_method("_on_external_drop_result"):
+				if source_slot and source_slot.has_method("_on_external_drop_result"):
 					source_slot._on_external_drop_result(false)
+				elif source_row and source_row.has_method("_on_external_drop_result"):
+					source_row._on_external_drop_result(false)
 
 				# Force refresh the source container/grid display
 				_force_refresh_inventory_display()
@@ -153,8 +178,10 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 				print("  Item cannot be equipped in this slot type - cancelling drag")
 
 				# Notify source slot that the drop failed so it can restore the item
-				if source_slot.has_method("_on_external_drop_result"):
+				if source_slot and source_slot.has_method("_on_external_drop_result"):
 					source_slot._on_external_drop_result(false)
+				elif source_row and source_row.has_method("_on_external_drop_result"):
+					source_row._on_external_drop_result(false)
 
 				# Force refresh the source container/grid display
 				_force_refresh_inventory_display()
@@ -190,8 +217,10 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 						source_container.add_item(item_to_swap)
 
 			# Notify source slot of successful drop
-			if source_slot.has_method("_on_external_drop_result"):
+			if source_slot and source_slot.has_method("_on_external_drop_result"):
 				source_slot._on_external_drop_result(true)
+			elif source_row and source_row.has_method("_on_external_drop_result"):
+				source_row._on_external_drop_result(true)
 
 			# Clean up drag data
 			if is_inside_tree():
@@ -202,8 +231,10 @@ func _handle_equipment_drop(drag_data: Dictionary, drop_position: Vector2) -> bo
 	print("  Drop not over any equipment slot - cancelling drag")
 
 	# Notify source slot that the drop failed so it can restore the item
-	if source_slot.has_method("_on_external_drop_result"):
+	if source_slot and source_slot.has_method("_on_external_drop_result"):
 		source_slot._on_external_drop_result(false)
+	elif source_row and source_row.has_method("_on_external_drop_result"):
+		source_row._on_external_drop_result(false)
 
 	# Force refresh the source container/grid display
 	_force_refresh_inventory_display()
@@ -247,7 +278,11 @@ func _setup_equipment_ui():
 	# CENTER COLUMN (Character preview placeholder)
 	var center_panel = Panel.new()
 	center_panel.custom_minimum_size = Vector2(180, 400)
+	center_panel.mouse_filter = Control.MOUSE_FILTER_PASS  # Enable mouse input for drag and drop
 	layout_container.add_child(center_panel)
+
+	# Store reference to character preview panel
+	character_preview_panel = center_panel
 
 	# Style center panel
 	var center_style = StyleBoxFlat.new()
@@ -267,6 +302,7 @@ func _setup_equipment_ui():
 	placeholder_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	placeholder_label.add_theme_color_override("font_color", Color(0.4, 0.4, 0.4, 1.0))
 	placeholder_label.add_theme_font_size_override("font_size", 16)
+	placeholder_label.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Let clicks pass through to panel
 	center_panel.add_child(placeholder_label)
 
 	# RIGHT COLUMN
@@ -487,7 +523,7 @@ func _on_item_dropped_on_equipment(
 	if currently_equipped and currently_equipped == item:
 		print("  Same item already equipped in this slot - cancelling drop")
 		# Restore source slot
-		if source_slot.has_method("_on_external_drop_result"):
+		if source_slot and source_slot.has_method("_on_external_drop_result"):
 			source_slot._on_external_drop_result(false)
 		return
 
@@ -596,6 +632,239 @@ func _on_equipment_item_dragged_to_inventory(
 	target_slot.set_item(item)
 
 	print("  Item unequipped and moved to inventory successfully")
+
+
+func _auto_equip_item(
+	source_item: InventoryItem_Base,
+	source_slot: InventorySlot,
+	source_row,
+	source_container_id: String,
+	_drag_data: Dictionary
+) -> bool:
+	"""Automatically equip an item in its appropriate slot when dropped on character preview"""
+	print("  Attempting to auto-equip item: ", source_item.item_name)
+
+	# Block materials/resources from being equipped
+	if source_item.item_type == ItemTypes.Type.RESOURCE:
+		print("    Item is a RESOURCE - materials cannot be equipped")
+		if source_slot:
+			_cancel_drag_operation(source_slot)
+		elif source_row:
+			_cancel_drag_operation_from_row(source_row)
+		return false
+
+	# Determine which slot type this item should go in
+	var target_slot_type = _determine_slot_type_for_item(source_item)
+	if target_slot_type == null:
+		print("    Could not determine equipment slot for item")
+		if source_slot:
+			_cancel_drag_operation(source_slot)
+		elif source_row:
+			_cancel_drag_operation_from_row(source_row)
+		return false
+
+	print("    Auto-detected slot type: ", _get_slot_name(target_slot_type))
+
+	# Check if the item is already equipped in this slot
+	var currently_equipped = equipped_items.get(target_slot_type)
+	if currently_equipped and currently_equipped == source_item:
+		print("    Same item already equipped in this slot - cancelling drag")
+		if source_slot:
+			_cancel_drag_operation(source_slot)
+		elif source_row:
+			_cancel_drag_operation_from_row(source_row)
+		return false
+
+	# Handle swapping if slot is already occupied
+	var item_to_swap = null
+	if currently_equipped:
+		print("    Slot already has item: ", currently_equipped.item_name, " - will swap")
+		item_to_swap = currently_equipped
+
+	# Equip the new item
+	print("    Equipping item!")
+	_equip_item(source_item, target_slot_type)
+
+	# Handle source cleanup based on whether it's from grid or list view
+	if source_slot:
+		# Grid view source
+		_handle_grid_source_cleanup(source_slot, source_item, item_to_swap)
+	elif source_row:
+		# List view source
+		_handle_list_source_cleanup(source_row, source_item, item_to_swap, source_container_id)
+
+	# Clean up drag data
+	if is_inside_tree():
+		get_viewport().remove_meta("current_drag_data")
+
+	return true
+
+
+func _handle_grid_source_cleanup(
+	source_slot: InventorySlot, source_item: InventoryItem_Base, item_to_swap: InventoryItem_Base
+):
+	"""Handle cleanup when dropping from grid view"""
+	if not source_slot:
+		return
+
+	# If swapping, put the old item in the source location
+	if item_to_swap:
+		print("    Placing swapped item back in source")
+		source_slot.set_item(item_to_swap)
+
+		# Update the source container
+		if source_slot.container_id != "equipment":
+			var source_container = inventory_manager.get_container(source_slot.container_id)
+			if source_container:
+				source_container.remove_item(source_item)
+				source_container.add_item(item_to_swap)
+	else:
+		# No swap - just remove from source
+		# CRITICAL: Remove the item from the source slot
+		source_slot.clear_item()
+
+		# Make the source slot visually disappear immediately
+		source_slot.modulate.a = 0.0
+		source_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		# Trigger refresh of the source container
+		if inventory_manager and source_slot.container_id != "equipment":
+			var source_container = inventory_manager.get_container(source_slot.container_id)
+			if source_container:
+				source_container.remove_item(source_item)
+
+	# Clean up drag state on source slot
+	if source_slot.drag_handler:
+		source_slot.drag_handler.is_dragging = false
+		source_slot.drag_handler.drag_preview_created = false
+
+	# Notify source slot of successful drop
+	if source_slot.has_method("_on_external_drop_result"):
+		source_slot._on_external_drop_result(true)
+
+
+func _handle_list_source_cleanup(
+	source_row,
+	source_item: InventoryItem_Base,
+	item_to_swap: InventoryItem_Base,
+	container_id: String
+):
+	"""Handle cleanup when dropping from list view"""
+	if not inventory_manager:
+		push_error("EquipmentWindow: No inventory manager for list view drop cleanup")
+		return
+
+	var source_container = inventory_manager.get_container(container_id)
+	if not source_container:
+		push_error("EquipmentWindow: Could not find container: ", container_id)
+		return
+
+	# If swapping, add the old item to the container
+	if item_to_swap:
+		print("    Adding swapped item back to container")
+		source_container.remove_item(source_item)
+		source_container.add_item(item_to_swap)
+	else:
+		# No swap - just remove from source container
+		print("    Removing item from source container")
+		source_container.remove_item(source_item)
+
+	# Notify source row of successful drop
+	if source_row and source_row.has_method("_on_external_drop_result"):
+		source_row._on_external_drop_result(true)
+
+
+func _determine_slot_type_for_item(item: InventoryItem_Base):
+	"""Determine which equipment slot an item should be equipped in based on its category"""
+	if not item:
+		return null
+
+	# Get the item's equipment category
+	var item_category = item.get_meta("equipment_category", "")
+
+	# FALLBACK: Infer category from item type if not set
+	if item_category.is_empty():
+		match item.item_type:
+			ItemTypes.Type.TOOL:
+				item_category = "tool"
+			ItemTypes.Type.WEAPON:
+				item_category = "weapon"
+			ItemTypes.Type.ARMOR:
+				item_category = "chest"  # Default armor to chest
+			_:
+				return null
+
+	print("      Item category: '", item_category, "'")
+
+	# Map category to slot type - prefer empty slots, then try both weapon slots
+	if item_category in ["weapon", "tool", "melee", "ranged"]:
+		# For weapons, prefer empty slot, otherwise primary
+		if (
+			not equipped_items.has(EquipmentSlotType.WEAPON_PRIMARY)
+			or not equipped_items[EquipmentSlotType.WEAPON_PRIMARY]
+		):
+			return EquipmentSlotType.WEAPON_PRIMARY
+		elif (
+			not equipped_items.has(EquipmentSlotType.WEAPON_SECONDARY)
+			or not equipped_items[EquipmentSlotType.WEAPON_SECONDARY]
+		):
+			return EquipmentSlotType.WEAPON_SECONDARY
+		else:
+			return EquipmentSlotType.WEAPON_PRIMARY  # Default to primary if both occupied
+	elif item_category in ["head", "helmet", "hat"]:
+		return EquipmentSlotType.HEAD
+	elif item_category in ["chest", "armor", "torso"]:
+		return EquipmentSlotType.CHEST
+	elif item_category in ["legs", "pants", "leggings"]:
+		return EquipmentSlotType.LEGS
+	elif item_category in ["hands", "gloves", "gauntlets"]:
+		return EquipmentSlotType.HANDS
+	elif item_category in ["feet", "boots", "shoes"]:
+		return EquipmentSlotType.FEET
+	elif item_category in ["accessory", "ring", "amulet", "trinket"]:
+		# For accessories, prefer empty slot
+		if (
+			not equipped_items.has(EquipmentSlotType.ACCESSORY_1)
+			or not equipped_items[EquipmentSlotType.ACCESSORY_1]
+		):
+			return EquipmentSlotType.ACCESSORY_1
+		elif (
+			not equipped_items.has(EquipmentSlotType.ACCESSORY_2)
+			or not equipped_items[EquipmentSlotType.ACCESSORY_2]
+		):
+			return EquipmentSlotType.ACCESSORY_2
+		else:
+			return EquipmentSlotType.ACCESSORY_1  # Default to first if both occupied
+
+	return null
+
+
+func _cancel_drag_operation(source_slot: InventorySlot):
+	"""Helper method to cancel a drag operation and restore the source slot"""
+	# Notify source slot that the drop failed so it can restore the item
+	if source_slot and source_slot.has_method("_on_external_drop_result"):
+		source_slot._on_external_drop_result(false)
+
+	# Force refresh the source container/grid display
+	_force_refresh_inventory_display()
+
+	# Clean up drag data
+	if is_inside_tree():
+		get_viewport().remove_meta("current_drag_data")
+
+
+func _cancel_drag_operation_from_row(source_row):
+	"""Helper method to cancel a drag operation from list view and restore the source row"""
+	# Notify source row that the drop failed so it can restore the item
+	if source_row and source_row.has_method("_on_external_drop_result"):
+		source_row._on_external_drop_result(false)
+
+	# Force refresh the source container/grid display
+	_force_refresh_inventory_display()
+
+	# Clean up drag data
+	if is_inside_tree():
+		get_viewport().remove_meta("current_drag_data")
 
 
 func _can_equip_in_slot(item: InventoryItem_Base, slot_type: EquipmentSlotType) -> bool:

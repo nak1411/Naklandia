@@ -212,7 +212,10 @@ func _load_window_position():
 		var valid_position = false
 
 		for screen_id in screen_count:
-			var screen_rect = Rect2(DisplayServer.screen_get_position(screen_id), DisplayServer.screen_get_size(screen_id))
+			var screen_rect = Rect2(
+				DisplayServer.screen_get_position(screen_id),
+				DisplayServer.screen_get_size(screen_id)
+			)
 			if screen_rect.has_point(Vector2i(pos_x, pos_y)):
 				valid_position = true
 				break

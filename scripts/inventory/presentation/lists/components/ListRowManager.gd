@@ -442,7 +442,11 @@ func _start_drag():
 
 	# Store drag data globally for compatibility with container drops
 	var drag_data = {
-		"source_row": self, "item": item, "container_id": _get_container_id(), "partial_transfer": Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1, "success_callback": _on_external_drop_result
+		"source_row": self,
+		"item": item,
+		"container_id": _get_container_id(),
+		"partial_transfer": Input.is_key_pressed(KEY_SHIFT) and item.quantity > 1,
+		"success_callback": _on_external_drop_result
 	}
 
 	get_viewport().set_meta("current_drag_data", drag_data)
@@ -676,7 +680,13 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 		transfer_quantity = max(1, int(item.quantity / 2.0))  # Transfer half
 
 	# Perform transfer
-	var success = inventory_manager.transfer_item(item, current_container_id, target_container.container_id, Vector2i(-1, -1), transfer_quantity)
+	var success = inventory_manager.transfer_item(
+		item,
+		current_container_id,
+		target_container.container_id,
+		Vector2i(-1, -1),
+		transfer_quantity
+	)
 
 	if success:
 		# Refresh displays
@@ -687,16 +697,49 @@ func _attempt_drop_on_container_list(end_position: Vector2) -> bool:
 
 
 func _attempt_drop_on_equipment_slots(end_position: Vector2) -> bool:
-	"""Try to drop on equipment slots"""
+	"""Try to drop on equipment slots or equipment window (character preview panel)"""
 	if not item:
 		return false
 
-	# Find all equipment slots in the scene tree
+	# First, check if dropping on the equipment window itself
+	var equipment_window = get_tree().get_first_node_in_group("equipment_window")
+	if equipment_window and is_instance_valid(equipment_window):
+		if equipment_window.visible and equipment_window.is_inside_tree():
+			var window_rect = Rect2(equipment_window.global_position, equipment_window.size)
+			if window_rect.has_point(end_position):
+				print("ListRowManager: Drop is on equipment window - checking if it can handle it")
+
+				# Set drag data on viewport so EquipmentWindow can access it
+				var window_drag_data = {
+					"item": item, "source_row": self, "container_id": _get_container_id()
+				}
+
+				get_viewport().set_meta("current_drag_data", window_drag_data)
+
+				# Let the EquipmentWindow handle the drop
+				# It will check for character preview panel and auto-equip
+				if equipment_window.has_method("_handle_equipment_drop"):
+					var handled = equipment_window._handle_equipment_drop(
+						window_drag_data, end_position
+					)
+
+					# Clean up drag data
+					get_viewport().remove_meta("current_drag_data")
+
+					if handled:
+						print("ListRowManager: Equipment window handled the drop")
+						# Refresh the list view
+						var list_view = _find_list_view()
+						if list_view:
+							list_view.refresh_display()
+						return true
+
+	# If not handled by equipment window, check individual equipment slots
 	var equipment_slots = get_tree().get_nodes_in_group("equipment_slots")
 	if equipment_slots.is_empty():
 		return false
 
-	var drag_data = {"item": item, "source_row": self}
+	var slot_drag_data = {"item": item, "source_row": self, "container_id": _get_container_id()}
 
 	# Check each equipment slot
 	for equipment_slot in equipment_slots:
@@ -712,12 +755,12 @@ func _attempt_drop_on_equipment_slots(end_position: Vector2) -> bool:
 			print("ListRowManager: Found equipment slot at drop position: ", equipment_slot.name)
 
 			# Check if the item can be equipped
-			if not equipment_slot.can_drop_data(end_position, drag_data):
+			if not equipment_slot.can_drop_data(end_position, slot_drag_data):
 				print("ListRowManager: Equipment slot rejected the item")
 				continue
 
 			# Perform the drop
-			equipment_slot.drop_data(end_position, drag_data)
+			equipment_slot.drop_data(end_position, slot_drag_data)
 			print("ListRowManager: Item drop handled by equipment slot")
 
 			# Remove item from source container
@@ -755,7 +798,13 @@ func _handle_drop_on_slot(target_slot: InventorySlot) -> bool:
 			var amount_to_transfer = min(item.quantity, space_available)
 
 			if amount_to_transfer > 0:
-				var success = inventory_manager.transfer_item(item, current_container_id, target_container_id, Vector2i(-1, -1), amount_to_transfer)
+				var success = inventory_manager.transfer_item(
+					item,
+					current_container_id,
+					target_container_id,
+					Vector2i(-1, -1),
+					amount_to_transfer
+				)
 				return success
 
 		# Try swapping (same container only)
@@ -768,7 +817,9 @@ func _handle_drop_on_slot(target_slot: InventorySlot) -> bool:
 			return temp_source_slot._handle_item_swap(target_slot, target_item)
 	else:
 		# Empty slot - transfer item
-		var success = inventory_manager.transfer_item(item, current_container_id, target_container_id)
+		var success = inventory_manager.transfer_item(
+			item, current_container_id, target_container_id
+		)
 		return success
 
 	return false
@@ -859,7 +910,10 @@ func _find_inventory_manager_recursive(node: Node) -> InventoryManager:
 func _find_inventory_content() -> InventoryWindowContent:
 	var current = get_parent()
 	while current:
-		if current.get_script() and current.get_script().get_global_name() == "InventoryWindowContent":
+		if (
+			current.get_script()
+			and current.get_script().get_global_name() == "InventoryWindowContent"
+		):
 			return current
 		current = current.get_parent()
 	return null
