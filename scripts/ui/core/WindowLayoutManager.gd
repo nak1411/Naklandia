@@ -224,6 +224,44 @@ func save_equipment_window_state():
 	return true
 
 
+func save_crafting_window_state():
+	"""Save crafting window state"""
+	# Don't save while we're loading layout
+	if is_loading_layout:
+		return true
+
+	var config = ConfigFile.new()
+	_load_existing_config(config)
+
+	# Find the crafting window
+	var crafting_window = _find_crafting_window()
+	var is_open = crafting_window != null and crafting_window.visible
+
+	config.set_value("crafting_window", "is_open", is_open)
+	config.set_value("crafting_window", "was_open_on_exit", is_open)
+
+	if crafting_window and is_open:
+		# Basic properties
+		config.set_value("crafting_window", "position_x", crafting_window.position.x)
+		config.set_value("crafting_window", "position_y", crafting_window.position.y)
+		config.set_value("crafting_window", "size_x", crafting_window.size.x)
+		config.set_value("crafting_window", "size_y", crafting_window.size.y)
+		config.set_value("crafting_window", "modulate_a", crafting_window.modulate.a)
+
+		# Check for additional properties and save them
+		if "is_locked" in crafting_window:
+			config.set_value("crafting_window", "is_locked", crafting_window.is_locked)
+
+		if "is_maximized" in crafting_window:
+			config.set_value("crafting_window", "is_maximized", crafting_window.is_maximized)
+
+	var error = config.save(config_file_path)
+	if error != OK:
+		return false
+
+	return true
+
+
 func save_inventory_window_state():
 	"""Save main inventory window state"""
 	# Don't save inventory state while we're loading layout
@@ -363,6 +401,97 @@ func _find_equipment_integration():
 
 	# Alternative: search by class name or script
 	var result = _find_node_recursive(get_tree().current_scene, "EquipmentIntegration")
+
+	return result
+
+
+func load_crafting_window_state():
+	"""Load and apply saved crafting window state"""
+	var config = ConfigFile.new()
+	var error = config.load(config_file_path)
+
+	if error != OK:
+		return false
+
+	if not config.has_section("crafting_window"):
+		return false
+
+	var was_open = config.get_value("crafting_window", "was_open_on_exit", false)
+
+	if was_open:
+		# Get saved properties
+		var pos_x = config.get_value("crafting_window", "position_x", 400)
+		var pos_y = config.get_value("crafting_window", "position_y", 100)
+		var size_x = config.get_value("crafting_window", "size_x", 800)
+		var size_y = config.get_value("crafting_window", "size_y", 600)
+		var modulate_a = config.get_value("crafting_window", "modulate_a", 1.0)
+		var is_locked = config.get_value("crafting_window", "is_locked", false)
+		var is_maximized = config.get_value("crafting_window", "is_maximized", false)
+
+		# Try to open the crafting window
+		await _restore_crafting_open_state(
+			pos_x, pos_y, size_x, size_y, modulate_a, is_locked, is_maximized
+		)
+
+		return true
+
+	return false
+
+
+func _restore_crafting_open_state(
+	pos_x: float,
+	pos_y: float,
+	size_x: float,
+	size_y: float,
+	modulate_a: float,
+	is_locked: bool,
+	is_maximized: bool
+):
+	"""Try to open the crafting window and restore its state"""
+	# Find crafting integration to open the crafting window
+	var crafting_integration = _find_crafting_integration()
+
+	if crafting_integration:
+		# Try to open the crafting window
+		if crafting_integration.has_method("open_crafting_station"):
+			crafting_integration.open_crafting_station()
+		else:
+			return
+
+		# Wait multiple frames for the crafting window to open
+		await get_tree().process_frame
+		await get_tree().process_frame
+		await get_tree().process_frame
+
+		# Check if crafting window is now open
+		var crafting_window = _find_crafting_window()
+		if crafting_window:
+			# Apply position and size
+			if _is_position_valid(Vector2i(pos_x, pos_y)):
+				crafting_window.position = Vector2(pos_x, pos_y)
+
+			crafting_window.size = Vector2(size_x, size_y)
+			crafting_window.modulate.a = modulate_a
+
+			# Apply lock state
+			if is_locked and crafting_window.has_method("set_window_locked"):
+				crafting_window.set_window_locked(true)
+
+			# Apply maximized state
+			if is_maximized and crafting_window.has_method("_maximize_window"):
+				crafting_window._maximize_window()
+
+
+func _find_crafting_integration():
+	"""Find the crafting integration in the scene"""
+	# Search for crafting integration
+	var integrations = get_tree().get_nodes_in_group("crafting_integration")
+
+	if integrations.size() > 0:
+		return integrations[0]
+
+	# Alternative: search by class name or script
+	var result = _find_node_recursive(get_tree().current_scene, "CraftingIntegration")
 
 	return result
 
@@ -538,6 +667,20 @@ func _find_equipment_window():
 	return null
 
 
+func _find_crafting_window():
+	"""Find the crafting window"""
+	if not ui_manager:
+		return null
+
+	var all_windows = ui_manager.get_all_windows()
+	for window in all_windows:
+		var window_type = window.get_meta("window_type", "")
+		if window_type == "crafting":
+			return window
+
+	return null
+
+
 func _on_inventory_visibility_changed(window: Window_Base):
 	"""Handle inventory window visibility changes"""
 	inventory_window_state["is_open"] = window.visible
@@ -562,6 +705,18 @@ func _on_equipment_visibility_changed(_window: Window_Base):
 
 func _on_equipment_window_closed(_window: Window_Base):
 	"""Handle equipment window being closed"""
+	if auto_save_enabled and not is_saving_layout:
+		save_complete_layout()
+
+
+func _on_crafting_visibility_changed(_window: Window_Base):
+	"""Handle crafting window visibility changes"""
+	if auto_save_enabled and not is_saving_layout:
+		save_complete_layout()
+
+
+func _on_crafting_window_closed(_window: Window_Base):
+	"""Handle crafting window being closed"""
 	if auto_save_enabled and not is_saving_layout:
 		save_complete_layout()
 
@@ -742,7 +897,7 @@ func _restore_tearoff_window(config: ConfigFile, section: String) -> bool:
 
 
 func save_complete_layout():
-	"""Save complete window layout (main + inventory + equipment + tearoffs)"""
+	"""Save complete window layout (main + inventory + equipment + crafting + tearoffs)"""
 	if is_saving_layout:
 		return false
 
@@ -759,11 +914,12 @@ func save_complete_layout():
 	var main_saved = save_main_window_position()
 	var inventory_saved = save_inventory_window_state()
 	var equipment_saved = save_equipment_window_state()
+	var crafting_saved = save_crafting_window_state()
 	var tearoffs_saved = save_tearoff_window_states()
 
 	is_saving_layout = false
 
-	if main_saved or inventory_saved or equipment_saved or tearoffs_saved:
+	if main_saved or inventory_saved or equipment_saved or crafting_saved or tearoffs_saved:
 		layout_saved.emit()
 		return true
 
@@ -799,12 +955,18 @@ func load_complete_layout():
 	# Wait another frame
 	await get_tree().process_frame
 
+	# Load crafting window state
+	var crafting_loaded = await load_crafting_window_state()
+
+	# Wait another frame
+	await get_tree().process_frame
+
 	# Then restore tearoffs
 	var tearoffs_loaded = await load_tearoff_window_states()
 
 	is_loading_layout = false
 
-	if main_loaded or inventory_loaded or equipment_loaded or tearoffs_loaded:
+	if main_loaded or inventory_loaded or equipment_loaded or crafting_loaded or tearoffs_loaded:
 		layout_loaded.emit()
 		return true
 
@@ -891,6 +1053,10 @@ func connect_window_signals(window: Window_Base):
 	if window_type == "equipment":
 		_connect_equipment_specific_signals(window)
 
+	# For crafting window, also monitor open/close state
+	if window_type == "crafting":
+		_connect_crafting_specific_signals(window)
+
 	# Monitor position changes in real-time
 	_start_realtime_position_monitoring(window)
 
@@ -919,6 +1085,19 @@ func _connect_equipment_specific_signals(window: Window_Base):
 	if window.has_signal("window_closed"):
 		if not window.window_closed.is_connected(_on_equipment_window_closed):
 			window.window_closed.connect(_on_equipment_window_closed.bind(window))
+
+
+func _connect_crafting_specific_signals(window: Window_Base):
+	"""Connect crafting-specific signals"""
+	# Monitor visibility changes
+	if window.has_signal("visibility_changed"):
+		if not window.visibility_changed.is_connected(_on_crafting_visibility_changed):
+			window.visibility_changed.connect(_on_crafting_visibility_changed.bind(window))
+
+	# Monitor window close
+	if window.has_signal("window_closed"):
+		if not window.window_closed.is_connected(_on_crafting_window_closed):
+			window.window_closed.connect(_on_crafting_window_closed.bind(window))
 
 
 func _on_immediate_window_change(_window: Window_Base, _change_type: String):
