@@ -1,0 +1,15 @@
+{
+  "ammo_hybrid_charges": {
+    "name": "Hybrid Charges",
+    "description": "Standard ammunition for hybrid weapon systems.",
+    "type": "AMMUNITION",
+    "volume": 0.025,
+    "mass": 0.01,
+    "value": 1000.0,
+    "icon_path": "res://assets/textures/ui/icons/ammo.png",
+    "max_stack_size": 999999,
+    "metadata": {
+      "is_equippable": false
+    }
+  }
+}

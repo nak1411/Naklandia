@@ -6,6 +6,10 @@ signal recipe_discovered(recipe: CraftingRecipe)
 signal crafting_completed(output_item_id: String, quantity: int)
 signal crafting_failed(reason: String)
 
+# Configuration
+const RECIPE_DATA_PATH = "res://data/recipes/"
+const ENABLE_JSON_LOADING = true  # Set to false to use hardcoded recipes
+
 # Managers
 var inventory_manager: InventoryManager
 var player_container: InventoryContainer_Base
@@ -28,27 +32,131 @@ func set_inventory_manager(manager: InventoryManager):
 
 
 func _load_recipes():
-	"""Load crafting recipes - in production this would load from files"""
+	"""Load crafting recipes from JSON or hardcoded fallback"""
+	if ENABLE_JSON_LOADING:
+		_load_recipes_from_json()
+	else:
+		_load_hardcoded_recipes()
+
+
+func _load_recipes_from_json():
+	"""Load all recipe definitions from JSON files"""
+	print("CraftingManager: Loading recipes from JSON files...")
+
+	var json_files = ["basic_crafting.json"]
+
+	var total_recipes = 0
+	for file_name in json_files:
+		var file_path = RECIPE_DATA_PATH + file_name
+		var recipes_loaded = _load_recipe_json_file(file_path)
+		total_recipes += recipes_loaded
+		if recipes_loaded > 0:
+			print("  Loaded %d recipes from %s" % [recipes_loaded, file_name])
+
+	print("CraftingManager: Loaded %d total recipes from JSON" % total_recipes)
+
+	# Discover all always-available recipes by default
+	for recipe in all_recipes:
+		if recipe.is_always_available:
+			discovered_recipes.append(recipe.recipe_id)
+
+
+func _load_recipe_json_file(file_path: String) -> int:
+	"""Load recipes from a single JSON file"""
+	print("  Attempting to load: " + file_path)
+	if not FileAccess.file_exists(file_path):
+		push_warning("CraftingManager: JSON file not found: " + file_path)
+		return 0
+
+	var file = FileAccess.open(file_path, FileAccess.READ)
+	if not file:
+		push_error("CraftingManager: Failed to open JSON file: " + file_path)
+		return 0
+
+	var json_text = file.get_as_text()
+	file.close()
+
+	var json = JSON.new()
+	var parse_result = json.parse(json_text)
+
+	if parse_result != OK:
+		push_error(
+			(
+				"CraftingManager: JSON parse error in %s at line %d: %s"
+				% [file_path, json.get_error_line(), json.get_error_message()]
+			)
+		)
+		return 0
+
+	var data = json.data
+	if typeof(data) != TYPE_DICTIONARY:
+		push_error("CraftingManager: JSON root must be a dictionary in " + file_path)
+		return 0
+
+	var count = 0
+	for recipe_id in data:
+		if _create_recipe_from_json(recipe_id, data[recipe_id]):
+			count += 1
+
+	return count
+
+
+func _create_recipe_from_json(recipe_id: String, recipe_data: Dictionary) -> bool:
+	"""Create a recipe from JSON data"""
+	# Validate required fields
+	if not recipe_data.has("output_item_id"):
+		push_error("CraftingManager: Recipe %s missing 'output_item_id' field" % recipe_id)
+		return false
+
+	# Create recipe
+	var recipe = CraftingRecipe.new()
+	recipe.recipe_id = recipe_id
+	recipe.output_item_id = recipe_data.get("output_item_id", "")
+	recipe.output_quantity = recipe_data.get("output_quantity", 1)
+	recipe.is_always_available = recipe_data.get("is_always_available", false)
+	recipe.is_discovered = recipe_data.get("is_discovered", false)
+
+	# Load required materials
+	if recipe_data.has("required_materials"):
+		var materials = recipe_data["required_materials"]
+		if typeof(materials) == TYPE_ARRAY:
+			for mat_data in materials:
+				if typeof(mat_data) == TYPE_DICTIONARY:
+					var material = CraftingRecipe.RecipeMaterial.new()
+					material.material_id = mat_data.get("material_id", "")
+					material.quantity = mat_data.get("quantity", 1)
+					material.consumed = mat_data.get("consumed", true)
+					recipe.required_materials.append(material)
+
+	# Refresh recipe from ItemDatabase (populates name, description, etc.)
+	recipe.refresh_from_item_database()
+
+	all_recipes.append(recipe)
+	return true
+
+
+func _load_hardcoded_recipes():
+	"""Load hardcoded recipe definitions (legacy/fallback)"""
+	print("CraftingManager: Using hardcoded recipe definitions...")
 	_create_basic_recipes()
 
 
 func _create_basic_recipes():
 	"""Create basic crafting recipes"""
-	# Hybrid Charges Recipe
+	# Wrench Recipe - data auto-populated from ItemDatabase
 	var wrench = CraftingRecipe.new()
 	wrench.recipe_id = "recipe_wrench"
-	wrench.recipe_name = "Wrench"
-	wrench.description = "Durable hand tool used for assembly, maintenance, and machine calibration."
 	wrench.output_item_id = "tool_wrench"
 	wrench.output_quantity = 1
-	wrench.output_item_type = ItemTypes.Type.TOOL
 	wrench.is_always_available = true
 
 	var iron_ingot_mat = CraftingRecipe.RecipeMaterial.new()
 	iron_ingot_mat.material_id = "resource_iron_ingot"
-	iron_ingot_mat.material_name = "Iron Ingot"
 	iron_ingot_mat.quantity = 1
 	wrench.required_materials.append(iron_ingot_mat)
+
+	# Refresh display data from ItemDatabase
+	wrench.refresh_from_item_database()
 
 	all_recipes.append(wrench)
 
@@ -181,6 +289,27 @@ func add_recipe(recipe: CraftingRecipe):
 	all_recipes.append(recipe)
 	if recipe.is_always_available:
 		discovered_recipes.append(recipe.recipe_id)
+
+
+func reload_recipes():
+	"""Reload all recipes from JSON files (for hot-reload)"""
+	print("CraftingManager: Reloading recipes from JSON...")
+	all_recipes.clear()
+	discovered_recipes.clear()
+	_load_recipes()
+	print("CraftingManager: Reload complete!")
+
+
+func refresh_recipes():
+	"""Refresh all recipes to pull updated data from ItemDatabase"""
+	print("CraftingManager: Refreshing recipes from ItemDatabase...")
+	var refreshed_count = 0
+
+	for recipe in all_recipes:
+		recipe.refresh_from_item_database()
+		refreshed_count += 1
+
+	print("  Refreshed %d recipes" % refreshed_count)
 
 
 func _complete_crafting(recipe: CraftingRecipe) -> bool:

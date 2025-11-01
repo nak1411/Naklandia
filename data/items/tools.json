@@ -1,0 +1,34 @@
+{
+	"tool_wrench": {
+		"name": "Wrench",
+		"description": "Durable hand tool used for assembly, maintenance, and machine calibration.",
+		"type": "TOOL",
+		"volume": 0.05,
+		"mass": 0.1,
+		"value": 50.0,
+		"icon_path": "res://assets/textures/ui/icons/wrench_slot.png",
+		"max_stack_size": 999999,
+		"model_path": "res://assets/models/equippable/old_wrench.glb",
+		"metadata": {
+			"is_equippable": true,
+			"equipment_category": "tool",
+			"equipment_socket": "hand_tool"
+		}
+	},
+	"tool_hammer": {
+		"name": "Hammer",
+		"description": "Durable hand tool used for assembly, maintenance, and machine calibration.",
+		"type": "TOOL",
+		"volume": 0.05,
+		"mass": 0.1,
+		"value": 50.0,
+		"icon_path": "res://assets/textures/ui/icons/wrench_slot.png",
+		"max_stack_size": 999999,
+		"model_path": "res://assets/models/equippable/old_wrench.glb",
+		"metadata": {
+			"is_equippable": true,
+			"equipment_category": "tool",
+			"equipment_socket": "hand_tool"
+		}
+	}
+}

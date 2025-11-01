@@ -92,13 +92,23 @@ func show_tooltip():
 		is_showing_tooltip = false
 		return
 
-	# Convert slot's global position to inventory window's local space
+	# Make tooltip visible but transparent so Godot can calculate its size
+	tooltip.visible = true
+	tooltip.modulate.a = 0.0
+
+	# Wait one frame for Godot to update the tooltip's size
+	await slot.get_tree().process_frame
+
+	# Now calculate position with correct size
 	var slot_global_pos = slot.global_position
 	var window_global_pos = inventory_window.global_position
 	var slot_local_to_window = slot_global_pos - window_global_pos
 
 	# Calculate tooltip position below the slot
-	var tooltip_pos = slot_local_to_window + Vector2((slot.slot_size.x - tooltip.size.x) / 2, slot.slot_size.y + 40)  # Center horizontally  # Position below with 40px gap
+	var tooltip_pos = (
+		slot_local_to_window
+		+ Vector2((slot.slot_size.x - tooltip.size.x) / 2, slot.slot_size.y + 40)
+	)  # Center horizontally  # Position below with 40px gap
 
 	# Ensure tooltip stays within window bounds
 	var window_rect = Rect2(Vector2.ZERO, inventory_window.size)
@@ -120,10 +130,8 @@ func show_tooltip():
 		tooltip_pos.y = slot_local_to_window.y + slot.slot_size.y + 5
 
 	tooltip.position = tooltip_pos
-	tooltip.visible = true
 
-	# Start fully transparent and fade in
-	tooltip.modulate.a = 0.0
+	# Fade in from transparent
 	tooltip_tween = slot.create_tween()
 	tooltip_tween.tween_property(tooltip, "modulate:a", 1.0, tooltip_fade_duration)
 
@@ -180,12 +188,16 @@ func _get_tooltip_text(item: InventoryItem_Base) -> String:
 
 
 func _find_inventory_window() -> Control:
-	"""Find the inventory window in the scene hierarchy"""
+	"""Find the inventory window or equipment window in the scene hierarchy"""
 	var current = slot.get_parent()  # or row.get_parent() for ListRowTooltipManager
 	while current:
 		if current.get_script():
 			var script_name = current.get_script().get_global_name()
-			if script_name == "InventoryWindow" or script_name == "ContainerTearOffWindow":
+			if (
+				script_name == "InventoryWindow"
+				or script_name == "ContainerTearOffWindow"
+				or script_name == "EquipmentWindow"
+			):
 				return current
 		current = current.get_parent()
 	return null

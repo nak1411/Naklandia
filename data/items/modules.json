@@ -1,0 +1,12 @@
+{
+  "module_gauss_turret": {
+    "name": "Gauss Turret",
+    "description": "Turret firing a high velocity solid charge.",
+    "type": "MODULE",
+    "volume": 3.62,
+    "mass": 0.125,
+    "value": 50000.0,
+    "icon_path": "res://assets/textures/ui/icons/module.png",
+    "max_stack_size": 999999
+  }
+}

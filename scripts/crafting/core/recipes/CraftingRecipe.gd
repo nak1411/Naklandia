@@ -4,9 +4,11 @@ extends Resource
 
 # Recipe identification
 @export var recipe_id: String = ""
-@export var recipe_name: String = "Unknown Recipe"
-@export var description: String = ""
-@export var icon_path: String = ""
+
+# Cached display data (auto-populated from ItemDatabase)
+var recipe_name: String = "Unknown Recipe"
+var description: String = ""
+var icon_path: String = ""
 
 # Input requirements
 var required_materials: Array[RecipeMaterial] = []
@@ -14,7 +16,9 @@ var required_materials: Array[RecipeMaterial] = []
 # Output
 @export var output_item_id: String = ""
 @export var output_quantity: int = 1
-@export var output_item_type: ItemTypes.Type = ItemTypes.Type.MISCELLANEOUS
+
+# Cached output item type (auto-populated from ItemDatabase)
+var output_item_type: ItemTypes.Type = ItemTypes.Type.MISCELLANEOUS
 
 # Recipe unlocking
 @export var is_discovered: bool = false
@@ -32,6 +36,48 @@ class RecipeMaterial:
 func _init():
 	if recipe_id.is_empty():
 		recipe_id = "recipe_" + str(Time.get_unix_time_from_system())
+
+
+func refresh_from_item_database():
+	"""Refresh recipe display data from ItemDatabase based on output_item_id"""
+	if output_item_id.is_empty():
+		return
+
+	var item_db = _get_item_database()
+	if not item_db:
+		return
+
+	var item_def = item_db.get_item(output_item_id)
+	if not item_def:
+		push_warning("CraftingRecipe: Output item not found in database: " + output_item_id)
+		return
+
+	# Update recipe display data from item definition
+	recipe_name = item_def.name
+	description = item_def.description
+	icon_path = item_def.icon_path
+	output_item_type = item_def.item_type
+
+	# Refresh material names
+	for mat in required_materials:
+		if not mat.material_id.is_empty():
+			var mat_def = item_db.get_item(mat.material_id)
+			if mat_def:
+				mat.material_name = mat_def.name
+
+
+func _get_item_database():
+	"""Get ItemDatabase singleton"""
+	# Try AutoLoad first
+	if Engine.has_singleton("ItemDatabase"):
+		return Engine.get_singleton("ItemDatabase")
+
+	# Try direct node path
+	var tree = Engine.get_main_loop() as SceneTree
+	if tree and tree.root.has_node("/root/ItemDatabase"):
+		return tree.root.get_node("/root/ItemDatabase")
+
+	return null
 
 
 func can_craft(available_materials: Dictionary) -> bool:

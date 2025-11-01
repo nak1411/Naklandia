@@ -1,0 +1,22 @@
+{
+  "basic_component": {
+    "name": "Basic Component",
+    "description": "A simple component made from raw materials.",
+    "type": "MISCELLANEOUS",
+    "volume": 0.05,
+    "mass": 0.1,
+    "value": 50.0,
+    "icon_path": "res://assets/textures/ui/icons/resource.png",
+    "max_stack_size": 999999
+  },
+  "repair_kit": {
+    "name": "Repair Kit",
+    "description": "Emergency repair kit for quick fixes.",
+    "type": "MISCELLANEOUS",
+    "volume": 0.15,
+    "mass": 0.5,
+    "value": 500.0,
+    "icon_path": "res://assets/textures/ui/icons/resource.png",
+    "max_stack_size": 999999
+  }
+}

@@ -147,7 +147,12 @@ func _set_player_input_enabled(enabled: bool):
 
 func is_crafting_open() -> bool:
 	"""Check if crafting window is open"""
-	return is_crafting_open_flag and crafting_window and is_instance_valid(crafting_window) and crafting_window.visible
+	return (
+		is_crafting_open_flag
+		and crafting_window
+		and is_instance_valid(crafting_window)
+		and crafting_window.visible
+	)
 
 
 func get_crafting_manager() -> CraftingManager:

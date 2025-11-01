@@ -1,0 +1,26 @@
+{
+	"recipe_wrench": {
+		"output_item_id": "tool_wrench",
+		"output_quantity": 1,
+		"is_always_available": true,
+		"required_materials": [
+			{
+				"material_id": "resource_iron_ingot",
+				"quantity": 1,
+				"consumed": true
+			}
+		]
+	},
+	"recipe_hammer": {
+		"output_item_id": "tool_hammer",
+		"output_quantity": 1,
+		"is_always_available": true,
+		"required_materials": [
+			{
+				"material_id": "resource_iron_ingot",
+				"quantity": 1,
+				"consumed": true
+			}
+		]
+	}
+}

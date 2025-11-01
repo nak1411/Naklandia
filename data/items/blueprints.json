@@ -1,0 +1,12 @@
+{
+  "blueprint_hybrid_charges": {
+    "name": "Hybrid Charge Blueprint",
+    "description": "Blueprint for manufacturing Hybrid Charges.",
+    "type": "BLUEPRINT",
+    "volume": 0.015,
+    "mass": 0.01,
+    "value": 100000.0,
+    "icon_path": "res://assets/textures/ui/icons/blueprint.png",
+    "max_stack_size": 999999
+  }
+}

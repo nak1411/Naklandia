@@ -40,6 +40,9 @@ func _ready():
 	default_size = Vector2(1000, 700)
 	min_window_size = Vector2(800, 600)
 
+	# Add to crafting_window group for hot-reload support
+	add_to_group("crafting_window")
+
 	super._ready()
 
 
@@ -345,6 +348,15 @@ func _load_available_recipes():
 		return
 
 	available_recipes = crafting_manager.get_available_recipes()
+
+	# If a recipe is currently selected, update the reference to the refreshed version
+	if selected_recipe:
+		var recipe_id = selected_recipe.recipe_id
+		for recipe in available_recipes:
+			if recipe.recipe_id == recipe_id:
+				selected_recipe = recipe
+				break
+
 	_populate_recipe_list()
 
 
@@ -516,10 +528,14 @@ func _update_recipe_display():
 	recipe_info_label.visible = false
 	recipe_name_label.visible = true
 	recipe_details_label.visible = true
-	recipe_name_label.text = "[center][font_size=24][b]%s[/b][/font_size][/center]" % selected_recipe.recipe_name
+	recipe_name_label.text = (
+		"[center][font_size=24][b]%s[/b][/font_size][/center]" % selected_recipe.recipe_name
+	)
 
 	var details_text = "[color=gray]%s[/color]\n\n" % selected_recipe.description
-	details_text += "[b]Output:[/b] %s x%d" % [selected_recipe.recipe_name, selected_recipe.output_quantity]
+	details_text += (
+		"[b]Output:[/b] %s x%d" % [selected_recipe.recipe_name, selected_recipe.output_quantity]
+	)
 	recipe_details_label.text = details_text
 
 	# Display requirements
@@ -532,7 +548,10 @@ func _update_recipe_display():
 		var available = available_materials.get(req_mat.material_id, 0)
 		var has_enough = available >= req_mat.quantity
 		var color = "green" if has_enough else "red"
-		req_text += "[color=%s]• %s: %d/%d[/color]\n" % [color, req_mat.material_name, available, req_mat.quantity]
+		req_text += (
+			"[color=%s]• %s: %d/%d[/color]\n"
+			% [color, req_mat.material_name, available, req_mat.quantity]
+		)
 
 	requirements_label.text = req_text
 	requirements_label.visible = true
@@ -646,7 +665,8 @@ func refresh_display():
 	# Only refresh if UI is ready
 	if is_node_ready() and recipe_info_label and is_instance_valid(recipe_info_label):
 		if not is_crafting:
-			_populate_recipe_list()  # Refresh recipe list to update color borders
+			# Reload recipes from manager (in case they were updated via hot-reload)
+			_load_available_recipes()
 			_update_recipe_display()
 	else:
 		push_warning("CraftingStationWindow: Cannot refresh - UI not ready")

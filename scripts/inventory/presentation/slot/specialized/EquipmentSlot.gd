@@ -23,6 +23,9 @@ func _ready():
 	# Call parent ready to set up components
 	super._ready()
 
+	# Setup equipment-specific tooltip after parent components are ready
+	_setup_equipment_tooltip()
+
 	# Setup equipment visuals after parent is complete
 	if is_node_ready():
 		_setup_equipment_visual()
@@ -189,6 +192,53 @@ func _find_equipment_slot_type(equipment_window):
 	return null
 
 
+func _setup_equipment_tooltip():
+	"""Setup equipment-specific tooltip that searches for EquipmentWindow"""
+	if not tooltip_manager:
+		return
+
+	# Clean up the existing tooltip if it was set up for inventory window
+	if tooltip_manager.tooltip:
+		tooltip_manager.cleanup()
+
+	# Recreate the tooltip manager's tooltip component for equipment window
+	var equipment_window = _find_equipment_window()
+	if not equipment_window:
+		print("Warning: Equipment window not found for tooltip setup")
+		return
+
+	# Create tooltip panel
+	tooltip_manager.tooltip = PanelContainer.new()
+	tooltip_manager.tooltip.name = "ItemTooltip"
+	tooltip_manager.tooltip.visible = false
+	tooltip_manager.tooltip.z_index = 1000
+
+	# Style the tooltip panel (same as inventory)
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = Color(0.1, 0.1, 0.1, 0.75)
+	style_box.border_width_left = 1
+	style_box.border_width_right = 1
+	style_box.border_width_top = 1
+	style_box.border_width_bottom = 1
+	style_box.border_color = Color(0.5, 0.5, 0.5, 1.0)
+	style_box.content_margin_left = 8
+	style_box.content_margin_right = 8
+	style_box.content_margin_top = 6
+	style_box.content_margin_bottom = 6
+	tooltip_manager.tooltip.add_theme_stylebox_override("panel", style_box)
+
+	# Create tooltip label
+	tooltip_manager.tooltip_label = RichTextLabel.new()
+	tooltip_manager.tooltip_label.bbcode_enabled = true
+	tooltip_manager.tooltip_label.fit_content = true
+	tooltip_manager.tooltip_label.add_theme_font_size_override("normal_font_size", 12)
+	tooltip_manager.tooltip_label.custom_minimum_size = Vector2(200, 0)
+	tooltip_manager.tooltip.add_child(tooltip_manager.tooltip_label)
+
+	# Add to equipment window
+	equipment_window.add_child(tooltip_manager.tooltip)
+
+
 func _setup_equipment_visual():
 	"""Setup equipment-specific visual elements"""
 	visible = true
@@ -238,7 +288,10 @@ func can_accept_item(check_item: InventoryItem_Base) -> bool:
 
 	# FALLBACK: For TOOL and WEAPON types, infer equippable status if not set
 	if not is_equippable:
-		if check_item.item_type == ItemTypes.Type.TOOL or check_item.item_type == ItemTypes.Type.WEAPON:
+		if (
+			check_item.item_type == ItemTypes.Type.TOOL
+			or check_item.item_type == ItemTypes.Type.WEAPON
+		):
 			print("    Item is TOOL/WEAPON type - allowing even without explicit equippable flag")
 			is_equippable = true
 		else:
