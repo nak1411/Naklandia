@@ -27,7 +27,9 @@ var managers_ready: bool = false
 var drag_save_windows: Array[Window_Base] = []
 var closed_tearoff_containers: Array[String] = []
 
-var inventory_window_state: Dictionary = {"is_open": false, "position": Vector2.ZERO, "size": Vector2.ZERO, "was_open_on_exit": false}
+var inventory_window_state: Dictionary = {
+	"is_open": false, "position": Vector2.ZERO, "size": Vector2.ZERO, "was_open_on_exit": false
+}
 
 
 func _ready():
@@ -184,6 +186,44 @@ func load_main_window_position():
 # ==============================================================================
 
 
+func save_equipment_window_state():
+	"""Save equipment window state"""
+	# Don't save while we're loading layout
+	if is_loading_layout:
+		return true
+
+	var config = ConfigFile.new()
+	_load_existing_config(config)
+
+	# Find the equipment window
+	var equipment_window = _find_equipment_window()
+	var is_open = equipment_window != null and equipment_window.visible
+
+	config.set_value("equipment_window", "is_open", is_open)
+	config.set_value("equipment_window", "was_open_on_exit", is_open)
+
+	if equipment_window and is_open:
+		# Basic properties
+		config.set_value("equipment_window", "position_x", equipment_window.position.x)
+		config.set_value("equipment_window", "position_y", equipment_window.position.y)
+		config.set_value("equipment_window", "size_x", equipment_window.size.x)
+		config.set_value("equipment_window", "size_y", equipment_window.size.y)
+		config.set_value("equipment_window", "modulate_a", equipment_window.modulate.a)
+
+		# Check for additional properties and save them
+		if "is_locked" in equipment_window:
+			config.set_value("equipment_window", "is_locked", equipment_window.is_locked)
+
+		if "is_maximized" in equipment_window:
+			config.set_value("equipment_window", "is_maximized", equipment_window.is_maximized)
+
+	var error = config.save(config_file_path)
+	if error != OK:
+		return false
+
+	return true
+
+
 func save_inventory_window_state():
 	"""Save main inventory window state"""
 	# Don't save inventory state while we're loading layout
@@ -225,13 +265,106 @@ func save_inventory_window_state():
 		if inventory_window.has_method("get_current_container"):
 			var current_container = inventory_window.get_current_container()
 			if current_container:
-				config.set_value("inventory_window", "selected_container_id", current_container.container_id)
+				config.set_value(
+					"inventory_window", "selected_container_id", current_container.container_id
+				)
 
 	var error = config.save(config_file_path)
 	if error != OK:
 		return false
 
 	return true
+
+
+func load_equipment_window_state():
+	"""Load and apply saved equipment window state"""
+	var config = ConfigFile.new()
+	var error = config.load(config_file_path)
+
+	if error != OK:
+		return false
+
+	if not config.has_section("equipment_window"):
+		return false
+
+	var was_open = config.get_value("equipment_window", "was_open_on_exit", false)
+
+	if was_open:
+		# Get saved properties
+		var pos_x = config.get_value("equipment_window", "position_x", 300)
+		var pos_y = config.get_value("equipment_window", "position_y", 100)
+		var size_x = config.get_value("equipment_window", "size_x", 480)
+		var size_y = config.get_value("equipment_window", "size_y", 520)
+		var modulate_a = config.get_value("equipment_window", "modulate_a", 1.0)
+		var is_locked = config.get_value("equipment_window", "is_locked", false)
+		var is_maximized = config.get_value("equipment_window", "is_maximized", false)
+
+		# Try to open the equipment window
+		await _restore_equipment_open_state(
+			pos_x, pos_y, size_x, size_y, modulate_a, is_locked, is_maximized
+		)
+
+		return true
+
+	return false
+
+
+func _restore_equipment_open_state(
+	pos_x: float,
+	pos_y: float,
+	size_x: float,
+	size_y: float,
+	modulate_a: float,
+	is_locked: bool,
+	is_maximized: bool
+):
+	"""Try to open the equipment window and restore its state"""
+	# Find equipment integration to open the equipment window
+	var equipment_integration = _find_equipment_integration()
+
+	if equipment_integration:
+		# Try to open the equipment window
+		if equipment_integration.has_method("open_equipment_window"):
+			equipment_integration.open_equipment_window()
+		else:
+			return
+
+		# Wait multiple frames for the equipment window to open
+		await get_tree().process_frame
+		await get_tree().process_frame
+		await get_tree().process_frame
+
+		# Check if equipment window is now open
+		var equipment_window = _find_equipment_window()
+		if equipment_window:
+			# Apply position and size
+			if _is_position_valid(Vector2i(pos_x, pos_y)):
+				equipment_window.position = Vector2(pos_x, pos_y)
+
+			equipment_window.size = Vector2(size_x, size_y)
+			equipment_window.modulate.a = modulate_a
+
+			# Apply lock state
+			if is_locked and equipment_window.has_method("set_window_locked"):
+				equipment_window.set_window_locked(true)
+
+			# Apply maximized state
+			if is_maximized and equipment_window.has_method("_maximize_window"):
+				equipment_window._maximize_window()
+
+
+func _find_equipment_integration():
+	"""Find the equipment integration in the scene"""
+	# Search for equipment integration
+	var integrations = get_tree().get_nodes_in_group("equipment_integration")
+
+	if integrations.size() > 0:
+		return integrations[0]
+
+	# Alternative: search by class name or script
+	var result = _find_node_recursive(get_tree().current_scene, "EquipmentIntegration")
+
+	return result
 
 
 func load_inventory_window_state():
@@ -256,7 +389,9 @@ func load_inventory_window_state():
 		var modulate_a = config.get_value("inventory_window", "modulate_a", 1.0)
 		var is_locked = config.get_value("inventory_window", "is_locked", false)
 		var is_maximized = config.get_value("inventory_window", "is_maximized", false)
-		var selected_container_id = config.get_value("inventory_window", "selected_container_id", "")
+		var selected_container_id = config.get_value(
+			"inventory_window", "selected_container_id", ""
+		)
 
 		# Store the state to apply when inventory opens
 		inventory_window_state = {
@@ -321,15 +456,24 @@ func _apply_inventory_window_state():
 	inventory_window.modulate.a = inventory_window_state.get("modulate_a", 1.0)
 
 	# Apply lock state
-	if inventory_window_state.get("is_locked", false) and inventory_window.has_method("set_window_locked"):
+	if (
+		inventory_window_state.get("is_locked", false)
+		and inventory_window.has_method("set_window_locked")
+	):
 		inventory_window.set_window_locked(true)
 
 	# Apply maximized state
-	if inventory_window_state.get("is_maximized", false) and inventory_window.has_method("_maximize_window"):
+	if (
+		inventory_window_state.get("is_maximized", false)
+		and inventory_window.has_method("_maximize_window")
+	):
 		inventory_window._maximize_window()
 
 	# Restore selected container if available
-	if inventory_window_state.has("selected_container_id") and inventory_window.has_method("select_container_by_id"):
+	if (
+		inventory_window_state.has("selected_container_id")
+		and inventory_window.has_method("select_container_by_id")
+	):
 		inventory_window.select_container_by_id(inventory_window_state["selected_container_id"])
 
 
@@ -352,7 +496,10 @@ func _find_node_recursive(node: Node, target_class_name: String) -> Node:
 	if not node:
 		return null
 
-	if node.get_class() == target_class_name or (node.get_script() and node.get_script().get_global_name() == target_class_name):
+	if (
+		node.get_class() == target_class_name
+		or (node.get_script() and node.get_script().get_global_name() == target_class_name)
+	):
 		return node
 
 	for child in node.get_children():
@@ -377,6 +524,20 @@ func _find_main_inventory_window():
 	return null
 
 
+func _find_equipment_window():
+	"""Find the equipment window"""
+	if not ui_manager:
+		return null
+
+	var all_windows = ui_manager.get_all_windows()
+	for window in all_windows:
+		var window_type = window.get_meta("window_type", "")
+		if window_type == "equipment":
+			return window
+
+	return null
+
+
 func _on_inventory_visibility_changed(window: Window_Base):
 	"""Handle inventory window visibility changes"""
 	inventory_window_state["is_open"] = window.visible
@@ -389,6 +550,18 @@ func _on_inventory_window_closed(_window: Window_Base):
 	"""Handle inventory window being closed"""
 	inventory_window_state["is_open"] = false
 
+	if auto_save_enabled and not is_saving_layout:
+		save_complete_layout()
+
+
+func _on_equipment_visibility_changed(_window: Window_Base):
+	"""Handle equipment window visibility changes"""
+	if auto_save_enabled and not is_saving_layout:
+		save_complete_layout()
+
+
+func _on_equipment_window_closed(_window: Window_Base):
+	"""Handle equipment window being closed"""
 	if auto_save_enabled and not is_saving_layout:
 		save_complete_layout()
 
@@ -569,7 +742,7 @@ func _restore_tearoff_window(config: ConfigFile, section: String) -> bool:
 
 
 func save_complete_layout():
-	"""Save complete window layout (main + inventory + tearoffs)"""
+	"""Save complete window layout (main + inventory + equipment + tearoffs)"""
 	if is_saving_layout:
 		return false
 
@@ -585,11 +758,12 @@ func save_complete_layout():
 
 	var main_saved = save_main_window_position()
 	var inventory_saved = save_inventory_window_state()
+	var equipment_saved = save_equipment_window_state()
 	var tearoffs_saved = save_tearoff_window_states()
 
 	is_saving_layout = false
 
-	if main_saved or inventory_saved or tearoffs_saved:
+	if main_saved or inventory_saved or equipment_saved or tearoffs_saved:
 		layout_saved.emit()
 		return true
 
@@ -619,12 +793,18 @@ func load_complete_layout():
 	# Wait another frame
 	await get_tree().process_frame
 
+	# Load equipment window state
+	var equipment_loaded = await load_equipment_window_state()
+
+	# Wait another frame
+	await get_tree().process_frame
+
 	# Then restore tearoffs
 	var tearoffs_loaded = await load_tearoff_window_states()
 
 	is_loading_layout = false
 
-	if main_loaded or inventory_loaded or tearoffs_loaded:
+	if main_loaded or inventory_loaded or equipment_loaded or tearoffs_loaded:
 		layout_loaded.emit()
 		return true
 
@@ -693,7 +873,9 @@ func connect_window_signals(window: Window_Base):
 	# Connect to window resize
 	if window.has_signal("window_resized"):
 		if not window.window_resized.is_connected(_on_immediate_window_change):
-			window.window_resized.connect(func(_size): _on_immediate_window_change(window, "resize"))
+			window.window_resized.connect(
+				func(_size): _on_immediate_window_change(window, "resize")
+			)
 
 	# Connect to window close for tearoff windows
 	if window_type == "tearoff":
@@ -704,6 +886,10 @@ func connect_window_signals(window: Window_Base):
 	# For inventory window, also monitor open/close state
 	if window_type == "main_inventory" or window_type == "inventory":
 		_connect_inventory_specific_signals(window)
+
+	# For equipment window, also monitor open/close state
+	if window_type == "equipment":
+		_connect_equipment_specific_signals(window)
 
 	# Monitor position changes in real-time
 	_start_realtime_position_monitoring(window)
@@ -720,6 +906,19 @@ func _connect_inventory_specific_signals(window: Window_Base):
 	if window.has_signal("window_closed"):
 		if not window.window_closed.is_connected(_on_inventory_window_closed):
 			window.window_closed.connect(_on_inventory_window_closed.bind(window))
+
+
+func _connect_equipment_specific_signals(window: Window_Base):
+	"""Connect equipment-specific signals"""
+	# Monitor visibility changes
+	if window.has_signal("visibility_changed"):
+		if not window.visibility_changed.is_connected(_on_equipment_visibility_changed):
+			window.visibility_changed.connect(_on_equipment_visibility_changed.bind(window))
+
+	# Monitor window close
+	if window.has_signal("window_closed"):
+		if not window.window_closed.is_connected(_on_equipment_window_closed):
+			window.window_closed.connect(_on_equipment_window_closed.bind(window))
 
 
 func _on_immediate_window_change(_window: Window_Base, _change_type: String):
@@ -791,7 +990,9 @@ func _is_position_valid(pos: Vector2i) -> bool:
 	var screen_count = DisplayServer.get_screen_count()
 
 	for screen_id in screen_count:
-		var screen_rect = Rect2i(DisplayServer.screen_get_position(screen_id), DisplayServer.screen_get_size(screen_id))
+		var screen_rect = Rect2i(
+			DisplayServer.screen_get_position(screen_id), DisplayServer.screen_get_size(screen_id)
+		)
 
 		# Allow windows to be partially off-screen
 		var expanded_rect = screen_rect.grow(400)
@@ -846,7 +1047,12 @@ func get_layout_info() -> Dictionary:
 			tearoff_count += 1
 	var has_main_window = config.has_section("main_window")
 
-	return {"has_data": true, "has_main_window": has_main_window, "tearoff_count": tearoff_count, "sections": sections}
+	return {
+		"has_data": true,
+		"has_main_window": has_main_window,
+		"tearoff_count": tearoff_count,
+		"sections": sections
+	}
 
 
 func force_save_layout():
