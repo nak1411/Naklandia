@@ -218,5 +218,5 @@ text = "Clear All"
 [node name="HelpLabel" type="Label" parent="VBoxContainer/ToolbarPanel/HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Alt+Left: Orbit | Alt+Middle: Pan | Alt+Right: Zoom | Click: Select | Q/W/E/R: Select/Move/Rotate/Scale | F: Frame | Ctrl+Z: Undo | Drag Gizmo Arrows to Move"
+text = "Alt+Left: Orbit | Alt+Middle: Pan | Alt+Right: Zoom | Click: Select | Q/W/E/R: Select/Move/Rotate/Scale | F: Frame | Ctrl: Snap | Shift: Fine | Ctrl+Z: Undo"
 horizontal_alignment = 2

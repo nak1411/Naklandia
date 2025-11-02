@@ -61,6 +61,9 @@ var gizmo_drag_start_mouse: Vector2
 var gizmo_drag_initial_positions: Dictionary = {}  # PhysicalItem -> Vector3
 var gizmo_drag_initial_rotations: Dictionary = {}  # PhysicalItem -> Basis
 var gizmo_drag_initial_scales: Dictionary = {}  # PhysicalItem -> Vector3
+var was_shift_pressed: bool = false  # Track Shift state during drag
+var gizmo_drag_plane_origin: Vector3 = Vector3.ZERO  # Initial drag plane origin in world space
+var gizmo_drag_camera_distance: float = 0.0  # Initial camera distance when drag started
 
 # Undo system
 const MAX_UNDO_OPERATIONS: int = 10
@@ -403,6 +406,11 @@ func _try_start_gizmo_drag(_mouse_pos: Vector2) -> bool:
 		is_gizmo_dragging = true
 		gizmo_drag_start_mouse = viewport_pos
 		gizmo_drag_axis = axis_detected
+		was_shift_pressed = Input.is_key_pressed(KEY_SHIFT)
+
+		# Store initial plane origin and camera distance
+		gizmo_drag_plane_origin = gizmo_pos
+		gizmo_drag_camera_distance = gizmo_pos.distance_to(camera.global_position)
 
 		# Store initial positions
 		gizmo_drag_initial_positions.clear()
@@ -420,6 +428,11 @@ func _try_start_gizmo_drag(_mouse_pos: Vector2) -> bool:
 		is_gizmo_dragging = true
 		gizmo_drag_start_mouse = viewport_pos
 		gizmo_drag_axis = axis_detected
+		was_shift_pressed = Input.is_key_pressed(KEY_SHIFT)
+
+		# Store initial plane origin and camera distance
+		gizmo_drag_plane_origin = gizmo_pos
+		gizmo_drag_camera_distance = gizmo_pos.distance_to(camera.global_position)
 
 		# Store initial rotations (use Dictionary to store rotation as Basis)
 		gizmo_drag_initial_positions.clear()
@@ -438,6 +451,11 @@ func _try_start_gizmo_drag(_mouse_pos: Vector2) -> bool:
 		is_gizmo_dragging = true
 		gizmo_drag_start_mouse = viewport_pos
 		gizmo_drag_axis = axis_detected
+		was_shift_pressed = Input.is_key_pressed(KEY_SHIFT)
+
+		# Store initial plane origin and camera distance
+		gizmo_drag_plane_origin = gizmo_pos
+		gizmo_drag_camera_distance = gizmo_pos.distance_to(camera.global_position)
 
 		# Store initial scales for scaling
 		gizmo_drag_initial_scales.clear()
@@ -472,6 +490,12 @@ func _try_start_free_movement(_mouse_pos: Vector2) -> bool:
 			is_gizmo_dragging = true
 			gizmo_drag_start_mouse = viewport_pos
 			gizmo_drag_axis = Vector3(1, 1, 1)  # All axes for free movement
+			was_shift_pressed = Input.is_key_pressed(KEY_SHIFT)
+
+			# Store initial plane origin and camera distance
+			var gizmo_pos = transform_gizmo.global_position
+			gizmo_drag_plane_origin = gizmo_pos
+			gizmo_drag_camera_distance = gizmo_pos.distance_to(camera.global_position)
 
 			# Store initial positions
 			gizmo_drag_initial_positions.clear()
@@ -672,6 +696,23 @@ func _update_gizmo_drag(_mouse_pos: Vector2) -> void:
 
 func _update_move_drag(mouse_delta: Vector2) -> void:
 	"""Update object positions during move drag."""
+	# Detect if Shift state changed during drag
+	var is_shift_pressed = Input.is_key_pressed(KEY_SHIFT)
+	if is_shift_pressed != was_shift_pressed:
+		# Shift state changed - store current positions as new initial positions
+		# and reset the drag start to prevent jumping
+		var viewport_pos = viewport_container.get_local_mouse_position()
+		gizmo_drag_start_mouse = viewport_pos
+		was_shift_pressed = is_shift_pressed
+
+		# Update initial positions to current positions
+		for item in selected_items:
+			if item in gizmo_drag_initial_positions:
+				gizmo_drag_initial_positions[item] = item.global_position
+
+		# Reset mouse_delta since we're starting fresh
+		mouse_delta = Vector2.ZERO
+
 	var world_offset = Vector3.ZERO
 
 	# Check if dragging on a plane (2 axes) or single axis
@@ -679,21 +720,43 @@ func _update_move_drag(mouse_delta: Vector2) -> void:
 		int(gizmo_drag_axis.x != 0) + int(gizmo_drag_axis.y != 0) + int(gizmo_drag_axis.z != 0)
 	)
 
+	# Fine mode multiplier (Shift = 10x slower for precision)
+	var fine_multiplier = 0.1 if is_shift_pressed else 1.0
+
+	# Calculate proper viewport-aware scaling using the INITIAL drag distance
+	# This ensures the object moves at the same speed as the mouse cursor without drift
+	var viewport_size = viewport.size
+
+	# Use the stored initial camera distance (not current distance) to prevent exponential drift
+	var gizmo_to_camera = gizmo_drag_camera_distance
+
+	# Calculate pixel-to-world ratio at the initial drag distance
+	# This makes the movement speed consistent regardless of camera distance
+	var fov_rad = deg_to_rad(camera.fov)
+	var viewport_world_height = 2.0 * tan(fov_rad / 2.0) * gizmo_to_camera
+	var viewport_world_width = (
+		viewport_world_height * (float(viewport_size.x) / float(viewport_size.y))
+	)
+	var pixels_to_world_x = viewport_world_width / viewport_size.x
+	var pixels_to_world_y = viewport_world_height / viewport_size.y
+
 	if num_axes == 3:
 		# Free movement on all axes (parallel to camera view)
 		var right = camera.global_transform.basis.x
 		var up = camera.global_transform.basis.y
-		var movement_scale = camera_distance * 0.002
-		world_offset = right * mouse_delta.x * movement_scale - up * mouse_delta.y * movement_scale
+		world_offset = (
+			(right * mouse_delta.x * pixels_to_world_x - up * mouse_delta.y * pixels_to_world_y)
+			* fine_multiplier
+		)
 
 	elif num_axes == 2:
 		# Plane dragging (e.g., XY, XZ, YZ)
 		var right = camera.global_transform.basis.x
 		var up = camera.global_transform.basis.y
-		var movement_scale = camera_distance * 0.002
 
 		var camera_offset = (
-			right * mouse_delta.x * movement_scale - up * mouse_delta.y * movement_scale
+			(right * mouse_delta.x * pixels_to_world_x - up * mouse_delta.y * pixels_to_world_y)
+			* fine_multiplier
 		)
 
 		# Constrain to the plane by zeroing out the axis we're NOT dragging
@@ -707,17 +770,20 @@ func _update_move_drag(mouse_delta: Vector2) -> void:
 		world_offset = camera_offset
 
 	else:
-		# Single axis dragging
-		var gizmo_pos = transform_gizmo.global_position
-		var axis_end = gizmo_pos + gizmo_drag_axis * 0.5
+		# Single axis dragging - project mouse movement onto the screen-space axis
+		# Use the initial plane origin for consistent screen-space projection
+		var axis_end = gizmo_drag_plane_origin + gizmo_drag_axis * 0.5
 
-		var screen_start = camera.unproject_position(gizmo_pos)
+		var screen_start = camera.unproject_position(gizmo_drag_plane_origin)
 		var screen_end = camera.unproject_position(axis_end)
 		var screen_axis = (screen_end - screen_start).normalized()
 
+		# Project mouse delta onto the screen-space axis direction
 		var movement_on_axis = mouse_delta.dot(screen_axis)
-		var movement_scale = camera_distance * 0.003
-		world_offset = gizmo_drag_axis * movement_on_axis * movement_scale
+
+		# Convert screen pixels to world units using proper perspective calculation
+		var avg_pixels_to_world = (pixels_to_world_x + pixels_to_world_y) / 2.0
+		world_offset = gizmo_drag_axis * movement_on_axis * avg_pixels_to_world * fine_multiplier
 
 	# Apply position snapping if CTRL is held (0.25 unit increments)
 	if Input.is_key_pressed(KEY_CTRL):
@@ -738,6 +804,23 @@ func _update_move_drag(mouse_delta: Vector2) -> void:
 
 func _update_rotate_drag(mouse_delta: Vector2) -> void:
 	"""Update object rotations during rotate drag."""
+	# Detect if Shift state changed during drag
+	var is_shift_pressed = Input.is_key_pressed(KEY_SHIFT)
+	if is_shift_pressed != was_shift_pressed:
+		# Shift state changed - store current rotations as new initial rotations
+		# and reset the drag start to prevent jumping
+		var viewport_pos = viewport_container.get_local_mouse_position()
+		gizmo_drag_start_mouse = viewport_pos
+		was_shift_pressed = is_shift_pressed
+
+		# Update initial rotations to current rotations
+		for item in selected_items:
+			if item in gizmo_drag_initial_rotations:
+				gizmo_drag_initial_rotations[item] = item.basis
+
+		# Reset mouse_delta since we're starting fresh
+		mouse_delta = Vector2.ZERO
+
 	# Get the gizmo position in screen space
 	var gizmo_pos = transform_gizmo.global_position
 	var gizmo_screen = camera.unproject_position(gizmo_pos)
@@ -762,11 +845,14 @@ func _update_rotate_drag(mouse_delta: Vector2) -> void:
 	var current_tangent = current_pos.dot(tangent_screen)
 	var tangent_delta = current_tangent - start_tangent
 
+	# Fine mode multiplier (Shift = 10x slower for precision)
+	var fine_multiplier = 0.1 if is_shift_pressed else 1.0
+
 	# Convert to angle based on distance from center
 	var avg_distance = (start_pos.length() + current_pos.length()) / 2.0
 	var angle = 0.0
 	if avg_distance > 1.0:
-		angle = tangent_delta / avg_distance * 2.0
+		angle = tangent_delta / avg_distance * 2.0 * fine_multiplier
 
 	# Apply angle snapping if CTRL is held (15 degree increments)
 	if Input.is_key_pressed(KEY_CTRL):
@@ -791,8 +877,28 @@ func _update_rotate_drag(mouse_delta: Vector2) -> void:
 
 func _update_scale_drag(mouse_delta: Vector2) -> void:
 	"""Update object scales during scale drag."""
+	# Detect if Shift state changed during drag
+	var is_shift_pressed = Input.is_key_pressed(KEY_SHIFT)
+	if is_shift_pressed != was_shift_pressed:
+		# Shift state changed - store current scales as new initial scales
+		# and reset the drag start to prevent jumping
+		var viewport_pos = viewport_container.get_local_mouse_position()
+		gizmo_drag_start_mouse = viewport_pos
+		was_shift_pressed = is_shift_pressed
+
+		# Update initial scales to current scales
+		for item in selected_items:
+			if item in gizmo_drag_initial_scales:
+				gizmo_drag_initial_scales[item] = item.scale
+
+		# Reset mouse_delta since we're starting fresh
+		mouse_delta = Vector2.ZERO
+
+	# Fine mode multiplier (Shift = 10x slower for precision)
+	var fine_multiplier = 0.1 if is_shift_pressed else 1.0
+
 	# Calculate scale factor based on mouse movement change
-	var scale_speed = 0.01
+	var scale_speed = 0.01 * fine_multiplier
 	var scale_delta = -mouse_delta.y * scale_speed  # Negative because up = increase scale
 	var scale_multiplier = 1.0 + scale_delta
 
@@ -1118,14 +1224,20 @@ func _update_transform_stats(operation: String, value: float, axis: Vector3) -> 
 		text = "Move: %.2f units (%s)" % [value, axis_name]
 		if Input.is_key_pressed(KEY_CTRL):
 			text += " [Snapping: 0.25]"
+		if Input.is_key_pressed(KEY_SHIFT):
+			text += " [Fine Mode]"
 	elif operation == "Rotate":
 		text = "Rotate: %.1f° (%s)" % [value, axis_name]
 		if Input.is_key_pressed(KEY_CTRL):
 			text += " [Snapping: 15°]"
+		if Input.is_key_pressed(KEY_SHIFT):
+			text += " [Fine Mode]"
 	elif operation == "Scale":
 		text = "Scale: %.2fx (%s)" % [value, axis_name]
 		if Input.is_key_pressed(KEY_CTRL):
 			text += " [Snapping: 0.1x]"
+		if Input.is_key_pressed(KEY_SHIFT):
+			text += " [Fine Mode]"
 
 	# Add selected object count
 	text += (
