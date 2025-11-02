@@ -19,6 +19,7 @@ extends Control
 var viewport_container: SubViewportContainer
 var selection_overlay: Control
 var transform_stats_label: Label
+var object_info_label: Label
 var viewport: SubViewport
 var camera: Camera3D
 var world: Node3D
@@ -62,8 +63,14 @@ var gizmo_drag_initial_positions: Dictionary = {}  # PhysicalItem -> Vector3
 var gizmo_drag_initial_rotations: Dictionary = {}  # PhysicalItem -> Basis
 var gizmo_drag_initial_scales: Dictionary = {}  # PhysicalItem -> Vector3
 var was_shift_pressed: bool = false  # Track Shift state during drag
+var was_ctrl_pressed: bool = false  # Track Ctrl state during drag
+var was_x_pressed: bool = false  # Track X state during drag (snap to grid)
 var gizmo_drag_plane_origin: Vector3 = Vector3.ZERO  # Initial drag plane origin in world space
 var gizmo_drag_camera_distance: float = 0.0  # Initial camera distance when drag started
+
+# Snap to grid settings
+var snap_to_grid_enabled: bool = false  # True when X key is held
+var grid_snap_size: float = 1.0  # Grid size for snapping (1 unit)
 
 # Undo system
 const MAX_UNDO_OPERATIONS: int = 10
@@ -92,6 +99,7 @@ func _ready() -> void:
 	viewport_container = $VBoxContainer/ViewportContainer
 	selection_overlay = $VBoxContainer/ViewportContainer/SelectionOverlay
 	transform_stats_label = $VBoxContainer/ViewportContainer/TransformStatsLabel
+	object_info_label = $VBoxContainer/ViewportContainer/ObjectInfoLabel
 	viewport = $VBoxContainer/ViewportContainer/SubViewport
 	camera = $VBoxContainer/ViewportContainer/SubViewport/Camera3D
 	world = $VBoxContainer/ViewportContainer/SubViewport/World
@@ -157,6 +165,14 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		if event.keycode == KEY_ALT:
 			is_alt_held = event.pressed
+
+		# Track X key for snap to grid
+		if event.keycode == KEY_X:
+			snap_to_grid_enabled = event.pressed
+			if event.pressed:
+				print("Snap to grid enabled (grid size: ", grid_snap_size, ")")
+			else:
+				print("Snap to grid disabled")
 
 		# Transform mode shortcuts (only when not holding Alt)
 		if event.pressed and not is_alt_held:
@@ -407,6 +423,7 @@ func _try_start_gizmo_drag(_mouse_pos: Vector2) -> bool:
 		gizmo_drag_start_mouse = viewport_pos
 		gizmo_drag_axis = axis_detected
 		was_shift_pressed = Input.is_key_pressed(KEY_SHIFT)
+		was_x_pressed = Input.is_key_pressed(KEY_X)
 
 		# Store initial plane origin and camera distance
 		gizmo_drag_plane_origin = gizmo_pos
@@ -429,6 +446,7 @@ func _try_start_gizmo_drag(_mouse_pos: Vector2) -> bool:
 		gizmo_drag_start_mouse = viewport_pos
 		gizmo_drag_axis = axis_detected
 		was_shift_pressed = Input.is_key_pressed(KEY_SHIFT)
+		was_ctrl_pressed = Input.is_key_pressed(KEY_CTRL)
 
 		# Store initial plane origin and camera distance
 		gizmo_drag_plane_origin = gizmo_pos
@@ -439,6 +457,10 @@ func _try_start_gizmo_drag(_mouse_pos: Vector2) -> bool:
 		gizmo_drag_initial_rotations.clear()
 		for item in selected_items:
 			gizmo_drag_initial_rotations[item] = item.basis
+
+		# If CTRL is held, immediately snap to nearest 15-degree increment
+		if was_ctrl_pressed:
+			_snap_rotation_to_increment(axis_detected)
 
 		print("Rotate drag started on axis: ", gizmo_drag_axis)
 
@@ -491,6 +513,7 @@ func _try_start_free_movement(_mouse_pos: Vector2) -> bool:
 			gizmo_drag_start_mouse = viewport_pos
 			gizmo_drag_axis = Vector3(1, 1, 1)  # All axes for free movement
 			was_shift_pressed = Input.is_key_pressed(KEY_SHIFT)
+			was_x_pressed = Input.is_key_pressed(KEY_X)
 
 			# Store initial plane origin and camera distance
 			var gizmo_pos = transform_gizmo.global_position
@@ -713,6 +736,22 @@ func _update_move_drag(mouse_delta: Vector2) -> void:
 		# Reset mouse_delta since we're starting fresh
 		mouse_delta = Vector2.ZERO
 
+	# Detect if X key state changed during drag (snap to grid)
+	var is_x_pressed = Input.is_key_pressed(KEY_X)
+	if is_x_pressed != was_x_pressed:
+		# X state changed - store current positions as new initial positions
+		var viewport_pos = viewport_container.get_local_mouse_position()
+		gizmo_drag_start_mouse = viewport_pos
+		was_x_pressed = is_x_pressed
+
+		# Update initial positions to current positions
+		for item in selected_items:
+			if item in gizmo_drag_initial_positions:
+				gizmo_drag_initial_positions[item] = item.global_position
+
+		# Reset mouse_delta since we're starting fresh
+		mouse_delta = Vector2.ZERO
+
 	var world_offset = Vector3.ZERO
 
 	# Check if dragging on a plane (2 axes) or single axis
@@ -799,7 +838,15 @@ func _update_move_drag(mouse_delta: Vector2) -> void:
 	# Apply movement to all selected items
 	for item in gizmo_drag_initial_positions.keys():
 		if item:
-			item.global_position = gizmo_drag_initial_positions[item] + world_offset
+			var new_position = gizmo_drag_initial_positions[item] + world_offset
+
+			# Apply snap to grid if X key is held
+			if snap_to_grid_enabled:
+				new_position.x = round(new_position.x / grid_snap_size) * grid_snap_size
+				new_position.y = round(new_position.y / grid_snap_size) * grid_snap_size
+				new_position.z = round(new_position.z / grid_snap_size) * grid_snap_size
+
+			item.global_position = new_position
 
 
 func _update_rotate_drag(mouse_delta: Vector2) -> void:
@@ -817,6 +864,26 @@ func _update_rotate_drag(mouse_delta: Vector2) -> void:
 		for item in selected_items:
 			if item in gizmo_drag_initial_rotations:
 				gizmo_drag_initial_rotations[item] = item.basis
+
+		# Reset mouse_delta since we're starting fresh
+		mouse_delta = Vector2.ZERO
+
+	# Detect if Ctrl state changed during drag (for angle snapping)
+	var is_ctrl_pressed = Input.is_key_pressed(KEY_CTRL)
+	if is_ctrl_pressed != was_ctrl_pressed:
+		# Ctrl state changed
+		var viewport_pos = viewport_container.get_local_mouse_position()
+		gizmo_drag_start_mouse = viewport_pos
+		was_ctrl_pressed = is_ctrl_pressed
+
+		# Update initial rotations to current rotations
+		for item in selected_items:
+			if item in gizmo_drag_initial_rotations:
+				gizmo_drag_initial_rotations[item] = item.basis
+
+		# If CTRL was just pressed, snap to nearest increment
+		if is_ctrl_pressed:
+			_snap_rotation_to_increment(gizmo_drag_axis)
 
 		# Reset mouse_delta since we're starting fresh
 		mouse_delta = Vector2.ZERO
@@ -873,6 +940,38 @@ func _update_rotate_drag(mouse_delta: Vector2) -> void:
 
 			# Apply rotation to the initial state
 			item.basis = rotation_basis * initial_basis
+
+
+func _snap_rotation_to_increment(axis: Vector3) -> void:
+	"""Snap the current rotation to the nearest 15-degree increment on the specified axis."""
+	var snap_increment = deg_to_rad(15.0)
+
+	for item in selected_items:
+		# Get current rotation as Euler angles
+		var current_euler = item.rotation
+
+		# Snap the rotation on the specified axis
+		if axis == Vector3.RIGHT:
+			# X axis rotation
+			var snapped_angle = round(current_euler.x / snap_increment) * snap_increment
+			item.rotation.x = snapped_angle
+		elif axis == Vector3.UP:
+			# Y axis rotation
+			var snapped_angle = round(current_euler.y / snap_increment) * snap_increment
+			item.rotation.y = snapped_angle
+		elif axis == Vector3.BACK:
+			# Z axis rotation
+			var snapped_angle = round(current_euler.z / snap_increment) * snap_increment
+			item.rotation.z = snapped_angle
+
+		# Update the initial rotation to the snapped value to prevent jumping
+		if item in gizmo_drag_initial_rotations:
+			gizmo_drag_initial_rotations[item] = item.basis
+
+	# Update gizmo position
+	_update_gizmo()
+
+	print("Snapped rotation to nearest 15° increment")
 
 
 func _update_scale_drag(mouse_delta: Vector2) -> void:
@@ -1096,6 +1195,7 @@ func _select_item(item: PhysicalItem, add_to_selection: bool) -> void:
 		print("Selected: ", item.item_name, " (", selected_items.size(), " total)")
 
 	_update_gizmo()
+	_update_object_info()
 
 
 func _deselect_item(item: PhysicalItem) -> void:
@@ -1104,6 +1204,7 @@ func _deselect_item(item: PhysicalItem) -> void:
 		selected_items.erase(item)
 		item.show_highlight(false)
 		print("Deselected: ", item.item_name)
+	_update_object_info()
 
 
 func _clear_selection() -> void:
@@ -1112,6 +1213,7 @@ func _clear_selection() -> void:
 		item.show_highlight(false)
 	selected_items.clear()
 	_update_gizmo()
+	_update_object_info()
 
 
 func _set_transform_mode(mode: TransformMode) -> void:
@@ -1222,6 +1324,8 @@ func _update_transform_stats(operation: String, value: float, axis: Vector3) -> 
 	var text = ""
 	if operation == "Move":
 		text = "Move: %.2f units (%s)" % [value, axis_name]
+		if snap_to_grid_enabled:
+			text += " [Grid Snap: %.2f]" % grid_snap_size
 		if Input.is_key_pressed(KEY_CTRL):
 			text += " [Snapping: 0.25]"
 		if Input.is_key_pressed(KEY_SHIFT):
@@ -1252,6 +1356,32 @@ func _clear_transform_stats() -> void:
 	"""Clear the transform stats label."""
 	if transform_stats_label:
 		transform_stats_label.text = ""
+
+
+func _update_object_info() -> void:
+	"""Update the object info label showing selected object's transform data."""
+	if not object_info_label:
+		return
+
+	if selected_items.is_empty():
+		object_info_label.text = ""
+		return
+
+	if selected_items.size() > 1:
+		object_info_label.text = "Multiple Selected (%d objects)" % selected_items.size()
+		return
+
+	# Single object selected - show its transform info
+	var item = selected_items[0]
+	var pos = item.global_position
+	var rot = item.rotation_degrees
+	var scale_vec = item.scale
+
+	var text = "Position: (%.2f, %.2f, %.2f)\n" % [pos.x, pos.y, pos.z]
+	text += "Rotation: (%.1f°, %.1f°, %.1f°)\n" % [rot.x, rot.y, rot.z]
+	text += "Scale: (%.2f, %.2f, %.2f)" % [scale_vec.x, scale_vec.y, scale_vec.z]
+
+	object_info_label.text = text
 
 
 func _on_validate_pressed() -> void:
@@ -1318,6 +1448,10 @@ func _process(_delta: float) -> void:
 	# Update gizmo scale based on camera distance
 	if transform_gizmo and transform_gizmo.visible and camera:
 		transform_gizmo.update_scale_for_camera(camera.global_position)
+
+	# Update object info display (to show real-time transform changes)
+	if not selected_items.is_empty():
+		_update_object_info()
 
 
 func _update_gizmo() -> void:

@@ -159,6 +159,23 @@ theme_override_font_sizes/font_size = 14
 text = ""
 vertical_alignment = 0
 
+[node name="ObjectInfoLabel" type="Label" parent="VBoxContainer/ViewportContainer"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = -80.0
+offset_right = 300.0
+offset_bottom = -10.0
+grow_vertical = 0
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 12
+text = ""
+vertical_alignment = 2
+
 [node name="SubViewport" type="SubViewport" parent="VBoxContainer/ViewportContainer"]
 handle_input_locally = false
 size = Vector2i(1152, 648)
@@ -218,5 +235,5 @@ text = "Clear All"
 [node name="HelpLabel" type="Label" parent="VBoxContainer/ToolbarPanel/HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Alt+Left: Orbit | Alt+Middle: Pan | Alt+Right: Zoom | Click: Select | Q/W/E/R: Select/Move/Rotate/Scale | F: Frame | Ctrl: Snap | Shift: Fine | Ctrl+Z: Undo"
+text = "Alt+Left: Orbit | Alt+Middle: Pan | Alt+Right: Zoom | Click: Select | Q/W/E/R: Select/Move/Rotate/Scale | F: Frame | X: Grid Snap | Ctrl: Snap | Shift: Fine | Ctrl+Z: Undo"
 horizontal_alignment = 2
