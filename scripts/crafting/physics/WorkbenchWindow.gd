@@ -295,7 +295,9 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 		if drag_button == MOUSE_BUTTON_LEFT:
 			# Orbit (inverted for natural feel)
 			camera_rotation.x -= delta.x * 0.3
-			camera_rotation.y = clamp(camera_rotation.y + delta.y * 0.3, -89, 89)
+			# Calculate dynamic pitch limit to prevent camera from going through the floor
+			var min_pitch = _calculate_min_pitch_for_target()
+			camera_rotation.y = clamp(camera_rotation.y + delta.y * 0.3, min_pitch, 89)
 			_update_camera_transform()
 
 		elif drag_button == MOUSE_BUTTON_MIDDLE:
@@ -322,6 +324,26 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 		_update_gizmo_hover(event.position)
 
 	last_mouse_pos = event.position
+
+
+func _calculate_min_pitch_for_target() -> float:
+	"""Calculate the minimum pitch angle to prevent camera from going through the floor."""
+	# If target is at or below floor level (y <= 0.5), use a safe minimum pitch
+	if camera_target.y <= 0.5:
+		return 5.0
+
+	# For targets above the floor, calculate the angle where camera would hit floor
+	# Using basic trigonometry: tan(angle) = opposite/adjacent
+	# opposite = target height, adjacent = horizontal distance (camera_distance projected on XZ plane)
+	var target_height = camera_target.y
+	var floor_clearance = 0.1  # Keep camera 0.1 units above floor
+
+	# Calculate the pitch angle where camera would be at floor level
+	# Negative pitch means looking down past the target toward the floor
+	var critical_pitch = rad_to_deg(atan2(-(target_height - floor_clearance), camera_distance))
+
+	# Add a small safety margin (5 degrees) above the critical angle
+	return critical_pitch + 5.0
 
 
 func _update_camera_transform() -> void:
