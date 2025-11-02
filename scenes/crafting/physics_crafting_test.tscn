@@ -1,0 +1,99 @@
+[gd_scene load_steps=11 format=3 uid="uid://dep8yybijyvsw"]
+
+[ext_resource type="PackedScene" uid="uid://bqvh8xjk3ynfm" path="res://scenes/crafting/wooden_board.tscn" id="1_board"]
+[ext_resource type="Script" uid="uid://dvs5b7agifjv7" path="res://scripts/crafting/physics/ItemPlacer.gd" id="2_placer"]
+[ext_resource type="Script" uid="uid://dnwu6uaoe6xm2" path="res://scripts/crafting/physics/TestPlayerController.gd" id="3_player"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
+sky_horizon_color = Color(0.64625, 0.65575, 0.67075, 1)
+ground_horizon_color = Color(0.64625, 0.65575, 0.67075, 1)
+
+[sub_resource type="Sky" id="Sky_1"]
+sky_material = SubResource("ProceduralSkyMaterial_1")
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 2
+sky = SubResource("Sky_1")
+tonemap_mode = 2
+glow_enabled = true
+
+[sub_resource type="BoxMesh" id="BoxMesh_ground"]
+size = Vector3(20, 0.5, 20)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_atirg"]
+albedo_color = Color(0.129558, 0.129558, 0.129558, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape_ground"]
+size = Vector3(20, 0.5, 20)
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape_player"]
+radius = 0.3
+height = 1.8
+
+[node name="PhysicsCraftingTest" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, 0.75, -0.433013, 0, 5, 0)
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("BoxMesh_ground")
+surface_material_override/0 = SubResource("StandardMaterial3D_atirg")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+shape = SubResource("BoxShape_ground")
+
+[node name="Player" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 3)
+collision_layer = 2
+script = ExtResource("3_player")
+
+[node name="Camera3D" type="Camera3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+current = true
+
+[node name="ItemPlacer" type="Node3D" parent="Player"]
+script = ExtResource("2_placer")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("CapsuleShape_player")
+
+[node name="TestItems" type="Node3D" parent="."]
+
+[node name="WoodenBoard1" parent="TestItems" instance=ExtResource("1_board")]
+transform = Transform3D(0.948755, -0.316013, 0, 0.316013, 0.948755, 0, 0, 0, 1, 0.0399456, 1.78182, -0.111169)
+
+[node name="WoodenBoard2" parent="TestItems" instance=ExtResource("1_board")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 1, 0)
+
+[node name="WoodenBoard3" parent="TestItems" instance=ExtResource("1_board")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 1, 0)
+
+[node name="WoodenBoard4" parent="TestItems" instance=ExtResource("1_board")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 2)
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Instructions" type="Label" parent="UI"]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 500.0
+offset_bottom = 150.0
+text = "PHYSICS CRAFTING TEST - Phase 1
+
+Mouse - Look around
+WASD - Move around
+E - Pick up / Drop item
+Q/R (hold) - Rotate item left/right (when holding)
+Mouse Wheel - Rotate forward/back (when holding)
+ESC - Toggle mouse capture
+
+Look at wooden boards and press E to pick them up!
+Watch console for debug output."

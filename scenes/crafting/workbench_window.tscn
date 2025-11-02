@@ -1,0 +1,222 @@
+[gd_scene load_steps=14 format=3 uid="uid://cy8vn4m5xk2wp"]
+
+[ext_resource type="Script" path="res://scripts/crafting/physics/WorkbenchWindow.gd" id="1_workbench"]
+
+[sub_resource type="World3D" id="World3D_workbench"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
+size = Vector2(200, 200)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.15, 0.15, 0.15, 1)
+metallic = 0.0
+roughness = 1.0
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_grid"]
+size = Vector2(20, 20)
+
+[sub_resource type="Shader" id="Shader_grid"]
+code = "shader_type spatial;
+render_mode unshaded;
+
+uniform vec4 grid_color : source_color = vec4(0.3, 0.3, 0.3, 1.0);
+uniform vec4 axis_x_color : source_color = vec4(1.0, 0.3, 0.3, 1.0);
+uniform vec4 axis_z_color : source_color = vec4(0.3, 0.3, 1.0, 1.0);
+uniform float grid_scale : hint_range(0.1, 10.0) = 1.0;
+uniform float line_width : hint_range(0.001, 0.1) = 0.02;
+
+void fragment() {
+	vec2 coord = UV * 20.0 * grid_scale;
+	vec2 grid = abs(fract(coord - 0.5) - 0.5) / fwidth(coord);
+	float line = min(grid.x, grid.y);
+
+	// Grid alpha
+	float grid_alpha = 1.0 - min(line, 1.0);
+
+	// Check if we're on the X axis (Z = 0) - centered on grid
+	float z_coord = coord.y - 10.0 * grid_scale;
+	float z_grid_line = abs(fract(z_coord) - 0.5) / fwidth(coord.y);
+	bool on_x_axis = abs(z_coord) < 0.08;
+
+	// Check if we're on the Z axis (X = 0) - centered on grid
+	float x_coord = coord.x - 10.0 * grid_scale;
+	float x_grid_line = abs(fract(x_coord) - 0.5) / fwidth(coord.x);
+	bool on_z_axis = abs(x_coord) < 0.08;
+
+	vec3 color;
+	float alpha;
+
+	if (on_x_axis && grid_alpha > 0.0) {
+		color = axis_x_color.rgb;
+		alpha = 1.0;
+	} else if (on_z_axis && grid_alpha > 0.0) {
+		color = axis_z_color.rgb;
+		alpha = 1.0;
+	} else {
+		color = grid_color.rgb;
+		alpha = grid_alpha;
+	}
+
+	ALBEDO = color;
+	ALPHA = alpha;
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_grid"]
+render_priority = 0
+shader = SubResource("Shader_grid")
+shader_parameter/grid_color = Color(0.3, 0.3, 0.3, 1)
+shader_parameter/axis_x_color = Color(1, 0.3, 0.3, 1)
+shader_parameter/axis_z_color = Color(0.3, 0.3, 1, 1)
+shader_parameter/grid_scale = 1.0
+shader_parameter/line_width = 0.02
+
+[sub_resource type="Shader" id="Shader_gradient_sky"]
+code = "shader_type sky;
+
+uniform vec4 top_color : source_color = vec4(0.3, 0.3, 0.4, 1.0);
+uniform vec4 bottom_color : source_color = vec4(0.15, 0.15, 0.2, 1.0);
+
+void sky() {
+	float y = EYEDIR.y;
+	COLOR = mix(bottom_color.rgb, top_color.rgb, clamp(y * 0.5 + 0.5, 0.0, 1.0));
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_gradient_sky"]
+shader = SubResource("Shader_gradient_sky")
+shader_parameter/top_color = Color(0.3, 0.3, 0.4, 1)
+shader_parameter/bottom_color = Color(0.15, 0.15, 0.2, 1)
+
+[sub_resource type="Sky" id="Sky_gradient"]
+sky_material = SubResource("ShaderMaterial_gradient_sky")
+
+[sub_resource type="Environment" id="Environment_workbench"]
+background_mode = 2
+sky = SubResource("Sky_gradient")
+sky_custom_fov = 90.0
+ambient_light_source = 3
+ambient_light_color = Color(0.7, 0.7, 0.7, 1)
+tonemap_mode = 2
+
+[node name="WorkbenchWindow" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_workbench")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TitleBar" type="PanelContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/TitleBar"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="VBoxContainer/TitleBar/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Assembly Workbench"
+
+[node name="CloseButton" type="Button" parent="VBoxContainer/TitleBar/HBoxContainer"]
+layout_mode = 2
+text = "X"
+
+[node name="ViewportContainer" type="SubViewportContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+stretch = true
+
+[node name="SelectionOverlay" type="Control" parent="VBoxContainer/ViewportContainer"]
+layout_mode = 2
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TransformStatsLabel" type="Label" parent="VBoxContainer/ViewportContainer"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 250.0
+offset_bottom = 80.0
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 14
+text = ""
+vertical_alignment = 0
+
+[node name="SubViewport" type="SubViewport" parent="VBoxContainer/ViewportContainer"]
+handle_input_locally = false
+size = Vector2i(1152, 648)
+render_target_update_mode = 4
+world_3d = SubResource("World3D_workbench")
+
+[node name="Camera3D" type="Camera3D" parent="VBoxContainer/ViewportContainer/SubViewport"]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 5, 5)
+current = true
+
+[node name="World" type="Node3D" parent="VBoxContainer/ViewportContainer/SubViewport"]
+
+[node name="GroundPlane" type="MeshInstance3D" parent="VBoxContainer/ViewportContainer/SubViewport/World"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.01, 0)
+mesh = SubResource("PlaneMesh_ground")
+surface_material_override/0 = SubResource("StandardMaterial3D_ground")
+
+[node name="Grid" type="MeshInstance3D" parent="VBoxContainer/ViewportContainer/SubViewport/World"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+mesh = SubResource("PlaneMesh_grid")
+surface_material_override/0 = SubResource("ShaderMaterial_grid")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="VBoxContainer/ViewportContainer/SubViewport"]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 5, 0)
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="VBoxContainer/ViewportContainer/SubViewport"]
+environment = SubResource("Environment_workbench")
+
+[node name="ToolbarPanel" type="PanelContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/ToolbarPanel"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/ToolbarPanel/HBoxContainer"]
+layout_mode = 2
+text = "Parts:"
+
+[node name="PartList" type="ItemList" parent="VBoxContainer/ToolbarPanel/HBoxContainer"]
+custom_minimum_size = Vector2(200, 100)
+layout_mode = 2
+max_columns = 1
+
+[node name="VSeparator" type="VSeparator" parent="VBoxContainer/ToolbarPanel/HBoxContainer"]
+layout_mode = 2
+
+[node name="ValidateButton" type="Button" parent="VBoxContainer/ToolbarPanel/HBoxContainer"]
+layout_mode = 2
+text = "Validate Construct"
+
+[node name="ClearButton" type="Button" parent="VBoxContainer/ToolbarPanel/HBoxContainer"]
+layout_mode = 2
+text = "Clear All"
+
+[node name="HelpLabel" type="Label" parent="VBoxContainer/ToolbarPanel/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Alt+Left: Orbit | Alt+Middle: Pan | Alt+Right: Zoom | Click: Select | Q/W/E/R: Select/Move/Rotate/Scale | F: Frame | Ctrl+Z: Undo | Drag Gizmo Arrows to Move"
+horizontal_alignment = 2

@@ -1,0 +1,26 @@
+[gd_scene load_steps=4 format=3 uid="uid://bqvh8xjk3ynfm"]
+
+[ext_resource type="Script" path="res://scripts/crafting/physics/PhysicalItem.gd" id="1_xtk2m"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_wooden_board"]
+size = Vector3(1.0, 0.05, 0.2)
+
+[sub_resource type="BoxShape3D" id="BoxShape_wooden_board"]
+size = Vector3(1.0, 0.05, 0.2)
+
+[node name="WoodenBoard" type="RigidBody3D"]
+collision_layer = 4
+collision_mask = 5
+mass = 2.0
+script = ExtResource("1_xtk2m")
+item_id = "wooden_board"
+item_name = "Wooden Board"
+item_description = "A sturdy wooden plank. Can be used to build furniture and structures."
+item_mass = 2.0
+item_volume = 0.01
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_wooden_board")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape_wooden_board")

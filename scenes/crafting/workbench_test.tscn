@@ -1,0 +1,58 @@
+[gd_scene load_steps=3 format=3 uid="uid://b7qw5x3h8lay0"]
+
+[ext_resource type="PackedScene" uid="uid://cy8vn4m5xk2wp" path="res://scenes/crafting/workbench_window.tscn" id="1_workbench"]
+[ext_resource type="Script" path="res://scripts/crafting/physics/WorkbenchTestController.gd" id="2_test_script"]
+
+[node name="WorkbenchTest" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.15, 0.15, 0.15, 1)
+
+[node name="Instructions" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -250.0
+offset_top = 20.0
+offset_right = 250.0
+offset_bottom = 100.0
+grow_horizontal = 2
+text = "WORKBENCH TEST
+
+Press SPACE to toggle workbench window
+This is Phase 1.5 - Assembly Workbench UI"
+horizontal_alignment = 1
+
+[node name="WorkbenchWindow" parent="." instance=ExtResource("1_workbench")]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -576.0
+offset_top = -324.0
+offset_right = 576.0
+offset_bottom = 324.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TestScript" type="Node" parent="."]
+script = ExtResource("2_test_script")
+
+[connection signal="pressed" from="WorkbenchWindow/VBoxContainer/TitleBar/HBoxContainer/CloseButton" to="WorkbenchWindow" method="hide"]
+[connection signal="pressed" from="WorkbenchWindow/VBoxContainer/ToolbarPanel/HBoxContainer/ClearButton" to="WorkbenchWindow" method="clear_workbench"]
