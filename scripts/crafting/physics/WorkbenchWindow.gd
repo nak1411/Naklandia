@@ -1279,15 +1279,14 @@ func spawn_part(scene_path: String) -> PhysicalItem:
 	# Add to world
 	world.add_child(item)
 
-	# Position at camera target, well above the grid (minimum Y of 1.0)
-	var spawn_pos = camera_target + Vector3(0, 1.0, 0)
-	spawn_pos.y = max(spawn_pos.y, 1.0)  # Ensure always above floor
+	# Position at grid origin (0, 0, 0)
+	var spawn_pos = Vector3(0, 0, 0)
 	item.global_position = spawn_pos
 
 	# Initially frozen for placement
 	item.freeze = true
 
-	print("Spawned: ", item.item_name)
+	print("Spawned: ", item.item_name, " at origin (0, 0, 0)")
 	return item
 
 

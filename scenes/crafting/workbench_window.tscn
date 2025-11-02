@@ -200,7 +200,7 @@ surface_material_override/0 = SubResource("ShaderMaterial_grid")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="VBoxContainer/ViewportContainer/SubViewport"]
 transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 5, 0)
-shadow_enabled = true
+shadow_enabled = false
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="VBoxContainer/ViewportContainer/SubViewport"]
 environment = SubResource("Environment_workbench")
