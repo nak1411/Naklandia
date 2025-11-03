@@ -28,8 +28,23 @@ var part_list: ItemList
 var validate_button: Button
 var toggle_controls_button: Button
 var help_label: Label
-var controls_visible: bool = true
+var controls_visible: bool = false
 var initialized: bool = false
+var sidebar_panel: PanelContainer
+var separator: Control
+
+# Transform input panel
+var transform_panel: PanelContainer
+var position_x_input: SpinBox
+var position_y_input: SpinBox
+var position_z_input: SpinBox
+var rotation_x_input: SpinBox
+var rotation_y_input: SpinBox
+var rotation_z_input: SpinBox
+var scale_x_input: SpinBox
+var scale_y_input: SpinBox
+var scale_z_input: SpinBox
+var is_updating_transform_inputs: bool = false  # Flag to prevent recursion
 
 # Transform mode buttons
 var select_button: Button
@@ -77,6 +92,11 @@ var was_x_pressed: bool = false  # Track X state during drag (snap to grid)
 var gizmo_drag_plane_origin: Vector3 = Vector3.ZERO  # Initial drag plane origin in world space
 var gizmo_drag_camera_distance: float = 0.0  # Initial camera distance when drag started
 
+# Sidebar dragging state
+var is_dragging_separator: bool = false
+var sidebar_drag_start_x: float = 0.0
+var sidebar_initial_width: float = 250.0
+
 # Snap to grid settings
 var snap_to_grid_enabled: bool = false  # True when X key is held
 var grid_snap_size: float = 1.0  # Grid size for snapping (1 unit)
@@ -85,6 +105,9 @@ var grid_snap_size: float = 1.0  # Grid size for snapping (1 unit)
 const MAX_UNDO_OPERATIONS: int = 10
 var undo_history: Array = []  # Array of command dictionaries
 var redo_history: Array = []  # Array of command dictionaries for redo
+
+# Negative scale warning
+var negative_scale_warning_active: bool = false
 
 # Command structure:
 # {
@@ -117,10 +140,24 @@ func _ready() -> void:
 	camera = $VBoxContainer/MainContent/ViewportContainer/SubViewport/Camera3D
 	world = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World
 	grid = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World/Grid
-	part_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/PartList
+	part_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/PartList
 	validate_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ValidateButton
 	toggle_controls_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ToggleControlsButton
 	help_label = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/HelpLabel
+	sidebar_panel = $VBoxContainer/MainContent/SidebarPanel
+	separator = $VBoxContainer/MainContent/Separator
+
+	# Get transform panel references
+	transform_panel = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel
+	position_x_input = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionX/SpinBox
+	position_y_input = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionY/SpinBox
+	position_z_input = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionZ/SpinBox
+	rotation_x_input = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationX/SpinBox
+	rotation_y_input = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationY/SpinBox
+	rotation_z_input = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationZ/SpinBox
+	scale_x_input = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleX/SpinBox
+	scale_y_input = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleY/SpinBox
+	scale_z_input = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleZ/SpinBox
 
 	# Get transform mode button references
 	select_button = $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/SelectButton
@@ -171,11 +208,43 @@ func _ready() -> void:
 	if viewport_container:
 		viewport_container.mouse_exited.connect(_on_viewport_mouse_exited)
 
+	# Connect separator signals for dragging
+	if separator:
+		separator.gui_input.connect(_on_separator_gui_input)
+
+	# Connect transform input signals
+	if position_x_input:
+		position_x_input.value_changed.connect(_on_position_x_changed)
+	if position_y_input:
+		position_y_input.value_changed.connect(_on_position_y_changed)
+	if position_z_input:
+		position_z_input.value_changed.connect(_on_position_z_changed)
+	if rotation_x_input:
+		rotation_x_input.value_changed.connect(_on_rotation_x_changed)
+	if rotation_y_input:
+		rotation_y_input.value_changed.connect(_on_rotation_y_changed)
+	if rotation_z_input:
+		rotation_z_input.value_changed.connect(_on_rotation_z_changed)
+	if scale_x_input:
+		scale_x_input.value_changed.connect(_on_scale_x_changed)
+	if scale_y_input:
+		scale_y_input.value_changed.connect(_on_scale_y_changed)
+	if scale_z_input:
+		scale_z_input.value_changed.connect(_on_scale_z_changed)
+
+	# Initialize sidebar width
+	if sidebar_panel:
+		sidebar_initial_width = sidebar_panel.custom_minimum_size.x
+
 	# Update camera initial position
 	_update_camera_transform()
 
 	# Initialize button states to match current mode
 	_update_mode_buttons()
+
+	# Initialize help label visibility
+	if help_label:
+		help_label.visible = controls_visible
 
 	initialized = true
 	print("WorkbenchWindow ready - Use Alt+Mouse to navigate, Q/W/E/R for tools")
@@ -207,6 +276,8 @@ func _reset_all_drag_states() -> void:
 		gizmo_drag_initial_rotations.clear()
 		gizmo_drag_initial_scales.clear()
 		_clear_transform_stats()
+		# Clear any negative scale warning
+		_update_negative_scale_feedback(false)
 		print("Gizmo drag cancelled (focus lost)")
 
 	# Reset box selection
@@ -215,6 +286,10 @@ func _reset_all_drag_states() -> void:
 		if selection_overlay:
 			selection_overlay.queue_redraw()
 		print("Box selection cancelled (focus lost)")
+
+	# Reset separator dragging
+	if is_dragging_separator:
+		is_dragging_separator = false
 
 	# Reset modifier key states
 	is_alt_held = false
@@ -226,6 +301,32 @@ func _on_viewport_mouse_exited() -> void:
 	# Don't reset on mouse exit - let the global input handlers deal with it
 	# This prevents canceling operations during normal dragging outside viewport
 	pass
+
+
+func _on_separator_gui_input(event: InputEvent) -> void:
+	"""Handle input events on the separator for dragging."""
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				# Start dragging
+				is_dragging_separator = true
+				sidebar_drag_start_x = get_global_mouse_position().x
+				if sidebar_panel:
+					sidebar_initial_width = sidebar_panel.custom_minimum_size.x
+			else:
+				# Stop dragging
+				is_dragging_separator = false
+
+	elif event is InputEventMouseMotion and is_dragging_separator:
+		# Update sidebar width based on mouse position
+		var current_x = get_global_mouse_position().x
+		var delta_x = current_x - sidebar_drag_start_x
+
+		if sidebar_panel:
+			var new_width = sidebar_initial_width + delta_x
+			# Clamp to reasonable values (min 150px, max 600px)
+			new_width = clamp(new_width, 150.0, 600.0)
+			sidebar_panel.custom_minimum_size.x = new_width
 
 
 func _populate_part_list() -> void:
@@ -277,6 +378,8 @@ func _input(event: InputEvent) -> void:
 					gizmo_drag_initial_rotations.clear()
 					gizmo_drag_initial_scales.clear()
 					_clear_transform_stats()
+					# Clear any negative scale warning
+					_update_negative_scale_feedback(false)
 					print("Gizmo drag ended (outside viewport)")
 
 				if is_box_selecting:
@@ -405,6 +508,9 @@ func _handle_mouse_release(event: InputEventMouseButton) -> void:
 		gizmo_drag_initial_rotations.clear()
 		gizmo_drag_initial_scales.clear()
 		_clear_transform_stats()  # Clear stats display
+
+		# Clear any negative scale warning
+		_update_negative_scale_feedback(false)
 		return
 
 	# End camera drag
@@ -1195,7 +1301,7 @@ func _update_scale_drag(mouse_delta: Vector2) -> void:
 	if Input.is_key_pressed(KEY_CTRL):
 		var snap_increment = 0.1
 		scale_multiplier = round(scale_multiplier / snap_increment) * snap_increment
-		scale_multiplier = max(0.1, scale_multiplier)  # Prevent zero or negative scale
+		scale_multiplier = max(0.01, scale_multiplier)  # Prevent zero or negative scale
 
 	var num_axes = (
 		int(gizmo_drag_axis.x != 0) + int(gizmo_drag_axis.y != 0) + int(gizmo_drag_axis.z != 0)
@@ -1204,16 +1310,20 @@ func _update_scale_drag(mouse_delta: Vector2) -> void:
 	# Update stats display
 	_update_transform_stats("Scale", scale_multiplier, gizmo_drag_axis)
 
+	# Track if any object has negative scale for visual feedback
+	var has_negative_scale = false
+
 	for item in gizmo_drag_initial_scales.keys():
 		if item:
 			var initial_scale = gizmo_drag_initial_scales[item]
+			var new_scale: Vector3
 
 			if num_axes == 3:
 				# Uniform scaling (all axes)
-				item.scale = initial_scale * scale_multiplier
+				new_scale = initial_scale * scale_multiplier
 			else:
 				# Non-uniform scaling on specific axis
-				var new_scale = initial_scale
+				new_scale = initial_scale
 				if gizmo_drag_axis.x != 0:
 					new_scale.x = initial_scale.x * scale_multiplier
 				if gizmo_drag_axis.y != 0:
@@ -1221,7 +1331,55 @@ func _update_scale_drag(mouse_delta: Vector2) -> void:
 				if gizmo_drag_axis.z != 0:
 					new_scale.z = initial_scale.z * scale_multiplier
 
-				item.scale = new_scale
+			# Clamp each axis to a minimum of 0.01 to prevent negative scaling
+			new_scale.x = max(0.01, new_scale.x)
+			new_scale.y = max(0.01, new_scale.y)
+			new_scale.z = max(0.01, new_scale.z)
+
+			item.scale = new_scale
+
+			# Check if the calculated scale would have been negative (before clamping)
+			var unclamped_scale = (
+				initial_scale * scale_multiplier
+				if num_axes == 3
+				else Vector3(
+					initial_scale.x * (scale_multiplier if gizmo_drag_axis.x != 0 else 1.0),
+					initial_scale.y * (scale_multiplier if gizmo_drag_axis.y != 0 else 1.0),
+					initial_scale.z * (scale_multiplier if gizmo_drag_axis.z != 0 else 1.0)
+				)
+			)
+
+			if unclamped_scale.x < 0 or unclamped_scale.y < 0 or unclamped_scale.z < 0:
+				has_negative_scale = true
+
+	# Visual feedback: tint red if attempting negative scale
+	_update_negative_scale_feedback(has_negative_scale)
+
+
+func _update_negative_scale_feedback(is_negative: bool) -> void:
+	"""Apply red tint to selected objects when attempting negative scale."""
+	if is_negative == negative_scale_warning_active:
+		return  # No change needed
+
+	negative_scale_warning_active = is_negative
+
+	for item in selected_items:
+		if not item or not item.mesh_instance:
+			continue
+
+		var mesh = item.mesh_instance
+
+		if is_negative:
+			# Apply red warning tint
+			var warning_material = StandardMaterial3D.new()
+			warning_material.albedo_color = Color(1.0, 0.3, 0.3, 1.0)  # Red tint
+			warning_material.emission_enabled = true
+			warning_material.emission = Color(0.8, 0.2, 0.2, 1.0)  # Red emission
+			warning_material.emission_energy_multiplier = 0.7
+			mesh.set_surface_override_material(0, warning_material)
+		else:
+			# Restore original highlight (selected) material
+			mesh.set_surface_override_material(0, item.outline_material)
 
 
 func _is_mouse_over_viewport() -> bool:
@@ -1529,6 +1687,127 @@ func _on_scale_button_pressed() -> void:
 	_set_transform_mode(TransformMode.SCALE)
 
 
+# Transform input change handlers
+func _on_position_x_changed(value: float) -> void:
+	"""Handle position X input change."""
+	if is_updating_transform_inputs or selected_items.is_empty():
+		return
+
+	for item in selected_items:
+		var new_pos = item.global_position
+		new_pos.x = value
+		item.global_position = new_pos
+
+	_update_gizmo()
+	print("Position X set to: ", value)
+
+
+func _on_position_y_changed(value: float) -> void:
+	"""Handle position Y input change."""
+	if is_updating_transform_inputs or selected_items.is_empty():
+		return
+
+	for item in selected_items:
+		var new_pos = item.global_position
+		new_pos.y = value
+		item.global_position = new_pos
+
+	_update_gizmo()
+	print("Position Y set to: ", value)
+
+
+func _on_position_z_changed(value: float) -> void:
+	"""Handle position Z input change."""
+	if is_updating_transform_inputs or selected_items.is_empty():
+		return
+
+	for item in selected_items:
+		var new_pos = item.global_position
+		new_pos.z = value
+		item.global_position = new_pos
+
+	_update_gizmo()
+	print("Position Z set to: ", value)
+
+
+func _on_rotation_x_changed(value: float) -> void:
+	"""Handle rotation X input change."""
+	if is_updating_transform_inputs or selected_items.is_empty():
+		return
+
+	for item in selected_items:
+		var rot = item.rotation_degrees
+		rot.x = value
+		item.rotation_degrees = rot
+
+	print("Rotation X set to: ", value, "°")
+
+
+func _on_rotation_y_changed(value: float) -> void:
+	"""Handle rotation Y input change."""
+	if is_updating_transform_inputs or selected_items.is_empty():
+		return
+
+	for item in selected_items:
+		var rot = item.rotation_degrees
+		rot.y = value
+		item.rotation_degrees = rot
+
+	print("Rotation Y set to: ", value, "°")
+
+
+func _on_rotation_z_changed(value: float) -> void:
+	"""Handle rotation Z input change."""
+	if is_updating_transform_inputs or selected_items.is_empty():
+		return
+
+	for item in selected_items:
+		var rot = item.rotation_degrees
+		rot.z = value
+		item.rotation_degrees = rot
+
+	print("Rotation Z set to: ", value, "°")
+
+
+func _on_scale_x_changed(value: float) -> void:
+	"""Handle scale X input change."""
+	if is_updating_transform_inputs or selected_items.is_empty():
+		return
+
+	for item in selected_items:
+		var new_scale = item.scale
+		new_scale.x = value
+		item.scale = new_scale
+
+	print("Scale X set to: ", value)
+
+
+func _on_scale_y_changed(value: float) -> void:
+	"""Handle scale Y input change."""
+	if is_updating_transform_inputs or selected_items.is_empty():
+		return
+
+	for item in selected_items:
+		var new_scale = item.scale
+		new_scale.y = value
+		item.scale = new_scale
+
+	print("Scale Y set to: ", value)
+
+
+func _on_scale_z_changed(value: float) -> void:
+	"""Handle scale Z input change."""
+	if is_updating_transform_inputs or selected_items.is_empty():
+		return
+
+	for item in selected_items:
+		var new_scale = item.scale
+		new_scale.z = value
+		item.scale = new_scale
+
+	print("Scale Z set to: ", value)
+
+
 func _update_mode_buttons() -> void:
 	"""Update the visual state of transform mode buttons based on current mode."""
 	if not select_button or not move_button or not rotate_button or not scale_button:
@@ -1639,6 +1918,9 @@ func _update_object_info() -> void:
 	if not object_info_label:
 		return
 
+	# Update transform panel visibility and values
+	_update_transform_panel()
+
 	if selected_items.is_empty():
 		object_info_label.text = ""
 		return
@@ -1658,6 +1940,58 @@ func _update_object_info() -> void:
 	text += "Scale: (%.2f, %.2f, %.2f)" % [scale_vec.x, scale_vec.y, scale_vec.z]
 
 	object_info_label.text = text
+
+
+func _update_transform_panel() -> void:
+	"""Update the transform panel with current selection's transform values."""
+	if not transform_panel:
+		return
+
+	# Show panel only when items are selected
+	if selected_items.is_empty():
+		transform_panel.visible = false
+		return
+
+	transform_panel.visible = true
+
+	# Only update if single object is selected (for clarity)
+	if selected_items.size() != 1:
+		return
+
+	var item = selected_items[0]
+	var pos = item.global_position
+	var rot = item.rotation_degrees
+	var scale_vec = item.scale
+
+	# Set flag to prevent recursion
+	is_updating_transform_inputs = true
+
+	# Update position inputs
+	if position_x_input:
+		position_x_input.set_value_no_signal(pos.x)
+	if position_y_input:
+		position_y_input.set_value_no_signal(pos.y)
+	if position_z_input:
+		position_z_input.set_value_no_signal(pos.z)
+
+	# Update rotation inputs
+	if rotation_x_input:
+		rotation_x_input.set_value_no_signal(rot.x)
+	if rotation_y_input:
+		rotation_y_input.set_value_no_signal(rot.y)
+	if rotation_z_input:
+		rotation_z_input.set_value_no_signal(rot.z)
+
+	# Update scale inputs
+	if scale_x_input:
+		scale_x_input.set_value_no_signal(scale_vec.x)
+	if scale_y_input:
+		scale_y_input.set_value_no_signal(scale_vec.y)
+	if scale_z_input:
+		scale_z_input.set_value_no_signal(scale_vec.z)
+
+	# Clear flag
+	is_updating_transform_inputs = false
 
 
 func _on_validate_pressed() -> void:

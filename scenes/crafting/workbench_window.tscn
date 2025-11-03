@@ -123,35 +123,276 @@ layout_mode = 2
 size_flags_vertical = 3
 
 [node name="SidebarPanel" type="PanelContainer" parent="VBoxContainer/MainContent"]
-custom_minimum_size = Vector2(250, 0)
+custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
+size_flags_horizontal = 0
 size_flags_vertical = 3
 focus_mode = 0
+
+[node name="Separator" type="Control" parent="VBoxContainer/MainContent"]
+custom_minimum_size = Vector2(8, 0)
+layout_mode = 2
+mouse_default_cursor_shape = 10
+tooltip_text = "Drag to resize sidebar"
+
+[node name="SeparatorPanel" type="Panel" parent="VBoxContainer/MainContent/Separator"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 
 [node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="PartsLabelContainer" type="MarginContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
+[node name="VSplitContainer" type="VSplitContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PartsSection" type="VBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 4
+
+[node name="PartsLabelContainer" type="MarginContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection"]
 layout_mode = 2
 theme_override_constants/margin_left = 8
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_top = 4
 theme_override_constants/margin_bottom = 0
 
-[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/PartsLabelContainer"]
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/PartsLabelContainer"]
 layout_mode = 2
 theme_override_constants/line_spacing = 0
 text = "Parts:"
 
-[node name="PartList" type="ItemList" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
-custom_minimum_size = Vector2(200, 0)
+[node name="PartList" type="ItemList" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection"]
+custom_minimum_size = Vector2(200, 100)
 layout_mode = 2
 size_flags_vertical = 3
 focus_mode = 0
 max_columns = 1
 
-[node name="HSeparator" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
+[node name="TransformSection" type="VBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 4
+
+[node name="TransformPanel" type="PanelContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+size_flags_vertical = 3
+visible = false
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="TitleLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Transform"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="PositionLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Position:"
+theme_override_font_sizes/font_size = 12
+
+[node name="PositionX" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionX"]
+custom_minimum_size = Vector2(15, 0)
+layout_mode = 2
+text = "X:"
+theme_override_font_sizes/font_size = 11
+
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionX"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -100.0
+max_value = 100.0
+step = 0.1
+allow_greater = true
+allow_lesser = true
+
+[node name="PositionY" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionY"]
+custom_minimum_size = Vector2(15, 0)
+layout_mode = 2
+text = "Y:"
+theme_override_font_sizes/font_size = 11
+
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionY"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -100.0
+max_value = 100.0
+step = 0.1
+allow_greater = true
+allow_lesser = true
+
+[node name="PositionZ" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionZ"]
+custom_minimum_size = Vector2(15, 0)
+layout_mode = 2
+text = "Z:"
+theme_override_font_sizes/font_size = 11
+
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionZ"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -100.0
+max_value = 100.0
+step = 0.1
+allow_greater = true
+allow_lesser = true
+
+[node name="HSeparator2" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="RotationLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Rotation:"
+theme_override_font_sizes/font_size = 12
+
+[node name="RotationX" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationX"]
+custom_minimum_size = Vector2(15, 0)
+layout_mode = 2
+text = "X:"
+theme_override_font_sizes/font_size = 11
+
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationX"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -360.0
+max_value = 360.0
+step = 1.0
+allow_greater = true
+allow_lesser = true
+suffix = "°"
+
+[node name="RotationY" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationY"]
+custom_minimum_size = Vector2(15, 0)
+layout_mode = 2
+text = "Y:"
+theme_override_font_sizes/font_size = 11
+
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationY"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -360.0
+max_value = 360.0
+step = 1.0
+allow_greater = true
+allow_lesser = true
+suffix = "°"
+
+[node name="RotationZ" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationZ"]
+custom_minimum_size = Vector2(15, 0)
+layout_mode = 2
+text = "Z:"
+theme_override_font_sizes/font_size = 11
+
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationZ"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -360.0
+max_value = 360.0
+step = 1.0
+allow_greater = true
+allow_lesser = true
+suffix = "°"
+
+[node name="HSeparator3" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ScaleLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Scale:"
+theme_override_font_sizes/font_size = 12
+
+[node name="ScaleX" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleX"]
+custom_minimum_size = Vector2(15, 0)
+layout_mode = 2
+text = "X:"
+theme_override_font_sizes/font_size = 11
+
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleX"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.01
+max_value = 10.0
+step = 0.1
+value = 1.0
+allow_greater = true
+
+[node name="ScaleY" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleY"]
+custom_minimum_size = Vector2(15, 0)
+layout_mode = 2
+text = "Y:"
+theme_override_font_sizes/font_size = 11
+
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleY"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.01
+max_value = 10.0
+step = 0.1
+value = 1.0
+allow_greater = true
+
+[node name="ScaleZ" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleZ"]
+custom_minimum_size = Vector2(15, 0)
+layout_mode = 2
+text = "Z:"
+theme_override_font_sizes/font_size = 11
+
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleZ"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.01
+max_value = 10.0
+step = 0.1
+value = 1.0
+allow_greater = true
+
+[node name="HSeparator4" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
 layout_mode = 2
 
 [node name="ValidateButton" type="Button" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
@@ -163,14 +404,6 @@ text = "Validate Construct"
 layout_mode = 2
 focus_mode = 0
 text = "Clear All"
-
-[node name="HSeparator2" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
-layout_mode = 2
-
-[node name="ToggleControlsButton" type="Button" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
-layout_mode = 2
-focus_mode = 0
-text = "Toggle Controls"
 
 [node name="HelpLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
 layout_mode = 2
