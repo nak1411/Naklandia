@@ -26,6 +26,9 @@ var world: Node3D
 var grid: MeshInstance3D
 var part_list: ItemList
 var validate_button: Button
+var toggle_controls_button: Button
+var help_label: Label
+var controls_visible: bool = true
 var initialized: bool = false
 
 # Transform gizmo
@@ -72,9 +75,10 @@ var gizmo_drag_camera_distance: float = 0.0  # Initial camera distance when drag
 var snap_to_grid_enabled: bool = false  # True when X key is held
 var grid_snap_size: float = 1.0  # Grid size for snapping (1 unit)
 
-# Undo system
+# Undo/Redo system
 const MAX_UNDO_OPERATIONS: int = 10
 var undo_history: Array = []  # Array of command dictionaries
+var redo_history: Array = []  # Array of command dictionaries for redo
 
 # Command structure:
 # {
@@ -96,16 +100,18 @@ signal workbench_closed
 
 func _ready() -> void:
 	# Get node references
-	viewport_container = $VBoxContainer/ViewportContainer
-	selection_overlay = $VBoxContainer/ViewportContainer/SelectionOverlay
-	transform_stats_label = $VBoxContainer/ViewportContainer/TransformStatsLabel
-	object_info_label = $VBoxContainer/ViewportContainer/ObjectInfoLabel
-	viewport = $VBoxContainer/ViewportContainer/SubViewport
-	camera = $VBoxContainer/ViewportContainer/SubViewport/Camera3D
-	world = $VBoxContainer/ViewportContainer/SubViewport/World
-	grid = $VBoxContainer/ViewportContainer/SubViewport/World/Grid
-	part_list = $VBoxContainer/ToolbarPanel/HBoxContainer/PartList
-	validate_button = $VBoxContainer/ToolbarPanel/HBoxContainer/ValidateButton
+	viewport_container = $VBoxContainer/MainContent/ViewportContainer
+	selection_overlay = $VBoxContainer/MainContent/ViewportContainer/SelectionOverlay
+	transform_stats_label = $VBoxContainer/MainContent/ViewportContainer/TransformStatsLabel
+	object_info_label = $VBoxContainer/MainContent/ViewportContainer/ObjectInfoLabel
+	viewport = $VBoxContainer/MainContent/ViewportContainer/SubViewport
+	camera = $VBoxContainer/MainContent/ViewportContainer/SubViewport/Camera3D
+	world = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World
+	grid = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World/Grid
+	part_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/PartList
+	validate_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ValidateButton
+	toggle_controls_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ToggleControlsButton
+	help_label = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/HelpLabel
 
 	# Set up viewport
 	if viewport and viewport_container:
@@ -120,6 +126,8 @@ func _ready() -> void:
 		validate_button.pressed.connect(_on_validate_pressed)
 	if part_list:
 		part_list.item_activated.connect(_on_part_selected)
+	if toggle_controls_button:
+		toggle_controls_button.pressed.connect(_on_toggle_controls_pressed)
 
 	# Create transform gizmo
 	transform_gizmo = TransformGizmo.new()
@@ -193,8 +201,25 @@ func _input(event: InputEvent) -> void:
 					# Deselect all items
 					_clear_selection()
 			# Undo (Ctrl+Z)
-			elif event.keycode == KEY_Z and Input.is_key_pressed(KEY_CTRL):
+			elif (
+				event.keycode == KEY_Z
+				and Input.is_key_pressed(KEY_CTRL)
+				and not Input.is_key_pressed(KEY_SHIFT)
+			):
 				_undo_last_operation()
+			# Redo (Ctrl+Shift+Z or Ctrl+Y)
+			elif (
+				(
+					event.keycode == KEY_Z
+					and Input.is_key_pressed(KEY_CTRL)
+					and Input.is_key_pressed(KEY_SHIFT)
+				)
+				or (event.keycode == KEY_Y and Input.is_key_pressed(KEY_CTRL))
+			):
+				_redo_last_operation()
+			# Delete selected objects (DEL or Backspace)
+			elif event.keycode == KEY_DELETE or event.keycode == KEY_BACKSPACE:
+				_delete_selected_items()
 
 	# Mouse button events
 	if event is InputEventMouseButton:
@@ -1238,6 +1263,28 @@ func _clear_selection() -> void:
 	_update_object_info()
 
 
+func _delete_selected_items() -> void:
+	"""Delete all currently selected items."""
+	if selected_items.is_empty():
+		return
+
+	var count = selected_items.size()
+
+	# Remove all selected items from the scene
+	for item in selected_items:
+		if is_instance_valid(item):
+			item.queue_free()
+
+	# Clear selection array
+	selected_items.clear()
+
+	# Update UI
+	_update_gizmo()
+	_update_object_info()
+
+	print("Deleted ", count, " object(s)")
+
+
 func _set_transform_mode(mode: TransformMode) -> void:
 	"""Set the current transform mode."""
 	current_transform_mode = mode
@@ -1284,6 +1331,14 @@ func _on_part_selected(index: int) -> void:
 	var part_name = part_list.get_item_text(index).to_lower().replace(" ", "_")
 	if part_name in available_parts:
 		spawn_part(available_parts[part_name])
+
+
+func _on_toggle_controls_pressed() -> void:
+	"""Toggle visibility of the controls help text."""
+	controls_visible = !controls_visible
+	if help_label:
+		help_label.visible = controls_visible
+	print("Controls text ", "shown" if controls_visible else "hidden")
 
 
 func spawn_part(scene_path: String) -> PhysicalItem:
@@ -1543,6 +1598,9 @@ func _record_transform_operation() -> void:
 			# Add to history
 			undo_history.append(command)
 
+			# Clear redo history when a new operation is recorded
+			redo_history.clear()
+
 			# Limit history size to MAX_UNDO_OPERATIONS
 			if undo_history.size() > MAX_UNDO_OPERATIONS:
 				undo_history.pop_front()
@@ -1597,7 +1655,66 @@ func _undo_last_operation() -> void:
 					item.scale = command["old_values"][item]
 			print("Undid scale operation")
 
+	# Add to redo history
+	redo_history.append(command)
+
+	# Limit redo history size
+	if redo_history.size() > MAX_UNDO_OPERATIONS:
+		redo_history.pop_front()
+
 	# Update gizmo position
 	_update_gizmo()
 
-	print("Undo completed (", undo_history.size(), " operations remaining)")
+	print("Undo completed (", undo_history.size(), " undo | ", redo_history.size(), " redo)")
+
+
+func _redo_last_operation() -> void:
+	"""Redo the last undone operation."""
+	if redo_history.is_empty():
+		print("Nothing to redo")
+		return
+
+	var command = redo_history.pop_back()
+
+	# Verify all items still exist
+	var all_exist = true
+	for item in command["items"]:
+		if not is_instance_valid(item) or not item.is_inside_tree():
+			all_exist = false
+			break
+
+	if not all_exist:
+		print("Cannot redo: some items no longer exist")
+		return
+
+	# Apply the new values (the ones that were undone)
+	match command["type"]:
+		"move":
+			for item in command["new_values"].keys():
+				if is_instance_valid(item):
+					item.global_position = command["new_values"][item]
+			print("Redid move operation")
+
+		"rotate":
+			for item in command["new_values"].keys():
+				if is_instance_valid(item):
+					item.basis = command["new_values"][item]
+			print("Redid rotate operation")
+
+		"scale":
+			for item in command["new_values"].keys():
+				if is_instance_valid(item):
+					item.scale = command["new_values"][item]
+			print("Redid scale operation")
+
+	# Add back to undo history
+	undo_history.append(command)
+
+	# Limit undo history size
+	if undo_history.size() > MAX_UNDO_OPERATIONS:
+		undo_history.pop_front()
+
+	# Update gizmo position
+	_update_gizmo()
+
+	print("Redo completed (", undo_history.size(), " undo | ", redo_history.size(), " redo)")
