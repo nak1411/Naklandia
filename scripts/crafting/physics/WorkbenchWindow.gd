@@ -443,6 +443,9 @@ func _input(event: InputEvent) -> void:
 			# Delete selected objects (DEL or Backspace)
 			elif event.keycode == KEY_DELETE or event.keycode == KEY_BACKSPACE:
 				_delete_selected_items()
+			# Duplicate selected objects (Ctrl+D)
+			elif event.keycode == KEY_D and Input.is_key_pressed(KEY_CTRL):
+				_duplicate_selected_items()
 
 	# Mouse button events
 	if event is InputEventMouseButton:
@@ -1525,23 +1528,61 @@ func _try_box_select() -> void:
 				item_transform * (aabb.position + aabb.size)
 			]
 
-			# Project all corners to screen space and find screen-space bounding box
+			# Check visibility: only select if object is in front of camera
+			var is_in_front = false
+			for corner in corners:
+				var to_corner = corner - camera.global_position
+				var forward = -camera.global_transform.basis.z
+				if to_corner.dot(forward) > 0:
+					is_in_front = true
+					break
+
+			if not is_in_front:
+				continue
+
+			# Project all corners to screen space
+			var screen_corners: Array[Vector2] = []
+			for corner in corners:
+				screen_corners.append(camera.unproject_position(corner))
+
+			# Create screen-space bounding rect for the item
 			var screen_min = Vector2(INF, INF)
 			var screen_max = Vector2(-INF, -INF)
-
-			for corner in corners:
-				var screen_pos = camera.unproject_position(corner)
+			for screen_pos in screen_corners:
 				screen_min.x = min(screen_min.x, screen_pos.x)
 				screen_min.y = min(screen_min.y, screen_pos.y)
 				screen_max.x = max(screen_max.x, screen_pos.x)
 				screen_max.y = max(screen_max.y, screen_pos.y)
-
-			# Create screen-space bounding rect for the item
 			var item_screen_rect = Rect2(screen_min, screen_max - screen_min)
 
-			# Check if selection rect intersects with item's screen rect
-			if selection_rect.intersects(item_screen_rect):
-				items_to_select.append(item)
+			# Proper intersection test: check if rectangles actually overlap
+			# This prevents false positives when selection box is near but not touching
+			if selection_rect.intersects(item_screen_rect, true):
+				# Additional accuracy check: verify that at least one corner is actually inside
+				# This helps with rotated objects where AABB might be larger than visual bounds
+				var has_real_overlap = false
+
+				# Check if any object corner is inside selection rect
+				for screen_pos in screen_corners:
+					if selection_rect.has_point(screen_pos):
+						has_real_overlap = true
+						break
+
+				# Check if any selection rect corner is inside object rect
+				if not has_real_overlap:
+					var sel_corners = [
+						selection_rect.position,
+						selection_rect.position + Vector2(selection_rect.size.x, 0),
+						selection_rect.position + Vector2(0, selection_rect.size.y),
+						selection_rect.position + selection_rect.size
+					]
+					for sel_corner in sel_corners:
+						if item_screen_rect.has_point(sel_corner):
+							has_real_overlap = true
+							break
+
+				if has_real_overlap:
+					items_to_select.append(item)
 
 	# Update selection
 	if items_to_select.size() > 0:
@@ -1606,6 +1647,50 @@ func _delete_selected_items() -> void:
 	_update_object_info()
 
 	print("Deleted ", count, " object(s)")
+
+
+func _duplicate_selected_items() -> void:
+	"""Duplicate all currently selected items (industry standard: duplicate in place)."""
+	if selected_items.is_empty():
+		return
+
+	var duplicated_items: Array[PhysicalItem] = []
+
+	# Store original selection to deselect later
+	var original_items = selected_items.duplicate()
+
+	# First, deselect all originals to remove blue highlight
+	# This ensures the duplicates don't copy the blue material
+	_clear_selection()
+
+	# Duplicate each item
+	for item in original_items:
+		if not is_instance_valid(item):
+			continue
+
+		# Duplicate the item (now that it's deselected, no blue material)
+		var duplicated_item = item.duplicate(DUPLICATE_USE_INSTANTIATION) as PhysicalItem
+		if not duplicated_item:
+			continue
+
+		# Add to world
+		world.add_child(duplicated_item)
+
+		# Position at exact same location as original (no offset - industry standard)
+		duplicated_item.global_position = item.global_position
+		duplicated_item.rotation = item.rotation
+		duplicated_item.scale = item.scale
+
+		# Keep frozen state
+		duplicated_item.freeze = true
+
+		duplicated_items.append(duplicated_item)
+
+	# Now select only the duplicates
+	for item in duplicated_items:
+		_select_item(item, true)
+
+	print("Duplicated ", duplicated_items.size(), " object(s) in place")
 
 
 func _set_transform_mode(mode: TransformMode) -> void:

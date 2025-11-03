@@ -408,7 +408,7 @@ text = "Clear All"
 [node name="HelpLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
-text = "Alt+Left: Orbit | Alt+Middle: Pan | Alt+Right: Zoom | Click: Select | Q/W/E/R: Select/Move/Rotate/Scale | F: Frame | X: Grid Snap | Ctrl: Snap | Shift: Fine | Ctrl+Z: Undo | Ctrl+Shift+Z/Ctrl+Y: Redo"
+text = "Alt+Left: Orbit | Alt+Middle: Pan | Alt+Right: Zoom | Click: Select | Q/W/E/R: Select/Move/Rotate/Scale | F: Frame | X: Grid Snap | Ctrl: Snap | Shift: Fine | Ctrl+Z: Undo | Ctrl+Shift+Z/Ctrl+Y: Redo | Ctrl+D: Duplicate"
 autowrap_mode = 3
 vertical_alignment = 2
 
