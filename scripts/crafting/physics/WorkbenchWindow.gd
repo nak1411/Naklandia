@@ -31,6 +31,12 @@ var help_label: Label
 var controls_visible: bool = true
 var initialized: bool = false
 
+# Transform mode buttons
+var select_button: Button
+var move_button: Button
+var rotate_button: Button
+var scale_button: Button
+
 # Transform gizmo
 var transform_gizmo: TransformGizmo = null
 var gizmo_dragger: GizmoDragger = null
@@ -116,6 +122,12 @@ func _ready() -> void:
 	toggle_controls_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ToggleControlsButton
 	help_label = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/HelpLabel
 
+	# Get transform mode button references
+	select_button = $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/SelectButton
+	move_button = $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/MoveButton
+	rotate_button = $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/RotateButton
+	scale_button = $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/ScaleButton
+
 	# Set up viewport
 	if viewport and viewport_container:
 		viewport.size = viewport_container.size
@@ -132,6 +144,16 @@ func _ready() -> void:
 	if toggle_controls_button:
 		toggle_controls_button.pressed.connect(_on_toggle_controls_pressed)
 
+	# Connect transform mode button signals
+	if select_button:
+		select_button.pressed.connect(_on_select_button_pressed)
+	if move_button:
+		move_button.pressed.connect(_on_move_button_pressed)
+	if rotate_button:
+		rotate_button.pressed.connect(_on_rotate_button_pressed)
+	if scale_button:
+		scale_button.pressed.connect(_on_scale_button_pressed)
+
 	# Create transform gizmo
 	transform_gizmo = TransformGizmo.new()
 	world.add_child(transform_gizmo)
@@ -145,11 +167,65 @@ func _ready() -> void:
 	if selection_overlay:
 		selection_overlay.draw.connect(_draw_selection_box)
 
+	# Connect viewport container mouse exit signal
+	if viewport_container:
+		viewport_container.mouse_exited.connect(_on_viewport_mouse_exited)
+
 	# Update camera initial position
 	_update_camera_transform()
 
+	# Initialize button states to match current mode
+	_update_mode_buttons()
+
 	initialized = true
 	print("WorkbenchWindow ready - Use Alt+Mouse to navigate, Q/W/E/R for tools")
+
+
+func _notification(what: int) -> void:
+	"""Handle window notifications for focus changes."""
+	match what:
+		NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+			_reset_all_drag_states()
+		NOTIFICATION_APPLICATION_FOCUS_OUT:
+			_reset_all_drag_states()
+
+
+func _reset_all_drag_states() -> void:
+	"""Reset all dragging and input states to prevent stuck controls."""
+	# Reset camera dragging
+	if is_dragging_camera:
+		is_dragging_camera = false
+		drag_button = -1
+		print("Camera drag cancelled (focus lost)")
+
+	# Reset gizmo dragging
+	if is_gizmo_dragging:
+		# Don't cancel the operation, just stop the drag
+		# This preserves any partial transformations
+		is_gizmo_dragging = false
+		gizmo_drag_initial_positions.clear()
+		gizmo_drag_initial_rotations.clear()
+		gizmo_drag_initial_scales.clear()
+		_clear_transform_stats()
+		print("Gizmo drag cancelled (focus lost)")
+
+	# Reset box selection
+	if is_box_selecting:
+		is_box_selecting = false
+		if selection_overlay:
+			selection_overlay.queue_redraw()
+		print("Box selection cancelled (focus lost)")
+
+	# Reset modifier key states
+	is_alt_held = false
+	snap_to_grid_enabled = false
+
+
+func _on_viewport_mouse_exited() -> void:
+	"""Handle mouse leaving the viewport area."""
+	# Don't reset on mouse exit - let the global input handlers deal with it
+	# This prevents canceling operations during normal dragging outside viewport
+	pass
 
 
 func _populate_part_list() -> void:
@@ -165,6 +241,50 @@ func _input(event: InputEvent) -> void:
 	if not visible:
 		return
 
+	# Track Alt key for camera controls globally (even outside viewport)
+	# This prevents Alt from getting stuck when released outside the window
+	if event is InputEventKey:
+		if event.keycode == KEY_ALT:
+			var was_alt_held = is_alt_held
+			is_alt_held = event.pressed
+
+			# If Alt was released while dragging camera, stop the camera drag
+			if was_alt_held and not is_alt_held and is_dragging_camera:
+				is_dragging_camera = false
+				drag_button = -1
+				print("Camera drag cancelled (Alt released)")
+
+	# Track mouse button releases globally to prevent stuck drags
+	# Only handle releases outside the viewport to prevent interference with normal operation
+	if event is InputEventMouseButton and not event.pressed:
+		var mouse_over_viewport = _is_mouse_over_viewport()
+
+		# If mouse is NOT over viewport, handle releases to prevent stuck states
+		if not mouse_over_viewport:
+			# If the mouse button that was being used for dragging is released, stop dragging
+			if is_dragging_camera and event.button_index == drag_button:
+				is_dragging_camera = false
+				drag_button = -1
+				print("Camera drag ended (outside viewport)")
+
+			# If left mouse is released, cancel gizmo drag or box selection
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				if is_gizmo_dragging:
+					# Record the operation for undo before clearing
+					_record_transform_operation()
+					is_gizmo_dragging = false
+					gizmo_drag_initial_positions.clear()
+					gizmo_drag_initial_rotations.clear()
+					gizmo_drag_initial_scales.clear()
+					_clear_transform_stats()
+					print("Gizmo drag ended (outside viewport)")
+
+				if is_box_selecting:
+					is_box_selecting = false
+					if selection_overlay:
+						selection_overlay.queue_redraw()
+					print("Box selection ended (outside viewport)")
+
 	# Check if we're in the middle of an operation
 	var is_active_operation = is_gizmo_dragging or is_dragging_camera or is_box_selecting
 
@@ -172,11 +292,8 @@ func _input(event: InputEvent) -> void:
 	if not is_active_operation and not _is_mouse_over_viewport():
 		return
 
-	# Track Alt key for camera controls
+	# Track other keys for workbench controls
 	if event is InputEventKey:
-		if event.keycode == KEY_ALT:
-			is_alt_held = event.pressed
-
 		# Track X key for snap to grid
 		if event.keycode == KEY_X:
 			snap_to_grid_enabled = event.pressed
@@ -345,7 +462,20 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 	elif is_box_selecting:
 		# Convert to selection overlay's local coordinates for drawing
 		if selection_overlay:
-			box_select_end = selection_overlay.get_local_mouse_position()
+			var mouse_pos = selection_overlay.get_local_mouse_position()
+			# Clamp to viewport bounds
+			var viewport_rect = Rect2(Vector2.ZERO, viewport_container.size)
+			mouse_pos.x = clamp(
+				mouse_pos.x,
+				viewport_rect.position.x,
+				viewport_rect.position.x + viewport_rect.size.x
+			)
+			mouse_pos.y = clamp(
+				mouse_pos.y,
+				viewport_rect.position.y,
+				viewport_rect.position.y + viewport_rect.size.y
+			)
+			box_select_end = mouse_pos
 
 	# Gizmo hover detection (when not dragging anything)
 	elif not is_dragging_camera and not is_box_selecting:
@@ -754,6 +884,16 @@ func _update_gizmo_drag(_mouse_pos: Vector2) -> void:
 		return
 
 	var viewport_pos = viewport_container.get_local_mouse_position()
+
+	# Clamp mouse position to viewport bounds for gizmo dragging
+	var viewport_rect = Rect2(Vector2.ZERO, viewport_container.size)
+	viewport_pos.x = clamp(
+		viewport_pos.x, viewport_rect.position.x, viewport_rect.position.x + viewport_rect.size.x
+	)
+	viewport_pos.y = clamp(
+		viewport_pos.y, viewport_rect.position.y, viewport_rect.position.y + viewport_rect.size.y
+	)
+
 	var mouse_delta = viewport_pos - gizmo_drag_start_mouse
 
 	if current_transform_mode == TransformMode.MOVE:
@@ -1091,7 +1231,29 @@ func _is_mouse_over_viewport() -> bool:
 
 	var mouse_pos = viewport_container.get_local_mouse_position()
 	var rect = Rect2(Vector2.ZERO, viewport_container.size)
-	return rect.has_point(mouse_pos)
+	if not rect.has_point(mouse_pos):
+		return false
+
+	# Check if mouse is over UI buttons
+	if _is_mouse_over_ui():
+		return false
+
+	return true
+
+
+func _is_mouse_over_ui() -> bool:
+	"""Check if mouse is over any UI elements in the viewport."""
+	# Check transform mode buttons
+	if select_button and select_button.get_global_rect().has_point(get_global_mouse_position()):
+		return true
+	if move_button and move_button.get_global_rect().has_point(get_global_mouse_position()):
+		return true
+	if rotate_button and rotate_button.get_global_rect().has_point(get_global_mouse_position()):
+		return true
+	if scale_button and scale_button.get_global_rect().has_point(get_global_mouse_position()):
+		return true
+
+	return false
 
 
 func _update_hover_detection(_mouse_pos: Vector2) -> void:
@@ -1305,6 +1467,9 @@ func _set_transform_mode(mode: TransformMode) -> void:
 
 	print("Transform mode: ", mode_name)
 
+	# Update button states
+	_update_mode_buttons()
+
 	# Update gizmo mode
 	if transform_gizmo:
 		var gizmo_mode = TransformGizmo.GizmoMode.MOVE
@@ -1342,6 +1507,38 @@ func _on_toggle_controls_pressed() -> void:
 	if help_label:
 		help_label.visible = controls_visible
 	print("Controls text ", "shown" if controls_visible else "hidden")
+
+
+func _on_select_button_pressed() -> void:
+	"""Handle select button press."""
+	_set_transform_mode(TransformMode.SELECT)
+
+
+func _on_move_button_pressed() -> void:
+	"""Handle move button press."""
+	_set_transform_mode(TransformMode.MOVE)
+
+
+func _on_rotate_button_pressed() -> void:
+	"""Handle rotate button press."""
+	_set_transform_mode(TransformMode.ROTATE)
+
+
+func _on_scale_button_pressed() -> void:
+	"""Handle scale button press."""
+	_set_transform_mode(TransformMode.SCALE)
+
+
+func _update_mode_buttons() -> void:
+	"""Update the visual state of transform mode buttons based on current mode."""
+	if not select_button or not move_button or not rotate_button or not scale_button:
+		return
+
+	# Set button_pressed state without triggering signals
+	select_button.set_pressed_no_signal(current_transform_mode == TransformMode.SELECT)
+	move_button.set_pressed_no_signal(current_transform_mode == TransformMode.MOVE)
+	rotate_button.set_pressed_no_signal(current_transform_mode == TransformMode.ROTATE)
+	scale_button.set_pressed_no_signal(current_transform_mode == TransformMode.SCALE)
 
 
 func spawn_part(scene_path: String) -> PhysicalItem:

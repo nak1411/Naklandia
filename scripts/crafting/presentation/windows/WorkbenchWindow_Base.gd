@@ -73,6 +73,7 @@ func _on_window_closed():
 
 # Public API for accessing workbench functionality
 
+
 func spawn_part(scene_path: String) -> PhysicalItem:
 	"""Spawn a part in the workbench"""
 	if workbench_content:

@@ -195,6 +195,52 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
+[node name="TransformModeButtons" type="HBoxContainer" parent="VBoxContainer/MainContent/ViewportContainer"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -200.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 50.0
+grow_horizontal = 0
+mouse_filter = 1
+theme_override_constants/separation = 5
+
+[node name="SelectButton" type="Button" parent="VBoxContainer/MainContent/ViewportContainer/TransformModeButtons"]
+custom_minimum_size = Vector2(45, 40)
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+button_pressed = true
+text = "Q
+Select"
+
+[node name="MoveButton" type="Button" parent="VBoxContainer/MainContent/ViewportContainer/TransformModeButtons"]
+custom_minimum_size = Vector2(45, 40)
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "W
+Move"
+
+[node name="RotateButton" type="Button" parent="VBoxContainer/MainContent/ViewportContainer/TransformModeButtons"]
+custom_minimum_size = Vector2(45, 40)
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "E
+Rotate"
+
+[node name="ScaleButton" type="Button" parent="VBoxContainer/MainContent/ViewportContainer/TransformModeButtons"]
+custom_minimum_size = Vector2(45, 40)
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "R
+Scale"
+
 [node name="TransformStatsLabel" type="Label" parent="VBoxContainer/MainContent/ViewportContainer"]
 layout_mode = 0
 offset_left = 10.0
