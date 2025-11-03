@@ -63,7 +63,9 @@ func _apply_mouse_look():
 
 	# Vertical rotation (X-axis) - rotate the camera pivot
 	vertical_rotation += -mouse_delta.y
-	vertical_rotation = clamp(vertical_rotation, -deg_to_rad(vertical_look_limit), deg_to_rad(vertical_look_limit))
+	vertical_rotation = clamp(
+		vertical_rotation, -deg_to_rad(vertical_look_limit), deg_to_rad(vertical_look_limit)
+	)
 
 	camera_pivot.rotation.x = vertical_rotation
 
@@ -84,7 +86,9 @@ func _update_camera_height(delta: float):
 
 	# Smoothly transition camera height
 	if abs(current_camera_height - target_camera_height) > 0.01:
-		current_camera_height = move_toward(current_camera_height, target_camera_height, height_transition_speed * delta)
+		current_camera_height = move_toward(
+			current_camera_height, target_camera_height, height_transition_speed * delta
+		)
 		_update_camera_position()
 
 

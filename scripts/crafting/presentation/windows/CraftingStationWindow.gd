@@ -28,8 +28,11 @@ var interaction_container: VBoxContainer
 var output_panel: Panel
 var output_grid: GridContainer
 
+var workbench_button: Button
+
 # Data
 var crafting_manager: CraftingManager
+var workbench_window: WorkbenchWindow_Base = null
 var available_recipes: Array[CraftingRecipe] = []
 var selected_recipe: CraftingRecipe = null
 var is_crafting: bool = false
@@ -76,6 +79,7 @@ func _setup_crafting_ui():
 	_setup_recipe_info_panel(right_container)
 	_setup_process_panel(right_container)
 	_setup_interaction_panel(right_container)
+	_setup_workbench_button(right_container)
 
 	print("Crafting UI setup complete - recipe_info_label: %s" % str(recipe_info_label))
 
@@ -330,6 +334,41 @@ func _setup_interaction_panel(parent: VBoxContainer):
 	interaction_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	interaction_container.add_theme_constant_override("separation", 8)
 	margin.add_child(interaction_container)
+
+
+func _setup_workbench_button(parent: VBoxContainer):
+	"""Set up the workbench button to open the assembly workbench"""
+	workbench_button = Button.new()
+	workbench_button.text = "Open Assembly Workbench"
+	workbench_button.custom_minimum_size = Vector2(200, 40)
+	workbench_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	workbench_button.focus_mode = Control.FOCUS_NONE
+	workbench_button.pressed.connect(_on_workbench_button_pressed)
+
+	# Flat button styling
+	var normal = StyleBoxFlat.new()
+	normal.bg_color = Color(0.25, 0.4, 0.5)
+	normal.set_corner_radius_all(0)
+	workbench_button.add_theme_stylebox_override("normal", normal)
+
+	var hover = StyleBoxFlat.new()
+	hover.bg_color = Color(0.3, 0.5, 0.6)
+	hover.set_corner_radius_all(0)
+	workbench_button.add_theme_stylebox_override("hover", hover)
+
+	var pressed = StyleBoxFlat.new()
+	pressed.bg_color = Color(0.2, 0.3, 0.4)
+	pressed.set_corner_radius_all(0)
+	workbench_button.add_theme_stylebox_override("pressed", pressed)
+
+	workbench_button.add_theme_color_override("font_color", Color.WHITE)
+
+	var button_margin = MarginContainer.new()
+	button_margin.add_theme_constant_override("margin_bottom", 12)
+	button_margin.add_theme_constant_override("margin_top", 12)
+	button_margin.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	parent.add_child(button_margin)
+	button_margin.add_child(workbench_button)
 
 
 func set_crafting_manager(manager: CraftingManager):
@@ -670,3 +709,54 @@ func refresh_display():
 			_update_recipe_display()
 	else:
 		push_warning("CraftingStationWindow: Cannot refresh - UI not ready")
+
+
+func _on_workbench_button_pressed():
+	"""Handle workbench button press to open the assembly workbench"""
+	print("Opening Assembly Workbench...")
+
+	# Get UI manager
+	if not ui_manager:
+		var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+		if ui_managers.size() > 0:
+			ui_manager = ui_managers[0]
+		else:
+			push_warning("CraftingStationWindow: No UI Manager found")
+			return
+
+	# Create workbench window if it doesn't exist
+	if not workbench_window or not is_instance_valid(workbench_window):
+		print("Creating new workbench window...")
+		workbench_window = WorkbenchWindow_Base.new()
+		workbench_window.name = "AssemblyWorkbenchWindow"
+
+		# Register with UI manager as "tearoff" type (dynamic window)
+		print("Registering workbench window with UI manager...")
+		ui_manager.register_window(workbench_window, "tearoff")
+
+		# Wait for window to be ready
+		if not workbench_window.is_node_ready():
+			await workbench_window.ready
+
+		# Wait one more frame to ensure UI is fully built
+		await get_tree().process_frame
+
+		# Connect signals
+		if not workbench_window.window_closed.is_connected(_on_workbench_window_closed):
+			workbench_window.window_closed.connect(_on_workbench_window_closed)
+
+		# Show the window
+		print("Showing workbench window...")
+		workbench_window.show_window()
+
+		print("✓ Workbench window created and initialized")
+	else:
+		print("Showing existing workbench window...")
+		workbench_window.show_window()
+
+	print("✓ Workbench window opened")
+
+
+func _on_workbench_window_closed():
+	"""Handle workbench window being closed"""
+	print("Workbench window closed")

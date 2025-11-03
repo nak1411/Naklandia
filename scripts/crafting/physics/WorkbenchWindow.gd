@@ -99,6 +99,9 @@ signal workbench_closed
 
 
 func _ready() -> void:
+	# Add to workbench_window group so InputManager can detect when it's open
+	add_to_group("workbench_window")
+
 	# Get node references
 	viewport_container = $VBoxContainer/MainContent/ViewportContainer
 	selection_overlay = $VBoxContainer/MainContent/ViewportContainer/SelectionOverlay
@@ -169,7 +172,7 @@ func _input(event: InputEvent) -> void:
 	if not is_active_operation and not _is_mouse_over_viewport():
 		return
 
-	# Track Alt key
+	# Track Alt key for camera controls
 	if event is InputEventKey:
 		if event.keycode == KEY_ALT:
 			is_alt_held = event.pressed

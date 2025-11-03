@@ -87,16 +87,36 @@ func _update_input_buffers(delta: float):
 
 
 func _handle_toggle_inputs():
-	# Toggle mouse capture
+	# Toggle mouse capture (but not when workbench window is open)
 	if Input.is_action_just_pressed(TOGGLE_MOUSE):
-		var mouse_look = get_parent().get_node("MouseLook") as MouseLook
-		if mouse_look:
-			mouse_look.toggle_mouse_capture()
+		# Check if workbench window is open and visible
+		var workbench_windows = get_tree().get_nodes_in_group("workbench_window")
+		var workbench_is_open = false
+		for window in workbench_windows:
+			if window.visible:
+				workbench_is_open = true
+				break
+
+		# Only toggle mouse if workbench is not open
+		if not workbench_is_open:
+			var mouse_look = get_parent().get_node("MouseLook") as MouseLook
+			if mouse_look:
+				mouse_look.toggle_mouse_capture()
 
 
 func _verify_input_actions():
 	# Check if all required actions exist in the Input Map
-	var required_actions = [MOVE_FORWARD, MOVE_BACKWARD, MOVE_LEFT, MOVE_RIGHT, JUMP, RUN, CROUCH, TOGGLE_MOUSE, INTERACT]
+	var required_actions = [
+		MOVE_FORWARD,
+		MOVE_BACKWARD,
+		MOVE_LEFT,
+		MOVE_RIGHT,
+		JUMP,
+		RUN,
+		CROUCH,
+		TOGGLE_MOUSE,
+		INTERACT
+	]
 
 	for action in required_actions:
 		if not InputMap.has_action(action):
