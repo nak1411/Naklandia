@@ -898,64 +898,84 @@ func _detect_gizmo_axis(mouse_pos: Vector2, gizmo_pos: Vector3) -> Vector3:
 
 		return closest_axis
 
-	elif current_transform_mode == TransformMode.ROTATE:
-		# Rotate gizmo detection: check if mouse is near the visible torus ring
-		var major_radius = 0.71 * gizmo_scale  # Radius from center to middle of torus
-		var axes = [Vector3.RIGHT, Vector3.UP, Vector3.BACK]
+	if current_transform_mode == TransformMode.ROTATE:
+		# Rotate gizmo detection: ImGuizmo-style approach
+		# Uses ray-plane intersection + screen-space distance for reliable detection
+		# Torus is created with radius 0.70 * gizmo_size (where gizmo_size = 1.5)
+		# Then scaled by gizmo_scale, so actual radius = 0.70 * 1.5 * gizmo_scale = 1.05 * gizmo_scale
+		var circle_radius = 1.05 * gizmo_scale
+		var axes = [{"axis": Vector3.RIGHT, "name": "X"}, {"axis": Vector3.UP, "name": "Y"}, {"axis": Vector3.BACK, "name": "Z"}]
 
-		var closest_score = INF
+		# Sort axes by visibility: circles most perpendicular to camera view are most visible
+		# This prioritizes the "front-facing" circles when overlapping
+		var camera_forward = -camera.global_transform.basis.z
+		var sorted_axes = []
+		for axis_data in axes:
+			var axis = axis_data["axis"]
+			# Circle is most visible when its normal (rotation axis) is perpendicular to camera
+			var perpendicularity = abs(axis.dot(camera_forward))
+			sorted_axes.append({"axis": axis, "name": axis_data["name"], "priority": perpendicularity})
+
+		# Sort by priority: lower priority = more perpendicular = more visible = test first
+		sorted_axes.sort_custom(func(a, b): return a["priority"] < b["priority"])
+
+		var closest_screen_dist = INF
 		var closest_axis = Vector3.ZERO
+		var ray_origin = camera.project_ray_origin(mouse_pos)
+		var ray_dir = camera.project_ray_normal(mouse_pos)
 
-		for axis in axes:
-			# Project mouse position into 3D ray
-			var ray_origin = camera.project_ray_origin(mouse_pos)
-			var ray_dir = camera.project_ray_normal(mouse_pos)
+		# Test axes in visibility order (most visible first)
+		for axis_data in sorted_axes:
+			var axis = axis_data["axis"]
+			var priority = axis_data["priority"]
 
-			# Find closest point on the torus circle to the mouse ray
-			var best_dist_on_circle = INF
-			var sample_count = 64
+			# Build plane containing the rotation circle (plane normal = axis)
+			var plane_normal = axis
+			var plane = Plane(plane_normal, gizmo_pos.dot(plane_normal))
 
-			for i in range(sample_count):
-				var angle = (float(i) / sample_count) * TAU
-				var circle_point = Vector3.ZERO
+			# Intersect ray with plane
+			var intersection = plane.intersects_ray(ray_origin, ray_dir)
+			if intersection == null:
+				continue
 
-				# Calculate point on the circle centerline based on axis
-				if axis == Vector3.RIGHT:
-					# X axis - circle in YZ plane
-					circle_point = Vector3(0, cos(angle), sin(angle)) * major_radius
-				elif axis == Vector3.UP:
-					# Y axis - circle in XZ plane
-					circle_point = Vector3(cos(angle), 0, sin(angle)) * major_radius
-				elif axis == Vector3.BACK:
-					# Z axis - circle in XY plane
-					circle_point = Vector3(cos(angle), sin(angle), 0) * major_radius
+			# Get local position on plane relative to gizmo center
+			var local_pos = intersection - gizmo_pos
 
-				var world_point = gizmo_pos + circle_point
+			# Check if intersection is behind gizmo (basic depth test)
+			var to_intersection = intersection - gizmo_pos
+			var to_camera = camera.global_position - gizmo_pos
+			if to_intersection.dot(to_camera) < 0:
+				continue
 
-				# Calculate distance from ray to this point on the circle
-				var to_point = world_point - ray_origin
-				var projection = to_point.dot(ray_dir)
-				var closest_on_ray = ray_origin + ray_dir * projection
-				var dist_3d = world_point.distance_to(closest_on_ray)
+			# Project to circle: normalize and scale to circle radius
+			var local_distance = local_pos.length()
+			if local_distance < 0.001:
+				continue  # Too close to center
 
-				# Also check visibility - only consider points in front of camera
-				if projection > 0:
-					best_dist_on_circle = min(best_dist_on_circle, dist_3d)
+			var ideal_pos_on_circle = (local_pos / local_distance) * circle_radius
+			var world_pos_on_circle = gizmo_pos + ideal_pos_on_circle
 
-			# Convert 3D distance to screen-space equivalent score
-			# Closer to circle = lower score
-			if best_dist_on_circle < closest_score:
-				# Check if within acceptable threshold (scaled by distance to camera)
-				var dist_to_gizmo = gizmo_pos.distance_to(camera.global_position)
-				var threshold = 0.08 * dist_to_gizmo  # Adaptive threshold based on distance
+			# No backface culling - full circle is detectable
+			# Visibility sorting handles which circle takes priority when overlapping
 
-				if best_dist_on_circle < threshold:
-					closest_score = best_dist_on_circle
+			# Convert to screen space and measure distance
+			var screen_pos_on_circle = camera.unproject_position(world_pos_on_circle)
+			var screen_dist = mouse_pos.distance_to(screen_pos_on_circle)
+
+			# Use a reasonable threshold (ImGuizmo uses 8, we use 12 for easier selection)
+			var threshold = 12.0
+
+			if screen_dist < threshold:
+				# Prefer circles with better visibility when distances are close
+				# If this circle is significantly closer OR has better priority with similar distance
+				var distance_improvement = closest_screen_dist - screen_dist
+				if screen_dist < closest_screen_dist or (distance_improvement < 3.0 and priority < 0.3):
+					closest_screen_dist = screen_dist
 					closest_axis = axis
 
 		return closest_axis
 
-	elif current_transform_mode == TransformMode.SCALE:
+	if current_transform_mode == TransformMode.SCALE:
 		# Scale gizmo detection: check center box first, then handles
 		var center_screen = camera.unproject_position(gizmo_pos)
 		if mouse_pos.distance_to(center_screen) < 25.0:
@@ -984,6 +1004,88 @@ func _detect_gizmo_axis(mouse_pos: Vector2, gizmo_pos: Vector3) -> Vector3:
 		return closest_axis
 
 	return Vector3.ZERO
+
+
+func _closest_point_on_circle_to_ray(circle_center: Vector3, circle_normal: Vector3, circle_radius: float, ray_origin: Vector3, ray_dir: Vector3) -> Dictionary:
+	"""
+	Calculate the closest point on a 3D circle to a ray.
+	Returns a dictionary with 'point' and 'distance', or null if no valid solution.
+
+	Algorithm:
+	1. Find the closest point on the ray to the circle's plane
+	2. Project that point onto the circle
+	3. Calculate the distance from the ray to that circle point
+	"""
+	circle_normal = circle_normal.normalized()
+	ray_dir = ray_dir.normalized()
+
+	# Step 1: Find intersection of ray with the plane containing the circle
+	var denom = circle_normal.dot(ray_dir)
+
+	# If ray is parallel to the plane, use a different approach
+	if abs(denom) < 0.0001:
+		# Ray is parallel to circle plane - find closest point on ray to circle center
+		var to_center = circle_center - ray_origin
+		var t = to_center.dot(ray_dir)
+		var closest_on_ray = ray_origin + ray_dir * max(0.0, t)
+
+		# Project this point onto the circle's plane
+		var offset = circle_center - closest_on_ray
+		var plane_dist = offset.dot(circle_normal)
+		var point_on_plane = closest_on_ray + circle_normal * plane_dist
+
+		# Find the closest point on the circle to this point
+		var radial = point_on_plane - circle_center
+		var radial_in_plane = radial - circle_normal * radial.dot(circle_normal)
+		var dist_from_center = radial_in_plane.length()
+
+		if dist_from_center < 0.0001:
+			# Point is at circle center, pick arbitrary point on circle
+			var arbitrary_dir = Vector3.UP if abs(circle_normal.y) < 0.9 else Vector3.RIGHT
+			radial_in_plane = circle_normal.cross(arbitrary_dir).normalized()
+			dist_from_center = 1.0
+
+		var closest_on_circle = circle_center + radial_in_plane.normalized() * circle_radius
+		var distance = closest_on_circle.distance_to(closest_on_ray)
+
+		return {"point": closest_on_circle, "distance": distance}
+
+	# Step 2: Ray intersects plane - find the intersection point
+	var to_plane = circle_center - ray_origin
+	var t = to_plane.dot(circle_normal) / denom
+
+	# Use the intersection point (even if behind ray, we'll cull it later)
+	var plane_intersection = ray_origin + ray_dir * t
+
+	# Step 3: Find closest point on circle to the plane intersection
+	var radial = plane_intersection - circle_center
+
+	# Remove the component along the normal (project onto plane)
+	var radial_in_plane = radial - circle_normal * radial.dot(circle_normal)
+	var dist_from_center = radial_in_plane.length()
+
+	# Handle special case: intersection is at circle center
+	if dist_from_center < 0.0001:
+		# Pick a direction perpendicular to both ray and normal
+		var perp = ray_dir.cross(circle_normal)
+		if perp.length_squared() < 0.0001:
+			# Ray is along the normal, pick arbitrary direction
+			var arbitrary = Vector3.UP if abs(circle_normal.y) < 0.9 else Vector3.RIGHT
+			perp = circle_normal.cross(arbitrary)
+		radial_in_plane = perp.normalized()
+		dist_from_center = 1.0
+
+	# Project onto circle
+	var closest_on_circle = circle_center + radial_in_plane.normalized() * circle_radius
+
+	# Step 4: Calculate minimum distance from ray to this circle point
+	# Find closest point on ray to the circle point
+	var to_circle_point = closest_on_circle - ray_origin
+	var ray_t = to_circle_point.dot(ray_dir)
+	var closest_on_ray = ray_origin + ray_dir * max(0.0, ray_t)
+	var distance = closest_on_circle.distance_to(closest_on_ray)
+
+	return {"point": closest_on_circle, "distance": distance}
 
 
 func _point_to_segment_distance(point: Vector2, seg_start: Vector2, seg_end: Vector2) -> float:
@@ -2268,6 +2370,15 @@ func _update_gizmo() -> void:
 	for item in selected_items:
 		center += item.global_position
 	center /= selected_items.size()
+
+	# Distance-based culling: hide gizmo if too far away
+	if camera:
+		var distance = center.distance_to(camera.global_position)
+		var max_distance = 50.0  # Maximum distance for gizmo interaction
+
+		if distance > max_distance:
+			transform_gizmo.visible = false
+			return
 
 	# Position and show gizmo
 	transform_gizmo.set_target_position(center)

@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/crafting/physics/TransformGizmo.gd)"
     ],
     "deny": [],
     "ask": []

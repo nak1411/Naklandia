@@ -212,15 +212,36 @@ func _create_plane_handle(axis1: Vector3, axis2: Vector3, color: Color) -> MeshI
 
 
 func _create_torus_circle(axis: Vector3, material: StandardMaterial3D) -> MeshInstance3D:
-	"""Create a torus circle for rotation visualization."""
+	"""Create a torus circle for rotation visualization with depth-aware rendering."""
 	var torus = MeshInstance3D.new()
 	var torus_mesh = TorusMesh.new()
-	torus_mesh.inner_radius = 0.7 * gizmo_size
-	torus_mesh.outer_radius = 0.72 * gizmo_size  # Thinner torus
-	torus_mesh.rings = 32
-	torus_mesh.ring_segments = 6  # Fewer segments for thinner appearance
+	torus_mesh.inner_radius = 0.69 * gizmo_size
+	torus_mesh.outer_radius = 0.71 * gizmo_size  # Thin torus (0.02 thickness)
+	torus_mesh.rings = 64  # Very smooth circle
+	torus_mesh.ring_segments = 6  # Thin profile
 	torus.mesh = torus_mesh
-	torus.material_override = material
+
+	# Create a depth-aware material for rotation circles
+	# This allows proper visual feedback about which circle is in front
+	var depth_material = StandardMaterial3D.new()
+	depth_material.albedo_color = material.albedo_color
+	depth_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	depth_material.disable_receive_shadows = true
+
+	# Enable depth testing for rotation circles to show proper occlusion
+	# but disable depth writing so they don't occlude each other completely
+	depth_material.no_depth_test = false  # Enable depth test
+	depth_material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED  # But don't write depth
+
+	# Add slight transparency to show overlapping circles
+	depth_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	depth_material.albedo_color.a = 0.9  # Slightly transparent
+
+	# Render hint for better blending
+	depth_material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
+	depth_material.cull_mode = BaseMaterial3D.CULL_BACK  # Cull back faces for cleaner look
+
+	torus.material_override = depth_material
 
 	# Rotate the torus to align with the axis
 	# Torus default: lies in XZ plane (circle around Y axis)
@@ -375,7 +396,10 @@ func set_target_position(pos: Vector3) -> void:
 func update_scale_for_camera(camera_pos: Vector3) -> void:
 	"""Scale gizmo to appear constant size regardless of camera distance."""
 	var distance = global_position.distance_to(camera_pos)
-	scale = Vector3.ONE * distance * 0.15  # Adjust multiplier for desired size
+	# Scale gizmo proportionally to distance, with reasonable min/max bounds
+	var target_scale = distance * 0.15
+	target_scale = clamp(target_scale, 0.5, 10.0)  # Prevent extreme sizes
+	scale = Vector3.ONE * target_scale
 
 
 func set_hover(axis: Vector3) -> void:
@@ -452,7 +476,25 @@ func _highlight_mesh(mesh: MeshInstance3D) -> void:
 	"""Apply highlight material to a single mesh (for circles and center box)."""
 	if not mesh:
 		return
-	mesh.material_override = material_highlight
+
+	# For rotation circles, create a depth-aware highlight material
+	if mesh.get_parent() == rotate_gizmo:
+		var highlight_mat = StandardMaterial3D.new()
+		highlight_mat.albedo_color = Color(1, 1, 0, 1)  # Bright yellow
+		highlight_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		highlight_mat.disable_receive_shadows = true
+
+		# Match the depth settings from rotation circles
+		highlight_mat.no_depth_test = false
+		highlight_mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+		highlight_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		highlight_mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
+		highlight_mat.cull_mode = BaseMaterial3D.CULL_BACK
+
+		mesh.material_override = highlight_mat
+	else:
+		# For other meshes, use the standard highlight material
+		mesh.material_override = material_highlight
 
 
 func _highlight_scale_handle(handle: Node3D) -> void:
@@ -481,13 +523,13 @@ func _clear_highlight() -> void:
 	if plane_yz_node:
 		_restore_plane_material(plane_yz_node, Color(0, 1, 1, 0.5))
 
-	# Restore rotate gizmo materials
+	# Restore rotate gizmo materials with depth-aware rendering
 	if circle_x_node:
-		circle_x_node.material_override = material_x
+		_restore_rotation_circle_material(circle_x_node, material_x)
 	if circle_y_node:
-		circle_y_node.material_override = material_y
+		_restore_rotation_circle_material(circle_y_node, material_y)
 	if circle_z_node:
-		circle_z_node.material_override = material_z
+		_restore_rotation_circle_material(circle_z_node, material_z)
 
 	# Restore scale gizmo materials
 	if scale_x_node:
@@ -526,3 +568,24 @@ func _restore_plane_material(plane: MeshInstance3D, original_color: Color) -> vo
 	mat.no_depth_test = true
 	mat.disable_receive_shadows = true
 	plane.material_override = mat
+
+
+func _restore_rotation_circle_material(circle: MeshInstance3D, base_material: StandardMaterial3D) -> void:
+	"""Restore original depth-aware material to a rotation circle."""
+	if not circle:
+		return
+
+	var depth_material = StandardMaterial3D.new()
+	depth_material.albedo_color = base_material.albedo_color
+	depth_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	depth_material.disable_receive_shadows = true
+
+	# Restore depth-aware settings
+	depth_material.no_depth_test = false
+	depth_material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	depth_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	depth_material.albedo_color.a = 0.9
+	depth_material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
+	depth_material.cull_mode = BaseMaterial3D.CULL_BACK
+
+	circle.material_override = depth_material
