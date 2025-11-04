@@ -10,12 +10,14 @@ signal workbench_validated(success: bool, report: Dictionary)
 
 
 func _ready():
+	print("WorkbenchWindow_Base: _ready() called")
 	window_title = "Assembly Workbench"
 	default_size = Vector2(1200, 800)
 	min_window_size = Vector2(900, 600)
 	max_window_size = Vector2(1920, 1080)
 
 	super._ready()
+	print("WorkbenchWindow_Base: super._ready() completed")
 
 
 func _setup_window_content():

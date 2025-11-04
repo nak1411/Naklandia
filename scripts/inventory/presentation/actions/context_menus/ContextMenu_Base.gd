@@ -39,14 +39,35 @@ func _init():
 	custom_minimum_size = Vector2(min_width, item_height)
 
 
-func add_menu_item(id: String, text: String, icon: Texture2D = null, enabled: bool = true, has_submenu: bool = false, submenu_items: Array = []):
-	var item = {"id": id, "text": text, "icon": icon, "enabled": enabled, "has_submenu": has_submenu, "submenu_items": submenu_items}
+func add_menu_item(
+	id: String,
+	text: String,
+	icon: Texture2D = null,
+	enabled: bool = true,
+	has_submenu: bool = false,
+	submenu_items: Array = []
+):
+	var item = {
+		"id": id,
+		"text": text,
+		"icon": icon,
+		"enabled": enabled,
+		"has_submenu": has_submenu,
+		"submenu_items": submenu_items
+	}
 	menu_items.append(item)
 
 
 func add_separator():
 	"""Add a visual separator line between menu items"""
-	var separator = {"id": "_separator_" + str(menu_items.size()), "text": "", "is_separator": true, "enabled": false, "has_submenu": false, "submenu_items": []}
+	var separator = {
+		"id": "_separator_" + str(menu_items.size()),
+		"text": "",
+		"is_separator": true,
+		"enabled": false,
+		"has_submenu": false,
+		"submenu_items": []
+	}
 	menu_items.append(separator)
 
 
@@ -163,7 +184,9 @@ func _create_main_popup():
 	)
 
 
-func show_context_menu(_show_position: Vector2, data: Dictionary = {}, _parent_window: Window = null):
+func show_context_menu(
+	_show_position: Vector2, data: Dictionary = {}, _parent_window: Window = null
+):
 	context_data = data
 	_create_main_popup()
 
@@ -545,7 +568,10 @@ func _show_submenu(item_index: int):
 	_style_popup(submenu_popup)
 
 	# Position submenu to the right of main menu
-	var submenu_pos = Vector2i(main_popup.position.x + menu_width, main_popup.position.y + (_calculate_item_y_position(item_index)))
+	var submenu_pos = Vector2i(
+		main_popup.position.x + menu_width,
+		main_popup.position.y + (_calculate_item_y_position(item_index))
+	)
 	submenu_popup.position = submenu_pos
 
 	# Add to scene and show
@@ -823,7 +849,10 @@ func setup_item_context_menu(item: InventoryItem_Base):
 			if action.id == "item_info" and menu_actions.size() > 2:
 				add_separator()
 			# Add separator before destroy_item if it exists and there are other actions
-			elif i == menu_actions.size() - 2 and menu_actions[menu_actions.size() - 1].id == "destroy_item":
+			elif (
+				i == menu_actions.size() - 2
+				and menu_actions[menu_actions.size() - 1].id == "destroy_item"
+			):
 				add_separator()
 
 
@@ -853,7 +882,12 @@ func setup_container_context_menu(_container: InventoryContainer_Base):
 			"id": "move_to_hangar",
 			"text": "Hangar",
 			"has_submenu": true,
-			"submenu_items": [{"id": "move_to_hangar_1", "text": "Hangar Division 1"}, {"id": "move_to_hangar_2", "text": "Hangar Division 2"}, {"id": "move_to_hangar_3", "text": "Hangar Division 3"}]
+			"submenu_items":
+			[
+				{"id": "move_to_hangar_1", "text": "Hangar Division 1"},
+				{"id": "move_to_hangar_2", "text": "Hangar Division 2"},
+				{"id": "move_to_hangar_3", "text": "Hangar Division 3"}
+			]
 		}
 	)
 

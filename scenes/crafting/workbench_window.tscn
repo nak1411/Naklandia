@@ -169,12 +169,63 @@ layout_mode = 2
 theme_override_constants/line_spacing = 0
 text = "Parts:"
 
+[node name="CategoryFilterContainer" type="MarginContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_bottom = 4
+
+[node name="CategoryFilter" type="OptionButton" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/CategoryFilterContainer"]
+layout_mode = 2
+focus_mode = 0
+text = "All Categories"
+flat = false
+alignment = 0
+item_count = 5
+selected = 0
+popup/item_0/text = "All Categories"
+popup/item_0/id = 0
+popup/item_1/text = "Structural Items"
+popup/item_1/id = 1
+popup/item_2/text = "Cosmetic"
+popup/item_2/id = 2
+popup/item_3/text = "Hardware"
+popup/item_3/id = 3
+popup/item_4/text = "Containers"
+popup/item_4/id = 4
+
 [node name="PartList" type="ItemList" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection"]
 custom_minimum_size = Vector2(200, 100)
 layout_mode = 2
 size_flags_vertical = 3
 focus_mode = 0
 max_columns = 1
+
+[node name="Spacer" type="Control" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection"]
+custom_minimum_size = Vector2(0, 2)
+layout_mode = 2
+
+[node name="ButtonContainer" type="MarginContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_right = 20
+
+[node name="AddObjectButton" type="Button" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/ButtonContainer"]
+layout_mode = 2
+focus_mode = 0
+text = "Add Object"
+
+[node name="Spacer3" type="Control" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection"]
+custom_minimum_size = Vector2(0, 2)
+layout_mode = 2
+
+[node name="DragIndicator" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection"]
+layout_mode = 2
+
+[node name="Spacer4" type="Control" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection"]
+custom_minimum_size = Vector2(0, 4)
+layout_mode = 2
 
 [node name="TransformSection" type="VBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer"]
 layout_mode = 2
@@ -532,3 +583,4 @@ shadow_enabled = false
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="VBoxContainer/MainContent/ViewportContainer/SubViewport"]
 environment = SubResource("Environment_workbench")
+

@@ -25,13 +25,16 @@ var camera: Camera3D
 var world: Node3D
 var grid: MeshInstance3D
 var part_list: ItemList
+var category_filter: OptionButton
+var add_object_button: Button
 var validate_button: Button
-var toggle_controls_button: Button
+var clear_button: Button
 var help_label: Label
 var controls_visible: bool = false
 var initialized: bool = false
 var sidebar_panel: PanelContainer
 var separator: Control
+var context_menu: ContextMenu_Base
 
 # Transform input panel
 var transform_panel: PanelContainer
@@ -122,6 +125,15 @@ var available_parts: Dictionary = {
 	"wooden_board": "res://scenes/crafting/wooden_board.tscn",
 }
 
+# Part categories for filtering
+var part_categories: Dictionary = {
+	"wooden_board": "structural_items",
+}
+
+# Category filter options
+enum CategoryFilter { ALL, STRUCTURAL_ITEMS, COSMETIC, HARDWARE, CONTAINERS }
+var current_category_filter: CategoryFilter = CategoryFilter.ALL
+
 # Signals
 signal item_validated(success: bool, report: Dictionary)
 signal workbench_closed
@@ -141,11 +153,22 @@ func _ready() -> void:
 	world = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World
 	grid = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World/Grid
 	part_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/PartList
+	category_filter = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/CategoryFilterContainer/CategoryFilter
+	add_object_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/ButtonContainer/AddObjectButton
 	validate_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ValidateButton
-	toggle_controls_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ToggleControlsButton
+	clear_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ClearButton
 	help_label = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/HelpLabel
 	sidebar_panel = $VBoxContainer/MainContent/SidebarPanel
 	separator = $VBoxContainer/MainContent/Separator
+
+	# Create context menu (kept persistent like inventory system)
+	context_menu = ContextMenu_Base.new()
+	context_menu.name = "WorkbenchContextMenu"
+	add_child(context_menu)
+
+	# Connect context menu signals
+	context_menu.item_selected.connect(_on_context_menu_item_selected)
+	context_menu.menu_closed.connect(_on_context_menu_closed)
 
 	# Get transform panel references
 	transform_panel = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel
@@ -178,8 +201,12 @@ func _ready() -> void:
 		validate_button.pressed.connect(_on_validate_pressed)
 	if part_list:
 		part_list.item_activated.connect(_on_part_selected)
-	if toggle_controls_button:
-		toggle_controls_button.pressed.connect(_on_toggle_controls_pressed)
+	if category_filter:
+		category_filter.item_selected.connect(_on_category_filter_changed)
+	if add_object_button:
+		add_object_button.pressed.connect(_on_add_object_pressed)
+	if clear_button:
+		clear_button.pressed.connect(_on_clear_button_pressed)
 
 	# Connect transform mode button signals
 	if select_button:
@@ -330,12 +357,43 @@ func _on_separator_gui_input(event: InputEvent) -> void:
 
 
 func _populate_part_list() -> void:
-	"""Fill the part list with available items to spawn."""
+	"""Fill the part list with available items to spawn, filtered by category."""
 	if not part_list:
 		return
 	part_list.clear()
+
 	for part_name in available_parts.keys():
-		part_list.add_item(part_name.replace("_", " ").capitalize())
+		# Check if part matches current filter
+		if _should_show_part(part_name):
+			part_list.add_item(part_name.replace("_", " ").capitalize())
+
+
+func _should_show_part(part_name: String) -> bool:
+	"""Check if a part should be shown based on the current category filter."""
+	if current_category_filter == CategoryFilter.ALL:
+		return true
+
+	# Get the part's category
+	var part_category = part_categories.get(part_name, "")
+
+	# Match filter to category
+	match current_category_filter:
+		CategoryFilter.STRUCTURAL_ITEMS:
+			return part_category == "structural_items"
+		CategoryFilter.COSMETIC:
+			return part_category == "cosmetic"
+		CategoryFilter.HARDWARE:
+			return part_category == "hardware"
+		CategoryFilter.CONTAINERS:
+			return part_category == "containers"
+
+	return false
+
+
+func _on_category_filter_changed(index: int) -> void:
+	"""Handle category filter selection change."""
+	current_category_filter = index as CategoryFilter
+	_populate_part_list()
 
 
 func _input(event: InputEvent) -> void:
@@ -424,21 +482,10 @@ func _input(event: InputEvent) -> void:
 					# Deselect all items
 					_clear_selection()
 			# Undo (Ctrl+Z)
-			elif (
-				event.keycode == KEY_Z
-				and Input.is_key_pressed(KEY_CTRL)
-				and not Input.is_key_pressed(KEY_SHIFT)
-			):
+			elif event.keycode == KEY_Z and Input.is_key_pressed(KEY_CTRL) and not Input.is_key_pressed(KEY_SHIFT):
 				_undo_last_operation()
 			# Redo (Ctrl+Shift+Z or Ctrl+Y)
-			elif (
-				(
-					event.keycode == KEY_Z
-					and Input.is_key_pressed(KEY_CTRL)
-					and Input.is_key_pressed(KEY_SHIFT)
-				)
-				or (event.keycode == KEY_Y and Input.is_key_pressed(KEY_CTRL))
-			):
+			elif (event.keycode == KEY_Z and Input.is_key_pressed(KEY_CTRL) and Input.is_key_pressed(KEY_SHIFT)) or (event.keycode == KEY_Y and Input.is_key_pressed(KEY_CTRL)):
 				_redo_last_operation()
 			# Delete selected objects (DEL or Backspace)
 			elif event.keycode == KEY_DELETE or event.keycode == KEY_BACKSPACE:
@@ -574,16 +621,8 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 			var mouse_pos = selection_overlay.get_local_mouse_position()
 			# Clamp to viewport bounds
 			var viewport_rect = Rect2(Vector2.ZERO, viewport_container.size)
-			mouse_pos.x = clamp(
-				mouse_pos.x,
-				viewport_rect.position.x,
-				viewport_rect.position.x + viewport_rect.size.x
-			)
-			mouse_pos.y = clamp(
-				mouse_pos.y,
-				viewport_rect.position.y,
-				viewport_rect.position.y + viewport_rect.size.y
-			)
+			mouse_pos.x = clamp(mouse_pos.x, viewport_rect.position.x, viewport_rect.position.x + viewport_rect.size.x)
+			mouse_pos.y = clamp(mouse_pos.y, viewport_rect.position.y, viewport_rect.position.y + viewport_rect.size.y)
 			box_select_end = mouse_pos
 
 	# Gizmo hover detection (when not dragging anything)
@@ -623,10 +662,7 @@ func _update_camera_transform() -> void:
 	var pitch_rad = deg_to_rad(camera_rotation.y)
 
 	# Calculate camera position
-	var offset = (
-		Vector3(cos(pitch_rad) * sin(yaw_rad), sin(pitch_rad), cos(pitch_rad) * cos(yaw_rad))
-		* camera_distance
-	)
+	var offset = Vector3(cos(pitch_rad) * sin(yaw_rad), sin(pitch_rad), cos(pitch_rad) * cos(yaw_rad)) * camera_distance
 
 	camera.global_position = camera_target + offset
 	camera.look_at(camera_target, Vector3.UP)
@@ -842,11 +878,7 @@ func _detect_gizmo_axis(mouse_pos: Vector2, gizmo_pos: Vector3) -> Vector3:
 
 		# Then check arrows
 		var arrow_length = 0.95 * gizmo_scale
-		var axes = [
-			{"dir": Vector3.RIGHT, "vec": Vector3.RIGHT},
-			{"dir": Vector3.UP, "vec": Vector3.UP},
-			{"dir": Vector3.BACK, "vec": Vector3.BACK}
-		]
+		var axes = [{"dir": Vector3.RIGHT, "vec": Vector3.RIGHT}, {"dir": Vector3.UP, "vec": Vector3.UP}, {"dir": Vector3.BACK, "vec": Vector3.BACK}]
 
 		var closest_dist = 20.0  # Reduced from 30.0 for tighter detection
 		var closest_axis = Vector3.ZERO
@@ -931,11 +963,7 @@ func _detect_gizmo_axis(mouse_pos: Vector2, gizmo_pos: Vector3) -> Vector3:
 
 		# Then check scale handles (similar to arrows)
 		var handle_length = 0.7 * gizmo_scale
-		var axes = [
-			{"dir": Vector3.RIGHT, "vec": Vector3.RIGHT},
-			{"dir": Vector3.UP, "vec": Vector3.UP},
-			{"dir": Vector3.BACK, "vec": Vector3.BACK}
-		]
+		var axes = [{"dir": Vector3.RIGHT, "vec": Vector3.RIGHT}, {"dir": Vector3.UP, "vec": Vector3.UP}, {"dir": Vector3.BACK, "vec": Vector3.BACK}]
 
 		var closest_dist = 30.0
 		var closest_axis = Vector3.ZERO
@@ -996,12 +1024,8 @@ func _update_gizmo_drag(_mouse_pos: Vector2) -> void:
 
 	# Clamp mouse position to viewport bounds for gizmo dragging
 	var viewport_rect = Rect2(Vector2.ZERO, viewport_container.size)
-	viewport_pos.x = clamp(
-		viewport_pos.x, viewport_rect.position.x, viewport_rect.position.x + viewport_rect.size.x
-	)
-	viewport_pos.y = clamp(
-		viewport_pos.y, viewport_rect.position.y, viewport_rect.position.y + viewport_rect.size.y
-	)
+	viewport_pos.x = clamp(viewport_pos.x, viewport_rect.position.x, viewport_rect.position.x + viewport_rect.size.x)
+	viewport_pos.y = clamp(viewport_pos.y, viewport_rect.position.y, viewport_rect.position.y + viewport_rect.size.y)
 
 	var mouse_delta = viewport_pos - gizmo_drag_start_mouse
 
@@ -1054,9 +1078,7 @@ func _update_move_drag(mouse_delta: Vector2) -> void:
 	var world_offset = Vector3.ZERO
 
 	# Check if dragging on a plane (2 axes) or single axis
-	var num_axes = (
-		int(gizmo_drag_axis.x != 0) + int(gizmo_drag_axis.y != 0) + int(gizmo_drag_axis.z != 0)
-	)
+	var num_axes = int(gizmo_drag_axis.x != 0) + int(gizmo_drag_axis.y != 0) + int(gizmo_drag_axis.z != 0)
 
 	# Fine mode multiplier (Shift = 10x slower for precision)
 	var fine_multiplier = 0.1 if is_shift_pressed else 1.0
@@ -1072,9 +1094,7 @@ func _update_move_drag(mouse_delta: Vector2) -> void:
 	# This makes the movement speed consistent regardless of camera distance
 	var fov_rad = deg_to_rad(camera.fov)
 	var viewport_world_height = 2.0 * tan(fov_rad / 2.0) * gizmo_to_camera
-	var viewport_world_width = (
-		viewport_world_height * (float(viewport_size.x) / float(viewport_size.y))
-	)
+	var viewport_world_width = viewport_world_height * (float(viewport_size.x) / float(viewport_size.y))
 	var pixels_to_world_x = viewport_world_width / viewport_size.x
 	var pixels_to_world_y = viewport_world_height / viewport_size.y
 
@@ -1082,20 +1102,14 @@ func _update_move_drag(mouse_delta: Vector2) -> void:
 		# Free movement on all axes (parallel to camera view)
 		var right = camera.global_transform.basis.x
 		var up = camera.global_transform.basis.y
-		world_offset = (
-			(right * mouse_delta.x * pixels_to_world_x - up * mouse_delta.y * pixels_to_world_y)
-			* fine_multiplier
-		)
+		world_offset = ((right * mouse_delta.x * pixels_to_world_x - up * mouse_delta.y * pixels_to_world_y) * fine_multiplier)
 
 	elif num_axes == 2:
 		# Plane dragging (e.g., XY, XZ, YZ)
 		var right = camera.global_transform.basis.x
 		var up = camera.global_transform.basis.y
 
-		var camera_offset = (
-			(right * mouse_delta.x * pixels_to_world_x - up * mouse_delta.y * pixels_to_world_y)
-			* fine_multiplier
-		)
+		var camera_offset = (right * mouse_delta.x * pixels_to_world_x - up * mouse_delta.y * pixels_to_world_y) * fine_multiplier
 
 		# Constrain to the plane by zeroing out the axis we're NOT dragging
 		if gizmo_drag_axis.x == 0:
@@ -1306,9 +1320,7 @@ func _update_scale_drag(mouse_delta: Vector2) -> void:
 		scale_multiplier = round(scale_multiplier / snap_increment) * snap_increment
 		scale_multiplier = max(0.01, scale_multiplier)  # Prevent zero or negative scale
 
-	var num_axes = (
-		int(gizmo_drag_axis.x != 0) + int(gizmo_drag_axis.y != 0) + int(gizmo_drag_axis.z != 0)
-	)
+	var num_axes = int(gizmo_drag_axis.x != 0) + int(gizmo_drag_axis.y != 0) + int(gizmo_drag_axis.z != 0)
 
 	# Update stats display
 	_update_transform_stats("Scale", scale_multiplier, gizmo_drag_axis)
@@ -1485,12 +1497,8 @@ func _try_box_select() -> void:
 		return
 
 	# Create selection rectangle (normalize in case user dragged backwards)
-	var rect_min = Vector2(
-		min(box_select_start.x, box_select_end.x), min(box_select_start.y, box_select_end.y)
-	)
-	var rect_max = Vector2(
-		max(box_select_start.x, box_select_end.x), max(box_select_start.y, box_select_end.y)
-	)
+	var rect_min = Vector2(min(box_select_start.x, box_select_end.x), min(box_select_start.y, box_select_end.y))
+	var rect_max = Vector2(max(box_select_start.x, box_select_end.x), max(box_select_start.y, box_select_end.y))
 	var selection_rect = Rect2(rect_min, rect_max - rect_min)
 
 	# Check if box is too small (probably just a click)
@@ -1649,6 +1657,28 @@ func _delete_selected_items() -> void:
 	print("Deleted ", count, " object(s)")
 
 
+func _select_all_items() -> void:
+	"""Select all PhysicalItem objects in the world."""
+	# Clear current selection first
+	_clear_selection()
+
+	# Find all PhysicalItems in the world
+	for child in world.get_children():
+		if child is PhysicalItem:
+			var item = child as PhysicalItem
+			_select_item(item, true)
+
+	print("Selected all items (", selected_items.size(), " object(s))")
+
+
+func _toggle_grid_visibility() -> void:
+	"""Toggle the visibility of the grid."""
+	if grid:
+		grid.visible = not grid.visible
+		var status = "visible" if grid.visible else "hidden"
+		print("Grid is now ", status)
+
+
 func _duplicate_selected_items() -> void:
 	"""Duplicate all currently selected items (industry standard: duplicate in place)."""
 	if selected_items.is_empty():
@@ -1733,12 +1763,92 @@ func _set_transform_mode(mode: TransformMode) -> void:
 
 func _show_context_menu(_mouse_pos: Vector2) -> void:
 	"""Show context menu at mouse position."""
-	# TODO: Implement context menu
-	print("Context menu (right-click) - Not yet implemented")
+	if not context_menu:
+		return
+
+	# Clear existing menu items
+	context_menu.clear_items()
+
+	# Check if we clicked on an item
+	var clicked_on_item = false
+	if hovered_item != null:
+		clicked_on_item = true
+
+	if clicked_on_item:
+		# Context menu for when an item is clicked
+		context_menu.add_menu_item("duplicate", "Duplicate")
+		context_menu.add_menu_item("delete", "Delete")
+		context_menu.add_separator()
+		context_menu.add_menu_item("frame_selected", "Frame Selected", null, not selected_items.is_empty())
+		context_menu.add_separator()
+		context_menu.add_menu_item("select_all", "Select All")
+		context_menu.add_menu_item("select_none", "Select None", null, not selected_items.is_empty())
+	else:
+		# Context menu for when clicking on empty space
+		context_menu.add_menu_item("select_all", "Select All")
+		context_menu.add_menu_item("select_none", "Select None", null, not selected_items.is_empty())
+		context_menu.add_separator()
+		context_menu.add_menu_item("frame_selected", "Frame Selected", null, not selected_items.is_empty())
+		context_menu.add_separator()
+		var grid_text = "Hide Grid" if grid.visible else "Show Grid"
+		context_menu.add_menu_item("toggle_grid", grid_text)
+		context_menu.add_separator()
+		context_menu.add_menu_item("undo", "Undo", null, not undo_history.is_empty())
+		context_menu.add_menu_item("redo", "Redo", null, not redo_history.is_empty())
+
+	# Show the menu at mouse position
+	var context_data = {}
+	# Pass the window reference for proper positioning (important for editor scene testing)
+	var parent_window = get_window() if get_window() else null
+	context_menu.show_context_menu(Vector2.ZERO, context_data, parent_window)
+
+
+func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _context_data: Dictionary) -> void:
+	"""Handle context menu item selection."""
+	match item_id:
+		"select_all":
+			_select_all_items()
+		"select_none":
+			_clear_selection()
+		"frame_selected":
+			_frame_selection()
+		"toggle_grid":
+			_toggle_grid_visibility()
+		"undo":
+			_undo_last_operation()
+		"redo":
+			_redo_last_operation()
+		"duplicate":
+			_duplicate_selected_items()
+		"delete":
+			_delete_selected_items()
+
+
+func _on_context_menu_closed() -> void:
+	"""Handle context menu closure."""
+	# Just grab focus back like inventory system does
+	grab_focus()
 
 
 func _on_part_selected(index: int) -> void:
 	"""Spawn a new part when double-clicked from list."""
+	var part_name = part_list.get_item_text(index).to_lower().replace(" ", "_")
+	if part_name in available_parts:
+		spawn_part(available_parts[part_name])
+
+
+func _on_add_object_pressed() -> void:
+	"""Add the selected object from the list when the Add Object button is pressed."""
+	if not part_list:
+		return
+
+	var selected_indices = part_list.get_selected_items()
+	if selected_indices.is_empty():
+		print("No object selected in the list")
+		return
+
+	# Get the first selected item (ItemList should be in single-select mode)
+	var index = selected_indices[0]
 	var part_name = part_list.get_item_text(index).to_lower().replace(" ", "_")
 	if part_name in available_parts:
 		spawn_part(available_parts[part_name])
@@ -1750,6 +1860,11 @@ func _on_toggle_controls_pressed() -> void:
 	if help_label:
 		help_label.visible = controls_visible
 	print("Controls text ", "shown" if controls_visible else "hidden")
+
+
+func _on_clear_button_pressed() -> void:
+	"""Handle clear button press to clear all items from the workbench."""
+	clear_workbench()
 
 
 func _on_select_button_pressed() -> void:
@@ -1984,10 +2099,7 @@ func _update_transform_stats(operation: String, value: float, axis: Vector3) -> 
 			text += " [Fine Mode]"
 
 	# Add selected object count
-	text += (
-		"\nSelected: %d object%s"
-		% [selected_items.size(), "s" if selected_items.size() != 1 else ""]
-	)
+	text += ("\nSelected: %d object%s" % [selected_items.size(), "s" if selected_items.size() != 1 else ""])
 
 	transform_stats_label.text = text
 
@@ -2089,11 +2201,7 @@ func _on_validate_pressed() -> void:
 		return
 
 	# TODO: Implement actual validation in Phase 3
-	var report = {
-		"total_items": items.size(),
-		"selected_items": selected_items.size(),
-		"message": "Validation not yet implemented (Phase 3)"
-	}
+	var report = {"total_items": items.size(), "selected_items": selected_items.size(), "message": "Validation not yet implemented (Phase 3)"}
 
 	print("Validation report: ", report)
 	item_validated.emit(false, report)
@@ -2123,12 +2231,8 @@ func get_all_items() -> Array[PhysicalItem]:
 func _draw_selection_box() -> void:
 	if is_box_selecting:
 		# Normalize rectangle to handle backwards dragging
-		var rect_min = Vector2(
-			min(box_select_start.x, box_select_end.x), min(box_select_start.y, box_select_end.y)
-		)
-		var rect_size = Vector2(
-			abs(box_select_end.x - box_select_start.x), abs(box_select_end.y - box_select_start.y)
-		)
+		var rect_min = Vector2(min(box_select_start.x, box_select_end.x), min(box_select_start.y, box_select_end.y))
+		var rect_size = Vector2(abs(box_select_end.x - box_select_start.x), abs(box_select_end.y - box_select_start.y))
 		var rect = Rect2(rect_min, rect_size)
 
 		selection_overlay.draw_rect(rect, Color(0.3, 0.6, 1.0, 0.2), true)  # Fill
@@ -2178,9 +2282,7 @@ func _record_transform_operation() -> void:
 	if selected_items.is_empty():
 		return
 
-	var command = {
-		"type": "", "items": selected_items.duplicate(), "old_values": {}, "new_values": {}
-	}
+	var command = {"type": "", "items": selected_items.duplicate(), "old_values": {}, "new_values": {}}
 
 	# Determine operation type and collect old/new values
 	if current_transform_mode == TransformMode.MOVE:
@@ -2224,15 +2326,7 @@ func _record_transform_operation() -> void:
 			if undo_history.size() > MAX_UNDO_OPERATIONS:
 				undo_history.pop_front()
 
-			print(
-				"Recorded undo: ",
-				command["type"],
-				" (",
-				undo_history.size(),
-				"/",
-				MAX_UNDO_OPERATIONS,
-				" operations)"
-			)
+			print("Recorded undo: ", command["type"], " (", undo_history.size(), "/", MAX_UNDO_OPERATIONS, " operations)")
 
 
 func _undo_last_operation() -> void:

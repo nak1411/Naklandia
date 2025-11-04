@@ -165,7 +165,7 @@ func _create_window_canvas(window: Window_Base, window_type: String) -> CanvasLa
 			# Dialogs use the highest priority pause canvas
 			canvas.layer = 200 + active_windows.size()
 			pause_canvas.add_child(canvas)
-		"equipment", "crafting", "character":
+		"equipment", "crafting", "character", "workbench":
 			# Persistent UI windows - add directly to UIManager with their own layers
 			canvas.layer = 120 + active_windows.size()
 			add_child(canvas)

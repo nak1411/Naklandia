@@ -567,14 +567,10 @@ func _update_recipe_display():
 	recipe_info_label.visible = false
 	recipe_name_label.visible = true
 	recipe_details_label.visible = true
-	recipe_name_label.text = (
-		"[center][font_size=24][b]%s[/b][/font_size][/center]" % selected_recipe.recipe_name
-	)
+	recipe_name_label.text = ("[center][font_size=24][b]%s[/b][/font_size][/center]" % selected_recipe.recipe_name)
 
 	var details_text = "[color=gray]%s[/color]\n\n" % selected_recipe.description
-	details_text += (
-		"[b]Output:[/b] %s x%d" % [selected_recipe.recipe_name, selected_recipe.output_quantity]
-	)
+	details_text += ("[b]Output:[/b] %s x%d" % [selected_recipe.recipe_name, selected_recipe.output_quantity])
 	recipe_details_label.text = details_text
 
 	# Display requirements
@@ -587,10 +583,7 @@ func _update_recipe_display():
 		var available = available_materials.get(req_mat.material_id, 0)
 		var has_enough = available >= req_mat.quantity
 		var color = "green" if has_enough else "red"
-		req_text += (
-			"[color=%s]• %s: %d/%d[/color]\n"
-			% [color, req_mat.material_name, available, req_mat.quantity]
-		)
+		req_text += ("[color=%s]• %s: %d/%d[/color]\n" % [color, req_mat.material_name, available, req_mat.quantity])
 
 	requirements_label.text = req_text
 	requirements_label.visible = true
@@ -730,9 +723,9 @@ func _on_workbench_button_pressed():
 		workbench_window = WorkbenchWindow_Base.new()
 		workbench_window.name = "AssemblyWorkbenchWindow"
 
-		# Register with UI manager as "tearoff" type (dynamic window)
+		# Register with UI manager as "workbench" type so WindowLayoutManager can find it
 		print("Registering workbench window with UI manager...")
-		ui_manager.register_window(workbench_window, "tearoff")
+		ui_manager.register_window(workbench_window, "workbench")
 
 		# Wait for window to be ready
 		if not workbench_window.is_node_ready():
