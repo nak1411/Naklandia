@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(python:*)",
-      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/crafting/physics/TransformGizmo.gd)"
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/crafting/physics/TransformGizmo.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" checkout scripts/crafting/physics/WorkbenchWindow.gd scripts/inventory/presentation/windows/base/Window_Base.gd scripts/ui/core/UIManager.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" status --short)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff HEAD scripts/crafting/physics/WorkbenchWindow.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff HEAD~1 HEAD scripts/crafting/physics/WorkbenchWindow.gd)"
     ],
     "deny": [],
     "ask": []

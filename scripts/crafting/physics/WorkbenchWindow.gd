@@ -24,6 +24,7 @@ var viewport: SubViewport
 var camera: Camera3D
 var world: Node3D
 var grid: MeshInstance3D
+var world_environment: WorldEnvironment
 var part_list: ItemList
 var category_filter: OptionButton
 var add_object_button: Button
@@ -112,6 +113,9 @@ var redo_history: Array = []  # Array of command dictionaries for redo
 # Negative scale warning
 var negative_scale_warning_active: bool = false
 
+# Dialog interaction state
+var is_dialog_open: bool = false  # True when viewport settings dialog is open
+
 # Command structure:
 # {
 #   "type": "move" | "rotate" | "scale",
@@ -174,6 +178,7 @@ func _ready() -> void:
 	camera = $VBoxContainer/MainContent/ViewportContainer/SubViewport/Camera3D
 	world = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World
 	grid = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World/Grid
+	world_environment = $VBoxContainer/MainContent/ViewportContainer/SubViewport/WorldEnvironment
 	part_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/PartList
 	category_filter = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/CategoryFilterContainer/CategoryFilter
 	add_object_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/ButtonContainer/AddObjectButton
@@ -532,6 +537,10 @@ func _handle_mouse_press(event: InputEventMouseButton) -> void:
 	"""Handle mouse button press events."""
 	last_mouse_pos = event.position
 
+	# Ignore input if dialog is open
+	if is_dialog_open:
+		return
+
 	# Alt + Mouse = Camera controls
 	if is_alt_held:
 		is_dragging_camera = true
@@ -607,6 +616,10 @@ func _handle_mouse_release(event: InputEventMouseButton) -> void:
 
 func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 	"""Handle mouse motion events."""
+	# Ignore input if dialog is open
+	if is_dialog_open:
+		return
+
 	var delta = event.position - last_mouse_pos
 
 	# Gizmo drag mode
@@ -1933,6 +1946,7 @@ func _show_context_menu(_mouse_pos: Vector2) -> void:
 		context_menu.add_separator()
 		var grid_text = "Hide Grid" if grid.visible else "Show Grid"
 		context_menu.add_menu_item("toggle_grid", grid_text)
+		context_menu.add_menu_item("viewport_settings", "Viewport Settings...")
 		context_menu.add_separator()
 		context_menu.add_menu_item("undo", "Undo", null, not undo_history.is_empty())
 		context_menu.add_menu_item("redo", "Redo", null, not redo_history.is_empty())
@@ -1955,6 +1969,8 @@ func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _co
 			_frame_selection()
 		"toggle_grid":
 			_toggle_grid_visibility()
+		"viewport_settings":
+			_show_viewport_settings_dialog()
 		"undo":
 			_undo_last_operation()
 		"redo":
@@ -2716,3 +2732,112 @@ func _attach_selected_items_with_fastener() -> void:
 		_update_object_info()
 	else:
 		print("RESULT: Failed to attach any items")
+
+
+## ========================================
+## VIEWPORT SETTINGS DIALOG
+## ========================================
+
+func _show_viewport_settings_dialog() -> void:
+	"""Show viewport settings dialog for configuring grid size, gizmo scale, and background color."""
+	print("ViewportSettings: Opening dialog")
+
+	# Disable selection and translation while dialog is open
+	is_dialog_open = true
+
+	# Get current settings
+	var current_grid_size = grid_snap_size
+	var current_gizmo_scale = transform_gizmo.gizmo_size if transform_gizmo else 1.5
+	var current_bg_color = Color(0.2, 0.2, 0.25, 1.0)  # Default background color
+
+	# Get current background color from environment if available
+	if world_environment and world_environment.environment:
+		var env = world_environment.environment
+		if env.background_mode == Environment.BG_COLOR:
+			current_bg_color = env.background_color
+
+	# Create the settings dialog
+	var settings_dialog = ViewportSettingsDialog.new(current_grid_size, current_gizmo_scale, current_bg_color)
+
+	# Add to the UI manager's pause canvas (same pattern as other dialogs)
+	var ui_manager = get_tree().get_first_node_in_group("ui_manager")
+	if ui_manager and ui_manager.has_method("get_pause_canvas"):
+		var pause_canvas = ui_manager.get_pause_canvas()
+		pause_canvas.add_child(settings_dialog)
+	else:
+		# Fallback to adding to current scene
+		get_tree().current_scene.add_child(settings_dialog)
+
+	# Wait for dialog to be fully ready
+	if not settings_dialog.is_node_ready():
+		await settings_dialog.ready
+
+	# Explicitly initialize the dialog content
+	settings_dialog._setup_window_content()
+
+	# Wait one more frame to ensure all components are initialized
+	await get_tree().process_frame
+
+	# Connect to settings changed signal
+	settings_dialog.settings_changed.connect(
+		func(grid_size: float, gizmo_scale: float, bg_color: Color):
+			print("ViewportSettings: Settings changed signal received")
+			_on_viewport_settings_changed(grid_size, gizmo_scale, bg_color)
+	)
+
+	# Connect to dialog closed/cancelled signals to re-enable selection
+	settings_dialog.dialog_closed.connect(
+		func():
+			print("ViewportSettings: Dialog closed, re-enabling selection")
+			is_dialog_open = false
+	)
+
+	settings_dialog.dialog_cancelled.connect(
+		func():
+			print("ViewportSettings: Dialog cancelled, re-enabling selection")
+			is_dialog_open = false
+	)
+
+	# Show the dialog
+	settings_dialog.show_dialog(get_window())
+
+
+func _on_viewport_settings_changed(new_grid_size: float, new_gizmo_scale: float, new_bg_color: Color) -> void:
+	"""Apply new viewport settings."""
+	# Update grid snap size
+	grid_snap_size = new_grid_size
+	print("Grid snap size updated to: ", grid_snap_size)
+
+	# Update grid visual scale
+	if grid:
+		# Try material_override first
+		var shader_material = grid.material_override as ShaderMaterial
+		# If not found, try surface material
+		if not shader_material and grid.get_surface_override_material_count() > 0:
+			shader_material = grid.get_surface_override_material(0) as ShaderMaterial
+
+		if shader_material:
+			shader_material.set_shader_parameter("grid_scale", new_grid_size)
+			print("Grid visual scale updated to: ", new_grid_size)
+		else:
+			print("Warning: Could not find grid shader material")
+
+	# Update gizmo scale
+	if transform_gizmo:
+		transform_gizmo.gizmo_size = new_gizmo_scale
+		# Recreate gizmo components to apply new scale
+		transform_gizmo._create_move_gizmo()
+		transform_gizmo._create_rotate_gizmo()
+		transform_gizmo._create_scale_gizmo()
+		transform_gizmo.set_mode(transform_gizmo.current_mode)
+		_update_gizmo()
+		print("Gizmo scale updated to: ", new_gizmo_scale)
+
+	# Update background color
+	if world_environment:
+		if not world_environment.environment:
+			world_environment.environment = Environment.new()
+
+		world_environment.environment.background_mode = Environment.BG_COLOR
+		world_environment.environment.background_color = new_bg_color
+		print("Background color updated to: ", new_bg_color)

@@ -84,6 +84,10 @@ func _create_materials() -> void:
 
 func _create_move_gizmo() -> void:
 	"""Create move gizmo (3 arrows + 3 plane handles)."""
+	# Remove old gizmo if it exists
+	if move_gizmo:
+		move_gizmo.queue_free()
+
 	move_gizmo = Node3D.new()
 	move_gizmo.name = "MoveGizmo"
 	add_child(move_gizmo)
@@ -303,6 +307,10 @@ func _create_scale_handle(direction: Vector3, material: StandardMaterial3D) -> N
 
 func _create_rotate_gizmo() -> void:
 	"""Create rotate gizmo (3 torus circles for each axis)."""
+	# Remove old gizmo if it exists
+	if rotate_gizmo:
+		rotate_gizmo.queue_free()
+
 	rotate_gizmo = Node3D.new()
 	rotate_gizmo.name = "RotateGizmo"
 	add_child(rotate_gizmo)
@@ -327,6 +335,10 @@ func _create_rotate_gizmo() -> void:
 
 func _create_scale_gizmo() -> void:
 	"""Create scale gizmo (3 lines with boxes at ends)."""
+	# Remove old gizmo if it exists
+	if scale_gizmo:
+		scale_gizmo.queue_free()
+
 	scale_gizmo = Node3D.new()
 	scale_gizmo.name = "ScaleGizmo"
 	add_child(scale_gizmo)
@@ -394,11 +406,11 @@ func set_target_position(pos: Vector3) -> void:
 
 
 func update_scale_for_camera(camera_pos: Vector3) -> void:
-	"""Scale gizmo to appear constant size regardless of camera distance."""
+	"""Keep gizmo at a fixed screen size regardless of camera distance."""
+	# Scale proportionally to distance to maintain constant screen size
 	var distance = global_position.distance_to(camera_pos)
-	# Scale gizmo proportionally to distance, with reasonable min/max bounds
-	var target_scale = distance * 0.15
-	target_scale = clamp(target_scale, 0.5, 10.0)  # Prevent extreme sizes
+	# This multiplier keeps the gizmo at a fixed viewport size
+	var target_scale = distance * 0.05
 	scale = Vector3.ONE * target_scale
 
 
