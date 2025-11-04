@@ -266,5 +266,10 @@ func _on_settings_closed():
 
 
 func _on_exit_pressed():
+	# Save inventory before exiting
+	if inventory_integration and inventory_integration.inventory_manager:
+		print("PauseMenu: Saving inventory before exit...")
+		inventory_integration.inventory_manager.save_inventory()
+
 	# Exit the game
 	get_tree().quit()

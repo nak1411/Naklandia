@@ -85,6 +85,12 @@ func _setup_autosave():
 	add_child(timer)
 
 
+func _exit_tree():
+	# Save inventory when the manager is about to be removed (game exit)
+	print("InventoryManager: Saving inventory on exit...")
+	save_inventory()
+
+
 # Container management (simplified)
 func add_container(container: InventoryContainer_Base) -> bool:
 	if container.container_id in containers:
