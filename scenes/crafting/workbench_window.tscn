@@ -27,7 +27,10 @@ uniform float grid_scale : hint_range(0.1, 10.0) = 1.0;
 uniform float line_width : hint_range(0.001, 0.1) = 0.02;
 
 void fragment() {
-	vec2 coord = UV * 20.0 * grid_scale;
+	// Calculate coordinates in world units
+	// Mesh is 20x20 units, so UV * 20.0 gives us world coordinates
+	// Then divide by grid_scale to get grid cell coordinates
+	vec2 coord = (UV * 20.0) / grid_scale;
 	vec2 grid = abs(fract(coord - 0.5) - 0.5) / fwidth(coord);
 	float line = min(grid.x, grid.y);
 
@@ -35,12 +38,14 @@ void fragment() {
 	float grid_alpha = 1.0 - min(line, 1.0);
 
 	// Check if we're on the X axis (Z = 0) - centered on grid
-	float z_coord = coord.y - 10.0 * grid_scale;
+	// Z axis is at world coordinate 0, which is at UV.y = 0.5 (center of 20-unit mesh)
+	float z_coord = coord.y - (10.0 / grid_scale);
 	float z_grid_line = abs(fract(z_coord) - 0.5) / fwidth(coord.y);
 	bool on_x_axis = abs(z_coord) < 0.08;
 
 	// Check if we're on the Z axis (X = 0) - centered on grid
-	float x_coord = coord.x - 10.0 * grid_scale;
+	// X axis is at world coordinate 0, which is at UV.x = 0.5 (center of 20-unit mesh)
+	float x_coord = coord.x - (10.0 / grid_scale);
 	float x_grid_line = abs(fract(x_coord) - 0.5) / fwidth(coord.x);
 	bool on_z_axis = abs(x_coord) < 0.08;
 

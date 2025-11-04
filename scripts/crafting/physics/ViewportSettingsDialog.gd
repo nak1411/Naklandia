@@ -1,27 +1,47 @@
 class_name ViewportSettingsDialog
 extends DialogWindow_Base
 
-## Dialog for configuring viewport settings like grid size, gizmo scale, and background color
+## Dialog for configuring viewport settings like grid size, gizmo scale, background color, and floor color
 
-signal settings_changed(grid_size: float, gizmo_scale: float, background_color: Color)
+signal settings_changed(grid_size: float, gizmo_scale: float, background_color: Color, floor_color: Color)
+
+# Settings file path
+const SETTINGS_FILE_PATH = "user://viewport_settings.cfg"
+
+# Default settings
+const DEFAULT_GRID_SIZE: float = 1.0
+const DEFAULT_GIZMO_SCALE: float = 1.5
+const DEFAULT_BACKGROUND_COLOR: Color = Color(0.2, 0.2, 0.25, 1.0)
+const DEFAULT_FLOOR_COLOR: Color = Color(0.15, 0.15, 0.15, 1.0)
 
 # UI Controls
 var grid_size_spinbox: SpinBox
 var gizmo_scale_spinbox: SpinBox
 var background_color_picker: ColorPickerButton
+var floor_color_picker: ColorPickerButton
 
 # Current settings
-var current_grid_size: float = 1.0
-var current_gizmo_scale: float = 1.5
-var current_background_color: Color = Color(0.2, 0.2, 0.25, 1.0)
+var current_grid_size: float = DEFAULT_GRID_SIZE
+var current_gizmo_scale: float = DEFAULT_GIZMO_SCALE
+var current_background_color: Color = DEFAULT_BACKGROUND_COLOR
+var current_floor_color: Color = DEFAULT_FLOOR_COLOR
 
 
-func _init(grid_size: float = 1.0, gizmo_scale: float = 1.5, bg_color: Color = Color(0.2, 0.2, 0.25, 1.0)):
-	super._init("Viewport Settings", Vector2(400, 280))
+func _init(grid_size: float = 1.0, gizmo_scale: float = 1.5, bg_color: Color = Color(0.2, 0.2, 0.25, 1.0), floor_color: Color = Color(0.15, 0.15, 0.15, 1.0)):
+	super._init("Viewport Settings", Vector2(400, 330))
 
-	current_grid_size = grid_size
-	current_gizmo_scale = gizmo_scale
-	current_background_color = bg_color
+	# Load saved settings first
+	_load_settings()
+
+	# Override with passed parameters if they differ from defaults
+	if grid_size != DEFAULT_GRID_SIZE:
+		current_grid_size = grid_size
+	if gizmo_scale != DEFAULT_GIZMO_SCALE:
+		current_gizmo_scale = gizmo_scale
+	if bg_color != DEFAULT_BACKGROUND_COLOR:
+		current_background_color = bg_color
+	if floor_color != DEFAULT_FLOOR_COLOR:
+		current_floor_color = floor_color
 
 
 func _ready():
@@ -81,6 +101,23 @@ func _build_settings_ui():
 
 	content_container.add_child(color_container)
 
+	# Floor Color Setting
+	var floor_color_container = HBoxContainer.new()
+	floor_color_container.add_theme_constant_override("separation", 10)
+
+	var floor_color_label = Label.new()
+	floor_color_label.text = "Floor Color:"
+	floor_color_label.custom_minimum_size = Vector2(150, 0)
+	floor_color_container.add_child(floor_color_label)
+
+	floor_color_picker = ColorPickerButton.new()
+	floor_color_picker.color = current_floor_color
+	floor_color_picker.custom_minimum_size = Vector2(100, 30)
+	floor_color_picker.edit_alpha = true
+	floor_color_container.add_child(floor_color_picker)
+
+	content_container.add_child(floor_color_container)
+
 	# Add spacer to push buttons to bottom
 	var spacer = Control.new()
 	spacer.custom_minimum_size = Vector2(0, 20)
@@ -131,16 +168,21 @@ func _on_apply_pressed():
 	var new_grid_size = grid_size_spinbox.value if grid_size_spinbox else current_grid_size
 	var new_gizmo_scale = gizmo_scale_spinbox.value if gizmo_scale_spinbox else current_gizmo_scale
 	var new_bg_color = background_color_picker.color if background_color_picker else current_background_color
+	var new_floor_color = floor_color_picker.color if floor_color_picker else current_floor_color
 
 	print("ViewportSettingsDialog: Apply button pressed, emitting settings_changed")
-
-	# Emit the settings changed signal
-	settings_changed.emit(new_grid_size, new_gizmo_scale, new_bg_color)
 
 	# Update current settings to reflect the applied values
 	current_grid_size = new_grid_size
 	current_gizmo_scale = new_gizmo_scale
 	current_background_color = new_bg_color
+	current_floor_color = new_floor_color
+
+	# Save settings to file
+	save_settings()
+
+	# Emit the settings changed signal
+	settings_changed.emit(new_grid_size, new_gizmo_scale, new_bg_color, new_floor_color)
 
 
 func _on_close_pressed():
@@ -148,11 +190,21 @@ func _on_close_pressed():
 	var new_grid_size = grid_size_spinbox.value if grid_size_spinbox else current_grid_size
 	var new_gizmo_scale = gizmo_scale_spinbox.value if gizmo_scale_spinbox else current_gizmo_scale
 	var new_bg_color = background_color_picker.color if background_color_picker else current_background_color
+	var new_floor_color = floor_color_picker.color if floor_color_picker else current_floor_color
 
 	print("ViewportSettingsDialog: Close button pressed, applying settings and closing")
 
+	# Update current settings to reflect the applied values
+	current_grid_size = new_grid_size
+	current_gizmo_scale = new_gizmo_scale
+	current_background_color = new_bg_color
+	current_floor_color = new_floor_color
+
+	# Save settings to file
+	save_settings()
+
 	# Emit the settings changed signal
-	settings_changed.emit(new_grid_size, new_gizmo_scale, new_bg_color)
+	settings_changed.emit(new_grid_size, new_gizmo_scale, new_bg_color, new_floor_color)
 
 	# Emit the dialog closed signal
 	dialog_closed.emit()
@@ -168,3 +220,60 @@ func _on_cancel_pressed():
 	dialog_cancelled.emit()
 	# Defer the close to ensure signal handlers complete
 	call_deferred("close_dialog")
+
+
+func _load_settings():
+	"""Load viewport settings from file"""
+	var config = ConfigFile.new()
+	var err = config.load(SETTINGS_FILE_PATH)
+
+	if err == OK:
+		current_grid_size = config.get_value("viewport", "grid_size", DEFAULT_GRID_SIZE)
+		current_gizmo_scale = config.get_value("viewport", "gizmo_scale", DEFAULT_GIZMO_SCALE)
+		current_background_color = config.get_value("viewport", "background_color", DEFAULT_BACKGROUND_COLOR)
+		current_floor_color = config.get_value("viewport", "floor_color", DEFAULT_FLOOR_COLOR)
+		print("ViewportSettingsDialog: Settings loaded from file")
+	else:
+		# Use defaults
+		current_grid_size = DEFAULT_GRID_SIZE
+		current_gizmo_scale = DEFAULT_GIZMO_SCALE
+		current_background_color = DEFAULT_BACKGROUND_COLOR
+		current_floor_color = DEFAULT_FLOOR_COLOR
+		print("ViewportSettingsDialog: No saved settings found, using defaults")
+
+
+func save_settings():
+	"""Save viewport settings to file"""
+	var config = ConfigFile.new()
+
+	config.set_value("viewport", "grid_size", current_grid_size)
+	config.set_value("viewport", "gizmo_scale", current_gizmo_scale)
+	config.set_value("viewport", "background_color", current_background_color)
+	config.set_value("viewport", "floor_color", current_floor_color)
+
+	var err = config.save(SETTINGS_FILE_PATH)
+	if err == OK:
+		print("ViewportSettingsDialog: Settings saved to file")
+	else:
+		print("ViewportSettingsDialog: Error saving settings: ", err)
+
+
+static func load_saved_settings() -> Dictionary:
+	"""Static method to load saved settings without creating a dialog instance"""
+	var config = ConfigFile.new()
+	var err = config.load(SETTINGS_FILE_PATH)
+
+	var settings = {
+		"grid_size": DEFAULT_GRID_SIZE,
+		"gizmo_scale": DEFAULT_GIZMO_SCALE,
+		"background_color": DEFAULT_BACKGROUND_COLOR,
+		"floor_color": DEFAULT_FLOOR_COLOR
+	}
+
+	if err == OK:
+		settings["grid_size"] = config.get_value("viewport", "grid_size", DEFAULT_GRID_SIZE)
+		settings["gizmo_scale"] = config.get_value("viewport", "gizmo_scale", DEFAULT_GIZMO_SCALE)
+		settings["background_color"] = config.get_value("viewport", "background_color", DEFAULT_BACKGROUND_COLOR)
+		settings["floor_color"] = config.get_value("viewport", "floor_color", DEFAULT_FLOOR_COLOR)
+
+	return settings

@@ -24,6 +24,7 @@ var viewport: SubViewport
 var camera: Camera3D
 var world: Node3D
 var grid: MeshInstance3D
+var ground_plane: MeshInstance3D
 var world_environment: WorldEnvironment
 var part_list: ItemList
 var category_filter: OptionButton
@@ -178,6 +179,7 @@ func _ready() -> void:
 	camera = $VBoxContainer/MainContent/ViewportContainer/SubViewport/Camera3D
 	world = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World
 	grid = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World/Grid
+	ground_plane = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World/GroundPlane
 	world_environment = $VBoxContainer/MainContent/ViewportContainer/SubViewport/WorldEnvironment
 	part_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/PartList
 	category_filter = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/CategoryFilterContainer/CategoryFilter
@@ -249,6 +251,9 @@ func _ready() -> void:
 	transform_gizmo = TransformGizmo.new()
 	world.add_child(transform_gizmo)
 	transform_gizmo.visible = false  # Hidden until something is selected
+
+	# Load saved viewport settings
+	_load_viewport_settings()
 
 	# Create gizmo dragger
 	gizmo_dragger = GizmoDragger.new()
@@ -2739,7 +2744,7 @@ func _attach_selected_items_with_fastener() -> void:
 ## ========================================
 
 func _show_viewport_settings_dialog() -> void:
-	"""Show viewport settings dialog for configuring grid size, gizmo scale, and background color."""
+	"""Show viewport settings dialog for configuring grid size, gizmo scale, background color, and floor color."""
 	print("ViewportSettings: Opening dialog")
 
 	# Disable selection and translation while dialog is open
@@ -2749,6 +2754,7 @@ func _show_viewport_settings_dialog() -> void:
 	var current_grid_size = grid_snap_size
 	var current_gizmo_scale = transform_gizmo.gizmo_size if transform_gizmo else 1.5
 	var current_bg_color = Color(0.2, 0.2, 0.25, 1.0)  # Default background color
+	var current_floor_color = Color(0.15, 0.15, 0.15, 1.0)  # Default floor color
 
 	# Get current background color from environment if available
 	if world_environment and world_environment.environment:
@@ -2756,8 +2762,14 @@ func _show_viewport_settings_dialog() -> void:
 		if env.background_mode == Environment.BG_COLOR:
 			current_bg_color = env.background_color
 
+	# Get current floor color from ground plane material if available
+	if ground_plane:
+		var floor_material = ground_plane.get_surface_override_material(0) as StandardMaterial3D
+		if floor_material:
+			current_floor_color = floor_material.albedo_color
+
 	# Create the settings dialog
-	var settings_dialog = ViewportSettingsDialog.new(current_grid_size, current_gizmo_scale, current_bg_color)
+	var settings_dialog = ViewportSettingsDialog.new(current_grid_size, current_gizmo_scale, current_bg_color, current_floor_color)
 
 	# Add to the UI manager's pause canvas (same pattern as other dialogs)
 	var ui_manager = get_tree().get_first_node_in_group("ui_manager")
@@ -2780,9 +2792,9 @@ func _show_viewport_settings_dialog() -> void:
 
 	# Connect to settings changed signal
 	settings_dialog.settings_changed.connect(
-		func(grid_size: float, gizmo_scale: float, bg_color: Color):
+		func(grid_size: float, gizmo_scale: float, bg_color: Color, floor_color: Color):
 			print("ViewportSettings: Settings changed signal received")
-			_on_viewport_settings_changed(grid_size, gizmo_scale, bg_color)
+			_on_viewport_settings_changed(grid_size, gizmo_scale, bg_color, floor_color)
 	)
 
 	# Connect to dialog closed/cancelled signals to re-enable selection
@@ -2802,7 +2814,7 @@ func _show_viewport_settings_dialog() -> void:
 	settings_dialog.show_dialog(get_window())
 
 
-func _on_viewport_settings_changed(new_grid_size: float, new_gizmo_scale: float, new_bg_color: Color) -> void:
+func _on_viewport_settings_changed(new_grid_size: float, new_gizmo_scale: float, new_bg_color: Color, new_floor_color: Color) -> void:
 	"""Apply new viewport settings."""
 	# Update grid snap size
 	grid_snap_size = new_grid_size
@@ -2841,3 +2853,52 @@ func _on_viewport_settings_changed(new_grid_size: float, new_gizmo_scale: float,
 		world_environment.environment.background_mode = Environment.BG_COLOR
 		world_environment.environment.background_color = new_bg_color
 		print("Background color updated to: ", new_bg_color)
+
+	# Update floor color
+	if ground_plane:
+		var floor_material = ground_plane.get_surface_override_material(0) as StandardMaterial3D
+		if floor_material:
+			floor_material.albedo_color = new_floor_color
+			print("Floor color updated to: ", new_floor_color)
+		else:
+			print("Warning: Could not find ground plane material")
+
+
+func _load_viewport_settings() -> void:
+	"""Load and apply saved viewport settings on startup"""
+	var saved_settings = ViewportSettingsDialog.load_saved_settings()
+
+	# Apply grid snap size
+	grid_snap_size = saved_settings["grid_size"]
+	print("Loaded grid snap size: ", grid_snap_size)
+
+	# Apply grid visual scale
+	if grid:
+		var shader_material = grid.material_override as ShaderMaterial
+		if not shader_material and grid.get_surface_override_material_count() > 0:
+			shader_material = grid.get_surface_override_material(0) as ShaderMaterial
+
+		if shader_material:
+			shader_material.set_shader_parameter("grid_scale", saved_settings["grid_size"])
+			print("Loaded grid visual scale: ", saved_settings["grid_size"])
+
+	# Apply gizmo scale
+	if transform_gizmo:
+		transform_gizmo.gizmo_size = saved_settings["gizmo_scale"]
+		print("Loaded gizmo scale: ", saved_settings["gizmo_scale"])
+
+	# Apply background color
+	if world_environment:
+		if not world_environment.environment:
+			world_environment.environment = Environment.new()
+
+		world_environment.environment.background_mode = Environment.BG_COLOR
+		world_environment.environment.background_color = saved_settings["background_color"]
+		print("Loaded background color: ", saved_settings["background_color"])
+
+	# Apply floor color
+	if ground_plane:
+		var floor_material = ground_plane.get_surface_override_material(0) as StandardMaterial3D
+		if floor_material:
+			floor_material.albedo_color = saved_settings["floor_color"]
+			print("Loaded floor color: ", saved_settings["floor_color"])
