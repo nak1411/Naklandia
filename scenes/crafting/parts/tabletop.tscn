@@ -1,0 +1,27 @@
+[gd_scene load_steps=4 format=3 uid="uid://c5j7mamno3pqr"]
+
+[ext_resource type="Script" path="res://scripts/crafting/physics/PhysicalItem.gd" id="1_tabletop"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_tabletop"]
+size = Vector3(1.2, 0.03, 0.8)
+
+[sub_resource type="BoxShape3D" id="BoxShape_tabletop"]
+size = Vector3(1.2, 0.03, 0.8)
+
+[node name="Tabletop" type="RigidBody3D"]
+collision_layer = 4
+collision_mask = 5
+mass = 8.0
+script = ExtResource("1_tabletop")
+item_id = "part_tabletop"
+item_name = "Tabletop"
+item_description = "A flat wooden tabletop, 1.2m x 0.8m x 0.03m. Ready for leg attachment."
+item_mass = 8.0
+item_volume = 0.029
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_tabletop")
+skeleton = NodePath("../..")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape_tabletop")

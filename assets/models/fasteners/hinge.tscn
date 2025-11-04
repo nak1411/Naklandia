@@ -1,0 +1,30 @@
+[gd_scene load_steps=4 format=3]
+
+[sub_resource type="BoxMesh" id="BoxMesh_plate1"]
+size = Vector3(0.08, 0.002, 0.03)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_pin"]
+top_radius = 0.004
+bottom_radius = 0.004
+height = 0.03
+
+[sub_resource type="StandardMaterial3D" id="Material_steel"]
+albedo_color = Color(0.6, 0.6, 0.65, 1)
+metallic = 0.9
+
+[node name="Hinge" type="Node3D"]
+
+[node name="Plate1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.025, 0, 0)
+mesh = SubResource("BoxMesh_plate1")
+surface_material_override/0 = SubResource("Material_steel")
+
+[node name="Plate2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.025, 0, 0)
+mesh = SubResource("BoxMesh_plate1")
+surface_material_override/0 = SubResource("Material_steel")
+
+[node name="Pin" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)
+mesh = SubResource("CylinderMesh_pin")
+surface_material_override/0 = SubResource("Material_steel")

@@ -1,0 +1,33 @@
+[gd_scene load_steps=3 format=3 uid="uid://cnk8napqr3tuv"]
+
+[ext_resource type="Script" path="res://scripts/crafting/physics/JointHelper.gd" id="1_joint_hinge"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_bar"]
+size = Vector3(0.15, 0.005, 0.005)
+
+[sub_resource type="BoxShape3D" id="BoxShape_collision"]
+size = Vector3(0.15, 0.015, 0.015)
+
+[node name="JointHelperHinge" type="RigidBody3D"]
+collision_layer = 4
+collision_mask = 5
+mass = 0.05
+freeze = true
+script = ExtResource("1_joint_hinge")
+joint_type = 1
+item_id = "joint_helper_hinge"
+item_name = "Hinge Joint"
+item_description = "Rotating connection point. Allows rotation around one axis."
+item_mass = 0.05
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape_collision")
+
+[node name="XBar" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_bar")
+
+[node name="YBar" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_bar")
+
+[node name="ZBar" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_bar")

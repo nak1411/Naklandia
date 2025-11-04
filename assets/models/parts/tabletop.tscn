@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="BoxMesh" id="BoxMesh_tabletop"]
+size = Vector3(1.2, 0.03, 0.8)
+
+[sub_resource type="StandardMaterial3D" id="Material_wood"]
+albedo_color = Color(0.545, 0.353, 0.169, 1)
+
+[node name="Tabletop" type="MeshInstance3D"]
+mesh = SubResource("BoxMesh_tabletop")
+surface_material_override/0 = SubResource("Material_wood")

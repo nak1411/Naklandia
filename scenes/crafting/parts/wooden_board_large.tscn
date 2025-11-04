@@ -1,0 +1,27 @@
+[gd_scene load_steps=4 format=3 uid="uid://d5717sh7xw23"]
+
+[ext_resource type="Script" path="res://scripts/crafting/physics/PhysicalItem.gd" id="1_board_large"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_board_large"]
+size = Vector3(2.0, 0.05, 0.3)
+
+[sub_resource type="BoxShape3D" id="BoxShape_board_large"]
+size = Vector3(2.0, 0.05, 0.3)
+
+[node name="WoodenBoardLarge" type="RigidBody3D"]
+collision_layer = 4
+collision_mask = 5
+mass = 6.0
+script = ExtResource("1_board_large")
+item_id = "part_wooden_board_large"
+item_name = "Large Wooden Board"
+item_description = "A large wooden plank, 2m x 0.3m x 0.05m. Good for tables and larger structures."
+item_mass = 6.0
+item_volume = 0.03
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_board_large")
+skeleton = NodePath("../..")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape_board_large")

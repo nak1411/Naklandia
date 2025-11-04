@@ -1,0 +1,24 @@
+[gd_scene load_steps=4 format=3]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_shaft"]
+top_radius = 0.006
+bottom_radius = 0.006
+height = 0.06
+
+[sub_resource type="BoxMesh" id="BoxMesh_head"]
+size = Vector3(0.015, 0.008, 0.015)
+
+[sub_resource type="StandardMaterial3D" id="Material_steel"]
+albedo_color = Color(0.6, 0.6, 0.65, 1)
+metallic = 0.9
+
+[node name="SteelBolt" type="Node3D"]
+
+[node name="Shaft" type="MeshInstance3D" parent="."]
+mesh = SubResource("CylinderMesh_shaft")
+surface_material_override/0 = SubResource("Material_steel")
+
+[node name="Head" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.034, 0)
+mesh = SubResource("BoxMesh_head")
+surface_material_override/0 = SubResource("Material_steel")

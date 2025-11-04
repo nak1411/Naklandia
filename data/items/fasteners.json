@@ -1,0 +1,118 @@
+{
+	"fastener_iron_nail": {
+		"name": "Iron Nail",
+		"description": "Simple iron nail. Good for basic wood connections. Can be hammered in easily.",
+		"type": "MISCELLANEOUS",
+		"volume": 0.00001,
+		"mass": 0.01,
+		"value": 1.0,
+		"icon_path": "res://assets/textures/ui/icons/nail_icon.png",
+		"max_stack_size": 1000,
+		"model_path": "res://assets/models/fasteners/iron_nail.tscn",
+		"metadata": {
+			"fastener_type": "nail",
+			"material": "iron",
+			"strength": 25.0,
+			"durability": 0.7,
+			"removal_difficulty": 0.3,
+			"requires_tool": "tool_hammer",
+			"compatible_materials": ["wood"],
+			"connection_type": "fixed"
+		}
+	},
+	"fastener_steel_screw": {
+		"name": "Steel Screw",
+		"description": "Threaded steel screw. Stronger than nails and easier to remove. Requires a wrench or screwdriver.",
+		"type": "MISCELLANEOUS",
+		"volume": 0.00002,
+		"mass": 0.015,
+		"value": 3.0,
+		"icon_path": "res://assets/textures/ui/icons/screw_icon.png",
+		"max_stack_size": 500,
+		"model_path": "res://assets/models/fasteners/steel_screw.tscn",
+		"metadata": {
+			"fastener_type": "screw",
+			"material": "steel",
+			"strength": 50.0,
+			"durability": 0.85,
+			"removal_difficulty": 0.5,
+			"requires_tool": "tool_wrench",
+			"compatible_materials": ["wood", "metal"],
+			"connection_type": "fixed"
+		}
+	},
+	"fastener_steel_bolt": {
+		"name": "Steel Bolt",
+		"description": "Heavy-duty steel bolt with nut. Strongest mechanical fastener. Requires wrench for installation.",
+		"type": "MISCELLANEOUS",
+		"volume": 0.00005,
+		"mass": 0.03,
+		"value": 8.0,
+		"icon_path": "res://assets/textures/ui/icons/bolt_icon.png",
+		"max_stack_size": 250,
+		"model_path": "res://assets/models/fasteners/steel_bolt.tscn",
+		"metadata": {
+			"fastener_type": "bolt",
+			"material": "steel",
+			"strength": 150.0,
+			"durability": 0.95,
+			"removal_difficulty": 0.7,
+			"requires_tool": "tool_wrench",
+			"compatible_materials": ["wood", "metal", "composite"],
+			"connection_type": "fixed"
+		}
+	},
+	"fastener_hinge": {
+		"name": "Metal Hinge",
+		"description": "Rotating hinge joint. Allows parts to pivot on a single axis. Requires screws for mounting.",
+		"type": "MISCELLANEOUS",
+		"volume": 0.0001,
+		"mass": 0.1,
+		"value": 15.0,
+		"icon_path": "res://assets/textures/ui/icons/hinge_icon.png",
+		"max_stack_size": 100,
+		"model_path": "res://assets/models/fasteners/hinge.tscn",
+		"metadata": {
+			"fastener_type": "joint",
+			"material": "steel",
+			"strength": 80.0,
+			"durability": 0.9,
+			"removal_difficulty": 0.6,
+			"requires_tool": "tool_wrench",
+			"compatible_materials": ["wood", "metal"],
+			"connection_type": "hinge",
+			"joint_properties": {
+				"rotation_axis": "Y",
+				"min_angle": -180.0,
+				"max_angle": 180.0,
+				"friction": 0.1
+			}
+		}
+	},
+	"fastener_ball_joint": {
+		"name": "Ball Joint",
+		"description": "Multi-axis rotating joint. Allows parts to rotate freely in all directions. For complex mechanisms.",
+		"type": "MISCELLANEOUS",
+		"volume": 0.0002,
+		"mass": 0.15,
+		"value": 25.0,
+		"icon_path": "res://assets/textures/ui/icons/ball_joint_icon.png",
+		"max_stack_size": 50,
+		"model_path": "res://assets/models/fasteners/ball_joint.tscn",
+		"metadata": {
+			"fastener_type": "joint",
+			"material": "steel",
+			"strength": 100.0,
+			"durability": 0.88,
+			"removal_difficulty": 0.8,
+			"requires_tool": "tool_wrench",
+			"compatible_materials": ["metal", "composite"],
+			"connection_type": "ball_socket",
+			"joint_properties": {
+				"rotation_axis": "ALL",
+				"max_cone_angle": 45.0,
+				"friction": 0.15
+			}
+		}
+	}
+}

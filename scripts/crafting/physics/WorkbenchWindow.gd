@@ -122,13 +122,35 @@ var negative_scale_warning_active: bool = false
 
 # Available parts to spawn
 var available_parts: Dictionary = {
-	"wooden_board": "res://scenes/crafting/wooden_board.tscn",
+	"small_wooden_board": "res://scenes/crafting/parts/wooden_board_small.tscn",
+	"large_wooden_board": "res://scenes/crafting/parts/wooden_board_large.tscn",
+	"table_leg": "res://scenes/crafting/parts/table_leg.tscn",
+	"tabletop": "res://scenes/crafting/parts/tabletop.tscn",
+	"fixed_joint": "res://scenes/crafting/hardware/joint_helper_fixed.tscn",
+	"hinge_joint": "res://scenes/crafting/hardware/joint_helper_hinge.tscn",
+	"ball_joint": "res://scenes/crafting/hardware/joint_helper_ball.tscn",
 }
 
 # Part categories for filtering
 var part_categories: Dictionary = {
-	"wooden_board": "structural_items",
+	"small_wooden_board": "structural_items",
+	"large_wooden_board": "structural_items",
+	"table_leg": "structural_items",
+	"tabletop": "structural_items",
+	"fixed_joint": "hardware",
+	"hinge_joint": "hardware",
+	"ball_joint": "hardware",
 }
+
+# Fastener system
+var selected_fastener_id: String = "fastener_steel_bolt"  # Default fastener
+var available_fasteners: Array[String] = [
+	"fastener_iron_nail",
+	"fastener_steel_screw",
+	"fastener_steel_bolt",
+	"fastener_hinge",
+	"fastener_ball_joint"
+]
 
 # Category filter options
 enum CategoryFilter { ALL, STRUCTURAL_ITEMS, COSMETIC, HARDWARE, CONTAINERS }
@@ -1576,6 +1598,7 @@ func _try_select_single(_mouse_pos: Vector2) -> void:
 
 	if result and result.collider is PhysicalItem:
 		var item = result.collider as PhysicalItem
+		print("Raycast hit item: %s (instance: %s)" % [item.item_name, item.get_instance_id()])
 
 		# Check if Shift is held for multi-select
 		if Input.is_key_pressed(KEY_SHIFT):
@@ -1588,6 +1611,7 @@ func _try_select_single(_mouse_pos: Vector2) -> void:
 			_clear_selection()
 			_select_item(item, false)
 	else:
+		print("Raycast hit nothing")
 		# Clicked empty space - deselect all
 		if not Input.is_key_pressed(KEY_SHIFT):
 			_clear_selection()
@@ -1617,7 +1641,11 @@ func _try_box_select() -> void:
 
 			# Get the item's AABB (bounding box) in local space
 			var aabb: AABB
-			if item.has_node("MeshInstance3D"):
+
+			# For JointHelper, use a small AABB around the cross shape (15cm bars)
+			if item is JointHelper:
+				aabb = AABB(Vector3(-0.075, -0.075, -0.075), Vector3(0.15, 0.15, 0.15))
+			elif item.has_node("MeshInstance3D"):
 				var mesh_instance = item.get_node("MeshInstance3D") as MeshInstance3D
 				if mesh_instance and mesh_instance.mesh:
 					aabb = mesh_instance.get_aabb()
@@ -1881,12 +1909,23 @@ func _show_context_menu(_mouse_pos: Vector2) -> void:
 		context_menu.add_menu_item("duplicate", "Duplicate")
 		context_menu.add_menu_item("delete", "Delete")
 		context_menu.add_separator()
+
+		# Fastener attachment options (only if 2+ items selected)
+		if selected_items.size() >= 2:
+			context_menu.add_menu_item("attach_fastener", "Attach with Fastener...")
+			context_menu.add_separator()
+
 		context_menu.add_menu_item("frame_selected", "Frame Selected", null, not selected_items.is_empty())
 		context_menu.add_separator()
 		context_menu.add_menu_item("select_all", "Select All")
 		context_menu.add_menu_item("select_none", "Select None", null, not selected_items.is_empty())
 	else:
 		# Context menu for when clicking on empty space
+		# Fastener attachment options (only if 2+ items selected)
+		if selected_items.size() >= 2:
+			context_menu.add_menu_item("attach_fastener", "Attach with Fastener...")
+			context_menu.add_separator()
+
 		context_menu.add_menu_item("select_all", "Select All")
 		context_menu.add_menu_item("select_none", "Select None", null, not selected_items.is_empty())
 		context_menu.add_separator()
@@ -1924,6 +1963,8 @@ func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _co
 			_duplicate_selected_items()
 		"delete":
 			_delete_selected_items()
+		"attach_fastener":
+			_show_fastener_selection_dialog()
 
 
 func _on_context_menu_closed() -> void:
@@ -2122,30 +2163,33 @@ func _update_mode_buttons() -> void:
 	scale_button.set_pressed_no_signal(current_transform_mode == TransformMode.SCALE)
 
 
-func spawn_part(scene_path: String) -> PhysicalItem:
+func spawn_part(scene_path: String) -> Node3D:
 	"""Spawn a new part in the workbench."""
 	var scene = load(scene_path) as PackedScene
 	if not scene:
 		push_error("Failed to load part scene: ", scene_path)
 		return null
 
-	var item = scene.instantiate() as PhysicalItem
-	if not item:
-		push_error("Scene is not a PhysicalItem: ", scene_path)
+	var node = scene.instantiate()
+	if not node:
+		push_error("Failed to instantiate scene: ", scene_path)
 		return null
 
 	# Add to world
-	world.add_child(item)
+	world.add_child(node)
 
 	# Position at grid origin (0, 0, 0)
 	var spawn_pos = Vector3(0, 0, 0)
-	item.global_position = spawn_pos
+	node.global_position = spawn_pos
 
-	# Initially frozen for placement
-	item.freeze = true
+	# If it's a PhysicalItem, freeze it for placement
+	if node is PhysicalItem:
+		node.freeze = true
+		print("Spawned PhysicalItem: %s (instance: %s) at origin" % [node.item_name, node.get_instance_id()])
+	else:
+		print("Spawned node: ", node.name, " at origin")
 
-	print("Spawned: ", item.item_name, " at origin (0, 0, 0)")
-	return item
+	return node
 
 
 func _update_transform_stats(operation: String, value: float, axis: Vector3) -> void:
@@ -2225,10 +2269,24 @@ func _update_object_info() -> void:
 		return
 
 	if selected_items.size() > 1:
-		object_info_label.text = "Multiple Selected (%d objects)" % selected_items.size()
+		# Multiple objects - show count and joint/fastener info
+		var text = "Multiple Selected (%d objects)" % selected_items.size()
+		var total_joints = 0
+		var total_fasteners = 0
+
+		for item in selected_items:
+			total_joints += item.joints.size()
+			total_fasteners += item.fasteners.size()
+
+		if total_joints > 0:
+			text += "\nJoints: %d" % total_joints
+		if total_fasteners > 0:
+			text += "\nFasteners: %d" % total_fasteners
+
+		object_info_label.text = text
 		return
 
-	# Single object selected - show its transform info
+	# Single object selected - show its transform info and joint/fastener info
 	var item = selected_items[0]
 	var pos = item.global_position
 	var rot = item.rotation_degrees
@@ -2237,6 +2295,12 @@ func _update_object_info() -> void:
 	var text = "Position: (%.2f, %.2f, %.2f)\n" % [pos.x, pos.y, pos.z]
 	text += "Rotation: (%.1f°, %.1f°, %.1f°)\n" % [rot.x, rot.y, rot.z]
 	text += "Scale: (%.2f, %.2f, %.2f)" % [scale_vec.x, scale_vec.y, scale_vec.z]
+
+	# Add joint and fastener info
+	if not item.joints.is_empty():
+		text += "\nJoints: %d" % item.joints.size()
+	if not item.fasteners.is_empty():
+		text += "\nFasteners: %d" % item.fasteners.size()
 
 	object_info_label.text = text
 
@@ -2542,3 +2606,113 @@ func _redo_last_operation() -> void:
 	_update_gizmo()
 
 	print("Redo completed (", undo_history.size(), " undo | ", redo_history.size(), " redo)")
+
+
+## ========================================
+## FASTENER SYSTEM METHODS
+## ========================================
+
+func _show_fastener_selection_dialog() -> void:
+	"""Show a dialog to select which fastener to use for attaching selected items."""
+	print("_show_fastener_selection_dialog called with %d selected items" % selected_items.size())
+
+	if selected_items.size() < 2:
+		print("ERROR: Need at least 2 items selected to attach with fastener")
+		return
+
+	# Remove any existing popup
+	var existing_popup = get_node_or_null("FastenerSelectionPopup")
+	if existing_popup:
+		existing_popup.queue_free()
+
+	# Create simple popup menu for fastener selection
+	var popup = PopupMenu.new()
+	popup.name = "FastenerSelectionPopup"
+
+	# Add fastener options
+	print("Adding %d fastener options..." % available_fasteners.size())
+	for i in range(available_fasteners.size()):
+		var fastener_id = available_fasteners[i]
+		var fastener_name = _get_fastener_display_name(fastener_id)
+		popup.add_item(fastener_name, i)
+		print("  Added: %s" % fastener_name)
+
+	# Connect signal
+	popup.id_pressed.connect(_on_fastener_selected)
+	popup.popup_hide.connect(func(): popup.queue_free())
+
+	# Add to scene and show
+	add_child(popup)
+	var mouse_pos = get_global_mouse_position()
+	popup.position = Vector2i(mouse_pos)
+	popup.popup()
+	print("Popup shown at %s" % mouse_pos)
+
+
+func _get_fastener_display_name(fastener_id: String) -> String:
+	"""Get display name for fastener from ItemDatabase."""
+	if not ItemDatabase:
+		return fastener_id
+
+	var item_def = ItemDatabase.get_item(fastener_id)
+	if item_def:
+		return item_def.name
+
+	return fastener_id
+
+
+func _on_fastener_selected(index: int) -> void:
+	"""Handle fastener selection from popup menu."""
+	if index < 0 or index >= available_fasteners.size():
+		return
+
+	selected_fastener_id = available_fasteners[index]
+	print("Selected fastener: %s" % selected_fastener_id)
+
+	# Attach selected items with this fastener
+	_attach_selected_items_with_fastener()
+
+
+func _attach_selected_items_with_fastener() -> void:
+	"""Attach all selected items together using the selected fastener."""
+	print("_attach_selected_items_with_fastener called")
+	print("  Selected items: %d" % selected_items.size())
+	print("  Fastener: %s" % selected_fastener_id)
+
+	if selected_items.size() < 2:
+		print("ERROR: Need at least 2 items selected to attach")
+		return
+
+	# Get the first item as the base
+	var base_item = selected_items[0]
+	print("  Base item: %s" % base_item.item_name)
+
+	# Attach all other items to the base
+	var attached_count = 0
+	for i in range(1, selected_items.size()):
+		var target_item = selected_items[i]
+		print("  Attempting to attach: %s" % target_item.item_name)
+
+		# Calculate midpoint between items for connection point
+		var connection_point = (base_item.global_position + target_item.global_position) / 2.0
+		print("    Connection point: %s" % connection_point)
+
+		# Attach using PhysicalItem's method
+		var fastener = base_item.attach_with_fastener(
+			target_item,
+			selected_fastener_id,
+			connection_point,
+			world  # Use workbench world as parent for joints
+		)
+
+		if fastener:
+			attached_count += 1
+			print("    SUCCESS: Attached %s to %s with %s" % [target_item.item_name, base_item.item_name, selected_fastener_id])
+		else:
+			print("    FAILED: Could not attach %s to %s" % [target_item.item_name, base_item.item_name])
+
+	if attached_count > 0:
+		print("RESULT: Successfully attached %d items with %s" % [attached_count, selected_fastener_id])
+		_update_object_info()
+	else:
+		print("RESULT: Failed to attach any items")

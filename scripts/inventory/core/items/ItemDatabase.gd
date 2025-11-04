@@ -216,7 +216,9 @@ func _load_items_from_json():
 		"resources.json",
 		"modules.json",
 		"blueprints.json",
-		"miscellaneous.json"
+		"miscellaneous.json",
+		"parts.json",
+		"fasteners.json"
 	]
 
 	var total_items = 0

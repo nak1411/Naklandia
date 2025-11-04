@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_nail"]
+top_radius = 0.002
+bottom_radius = 0.002
+height = 0.05
+
+[sub_resource type="StandardMaterial3D" id="Material_iron"]
+albedo_color = Color(0.4, 0.4, 0.4, 1)
+metallic = 0.8
+
+[node name="IronNail" type="MeshInstance3D"]
+mesh = SubResource("CylinderMesh_nail")
+surface_material_override/0 = SubResource("Material_iron")

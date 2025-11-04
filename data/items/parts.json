@@ -1,0 +1,92 @@
+{
+	"part_wooden_board_small": {
+		"name": "Small Wooden Board",
+		"description": "A small wooden plank, 1m x 0.2m x 0.05m. Suitable for basic construction.",
+		"type": "MISCELLANEOUS",
+		"volume": 0.01,
+		"mass": 2.0,
+		"value": 10.0,
+		"icon_path": "res://assets/textures/ui/icons/wood_plank_icon.png",
+		"max_stack_size": 50,
+		"model_path": "res://assets/models/parts/wooden_board_small.tscn",
+		"metadata": {
+			"part_type": "structural",
+			"material": "wood",
+			"dimensions": {"length": 1.0, "width": 0.2, "height": 0.05},
+			"connection_points": [
+				{"position": [0.5, 0.0, 0.0], "type": "surface"},
+				{"position": [-0.5, 0.0, 0.0], "type": "surface"},
+				{"position": [0.0, 0.1, 0.0], "type": "surface"},
+				{"position": [0.0, -0.1, 0.0], "type": "surface"}
+			],
+			"structural_strength": 50.0
+		}
+	},
+	"part_wooden_board_large": {
+		"name": "Large Wooden Board",
+		"description": "A large wooden plank, 2m x 0.3m x 0.05m. Good for tables and larger structures.",
+		"type": "MISCELLANEOUS",
+		"volume": 0.03,
+		"mass": 6.0,
+		"value": 25.0,
+		"icon_path": "res://assets/textures/ui/icons/wood_plank_icon.png",
+		"max_stack_size": 25,
+		"model_path": "res://assets/models/parts/wooden_board_large.tscn",
+		"metadata": {
+			"part_type": "structural",
+			"material": "wood",
+			"dimensions": {"length": 2.0, "width": 0.3, "height": 0.05},
+			"connection_points": [
+				{"position": [1.0, 0.0, 0.0], "type": "surface"},
+				{"position": [-1.0, 0.0, 0.0], "type": "surface"},
+				{"position": [0.0, 0.15, 0.0], "type": "surface"},
+				{"position": [0.0, -0.15, 0.0], "type": "surface"}
+			],
+			"structural_strength": 100.0
+		}
+	},
+	"part_table_leg": {
+		"name": "Table Leg",
+		"description": "A sturdy wooden table leg, 0.75m tall. Perfect for furniture construction.",
+		"type": "MISCELLANEOUS",
+		"volume": 0.005,
+		"mass": 1.5,
+		"value": 8.0,
+		"icon_path": "res://assets/textures/ui/icons/wood_leg_icon.png",
+		"max_stack_size": 50,
+		"model_path": "res://assets/models/parts/table_leg.tscn",
+		"metadata": {
+			"part_type": "structural",
+			"material": "wood",
+			"dimensions": {"length": 0.1, "width": 0.1, "height": 0.75},
+			"connection_points": [
+				{"position": [0.0, 0.375, 0.0], "type": "end"},
+				{"position": [0.0, -0.375, 0.0], "type": "end"}
+			],
+			"structural_strength": 75.0
+		}
+	},
+	"part_tabletop": {
+		"name": "Tabletop",
+		"description": "A flat wooden tabletop, 1.2m x 0.8m x 0.03m. Ready for leg attachment.",
+		"type": "MISCELLANEOUS",
+		"volume": 0.029,
+		"mass": 8.0,
+		"value": 40.0,
+		"icon_path": "res://assets/textures/ui/icons/tabletop_icon.png",
+		"max_stack_size": 10,
+		"model_path": "res://assets/models/parts/tabletop.tscn",
+		"metadata": {
+			"part_type": "structural",
+			"material": "wood",
+			"dimensions": {"length": 1.2, "width": 0.8, "height": 0.03},
+			"connection_points": [
+				{"position": [0.5, -0.015, 0.35], "type": "mounting"},
+				{"position": [-0.5, -0.015, 0.35], "type": "mounting"},
+				{"position": [0.5, -0.015, -0.35], "type": "mounting"},
+				{"position": [-0.5, -0.015, -0.35], "type": "mounting"}
+			],
+			"structural_strength": 120.0
+		}
+	}
+}
