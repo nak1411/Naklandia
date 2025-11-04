@@ -22,12 +22,12 @@ var button_container: HBoxContainer
 var _content_initialized: bool = false
 
 
-func _init(title: String = "Dialog", size: Vector2 = Vector2(400, 300)):
+func _init(title: String = "Dialog", dialog_sz: Vector2 = Vector2(400, 300)):
 	super._init()
 
 	# Set dialog-specific properties
 	dialog_title = title
-	dialog_size = size
+	dialog_size = dialog_sz
 	window_title = dialog_title
 	default_size = dialog_size
 	min_window_size = Vector2(dialog_size.x - 100, dialog_size.y - 100)
@@ -196,3 +196,14 @@ func center_on_viewport():
 	if viewport:
 		var screen_size = viewport.get_visible_rect().size
 		position = (screen_size - size) / 2
+
+
+# Override focus behavior - dialogs are modal and don't need UIManager focus
+func _bring_to_front():
+	"""Dialogs don't participate in the UIManager focus system"""
+	return  # Do nothing - dialogs are always on top
+
+
+func bring_to_front():
+	"""Dialogs don't participate in the UIManager focus system"""
+	return  # Do nothing - dialogs are always on top
