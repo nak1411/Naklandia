@@ -900,6 +900,20 @@ func _detect_gizmo_axis(mouse_pos: Vector2, gizmo_pos: Vector3) -> Vector3:
 	"""Detect which gizmo axis or plane the mouse is over."""
 	var gizmo_scale = transform_gizmo.scale.x
 
+	# Calculate dynamic threshold based on gizmo's actual screen-space size
+	# Measure the screen-space length of the arrow to get accurate scaling
+	var arrow_tip_world = gizmo_pos + Vector3.RIGHT * (0.95 * gizmo_scale)
+	var gizmo_center_screen = camera.unproject_position(gizmo_pos)
+	var arrow_tip_screen = camera.unproject_position(arrow_tip_world)
+	var arrow_screen_length = gizmo_center_screen.distance_to(arrow_tip_screen)
+
+	# Calculate thresholds as percentages of the arrow's screen length
+	# This approach is resolution and FOV independent
+	var arrow_threshold = arrow_screen_length * 0.06  # 6% of arrow length
+	var plane_threshold = arrow_screen_length * 0.08  # 8% of arrow length (slightly larger)
+	var rotate_threshold = arrow_screen_length * 0.05  # 5% of arrow length
+	var scale_threshold = arrow_screen_length * 0.10  # 10% of arrow length
+
 	if current_transform_mode == TransformMode.MOVE:
 		# Move gizmo detection: check plane handles first, then arrows
 		var planes = [
@@ -913,14 +927,18 @@ func _detect_gizmo_axis(mouse_pos: Vector2, gizmo_pos: Vector3) -> Vector3:
 			var plane_screen_pos = camera.unproject_position(plane_world_pos)
 			var dist = mouse_pos.distance_to(plane_screen_pos)
 
-			if dist < 20.0:  # Reduced from 30.0 for tighter detection
+			if dist < plane_threshold:
 				return plane_data["axes"]
 
 		# Then check arrows
-		var arrow_length = 0.95 * gizmo_scale
+		# Arrow is built with gizmo_size (1.5), positioned at 0.95 * gizmo_size in local space
+		# The gizmo node has scale = gizmo_scale applied to it
+		# So in world space, arrow end = gizmo_pos + direction * (0.95 * gizmo_size * gizmo_scale)
+		var gizmo_size = transform_gizmo.gizmo_size
+		var arrow_length = 0.95 * gizmo_size * gizmo_scale  # Full arrow length in world space
 		var axes = [{"dir": Vector3.RIGHT, "vec": Vector3.RIGHT}, {"dir": Vector3.UP, "vec": Vector3.UP}, {"dir": Vector3.BACK, "vec": Vector3.BACK}]
 
-		var closest_dist = 20.0  # Reduced from 30.0 for tighter detection
+		var closest_dist = arrow_threshold
 		var closest_axis = Vector3.ZERO
 
 		for axis_data in axes:
@@ -941,9 +959,11 @@ func _detect_gizmo_axis(mouse_pos: Vector2, gizmo_pos: Vector3) -> Vector3:
 	if current_transform_mode == TransformMode.ROTATE:
 		# Rotate gizmo detection: ImGuizmo-style approach
 		# Uses ray-plane intersection + screen-space distance for reliable detection
-		# Torus is created with radius 0.70 * gizmo_size (where gizmo_size = 1.5)
-		# Then scaled by gizmo_scale, so actual radius = 0.70 * 1.5 * gizmo_scale = 1.05 * gizmo_scale
-		var circle_radius = 1.05 * gizmo_scale
+		# Torus is created with radius 0.70 * gizmo_size in local space
+		# The gizmo node has scale = gizmo_scale applied to it
+		# So in world space, circle_radius = 0.70 * gizmo_size * gizmo_scale
+		var gizmo_size = transform_gizmo.gizmo_size
+		var circle_radius = 0.70 * gizmo_size * gizmo_scale  # Circle radius in world space
 		var axes = [{"axis": Vector3.RIGHT, "name": "X"}, {"axis": Vector3.UP, "name": "Y"}, {"axis": Vector3.BACK, "name": "Z"}]
 
 		# Sort axes by visibility: circles most perpendicular to camera view are most visible
@@ -1002,10 +1022,7 @@ func _detect_gizmo_axis(mouse_pos: Vector2, gizmo_pos: Vector3) -> Vector3:
 			var screen_pos_on_circle = camera.unproject_position(world_pos_on_circle)
 			var screen_dist = mouse_pos.distance_to(screen_pos_on_circle)
 
-			# Use a reasonable threshold (ImGuizmo uses 8, we use 12 for easier selection)
-			var threshold = 12.0
-
-			if screen_dist < threshold:
+			if screen_dist < rotate_threshold:
 				# Prefer circles with better visibility when distances are close
 				# If this circle is significantly closer OR has better priority with similar distance
 				var distance_improvement = closest_screen_dist - screen_dist
@@ -1018,14 +1035,19 @@ func _detect_gizmo_axis(mouse_pos: Vector2, gizmo_pos: Vector3) -> Vector3:
 	if current_transform_mode == TransformMode.SCALE:
 		# Scale gizmo detection: check center box first, then handles
 		var center_screen = camera.unproject_position(gizmo_pos)
-		if mouse_pos.distance_to(center_screen) < 25.0:
+		if mouse_pos.distance_to(center_screen) < scale_threshold:
 			return Vector3(1, 1, 1)  # Uniform scale
 
-		# Then check scale handles (similar to arrows)
-		var handle_length = 0.7 * gizmo_scale
+		# Then check scale handles
+		# Handle shaft extends to 0.7 * gizmo_size in local space
+		# Box is positioned at 0.7 * gizmo_size with size 0.05, so extends slightly beyond
+		# The gizmo node has scale = gizmo_scale applied to it
+		# So in world space, handle end = gizmo_pos + direction * (0.7 * gizmo_size * gizmo_scale)
+		var gizmo_size = transform_gizmo.gizmo_size
+		var handle_length = 0.7 * gizmo_size * gizmo_scale  # Full handle length in world space
 		var axes = [{"dir": Vector3.RIGHT, "vec": Vector3.RIGHT}, {"dir": Vector3.UP, "vec": Vector3.UP}, {"dir": Vector3.BACK, "vec": Vector3.BACK}]
 
-		var closest_dist = 30.0
+		var closest_dist = scale_threshold
 		var closest_axis = Vector3.ZERO
 
 		for axis_data in axes:

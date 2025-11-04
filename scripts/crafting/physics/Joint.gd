@@ -155,10 +155,9 @@ func _create_visual_helper(parent: Node3D):
 	parent.add_child(joint_node)
 
 	# Position at connection point
-	var connection_pos = item_a.global_position + item_a.global_transform.basis * anchor_point_a
-	joint_node.global_position = connection_pos
+	update_visual_helper_position()
 
-	print("Joint: Created visual helper at %s" % connection_pos)
+	print("Joint: Created visual helper at %s" % joint_node.global_position)
 
 
 ## Create a fixed joint (no movement)
@@ -345,6 +344,19 @@ func apply_stress(force: float):
 		if durability <= 0.0:
 			joint_broken.emit(self)
 			destroy_physics_joint()
+
+
+## Update the visual helper position to follow the connected objects
+func update_visual_helper_position() -> void:
+	"""Update the joint visual helper to stay at the connection point as objects move."""
+	if not joint_node or not item_a or not item_b:
+		return
+
+	# Calculate connection point from item A's anchor in world space
+	var connection_pos = item_a.global_transform * anchor_point_a
+
+	# Update visual helper position
+	joint_node.global_position = connection_pos
 
 
 ## Get joint info as dictionary for serialization
