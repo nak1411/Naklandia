@@ -541,8 +541,8 @@ func load_workbench_window_state():
 		# Get saved properties
 		var pos_x = config.get_value("workbench_window", "position_x", 300)
 		var pos_y = config.get_value("workbench_window", "position_y", 100)
-		var size_x = config.get_value("workbench_window", "size_x", 800)
-		var size_y = config.get_value("workbench_window", "size_y", 600)
+		var size_x = config.get_value("workbench_window", "size_x", 1200)
+		var size_y = config.get_value("workbench_window", "size_y", 800)
 		var modulate_a = config.get_value("workbench_window", "modulate_a", 1.0)
 		var is_locked = config.get_value("workbench_window", "is_locked", false)
 		var is_maximized = config.get_value("workbench_window", "is_maximized", false)

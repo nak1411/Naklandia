@@ -128,6 +128,7 @@ layout_mode = 2
 size_flags_horizontal = 0
 size_flags_vertical = 3
 focus_mode = 0
+clip_contents = true
 
 [node name="Separator" type="Control" parent="VBoxContainer/MainContent"]
 custom_minimum_size = Vector2(8, 0)
@@ -147,6 +148,7 @@ mouse_filter = 2
 [node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel"]
 layout_mode = 2
 theme_override_constants/separation = 8
+clip_contents = true
 
 [node name="VSplitContainer" type="VSplitContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
 layout_mode = 2
@@ -233,45 +235,51 @@ size_flags_vertical = 3
 theme_override_constants/separation = 4
 
 [node name="TransformPanel" type="PanelContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection"]
-custom_minimum_size = Vector2(0, 100)
+custom_minimum_size = Vector2(0, 150)
 layout_mode = 2
 size_flags_vertical = 3
 visible = false
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel"]
+[node name="ScrollContainer" type="ScrollContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel"]
 layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/margin_left = 8
 theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 8
 
-[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer"]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="TitleLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="TitleLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "Transform"
 horizontal_alignment = 1
 
-[node name="HSeparator" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="HSeparator" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="PositionLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="PositionLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "Position:"
 theme_override_font_sizes/font_size = 12
 
-[node name="PositionX" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="PositionX" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionX"]
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionX"]
 custom_minimum_size = Vector2(15, 0)
 layout_mode = 2
 text = "X:"
 theme_override_font_sizes/font_size = 11
 
-[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionX"]
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionX"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = -100.0
@@ -280,16 +288,16 @@ step = 0.1
 allow_greater = true
 allow_lesser = true
 
-[node name="PositionY" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="PositionY" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionY"]
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionY"]
 custom_minimum_size = Vector2(15, 0)
 layout_mode = 2
 text = "Y:"
 theme_override_font_sizes/font_size = 11
 
-[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionY"]
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionY"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = -100.0
@@ -298,16 +306,16 @@ step = 0.1
 allow_greater = true
 allow_lesser = true
 
-[node name="PositionZ" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="PositionZ" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionZ"]
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionZ"]
 custom_minimum_size = Vector2(15, 0)
 layout_mode = 2
 text = "Z:"
 theme_override_font_sizes/font_size = 11
 
-[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/PositionZ"]
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionZ"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = -100.0
@@ -316,24 +324,24 @@ step = 0.1
 allow_greater = true
 allow_lesser = true
 
-[node name="HSeparator2" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="HSeparator2" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="RotationLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="RotationLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "Rotation:"
 theme_override_font_sizes/font_size = 12
 
-[node name="RotationX" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="RotationX" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationX"]
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationX"]
 custom_minimum_size = Vector2(15, 0)
 layout_mode = 2
 text = "X:"
 theme_override_font_sizes/font_size = 11
 
-[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationX"]
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationX"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = -360.0
@@ -343,16 +351,16 @@ allow_greater = true
 allow_lesser = true
 suffix = "°"
 
-[node name="RotationY" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="RotationY" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationY"]
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationY"]
 custom_minimum_size = Vector2(15, 0)
 layout_mode = 2
 text = "Y:"
 theme_override_font_sizes/font_size = 11
 
-[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationY"]
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationY"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = -360.0
@@ -362,16 +370,16 @@ allow_greater = true
 allow_lesser = true
 suffix = "°"
 
-[node name="RotationZ" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="RotationZ" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationZ"]
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationZ"]
 custom_minimum_size = Vector2(15, 0)
 layout_mode = 2
 text = "Z:"
 theme_override_font_sizes/font_size = 11
 
-[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/RotationZ"]
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationZ"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = -360.0
@@ -381,24 +389,24 @@ allow_greater = true
 allow_lesser = true
 suffix = "°"
 
-[node name="HSeparator3" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="HSeparator3" type="HSeparator" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="ScaleLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="ScaleLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "Scale:"
 theme_override_font_sizes/font_size = 12
 
-[node name="ScaleX" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="ScaleX" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleX"]
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleX"]
 custom_minimum_size = Vector2(15, 0)
 layout_mode = 2
 text = "X:"
 theme_override_font_sizes/font_size = 11
 
-[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleX"]
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleX"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = 0.01
@@ -407,16 +415,16 @@ step = 0.1
 value = 1.0
 allow_greater = true
 
-[node name="ScaleY" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="ScaleY" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleY"]
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleY"]
 custom_minimum_size = Vector2(15, 0)
 layout_mode = 2
 text = "Y:"
 theme_override_font_sizes/font_size = 11
 
-[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleY"]
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleY"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = 0.01
@@ -425,16 +433,16 @@ step = 0.1
 value = 1.0
 allow_greater = true
 
-[node name="ScaleZ" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer"]
+[node name="ScaleZ" type="HBoxContainer" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleZ"]
+[node name="Label" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleZ"]
 custom_minimum_size = Vector2(15, 0)
 layout_mode = 2
 text = "Z:"
 theme_override_font_sizes/font_size = 11
 
-[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/MarginContainer/VBoxContainer/ScaleZ"]
+[node name="SpinBox" type="SpinBox" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleZ"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = 0.01

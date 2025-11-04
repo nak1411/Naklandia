@@ -13,7 +13,7 @@ func _ready():
 	print("WorkbenchWindow_Base: _ready() called")
 	window_title = "Assembly Workbench"
 	default_size = Vector2(1200, 800)
-	min_window_size = Vector2(900, 600)
+	min_window_size = Vector2(1000, 800)
 	max_window_size = Vector2(1920, 1080)
 
 	super._ready()
