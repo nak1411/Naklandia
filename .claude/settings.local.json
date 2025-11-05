@@ -6,7 +6,12 @@
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" checkout scripts/crafting/physics/WorkbenchWindow.gd scripts/inventory/presentation/windows/base/Window_Base.gd scripts/ui/core/UIManager.gd)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" status --short)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff HEAD scripts/crafting/physics/WorkbenchWindow.gd)",
-      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff HEAD~1 HEAD scripts/crafting/physics/WorkbenchWindow.gd)"
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff HEAD~1 HEAD scripts/crafting/physics/WorkbenchWindow.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" stash list)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" fsck --lost-found)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show --stat 025b193924b888bba1088c0f2b674d53d6f6415f)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show a908eb3 --stat)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show a908eb3:scripts/crafting/physics/WorkbenchWindow.gd)"
     ],
     "deny": [],
     "ask": []

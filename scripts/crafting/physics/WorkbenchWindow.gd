@@ -31,6 +31,7 @@ var category_filter: OptionButton
 var add_object_button: Button
 var validate_button: Button
 var clear_button: Button
+var connect_mode_button: Button
 var help_label: Label
 var controls_visible: bool = false
 var initialized: bool = false
@@ -71,9 +72,11 @@ var is_alt_held: bool = false
 # Selection
 var selected_items: Array[PhysicalItem] = []
 var hovered_item: PhysicalItem = null
+var cluster_pivot_point: Vector3 = Vector3.ZERO  # Pivot for bonded clusters
+var cluster_pivot_active: bool = false  # Whether to use cluster pivot
 
 # Transform modes
-enum TransformMode { SELECT, MOVE, ROTATE, SCALE }
+enum TransformMode { SELECT, MOVE, ROTATE, SCALE, CONNECT }
 var current_transform_mode: TransformMode = TransformMode.SELECT
 
 # Box selection
@@ -96,6 +99,18 @@ var was_ctrl_pressed: bool = false  # Track Ctrl state during drag
 var was_x_pressed: bool = false  # Track X state during drag (snap to grid)
 var gizmo_drag_plane_origin: Vector3 = Vector3.ZERO  # Initial drag plane origin in world space
 var gizmo_drag_camera_distance: float = 0.0  # Initial camera distance when drag started
+
+# Connect Mode (Bolt Gun) state
+var connect_mode_active: bool = false
+var connect_mode_target_a: PhysicalItem = null
+var connect_mode_target_b: PhysicalItem = null
+var connect_mode_preview_line: MeshInstance3D = null
+var connect_mode_fire_line: MeshInstance3D = null
+var connect_mode_max_bolt_length: float = 50.0
+var connect_mode_max_ray_distance: float = 1000.0
+var fasteners_created: Array[Fastener] = []
+var fire_line_timer: float = 0.0
+const FIRE_LINE_DURATION: float = 1.0
 
 # Sidebar dragging state
 var is_dragging_separator: bool = false
@@ -186,6 +201,7 @@ func _ready() -> void:
 	add_object_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection/ButtonContainer/AddObjectButton
 	validate_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ValidateButton
 	clear_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ClearButton
+	connect_mode_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/ConnectModeButton
 	help_label = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/HelpLabel
 	sidebar_panel = $VBoxContainer/MainContent/SidebarPanel
 	separator = $VBoxContainer/MainContent/Separator
@@ -236,6 +252,8 @@ func _ready() -> void:
 		add_object_button.pressed.connect(_on_add_object_pressed)
 	if clear_button:
 		clear_button.pressed.connect(_on_clear_button_pressed)
+	if connect_mode_button:
+		connect_mode_button.toggled.connect(_on_connect_mode_button_toggled)
 
 	# Connect transform mode button signals
 	if select_button:
@@ -498,6 +516,11 @@ func _input(event: InputEvent) -> void:
 		# Transform mode shortcuts (only when not holding Alt)
 		if event.pressed and not is_alt_held:
 			if event.keycode == KEY_Q:
+				# Exit Connect Mode if active
+				if connect_mode_active:
+					_exit_connect_mode()
+					if connect_mode_button:
+						connect_mode_button.set_pressed_no_signal(false)
 				_set_transform_mode(TransformMode.SELECT)
 			elif event.keycode == KEY_W:
 				_set_transform_mode(TransformMode.MOVE)
@@ -551,8 +574,14 @@ func _handle_mouse_press(event: InputEventMouseButton) -> void:
 		is_dragging_camera = true
 		drag_button = event.button_index
 
-	# Left click without Alt = Check for gizmo or selection
+	# Left click without Alt = Check for Connect Mode, gizmo, or selection
 	elif event.button_index == MOUSE_BUTTON_LEFT:
+		# Handle Connect Mode (Bolt Gun) clicks
+		if connect_mode_active and current_transform_mode == TransformMode.CONNECT:
+			var mouse_pos = viewport_container.get_local_mouse_position()
+			_place_fastener_at_ray(mouse_pos)
+			return
+
 		# Try to click on gizmo first
 		if _try_start_gizmo_drag(event.position):
 			return
@@ -817,11 +846,12 @@ func _try_start_gizmo_drag(_mouse_pos: Vector2) -> bool:
 		gizmo_drag_plane_origin = gizmo_pos
 		gizmo_drag_camera_distance = gizmo_pos.distance_to(camera.global_position)
 
-		# Store initial rotations (use Dictionary to store rotation as Basis)
+		# Store initial rotations and positions (for rotating around pivot)
 		gizmo_drag_initial_positions.clear()
 		gizmo_drag_initial_rotations.clear()
 		for item in selected_items:
 			gizmo_drag_initial_rotations[item] = item.basis
+			gizmo_drag_initial_positions[item] = item.global_position
 
 		# If CTRL is held, immediately snap to nearest 15-degree increment
 		if was_ctrl_pressed:
@@ -1200,6 +1230,10 @@ func _update_gizmo_drag(_mouse_pos: Vector2) -> void:
 	elif current_transform_mode == TransformMode.SCALE:
 		_update_scale_drag(mouse_delta)
 
+	# Update cluster pivot if bonded objects are being transformed
+	if cluster_pivot_active:
+		_update_cluster_pivot()
+
 	# Update gizmo position
 	_update_gizmo()
 
@@ -1406,17 +1440,26 @@ func _update_rotate_drag(mouse_delta: Vector2) -> void:
 	# Update stats display
 	_update_transform_stats("Rotate", rad_to_deg(angle), axis_world)
 
+	# Get the pivot point (gizmo position)
+	var pivot = gizmo_drag_plane_origin
+
 	# Apply rotation from initial state
 	for item in gizmo_drag_initial_rotations.keys():
 		if item:
-			# Get the initial rotation
+			# Get the initial rotation and position
 			var initial_basis = gizmo_drag_initial_rotations[item]
+			var initial_position = gizmo_drag_initial_positions[item]
 
 			# Create rotation around the axis
 			var rotation_basis = Basis(axis_world, angle)
 
-			# Apply rotation to the initial state
+			# Apply rotation to the item's basis
 			item.basis = rotation_basis * initial_basis
+
+			# Rotate position around the pivot point
+			var offset_from_pivot = initial_position - pivot
+			var rotated_offset = rotation_basis * offset_from_pivot
+			item.global_position = pivot + rotated_offset
 
 
 func _snap_rotation_to_increment(axis: Vector3) -> void:
@@ -1645,11 +1688,11 @@ func _try_select_single(_mouse_pos: Vector2) -> void:
 			if item in selected_items:
 				_deselect_item(item)
 			else:
-				_select_item(item, true)  # Add to selection
+				_select_item_with_cluster(item, true)  # Add cluster to selection
 		else:
 			# Single select (clear others)
 			_clear_selection()
-			_select_item(item, false)
+			_select_item_with_cluster(item, false)  # Select entire cluster
 	else:
 		print("Raycast hit nothing")
 		# Clicked empty space - deselect all
@@ -1787,6 +1830,54 @@ func _select_item(item: PhysicalItem, add_to_selection: bool) -> void:
 	_update_object_info()
 
 
+func _select_item_with_cluster(item: PhysicalItem, add_to_selection: bool) -> void:
+	"""Select an item and its entire bonded cluster."""
+	if not add_to_selection:
+		_clear_selection()
+
+	# Get the entire bonded cluster
+	var cluster = item.get_bonded_cluster()
+
+	if cluster.size() > 1:
+		print("Selecting bonded cluster of %d items" % cluster.size())
+
+		# Calculate cluster pivot point (average of all fastener connection points)
+		# Use the joint visual helper positions (which update in real-time)
+		var connection_points: Array[Vector3] = []
+		for cluster_item in cluster:
+			for fastener in cluster_item.fasteners:
+				if fastener.joint and fastener.joint.joint_node:
+					# Use the current position of the joint visual helper
+					connection_points.append(fastener.joint.joint_node.global_position)
+
+		if connection_points.size() > 0:
+			cluster_pivot_point = Vector3.ZERO
+			for point in connection_points:
+				cluster_pivot_point += point
+			cluster_pivot_point /= connection_points.size()
+			cluster_pivot_active = true
+			print("✓ Cluster pivot set to: %.3f, %.3f, %.3f (from %d joints)" % [
+				cluster_pivot_point.x, cluster_pivot_point.y, cluster_pivot_point.z,
+				connection_points.size()
+			])
+		else:
+			print("⚠️ No joints found for cluster pivot - using default center")
+			cluster_pivot_active = false
+	else:
+		cluster_pivot_active = false
+
+	# Select all items in cluster
+	for cluster_item in cluster:
+		if cluster_item not in selected_items:
+			selected_items.append(cluster_item)
+			cluster_item.show_highlight(true)
+
+	print("Selected: %s and cluster (total: %d items)" % [item.item_name, cluster.size()])
+
+	_update_gizmo()
+	_update_object_info()
+
+
 func _deselect_item(item: PhysicalItem) -> void:
 	"""Deselect a specific item."""
 	if item in selected_items:
@@ -1801,6 +1892,7 @@ func _clear_selection() -> void:
 	for item in selected_items:
 		item.show_highlight(false)
 	selected_items.clear()
+	cluster_pivot_active = false
 	_update_gizmo()
 	_update_object_info()
 
@@ -1811,6 +1903,30 @@ func _delete_selected_items() -> void:
 		return
 
 	var count = selected_items.size()
+	var fasteners_to_remove: Array[Fastener] = []
+
+	# Collect all fasteners connected to the items being deleted
+	for item in selected_items:
+		if is_instance_valid(item):
+			# Collect fasteners from this item
+			for fastener in item.fasteners:
+				if fastener not in fasteners_to_remove:
+					fasteners_to_remove.append(fastener)
+					print("Marking fastener for deletion: %s <-> %s" % [
+						fastener.item_a.item_name if fastener.item_a else "?",
+						fastener.item_b.item_name if fastener.item_b else "?"
+					])
+
+	# Remove and destroy all fasteners
+	for fastener in fasteners_to_remove:
+		# Remove joint visual helper
+		if fastener.joint and fastener.joint.joint_node:
+			fastener.joint.joint_node.queue_free()
+			print("  Deleted joint visual helper")
+
+		# Destroy physics joint
+		if fastener.joint:
+			fastener.joint.destroy_physics_joint()
 
 	# Remove all selected items from the scene
 	for item in selected_items:
@@ -1819,12 +1935,13 @@ func _delete_selected_items() -> void:
 
 	# Clear selection array
 	selected_items.clear()
+	cluster_pivot_active = false
 
 	# Update UI
 	_update_gizmo()
 	_update_object_info()
 
-	print("Deleted ", count, " object(s)")
+	print("Deleted %d object(s) and %d fastener(s)" % [count, fasteners_to_remove.size()])
 
 
 func _select_all_items() -> void:
@@ -1891,44 +2008,6 @@ func _duplicate_selected_items() -> void:
 		_select_item(item, true)
 
 	print("Duplicated ", duplicated_items.size(), " object(s) in place")
-
-
-func _set_transform_mode(mode: TransformMode) -> void:
-	"""Set the current transform mode."""
-	current_transform_mode = mode
-
-	var mode_name = ""
-	match mode:
-		TransformMode.SELECT:
-			mode_name = "Select"
-		TransformMode.MOVE:
-			mode_name = "Move"
-		TransformMode.ROTATE:
-			mode_name = "Rotate"
-		TransformMode.SCALE:
-			mode_name = "Scale"
-
-	print("Transform mode: ", mode_name)
-
-	# Update button states
-	_update_mode_buttons()
-
-	# Update gizmo mode
-	if transform_gizmo:
-		var gizmo_mode = TransformGizmo.GizmoMode.MOVE
-		match mode:
-			TransformMode.MOVE:
-				gizmo_mode = TransformGizmo.GizmoMode.MOVE
-			TransformMode.ROTATE:
-				gizmo_mode = TransformGizmo.GizmoMode.ROTATE
-			TransformMode.SCALE:
-				gizmo_mode = TransformGizmo.GizmoMode.SCALE
-			TransformMode.SELECT:
-				transform_gizmo.visible = false
-				return
-
-		transform_gizmo.set_mode(gizmo_mode)
-		_update_gizmo()
 
 
 func _show_context_menu(_mouse_pos: Vector2) -> void:
@@ -2071,6 +2150,25 @@ func _on_rotate_button_pressed() -> void:
 func _on_scale_button_pressed() -> void:
 	"""Handle scale button press."""
 	_set_transform_mode(TransformMode.SCALE)
+
+
+func _on_connect_mode_button_toggled(button_pressed: bool) -> void:
+	"""Handle connect mode button toggle - enters/exits bolt gun mode."""
+	if button_pressed:
+		# Check if exactly 2 items are selected
+		if selected_items.size() != 2:
+			print("Connect Mode: Requires exactly 2 items selected. Currently selected: ", selected_items.size())
+			# Unpress the button
+			connect_mode_button.button_pressed = false
+			return
+
+		# Enter Connect Mode
+		_set_transform_mode(TransformMode.CONNECT)
+	else:
+		# Exit Connect Mode
+		if connect_mode_active:
+			_exit_connect_mode()
+		_set_transform_mode(TransformMode.SELECT)
 
 
 # Transform input change handlers
@@ -2453,6 +2551,19 @@ func _process(_delta: float) -> void:
 	if is_box_selecting and selection_overlay:
 		selection_overlay.queue_redraw()
 
+	# Update all joint visual helpers to follow moving objects (do this first)
+	for item in world.get_children():
+		if item is PhysicalItem:
+			for fastener in item.fasteners:
+				if fastener.joint:
+					fastener.joint.update_visual_helper_position()
+
+	# Update gizmo position if cluster is selected (to follow moving objects)
+	# This must happen after joint helpers update so we can use their new positions
+	if cluster_pivot_active and not selected_items.is_empty():
+		_update_cluster_pivot()
+		_update_gizmo()
+
 	# Update gizmo scale based on camera distance
 	if transform_gizmo and transform_gizmo.visible and camera:
 		transform_gizmo.update_scale_for_camera(camera.global_position)
@@ -2460,6 +2571,32 @@ func _process(_delta: float) -> void:
 	# Update object info display (to show real-time transform changes)
 	if not selected_items.is_empty():
 		_update_object_info()
+
+	# Handle fire line timer (fade out after firing)
+	if fire_line_timer > 0.0:
+		fire_line_timer -= _delta
+		if fire_line_timer <= 0.0 and connect_mode_fire_line:
+			connect_mode_fire_line.visible = false
+
+
+func _update_cluster_pivot() -> void:
+	"""Recalculate cluster pivot point based on current fastener positions."""
+	if not cluster_pivot_active or selected_items.is_empty():
+		return
+
+	# Recalculate pivot from all fastener connection points in selected cluster
+	var connection_points: Array[Vector3] = []
+	for item in selected_items:
+		for fastener in item.fasteners:
+			if fastener.joint and fastener.joint.joint_node:
+				# Use the actual visual helper position (which follows the objects)
+				connection_points.append(fastener.joint.joint_node.global_position)
+
+	if connection_points.size() > 0:
+		cluster_pivot_point = Vector3.ZERO
+		for point in connection_points:
+			cluster_pivot_point += point
+		cluster_pivot_point /= connection_points.size()
 
 
 func _update_gizmo() -> void:
@@ -2474,9 +2611,15 @@ func _update_gizmo() -> void:
 
 	# Calculate center of selection
 	var center = Vector3.ZERO
-	for item in selected_items:
-		center += item.global_position
-	center /= selected_items.size()
+
+	# Use cluster pivot if active (for bonded assemblies)
+	if cluster_pivot_active:
+		center = cluster_pivot_point
+	else:
+		# Default: average of all selected item positions
+		for item in selected_items:
+			center += item.global_position
+		center /= selected_items.size()
 
 	# Distance-based culling: hide gizmo if too far away
 	if camera:
@@ -2924,3 +3067,419 @@ func _load_viewport_settings() -> void:
 		if floor_material:
 			floor_material.albedo_color = saved_settings["floor_color"]
 			print("Loaded floor color: ", saved_settings["floor_color"])
+# This file contains the Connect Mode functions to be appended to WorkbenchWindow.gd
+
+## ========================================
+## CONNECT MODE (BOLT GUN) FUNCTIONS
+## ========================================
+
+func _set_transform_mode(mode: TransformMode) -> void:
+	"""Set the current transform mode."""
+	current_transform_mode = mode
+
+	# Handle Connect Mode activation
+	if mode == TransformMode.CONNECT:
+		if selected_items.size() == 2:
+			_enter_connect_mode()
+		else:
+			print("Connect Mode ERROR: Requires exactly 2 items selected")
+			return
+
+	# Update button states
+	if select_button:
+		select_button.button_pressed = (mode == TransformMode.SELECT)
+	if move_button:
+		move_button.button_pressed = (mode == TransformMode.MOVE)
+	if rotate_button:
+		rotate_button.button_pressed = (mode == TransformMode.ROTATE)
+	if scale_button:
+		scale_button.button_pressed = (mode == TransformMode.SCALE)
+	if connect_mode_button:
+		connect_mode_button.set_pressed_no_signal(mode == TransformMode.CONNECT)
+
+	# Update gizmo mode
+	if transform_gizmo:
+		match mode:
+			TransformMode.SELECT:
+				transform_gizmo.visible = false
+			TransformMode.MOVE:
+				transform_gizmo.set_mode(TransformGizmo.GizmoMode.MOVE)
+			TransformMode.ROTATE:
+				transform_gizmo.set_mode(TransformGizmo.GizmoMode.ROTATE)
+			TransformMode.SCALE:
+				transform_gizmo.set_mode(TransformGizmo.GizmoMode.SCALE)
+			TransformMode.CONNECT:
+				transform_gizmo.visible = false
+
+	_update_gizmo()
+	print("Transform mode: ", ["Select", "Move", "Rotate", "Scale", "Connect"][mode])
+
+
+func _enter_connect_mode() -> void:
+	"""Enter Connect Mode with 2 selected items."""
+	if selected_items.size() != 2:
+		print("Connect Mode ERROR: Requires exactly 2 items selected. Currently selected: ", selected_items.size())
+		return
+
+	connect_mode_active = true
+	connect_mode_target_a = selected_items[0]
+	connect_mode_target_b = selected_items[1]
+
+	print("\n=== CONNECT MODE ACTIVATED ===")
+	print("Target A: %s at %.2f,%.2f,%.2f" % [
+		connect_mode_target_a.item_name,
+		connect_mode_target_a.global_position.x,
+		connect_mode_target_a.global_position.y,
+		connect_mode_target_a.global_position.z
+	])
+	print("Target B: %s at %.2f,%.2f,%.2f" % [
+		connect_mode_target_b.item_name,
+		connect_mode_target_b.global_position.x,
+		connect_mode_target_b.global_position.y,
+		connect_mode_target_b.global_position.z
+	])
+	print("Click anywhere on visible surface to place fastener")
+	print("Press Q or click button to exit")
+
+
+func _exit_connect_mode() -> void:
+	"""Exit Connect Mode."""
+	connect_mode_active = false
+	connect_mode_target_a = null
+	connect_mode_target_b = null
+
+	# Clean up preview line
+	if connect_mode_preview_line:
+		connect_mode_preview_line.queue_free()
+		connect_mode_preview_line = null
+
+	# Clean up fire line
+	if connect_mode_fire_line:
+		connect_mode_fire_line.queue_free()
+		connect_mode_fire_line = null
+
+	print("Connect Mode: Exited")
+
+
+func _perform_connect_mode_raycast(mouse_pos: Vector2) -> Dictionary:
+	"""
+	Perform raycast to find intersection between two objects.
+	Returns success dict with hit points or error message.
+	"""
+	if not camera or not connect_mode_target_a or not connect_mode_target_b:
+		return {"success": false, "error_message": "Invalid state"}
+
+	var viewport_pos = viewport_container.get_local_mouse_position()
+	var ray_origin = camera.project_ray_origin(viewport_pos)
+	var ray_direction = camera.project_ray_normal(viewport_pos)
+	var ray_length = connect_mode_max_ray_distance
+
+	print("\nRaycast setup:")
+	print("  Origin: %.2f, %.2f, %.2f" % [ray_origin.x, ray_origin.y, ray_origin.z])
+	print("  Direction: %.2f, %.2f, %.2f" % [ray_direction.x, ray_direction.y, ray_direction.z])
+	print("  Max distance: %.2f" % ray_length)
+	print("  Target A: %s at %.2f,%.2f,%.2f" % [
+		connect_mode_target_a.item_name,
+		connect_mode_target_a.global_position.x,
+		connect_mode_target_a.global_position.y,
+		connect_mode_target_a.global_position.z
+	])
+	print("  Target B: %s at %.2f,%.2f,%.2f" % [
+		connect_mode_target_b.item_name,
+		connect_mode_target_b.global_position.x,
+		connect_mode_target_b.global_position.y,
+		connect_mode_target_b.global_position.z
+	])
+
+	var space_state = viewport.world_3d.direct_space_state
+
+	# Collect all hits along the ray by doing multiple raycasts
+	var all_hits = []
+	var current_origin = ray_origin
+	var remaining_length = ray_length
+	var max_iterations = 20  # Safety limit
+
+	for i in range(max_iterations):
+		var ray_query = PhysicsRayQueryParameters3D.create(
+			current_origin,
+			current_origin + ray_direction * remaining_length
+		)
+		ray_query.collision_mask = 4
+		ray_query.collide_with_bodies = true
+		ray_query.hit_from_inside = true
+
+		var result = space_state.intersect_ray(ray_query)
+
+		if not result or not result.collider:
+			break  # No more hits
+
+		all_hits.append(result)
+
+		# Move past this hit point - use a larger offset to ensure we clear the collision shape
+		var distance_to_hit = current_origin.distance_to(result.position)
+		current_origin = result.position + ray_direction * 0.01  # 1cm past (was 1mm)
+		remaining_length -= (distance_to_hit + 0.01)
+
+		if remaining_length <= 0:
+			break
+
+	# Debug output
+	print("Connect Mode: Found %d total intersection points along ray" % all_hits.size())
+	if all_hits.size() > 0:
+		for i in range(all_hits.size()):
+			var hit = all_hits[i]
+			if hit.collider is PhysicalItem:
+				# Show which target this is (A or B)
+				var target_label = ""
+				if hit.collider == connect_mode_target_a:
+					target_label = " [TARGET A]"
+				elif hit.collider == connect_mode_target_b:
+					target_label = " [TARGET B]"
+
+				print("  Hit %d: %s%s at %.3f,%.3f,%.3f" % [
+					i,
+					hit.collider.item_name,
+					target_label,
+					hit.position.x, hit.position.y, hit.position.z
+				])
+			else:
+				print("  Hit %d: (not PhysicalItem) %s" % [i, hit.collider])
+	else:
+		print("  ⚠️ NO HITS DETECTED! Ray may not be reaching objects.")
+		print("  ⚠️ Check that objects have collision shapes on layer 3")
+
+	# Find where ray EXITS first object and ENTERS second object
+	# The hits are in sequential order along the ray path
+	# We want to find where we go from one target object to the other target object
+	var exit_point: Vector3
+	var entry_point: Vector3
+	var first_object: PhysicalItem
+	var second_object: PhysicalItem
+	var found_transition = false
+
+	print("Analyzing hit sequence to find object transition...")
+
+	# Look through ALL consecutive hits to find where we transition from one target to the other
+	for i in range(all_hits.size() - 1):
+		var current_hit = all_hits[i]
+		var next_hit = all_hits[i + 1]
+
+		var current_obj = current_hit.collider
+		var next_obj = next_hit.collider
+
+		# Check if current is one target and next is the other target
+		var current_is_target = (current_obj == connect_mode_target_a or current_obj == connect_mode_target_b)
+		var next_is_target = (next_obj == connect_mode_target_a or next_obj == connect_mode_target_b)
+
+		print("  Checking hits %d→%d: %s → %s" % [
+			i, i+1,
+			current_obj.item_name if current_obj is PhysicalItem else "?",
+			next_obj.item_name if next_obj is PhysicalItem else "?"
+		])
+
+		if current_is_target and next_is_target and current_obj != next_obj:
+			# Found it! Ray exits current object and enters next object
+			exit_point = current_hit.position
+			entry_point = next_hit.position
+			first_object = current_obj
+			second_object = next_obj
+			found_transition = true
+
+			print("✓ Found transition from %s to %s" % [first_object.item_name, second_object.item_name])
+			print("  Exit point: %.3f,%.3f,%.3f" % [exit_point.x, exit_point.y, exit_point.z])
+			print("  Entry point: %.3f,%.3f,%.3f" % [entry_point.x, entry_point.y, entry_point.z])
+			break
+
+	if not found_transition:
+		# Check if we at least hit both objects (even if not consecutively)
+		var hit_target_a = false
+		var hit_target_b = false
+		for hit in all_hits:
+			if hit.collider == connect_mode_target_a:
+				hit_target_a = true
+			if hit.collider == connect_mode_target_b:
+				hit_target_b = true
+
+		if not hit_target_a:
+			return {"success": false, "error_message": "Ray didn't hit %s" % connect_mode_target_a.item_name}
+		if not hit_target_b:
+			return {"success": false, "error_message": "Ray didn't hit %s" % connect_mode_target_b.item_name}
+
+		return {"success": false, "error_message": "Ray hit both objects but not consecutively (something in between)"}
+
+	# Calculate distance between exit and entry points
+	var distance = exit_point.distance_to(entry_point)
+
+	# Check if distance exceeds max bolt length
+	if distance > connect_mode_max_bolt_length:
+		return {
+			"success": false,
+			"error_message": "Distance too large (%.2fm > %.2fm max)" % [distance, connect_mode_max_bolt_length]
+		}
+
+	print("✓ Fastener placement:")
+	print("  Exit from: %s at %.3f,%.3f,%.3f" % [first_object.item_name, exit_point.x, exit_point.y, exit_point.z])
+	print("  Entry to: %s at %.3f,%.3f,%.3f" % [second_object.item_name, entry_point.x, entry_point.y, entry_point.z])
+	print("  Distance: %.3fm" % distance)
+
+	# Success!
+	return {
+		"success": true,
+		"hit_point_a": exit_point,
+		"hit_point_b": entry_point,
+		"hit_item_a": first_object,
+		"hit_item_b": second_object,
+		"distance": distance,
+		"ray_direction": ray_direction
+	}
+
+
+func _place_fastener_at_ray(mouse_pos: Vector2) -> void:
+	"""
+	Place a fastener at the INTERSECTION between two objects (where they touch/connect).
+	This fires a ray through both objects and finds their contact point.
+	"""
+	print("\n=== FIRING BOLT GUN (detecting intersection) ===")
+
+	# Show visual fire line
+	_show_fire_line(mouse_pos)
+
+	var result = _perform_connect_mode_raycast(mouse_pos)
+
+	if not result["success"]:
+		print("❌ Cannot place fastener: ", result["error_message"])
+		return
+
+	var hit_point_a = result["hit_point_a"]
+	var hit_point_b = result["hit_point_b"]
+	var hit_item_a = result["hit_item_a"]
+	var hit_item_b = result["hit_item_b"]
+	var distance = result["distance"]
+	var ray_direction = result["ray_direction"]
+
+	# Calculate connection point (midpoint between hits)
+	var connection_point = (hit_point_a + hit_point_b) / 2.0
+
+	# Get selected fastener ID (default to steel bolt if none selected)
+	var fastener_id = "fastener_steel_bolt"  # Default
+
+	# Create fastener
+	var fastener = Fastener.new(hit_item_a, hit_item_b, fastener_id)
+	fastener.connection_point = connection_point
+	fastener.connection_normal = ray_direction
+	fastener.penetration_depth = distance
+
+	# Create joint
+	if fastener.create_joint(world):
+		fasteners_created.append(fastener)
+
+		# Add fastener to both items' fastener arrays (for cluster tracking)
+		hit_item_a.fasteners.append(fastener)
+		hit_item_b.fasteners.append(fastener)
+
+		# Add joint to both items' joint arrays
+		if fastener.joint:
+			hit_item_a.joints.append(fastener.joint)
+			hit_item_b.joints.append(fastener.joint)
+
+		# Bond the items together for cluster selection
+		hit_item_a.bond_to(hit_item_b)
+
+		print("✓ Fastener placed at INTERSECTION! Distance: %.3fm, Type: %s" % [distance, fastener_id])
+		print("✓ Connected %s to %s at their contact point" % [hit_item_a.item_name, hit_item_b.item_name])
+		print("  Connection point: %.3f, %.3f, %.3f" % [connection_point.x, connection_point.y, connection_point.z])
+		print("✓ Items bonded - they will now select and move as a cluster")
+		print("  Fastener added to items, joint node: %s" % str(fastener.joint.joint_node if fastener.joint else "none"))
+
+		# Keep Connect Mode active for rapid placement
+		# User can continue clicking to place more fasteners
+	else:
+		print("❌ Failed to create joint for fastener")
+
+
+func _show_fire_line(_mouse_pos: Vector2) -> void:
+	"""
+	Show a visual fire line from camera through the scene when firing the bolt gun.
+	The line stays visible for FIRE_LINE_DURATION seconds.
+	"""
+	if not camera:
+		print("WARNING: No camera for fire line")
+		return
+
+	# Create fire line if it doesn't exist yet
+	if not connect_mode_fire_line:
+		print("Creating fire line on demand...")
+		_create_fire_line()
+
+	if not connect_mode_fire_line:
+		print("ERROR: Failed to create fire line!")
+		return
+
+	var viewport_pos = viewport_container.get_local_mouse_position()
+	var ray_origin = camera.project_ray_origin(viewport_pos)
+	var ray_direction = camera.project_ray_normal(viewport_pos)
+	var ray_end = ray_origin + ray_direction * connect_mode_max_ray_distance
+
+	_update_line_mesh(connect_mode_fire_line, ray_origin, ray_end)
+	connect_mode_fire_line.visible = true
+	fire_line_timer = FIRE_LINE_DURATION
+
+	print("Fire line: Drawing from %.2f,%.2f,%.2f to %.2f,%.2f,%.2f" % [
+		ray_origin.x, ray_origin.y, ray_origin.z,
+		ray_end.x, ray_end.y, ray_end.z
+	])
+	print("🔫 BOLT GUN FIRED - Visual ray displayed for %.1fs" % FIRE_LINE_DURATION)
+
+
+func _create_fire_line() -> void:
+	"""Create the fire line visual (bright orange)."""
+	connect_mode_fire_line = MeshInstance3D.new()
+	connect_mode_fire_line.name = "ConnectModeFireLine"
+
+	var mesh = CylinderMesh.new()
+	mesh.height = 1.0
+	mesh.radial_segments = 8
+	mesh.rings = 1
+	mesh.top_radius = 0.005  # 5mm radius
+	mesh.bottom_radius = 0.005
+
+	connect_mode_fire_line.mesh = mesh
+
+	# Bright orange material with emission
+	var material = StandardMaterial3D.new()
+	material.albedo_color = Color(1.0, 0.4, 0.0, 0.9)  # Bright orange
+	material.emission_enabled = true
+	material.emission = Color(1.0, 0.5, 0.0)
+	material.emission_energy_multiplier = 1.5
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.no_depth_test = true  # Always visible
+
+	connect_mode_fire_line.set_surface_override_material(0, material)
+	connect_mode_fire_line.visible = false
+
+	world.add_child(connect_mode_fire_line)
+	print("Connect Mode: Created fire line visual (bright orange)")
+
+
+func _update_line_mesh(line: MeshInstance3D, start: Vector3, end: Vector3) -> void:
+	"""Update a line mesh to connect two points."""
+	if not line:
+		return
+
+	var midpoint = (start + end) / 2.0
+	var direction = end - start
+	var distance = direction.length()
+
+	# Position at midpoint
+	line.global_position = midpoint
+
+	# Scale to match distance
+	var mesh = line.mesh as CylinderMesh
+	if mesh:
+		mesh.height = distance
+
+	# Rotate to point from start to end
+	if distance > 0.001:
+		var up = direction.normalized()
+		line.look_at(end, Vector3.UP)
+		line.rotate_object_local(Vector3.RIGHT, PI / 2)
