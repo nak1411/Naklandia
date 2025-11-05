@@ -259,14 +259,27 @@ func update_transform_panel(selected_items: Array[PhysicalItem]) -> void:
 
 	transform_panel.visible = true
 
-	# Only update if single object is selected
-	if selected_items.size() != 1:
-		return
+	# Determine what values to display
+	var pos: Vector3
+	var rot: Vector3
+	var scale_vec: Vector3
 
+	# Get the first item's values as reference
 	var item = selected_items[0]
-	var pos = item.global_position
-	var rot = item.rotation_degrees
-	var scale_vec = item.scale
+
+	# For clustered objects (multiple items with active pivot), show pivot's position
+	# For rotation/scale, still show first item's values as reference
+	if selected_items.size() > 1:
+		# TODO: For now, show first item's values
+		# In the future, could show pivot position for clustered objects
+		pos = item.global_position
+		rot = item.rotation_degrees
+		scale_vec = item.scale
+	else:
+		# Single selection - show item's values
+		pos = item.global_position
+		rot = item.rotation_degrees
+		scale_vec = item.scale
 
 	# Set flag to prevent recursion
 	is_updating_transform_inputs = true

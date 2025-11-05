@@ -182,13 +182,26 @@ func _apply_transform(operation_type: String, values: Dictionary) -> void:
 		"rotate":
 			for item in values.keys():
 				if is_instance_valid(item):
-					var old_basis = item.basis
-					item.basis = values[item]
-					print("  Item rotation: ", item.rotation_degrees, " (basis changed: ", old_basis != item.basis, ")")
+					var value = values[item]
+					# Handle both old format (Basis) and new format (Dictionary with basis and position)
+					if value is Dictionary:
+						item.basis = value["basis"]
+						item.global_position = value["position"]
+					else:
+						# Old format - just basis
+						item.basis = value
+					print("  Item rotation: ", item.rotation_degrees)
 			print("Applied rotate operation to ", values.size(), " items")
 
 		"scale":
 			for item in values.keys():
 				if is_instance_valid(item):
-					item.scale = values[item]
+					var value = values[item]
+					# Handle both old format (Vector3) and new format (Dictionary with scale and position)
+					if value is Dictionary:
+						item.scale = value["scale"]
+						item.global_position = value["position"]
+					else:
+						# Old format - just scale
+						item.scale = value
 			print("Applied scale operation to ", values.size(), " items")

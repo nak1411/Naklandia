@@ -574,9 +574,19 @@ func _record_transform_operation() -> void:
 
 		TransformMode.ROTATE:
 			operation_type = "rotate"
-			initial_values = initial_data["rotations"]
+			# Combine rotations and positions into Dictionary format for consistency with spinbox operations
+			var initial_rotations = initial_data["rotations"]
+			var initial_positions = initial_data["positions"]
 			for item in selection_manager.selected_items:
-				final_values[item] = item.basis
+				if item in initial_rotations and item in initial_positions:
+					initial_values[item] = {
+						"basis": initial_rotations[item],
+						"position": initial_positions[item]
+					}
+					final_values[item] = {
+						"basis": item.basis,
+						"position": item.global_position
+					}
 
 		TransformMode.SCALE:
 			operation_type = "scale"
@@ -703,9 +713,24 @@ func _on_transform_input_focus_exited() -> void:
 			"position":
 				final_values[item] = item.global_position
 			"rotation":
-				final_values[item] = item.basis
+				# Match the format of initial values (Dictionary with basis and position)
+				final_values[item] = {
+					"basis": item.basis,
+					"position": item.global_position
+				}
 			"scale":
-				final_values[item] = item.scale
+				# Match the format of initial values (Dictionary with scale and position)
+				final_values[item] = {
+					"scale": item.scale,
+					"position": item.global_position
+				}
+
+	# Filter out the __pivot__ key from initial values (it's not a PhysicalItem)
+	var filtered_initial_values = {}
+	for key in manual_transform_initial_values:
+		# Skip string keys (like "__pivot__"), only include PhysicalItem objects
+		if not (key is String):
+			filtered_initial_values[key] = manual_transform_initial_values[key]
 
 	# Record the operation
 	var operation_type = manual_transform_operation_type
@@ -718,7 +743,7 @@ func _on_transform_input_focus_exited() -> void:
 	undo_redo_manager.record_transform(
 		operation_type,
 		selection_manager.selected_items,
-		manual_transform_initial_values,
+		filtered_initial_values,
 		final_values
 	)
 
@@ -746,12 +771,27 @@ func _on_manual_transform_timeout() -> void:
 			"position":
 				final_values[item] = item.global_position
 			"rotation":
-				final_values[item] = item.basis
+				# Match the format of initial values (Dictionary with basis and position)
+				final_values[item] = {
+					"basis": item.basis,
+					"position": item.global_position
+				}
 				print("  Storing final rotation basis for item: ", item.name)
 				print("    Rotation degrees: ", item.rotation_degrees)
 				print("    Basis: ", item.basis)
 			"scale":
-				final_values[item] = item.scale
+				# Match the format of initial values (Dictionary with scale and position)
+				final_values[item] = {
+					"scale": item.scale,
+					"position": item.global_position
+				}
+
+	# Filter out the __pivot__ key from initial values (it's not a PhysicalItem)
+	var filtered_initial_values = {}
+	for key in manual_transform_initial_values:
+		# Skip string keys (like "__pivot__"), only include PhysicalItem objects
+		if not (key is String):
+			filtered_initial_values[key] = manual_transform_initial_values[key]
 
 	# Record the operation
 	var operation_type = manual_transform_operation_type
@@ -764,7 +804,7 @@ func _on_manual_transform_timeout() -> void:
 	undo_redo_manager.record_transform(
 		operation_type,
 		selection_manager.selected_items,
-		manual_transform_initial_values,
+		filtered_initial_values,
 		final_values
 	)
 
@@ -790,23 +830,39 @@ func _on_transform_input_changed(component: String, axis: String, value: float) 
 		manual_transform_operation_type = component
 		manual_transform_initial_values.clear()
 
-		# Store initial values based on component type
+		# For clustered objects, also store the initial pivot point
+		var initial_pivot: Vector3
+		if selection_manager.selected_items.size() > 1 and selection_manager.cluster_pivot_active:
+			initial_pivot = selection_manager.cluster_pivot_point
+			manual_transform_initial_values["__pivot__"] = initial_pivot
+			print("  Storing cluster pivot: ", initial_pivot)
+
+		# Store initial values - for rotation/scale we need BOTH position and basis/scale
 		for item in selection_manager.selected_items:
 			match component:
 				"position":
 					manual_transform_initial_values[item] = item.global_position
 				"rotation":
-					manual_transform_initial_values[item] = item.basis
+					# Store both basis and position for rotation
+					manual_transform_initial_values[item] = {
+						"basis": item.basis,
+						"position": item.global_position
+					}
 					print("  Storing initial rotation basis for item: ", item.name)
 					print("    Rotation degrees: ", item.rotation_degrees)
 					print("    Basis: ", item.basis)
 				"scale":
-					manual_transform_initial_values[item] = item.scale
+					# Store both scale and position for scaling
+					manual_transform_initial_values[item] = {
+						"scale": item.scale,
+						"position": item.global_position
+					}
 
 		print("Manual transform edit started: ", component, " (stored ", manual_transform_initial_values.size(), " items)")
 
-	# Apply the transform
-	for item in selection_manager.selected_items:
+	# For single selection, apply directly to the item
+	if selection_manager.selected_items.size() == 1:
+		var item = selection_manager.selected_items[0]
 		match component:
 			"position":
 				var pos = item.global_position
@@ -840,11 +896,133 @@ func _on_transform_input_changed(component: String, axis: String, value: float) 
 					"z":
 						scl.z = value
 				item.scale = scl
+	else:
+		# Multiple selection - apply cluster-aware transformation
+		_apply_cluster_aware_transform(component, axis, value)
 
 	_update_gizmo()
 
 	# Restart the timer - undo will be recorded 0.5s after the last change
 	manual_transform_timer.start()
+
+
+func _apply_cluster_aware_transform(component: String, axis: String, value: float) -> void:
+	"""Apply transformation to multiple objects using pivot point as the group's origin.
+
+	For clustered objects, the spinbox value represents the pivot's transform value.
+	All objects transform together relative to this pivot."""
+
+	# Get the initial pivot point
+	var initial_pivot: Vector3
+	if "__pivot__" in manual_transform_initial_values:
+		initial_pivot = manual_transform_initial_values["__pivot__"] as Vector3
+	else:
+		# No stored pivot - calculate from initial positions
+		initial_pivot = Vector3.ZERO
+		var count = 0
+		for item in selection_manager.selected_items:
+			if item in manual_transform_initial_values:
+				var item_data = manual_transform_initial_values[item]
+				if item_data is Vector3:
+					initial_pivot += item_data
+				elif item_data is Dictionary and "position" in item_data:
+					initial_pivot += item_data["position"] as Vector3
+				count += 1
+		if count > 0:
+			initial_pivot /= count
+
+	match component:
+		"position":
+			# Spinbox value represents where the PIVOT should be
+			# Calculate delta from initial pivot position
+			var pivot_delta = Vector3.ZERO
+			match axis:
+				"x":
+					pivot_delta.x = value - initial_pivot.x
+				"y":
+					pivot_delta.y = value - initial_pivot.y
+				"z":
+					pivot_delta.z = value - initial_pivot.z
+
+			# Move all items by this delta (translating the entire group)
+			for item in selection_manager.selected_items:
+				if item in manual_transform_initial_values:
+					var item_initial_pos = manual_transform_initial_values[item] as Vector3
+					item.global_position = item_initial_pos + pivot_delta
+
+		"rotation":
+			# Spinbox value represents the absolute rotation angle around the pivot
+			# This rotates the entire group around the pivot point
+			var angle_rad = deg_to_rad(value)
+			var rotation_axis: Vector3
+			match axis:
+				"x":
+					rotation_axis = Vector3.RIGHT
+				"y":
+					rotation_axis = Vector3.UP
+				"z":
+					rotation_axis = Vector3.BACK
+
+			# Create rotation basis from absolute angle
+			var rotation_basis = Basis(rotation_axis, angle_rad)
+
+			# Apply rotation to all items around the pivot from their INITIAL state
+			for item in selection_manager.selected_items:
+				if item in manual_transform_initial_values:
+					var item_data = manual_transform_initial_values[item]
+					var item_initial_basis = item_data["basis"] as Basis
+					var item_initial_pos = item_data["position"] as Vector3
+
+					# Rotate the item's orientation
+					item.basis = rotation_basis * item_initial_basis
+
+					# Rotate the item's position around the pivot
+					var offset_from_pivot = item_initial_pos - initial_pivot
+					var rotated_offset = rotation_basis * offset_from_pivot
+					item.global_position = initial_pivot + rotated_offset
+
+		"scale":
+			# Spinbox value represents the scale multiplier to apply to the group
+			# For uniform scaling based on the first item's initial scale
+			var first_item = selection_manager.selected_items[0]
+			if first_item in manual_transform_initial_values:
+				var first_item_data = manual_transform_initial_values[first_item]
+				var initial_scale = first_item_data["scale"] as Vector3
+				var scale_multiplier: float = 1.0
+				match axis:
+					"x":
+						scale_multiplier = value / initial_scale.x if initial_scale.x != 0 else 1.0
+					"y":
+						scale_multiplier = value / initial_scale.y if initial_scale.y != 0 else 1.0
+					"z":
+						scale_multiplier = value / initial_scale.z if initial_scale.z != 0 else 1.0
+
+				# Apply scale to all items
+				for item in selection_manager.selected_items:
+					if item in manual_transform_initial_values:
+						var item_data = manual_transform_initial_values[item]
+						var item_initial_scale = item_data["scale"] as Vector3
+						var scl = item_initial_scale
+						match axis:
+							"x":
+								scl.x *= scale_multiplier
+							"y":
+								scl.y *= scale_multiplier
+							"z":
+								scl.z *= scale_multiplier
+						item.scale = scl
+
+						# Scale position distance from pivot
+						var item_initial_pos = item_data["position"] as Vector3
+						var offset_from_pivot = item_initial_pos - initial_pivot
+						match axis:
+							"x":
+								offset_from_pivot.x *= scale_multiplier
+							"y":
+								offset_from_pivot.y *= scale_multiplier
+							"z":
+								offset_from_pivot.z *= scale_multiplier
+						item.global_position = initial_pivot + offset_from_pivot
 
 
 func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _context_data: Dictionary) -> void:
@@ -863,9 +1041,11 @@ func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _co
 		"undo":
 			undo_redo_manager.undo()
 			_update_gizmo()
+			ui_manager.update_object_info(selection_manager.selected_items)
 		"redo":
 			undo_redo_manager.redo()
 			_update_gizmo()
+			ui_manager.update_object_info(selection_manager.selected_items)
 		"duplicate":
 			_duplicate_selected_items()
 		"delete":
