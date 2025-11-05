@@ -1,13 +1,42 @@
-[gd_scene load_steps=13 format=3 uid="uid://cy8vn4m5xk2wp"]
+[gd_scene load_steps=17 format=3 uid="uid://cy8vn4m5xk2wp"]
 
 [ext_resource type="Script" uid="uid://btbmj78ppecj1" path="res://scripts/crafting/physics/workbench/WorkbenchWindow.gd" id="1_workbench"]
 [ext_resource type="Theme" uid="uid://bld6s83sdkmse" path="res://workbench_theme.tres" id="2_theme"]
-[ext_resource type="Texture2D" path="res://assets/textures/ui/icons/select_icon.png" id="select_icon"]
-[ext_resource type="Texture2D" path="res://assets/textures/ui/icons/translate_icon.png" id="translate_icon"]
-[ext_resource type="Texture2D" path="res://assets/textures/ui/icons/rotate_icon.png" id="rotate_icon"]
-[ext_resource type="Texture2D" path="res://assets/textures/ui/icons/scale_icon.png" id="scale_icon"]
+[ext_resource type="Texture2D" uid="uid://dcb7cwk1t50xq" path="res://assets/textures/ui/icons/rotate_icon.png" id="rotate_icon"]
+[ext_resource type="Texture2D" uid="uid://bt488nahwybwn" path="res://assets/textures/ui/icons/scale_icon.png" id="scale_icon"]
+[ext_resource type="Texture2D" uid="uid://c7yqsufwuuxi4" path="res://assets/textures/ui/icons/select_icon.png" id="select_icon"]
+[ext_resource type="Texture2D" uid="uid://bydolya88m6rf" path="res://assets/textures/ui/icons/translate_icon.png" id="translate_icon"]
+
+[sub_resource type="Shader" id="Shader_gradient_sky"]
+code = "shader_type sky;
+
+uniform vec4 top_color : source_color = vec4(0.3, 0.3, 0.4, 1.0);
+uniform vec4 bottom_color : source_color = vec4(0.15, 0.15, 0.2, 1.0);
+
+void sky() {
+	float y = EYEDIR.y;
+	COLOR = mix(bottom_color.rgb, top_color.rgb, clamp(y * 0.5 + 0.5, 0.0, 1.0));
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_gradient_sky"]
+shader = SubResource("Shader_gradient_sky")
+shader_parameter/top_color = Color(0.3, 0.3, 0.4, 1)
+shader_parameter/bottom_color = Color(0.15, 0.15, 0.2, 1)
+
+[sub_resource type="Sky" id="Sky_gradient"]
+sky_material = SubResource("ShaderMaterial_gradient_sky")
+
+[sub_resource type="Environment" id="Environment_workbench"]
+background_mode = 2
+sky = SubResource("Sky_gradient")
+sky_custom_fov = 90.0
+ambient_light_source = 3
+ambient_light_color = Color(0.7, 0.7, 0.7, 1)
+tonemap_mode = 2
 
 [sub_resource type="World3D" id="World3D_workbench"]
+environment = SubResource("Environment_workbench")
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(200, 200)
@@ -78,34 +107,6 @@ shader_parameter/axis_x_color = Color(1, 0.3, 0.3, 1)
 shader_parameter/axis_z_color = Color(0.3, 0.3, 1, 1)
 shader_parameter/grid_scale = 1.0
 shader_parameter/line_width = 0.02
-
-[sub_resource type="Shader" id="Shader_gradient_sky"]
-code = "shader_type sky;
-
-uniform vec4 top_color : source_color = vec4(0.3, 0.3, 0.4, 1.0);
-uniform vec4 bottom_color : source_color = vec4(0.15, 0.15, 0.2, 1.0);
-
-void sky() {
-	float y = EYEDIR.y;
-	COLOR = mix(bottom_color.rgb, top_color.rgb, clamp(y * 0.5 + 0.5, 0.0, 1.0));
-}
-"
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_gradient_sky"]
-shader = SubResource("Shader_gradient_sky")
-shader_parameter/top_color = Color(0.3, 0.3, 0.4, 1)
-shader_parameter/bottom_color = Color(0.15, 0.15, 0.2, 1)
-
-[sub_resource type="Sky" id="Sky_gradient"]
-sky_material = SubResource("ShaderMaterial_gradient_sky")
-
-[sub_resource type="Environment" id="Environment_workbench"]
-background_mode = 2
-sky = SubResource("Sky_gradient")
-sky_custom_fov = 90.0
-ambient_light_source = 3
-ambient_light_color = Color(0.7, 0.7, 0.7, 1)
-tonemap_mode = 2
 
 [node name="WorkbenchWindow" type="Control"]
 layout_mode = 3
@@ -530,14 +531,7 @@ icon_alignment = 1
 expand_icon = true
 
 [node name="TransformStatsLabel" type="Label" parent="VBoxContainer/MainContent/ViewportContainer"]
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -200.0
-offset_top = 8.0
-offset_bottom = 28.0
-grow_horizontal = 0
+layout_mode = 2
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
 theme_override_constants/shadow_offset_x = 1
 theme_override_constants/shadow_offset_y = 1
@@ -545,15 +539,7 @@ theme_override_font_sizes/font_size = 14
 horizontal_alignment = 2
 
 [node name="ObjectInfoLabel" type="Label" parent="VBoxContainer/MainContent/ViewportContainer"]
-layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 8.0
-offset_top = -60.0
-offset_right = 400.0
-offset_bottom = -8.0
-grow_vertical = 0
+layout_mode = 2
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
 theme_override_constants/shadow_offset_x = 1
 theme_override_constants/shadow_offset_y = 1
@@ -563,7 +549,7 @@ vertical_alignment = 2
 [node name="SubViewport" type="SubViewport" parent="VBoxContainer/MainContent/ViewportContainer"]
 world_3d = SubResource("World3D_workbench")
 handle_input_locally = false
-size = Vector2i(2, 2)
+size = Vector2i(1688, 1080)
 render_target_update_mode = 4
 
 [node name="Camera3D" type="Camera3D" parent="VBoxContainer/MainContent/ViewportContainer/SubViewport"]
