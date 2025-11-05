@@ -164,13 +164,7 @@ var part_categories: Dictionary = {
 
 # Fastener system
 var selected_fastener_id: String = "fastener_steel_bolt"  # Default fastener
-var available_fasteners: Array[String] = [
-	"fastener_iron_nail",
-	"fastener_steel_screw",
-	"fastener_steel_bolt",
-	"fastener_hinge",
-	"fastener_ball_joint"
-]
+var available_fasteners: Array[String] = ["fastener_iron_nail", "fastener_steel_screw", "fastener_steel_bolt", "fastener_hinge", "fastener_ball_joint"]
 
 # Category filter options
 enum CategoryFilter { ALL, STRUCTURAL_ITEMS, COSMETIC, HARDWARE, CONTAINERS }
@@ -1856,10 +1850,7 @@ func _select_item_with_cluster(item: PhysicalItem, add_to_selection: bool) -> vo
 				cluster_pivot_point += point
 			cluster_pivot_point /= connection_points.size()
 			cluster_pivot_active = true
-			print("✓ Cluster pivot set to: %.3f, %.3f, %.3f (from %d joints)" % [
-				cluster_pivot_point.x, cluster_pivot_point.y, cluster_pivot_point.z,
-				connection_points.size()
-			])
+			print("✓ Cluster pivot set to: %.3f, %.3f, %.3f (from %d joints)" % [cluster_pivot_point.x, cluster_pivot_point.y, cluster_pivot_point.z, connection_points.size()])
 		else:
 			print("⚠️ No joints found for cluster pivot - using default center")
 			cluster_pivot_active = false
@@ -1912,10 +1903,7 @@ func _delete_selected_items() -> void:
 			for fastener in item.fasteners:
 				if fastener not in fasteners_to_remove:
 					fasteners_to_remove.append(fastener)
-					print("Marking fastener for deletion: %s <-> %s" % [
-						fastener.item_a.item_name if fastener.item_a else "?",
-						fastener.item_b.item_name if fastener.item_b else "?"
-					])
+					print("Marking fastener for deletion: %s <-> %s" % [fastener.item_a.item_name if fastener.item_a else "?", fastener.item_b.item_name if fastener.item_b else "?"])
 
 	# Remove and destroy all fasteners
 	for fastener in fasteners_to_remove:
@@ -2798,6 +2786,7 @@ func _redo_last_operation() -> void:
 ## FASTENER SYSTEM METHODS
 ## ========================================
 
+
 func _show_fastener_selection_dialog() -> void:
 	"""Show a dialog to select which fastener to use for attaching selected items."""
 	print("_show_fastener_selection_dialog called with %d selected items" % selected_items.size())
@@ -2884,12 +2873,7 @@ func _attach_selected_items_with_fastener() -> void:
 		print("    Connection point: %s" % connection_point)
 
 		# Attach using PhysicalItem's method
-		var fastener = base_item.attach_with_fastener(
-			target_item,
-			selected_fastener_id,
-			connection_point,
-			world  # Use workbench world as parent for joints
-		)
+		var fastener = base_item.attach_with_fastener(target_item, selected_fastener_id, connection_point, world)  # Use workbench world as parent for joints
 
 		if fastener:
 			attached_count += 1
@@ -2907,6 +2891,7 @@ func _attach_selected_items_with_fastener() -> void:
 ## ========================================
 ## VIEWPORT SETTINGS DIALOG
 ## ========================================
+
 
 func _show_viewport_settings_dialog() -> void:
 	"""Show viewport settings dialog for configuring grid size, gizmo scale, background color, and floor color."""
@@ -3067,11 +3052,14 @@ func _load_viewport_settings() -> void:
 		if floor_material:
 			floor_material.albedo_color = saved_settings["floor_color"]
 			print("Loaded floor color: ", saved_settings["floor_color"])
+
+
 # This file contains the Connect Mode functions to be appended to WorkbenchWindow.gd
 
 ## ========================================
 ## CONNECT MODE (BOLT GUN) FUNCTIONS
 ## ========================================
+
 
 func _set_transform_mode(mode: TransformMode) -> void:
 	"""Set the current transform mode."""
@@ -3126,18 +3114,12 @@ func _enter_connect_mode() -> void:
 	connect_mode_target_b = selected_items[1]
 
 	print("\n=== CONNECT MODE ACTIVATED ===")
-	print("Target A: %s at %.2f,%.2f,%.2f" % [
-		connect_mode_target_a.item_name,
-		connect_mode_target_a.global_position.x,
-		connect_mode_target_a.global_position.y,
-		connect_mode_target_a.global_position.z
-	])
-	print("Target B: %s at %.2f,%.2f,%.2f" % [
-		connect_mode_target_b.item_name,
-		connect_mode_target_b.global_position.x,
-		connect_mode_target_b.global_position.y,
-		connect_mode_target_b.global_position.z
-	])
+	print(
+		"Target A: %s at %.2f,%.2f,%.2f" % [connect_mode_target_a.item_name, connect_mode_target_a.global_position.x, connect_mode_target_a.global_position.y, connect_mode_target_a.global_position.z]
+	)
+	print(
+		"Target B: %s at %.2f,%.2f,%.2f" % [connect_mode_target_b.item_name, connect_mode_target_b.global_position.x, connect_mode_target_b.global_position.y, connect_mode_target_b.global_position.z]
+	)
 	print("Click anywhere on visible surface to place fastener")
 	print("Press Q or click button to exit")
 
@@ -3178,18 +3160,18 @@ func _perform_connect_mode_raycast(mouse_pos: Vector2) -> Dictionary:
 	print("  Origin: %.2f, %.2f, %.2f" % [ray_origin.x, ray_origin.y, ray_origin.z])
 	print("  Direction: %.2f, %.2f, %.2f" % [ray_direction.x, ray_direction.y, ray_direction.z])
 	print("  Max distance: %.2f" % ray_length)
-	print("  Target A: %s at %.2f,%.2f,%.2f" % [
-		connect_mode_target_a.item_name,
-		connect_mode_target_a.global_position.x,
-		connect_mode_target_a.global_position.y,
-		connect_mode_target_a.global_position.z
-	])
-	print("  Target B: %s at %.2f,%.2f,%.2f" % [
-		connect_mode_target_b.item_name,
-		connect_mode_target_b.global_position.x,
-		connect_mode_target_b.global_position.y,
-		connect_mode_target_b.global_position.z
-	])
+	print(
+		(
+			"  Target A: %s at %.2f,%.2f,%.2f"
+			% [connect_mode_target_a.item_name, connect_mode_target_a.global_position.x, connect_mode_target_a.global_position.y, connect_mode_target_a.global_position.z]
+		)
+	)
+	print(
+		(
+			"  Target B: %s at %.2f,%.2f,%.2f"
+			% [connect_mode_target_b.item_name, connect_mode_target_b.global_position.x, connect_mode_target_b.global_position.y, connect_mode_target_b.global_position.z]
+		)
+	)
 
 	var space_state = viewport.world_3d.direct_space_state
 
@@ -3200,10 +3182,7 @@ func _perform_connect_mode_raycast(mouse_pos: Vector2) -> Dictionary:
 	var max_iterations = 20  # Safety limit
 
 	for i in range(max_iterations):
-		var ray_query = PhysicsRayQueryParameters3D.create(
-			current_origin,
-			current_origin + ray_direction * remaining_length
-		)
+		var ray_query = PhysicsRayQueryParameters3D.create(current_origin, current_origin + ray_direction * remaining_length)
 		ray_query.collision_mask = 4
 		ray_query.collide_with_bodies = true
 		ray_query.hit_from_inside = true
@@ -3236,12 +3215,7 @@ func _perform_connect_mode_raycast(mouse_pos: Vector2) -> Dictionary:
 				elif hit.collider == connect_mode_target_b:
 					target_label = " [TARGET B]"
 
-				print("  Hit %d: %s%s at %.3f,%.3f,%.3f" % [
-					i,
-					hit.collider.item_name,
-					target_label,
-					hit.position.x, hit.position.y, hit.position.z
-				])
+				print("  Hit %d: %s%s at %.3f,%.3f,%.3f" % [i, hit.collider.item_name, target_label, hit.position.x, hit.position.y, hit.position.z])
 			else:
 				print("  Hit %d: (not PhysicalItem) %s" % [i, hit.collider])
 	else:
@@ -3268,14 +3242,10 @@ func _perform_connect_mode_raycast(mouse_pos: Vector2) -> Dictionary:
 		var next_obj = next_hit.collider
 
 		# Check if current is one target and next is the other target
-		var current_is_target = (current_obj == connect_mode_target_a or current_obj == connect_mode_target_b)
-		var next_is_target = (next_obj == connect_mode_target_a or next_obj == connect_mode_target_b)
+		var current_is_target = current_obj == connect_mode_target_a or current_obj == connect_mode_target_b
+		var next_is_target = next_obj == connect_mode_target_a or next_obj == connect_mode_target_b
 
-		print("  Checking hits %d→%d: %s → %s" % [
-			i, i+1,
-			current_obj.item_name if current_obj is PhysicalItem else "?",
-			next_obj.item_name if next_obj is PhysicalItem else "?"
-		])
+		print("  Checking hits %d→%d: %s → %s" % [i, i + 1, current_obj.item_name if current_obj is PhysicalItem else "?", next_obj.item_name if next_obj is PhysicalItem else "?"])
 
 		if current_is_target and next_is_target and current_obj != next_obj:
 			# Found it! Ray exits current object and enters next object
@@ -3312,10 +3282,7 @@ func _perform_connect_mode_raycast(mouse_pos: Vector2) -> Dictionary:
 
 	# Check if distance exceeds max bolt length
 	if distance > connect_mode_max_bolt_length:
-		return {
-			"success": false,
-			"error_message": "Distance too large (%.2fm > %.2fm max)" % [distance, connect_mode_max_bolt_length]
-		}
+		return {"success": false, "error_message": "Distance too large (%.2fm > %.2fm max)" % [distance, connect_mode_max_bolt_length]}
 
 	print("✓ Fastener placement:")
 	print("  Exit from: %s at %.3f,%.3f,%.3f" % [first_object.item_name, exit_point.x, exit_point.y, exit_point.z])
@@ -3323,15 +3290,7 @@ func _perform_connect_mode_raycast(mouse_pos: Vector2) -> Dictionary:
 	print("  Distance: %.3fm" % distance)
 
 	# Success!
-	return {
-		"success": true,
-		"hit_point_a": exit_point,
-		"hit_point_b": entry_point,
-		"hit_item_a": first_object,
-		"hit_item_b": second_object,
-		"distance": distance,
-		"ray_direction": ray_direction
-	}
+	return {"success": true, "hit_point_a": exit_point, "hit_point_b": entry_point, "hit_item_a": first_object, "hit_item_b": second_object, "distance": distance, "ray_direction": ray_direction}
 
 
 func _place_fastener_at_ray(mouse_pos: Vector2) -> void:
@@ -3424,10 +3383,7 @@ func _show_fire_line(_mouse_pos: Vector2) -> void:
 	connect_mode_fire_line.visible = true
 	fire_line_timer = FIRE_LINE_DURATION
 
-	print("Fire line: Drawing from %.2f,%.2f,%.2f to %.2f,%.2f,%.2f" % [
-		ray_origin.x, ray_origin.y, ray_origin.z,
-		ray_end.x, ray_end.y, ray_end.z
-	])
+	print("Fire line: Drawing from %.2f,%.2f,%.2f to %.2f,%.2f,%.2f" % [ray_origin.x, ray_origin.y, ray_origin.z, ray_end.x, ray_end.y, ray_end.z])
 	print("🔫 BOLT GUN FIRED - Visual ray displayed for %.1fs" % FIRE_LINE_DURATION)
 
 

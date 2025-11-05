@@ -1,6 +1,6 @@
 [gd_scene load_steps=13 format=3 uid="uid://cy8vn4m5xk2wp"]
 
-[ext_resource type="Script" uid="uid://bb7h2d7034qjq" path="res://scripts/crafting/physics/WorkbenchWindow.gd" id="1_workbench"]
+[ext_resource type="Script" uid="uid://btbmj78ppecj1" path="res://scripts/crafting/physics/workbench/WorkbenchWindow.gd" id="1_workbench"]
 [ext_resource type="Theme" uid="uid://bld6s83sdkmse" path="res://workbench_theme.tres" id="2_theme"]
 
 [sub_resource type="World3D" id="World3D_workbench"]
@@ -185,7 +185,7 @@ popup/item_4/id = 4
 custom_minimum_size = Vector2(200, 100)
 layout_mode = 2
 size_flags_vertical = 3
-focus_mode = 0
+allow_reselect = true
 
 [node name="Spacer" type="Control" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/PartsSection"]
 custom_minimum_size = Vector2(0, 2)
@@ -448,6 +448,7 @@ focus_mode = 0
 text = "Clear All"
 
 [node name="HelpLabel" type="Label" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer"]
+visible = false
 layout_mode = 2
 size_flags_vertical = 3
 text = "Alt+Left: Orbit | Alt+Middle: Pan | Alt+Right: Zoom | Click: Select | Q/W/E/R: Select/Move/Rotate/Scale | F: Frame | X: Grid Snap | Ctrl: Snap | Shift: Fine | Ctrl+Z: Undo | Ctrl+Shift+Z/Ctrl+Y: Redo | Ctrl+D: Duplicate"
@@ -530,7 +531,7 @@ vertical_alignment = 2
 [node name="SubViewport" type="SubViewport" parent="VBoxContainer/MainContent/ViewportContainer"]
 world_3d = SubResource("World3D_workbench")
 handle_input_locally = false
-size = Vector2i(1688, 1080)
+size = Vector2i(2, 2)
 render_target_update_mode = 4
 
 [node name="Camera3D" type="Camera3D" parent="VBoxContainer/MainContent/ViewportContainer/SubViewport"]
