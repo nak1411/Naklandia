@@ -2,6 +2,10 @@
 
 [ext_resource type="Script" uid="uid://btbmj78ppecj1" path="res://scripts/crafting/physics/workbench/WorkbenchWindow.gd" id="1_workbench"]
 [ext_resource type="Theme" uid="uid://bld6s83sdkmse" path="res://workbench_theme.tres" id="2_theme"]
+[ext_resource type="Texture2D" path="res://assets/textures/ui/icons/select_icon.png" id="select_icon"]
+[ext_resource type="Texture2D" path="res://assets/textures/ui/icons/translate_icon.png" id="translate_icon"]
+[ext_resource type="Texture2D" path="res://assets/textures/ui/icons/rotate_icon.png" id="rotate_icon"]
+[ext_resource type="Texture2D" path="res://assets/textures/ui/icons/scale_icon.png" id="scale_icon"]
 
 [sub_resource type="World3D" id="World3D_workbench"]
 
@@ -490,38 +494,66 @@ custom_minimum_size = Vector2(32, 32)
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-text = "Q"
+icon = ExtResource("select_icon")
+flat = true
+icon_alignment = 1
+expand_icon = true
 
 [node name="MoveButton" type="Button" parent="VBoxContainer/MainContent/ViewportContainer/TransformModeButtons"]
 custom_minimum_size = Vector2(32, 32)
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-text = "W"
+icon = ExtResource("translate_icon")
+flat = true
+icon_alignment = 1
+expand_icon = true
 
 [node name="RotateButton" type="Button" parent="VBoxContainer/MainContent/ViewportContainer/TransformModeButtons"]
 custom_minimum_size = Vector2(32, 32)
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-text = "E"
+icon = ExtResource("rotate_icon")
+flat = true
+icon_alignment = 1
+expand_icon = true
 
 [node name="ScaleButton" type="Button" parent="VBoxContainer/MainContent/ViewportContainer/TransformModeButtons"]
 custom_minimum_size = Vector2(32, 32)
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-text = "R"
+icon = ExtResource("scale_icon")
+flat = true
+icon_alignment = 1
+expand_icon = true
 
 [node name="TransformStatsLabel" type="Label" parent="VBoxContainer/MainContent/ViewportContainer"]
-layout_mode = 2
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -200.0
+offset_top = 8.0
+offset_bottom = 28.0
+grow_horizontal = 0
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
 theme_override_constants/shadow_offset_x = 1
 theme_override_constants/shadow_offset_y = 1
 theme_override_font_sizes/font_size = 14
+horizontal_alignment = 2
 
 [node name="ObjectInfoLabel" type="Label" parent="VBoxContainer/MainContent/ViewportContainer"]
-layout_mode = 2
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = -60.0
+offset_right = 400.0
+offset_bottom = -8.0
+grow_vertical = 0
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
 theme_override_constants/shadow_offset_x = 1
 theme_override_constants/shadow_offset_y = 1
