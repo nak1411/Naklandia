@@ -36,6 +36,8 @@ var context_menu: ContextMenu_Base
 
 # Input state
 var is_alt_held: bool = false
+var is_shift_held: bool = false
+var is_ctrl_held: bool = false
 var initialized: bool = false
 var controls_visible: bool = false
 
@@ -312,6 +314,8 @@ func _notification(what: int) -> void:
 func _reset_all_drag_states() -> void:
 	"""Reset all drag states when focus is lost."""
 	is_alt_held = false
+	is_shift_held = false
+	is_ctrl_held = false
 	camera_controller.end_drag()
 	gizmo_controller.cancel_gizmo_drag(selection_manager.selected_items)
 	selection_manager.cancel_box_select()
@@ -322,11 +326,16 @@ func _input(event: InputEvent) -> void:
 	if not visible:
 		return
 
-	# Track Alt key globally
-	if event is InputEventKey and event.keycode == KEY_ALT:
-		is_alt_held = event.pressed
-		if not is_alt_held and camera_controller.is_dragging:
-			camera_controller.end_drag()
+	# Track Alt, Shift, and Ctrl keys globally
+	if event is InputEventKey:
+		if event.keycode == KEY_ALT:
+			is_alt_held = event.pressed
+			if not is_alt_held and camera_controller.is_dragging:
+				camera_controller.end_drag()
+		elif event.keycode == KEY_SHIFT:
+			is_shift_held = event.pressed
+		elif event.keycode == KEY_CTRL:
+			is_ctrl_held = event.pressed
 
 	# Keyboard shortcuts
 	if event is InputEventKey and not event.echo:
@@ -474,7 +483,8 @@ func _handle_mouse_press(event: InputEventMouseButton) -> void:
 			if gizmo_controller.try_start_free_movement(event.position, selection_manager.selected_items):
 				return
 
-		# Start box selection
+		# Start box selection (which will handle single click if box is too small)
+		# The shift state will be passed when the box selection finishes
 		selection_manager.start_box_select(selection_overlay.get_local_mouse_position())
 
 	# Right click = Context menu
@@ -504,7 +514,7 @@ func _handle_mouse_release(event: InputEventMouseButton) -> void:
 
 	# End box selection
 	if selection_manager.is_box_selecting and event.button_index == MOUSE_BUTTON_LEFT:
-		selection_manager.finish_box_select()
+		selection_manager.finish_box_select(is_shift_held, is_ctrl_held)
 		if selection_overlay:
 			selection_overlay.queue_redraw()
 
@@ -579,14 +589,8 @@ func _record_transform_operation() -> void:
 			var initial_positions = initial_data["positions"]
 			for item in selection_manager.selected_items:
 				if item in initial_rotations and item in initial_positions:
-					initial_values[item] = {
-						"basis": initial_rotations[item],
-						"position": initial_positions[item]
-					}
-					final_values[item] = {
-						"basis": item.basis,
-						"position": item.global_position
-					}
+					initial_values[item] = {"basis": initial_rotations[item], "position": initial_positions[item]}
+					final_values[item] = {"basis": item.basis, "position": item.global_position}
 
 		TransformMode.SCALE:
 			operation_type = "scale"
@@ -714,16 +718,10 @@ func _on_transform_input_focus_exited() -> void:
 				final_values[item] = item.global_position
 			"rotation":
 				# Match the format of initial values (Dictionary with basis and position)
-				final_values[item] = {
-					"basis": item.basis,
-					"position": item.global_position
-				}
+				final_values[item] = {"basis": item.basis, "position": item.global_position}
 			"scale":
 				# Match the format of initial values (Dictionary with scale and position)
-				final_values[item] = {
-					"scale": item.scale,
-					"position": item.global_position
-				}
+				final_values[item] = {"scale": item.scale, "position": item.global_position}
 
 	# Filter out the __pivot__ key from initial values (it's not a PhysicalItem)
 	var filtered_initial_values = {}
@@ -740,12 +738,7 @@ func _on_transform_input_focus_exited() -> void:
 		operation_type = "rotate"
 
 	print("  Recording undo for ", operation_type, " with ", final_values.size(), " items")
-	undo_redo_manager.record_transform(
-		operation_type,
-		selection_manager.selected_items,
-		filtered_initial_values,
-		final_values
-	)
+	undo_redo_manager.record_transform(operation_type, selection_manager.selected_items, filtered_initial_values, final_values)
 
 	# Clear tracking variables
 	manual_transform_initial_values.clear()
@@ -772,19 +765,13 @@ func _on_manual_transform_timeout() -> void:
 				final_values[item] = item.global_position
 			"rotation":
 				# Match the format of initial values (Dictionary with basis and position)
-				final_values[item] = {
-					"basis": item.basis,
-					"position": item.global_position
-				}
+				final_values[item] = {"basis": item.basis, "position": item.global_position}
 				print("  Storing final rotation basis for item: ", item.name)
 				print("    Rotation degrees: ", item.rotation_degrees)
 				print("    Basis: ", item.basis)
 			"scale":
 				# Match the format of initial values (Dictionary with scale and position)
-				final_values[item] = {
-					"scale": item.scale,
-					"position": item.global_position
-				}
+				final_values[item] = {"scale": item.scale, "position": item.global_position}
 
 	# Filter out the __pivot__ key from initial values (it's not a PhysicalItem)
 	var filtered_initial_values = {}
@@ -801,12 +788,7 @@ func _on_manual_transform_timeout() -> void:
 		operation_type = "rotate"
 
 	print("Manual transform timeout: Recording undo for ", operation_type)
-	undo_redo_manager.record_transform(
-		operation_type,
-		selection_manager.selected_items,
-		filtered_initial_values,
-		final_values
-	)
+	undo_redo_manager.record_transform(operation_type, selection_manager.selected_items, filtered_initial_values, final_values)
 
 	# Clear tracking variables
 	manual_transform_initial_values.clear()
@@ -844,19 +826,13 @@ func _on_transform_input_changed(component: String, axis: String, value: float) 
 					manual_transform_initial_values[item] = item.global_position
 				"rotation":
 					# Store both basis and position for rotation
-					manual_transform_initial_values[item] = {
-						"basis": item.basis,
-						"position": item.global_position
-					}
+					manual_transform_initial_values[item] = {"basis": item.basis, "position": item.global_position}
 					print("  Storing initial rotation basis for item: ", item.name)
 					print("    Rotation degrees: ", item.rotation_degrees)
 					print("    Basis: ", item.basis)
 				"scale":
 					# Store both scale and position for scaling
-					manual_transform_initial_values[item] = {
-						"scale": item.scale,
-						"position": item.global_position
-					}
+					manual_transform_initial_values[item] = {"scale": item.scale, "position": item.global_position}
 
 		print("Manual transform edit started: ", component, " (stored ", manual_transform_initial_values.size(), " items)")
 
@@ -1240,7 +1216,7 @@ func _duplicate_selected_items() -> void:
 
 		var new_item = spawn_part(scene)
 		if new_item:
-			new_item.global_position = item.global_position + Vector3(0.5, 0, 0.5)
+			new_item.global_position = item.global_position
 			new_item.rotation = item.rotation
 			new_item.scale = item.scale
 

@@ -54,8 +54,9 @@ func set_hovered_item(item: PhysicalItem) -> void:
 		hover_changed.emit(hovered_item)
 
 
-func try_select_single(mouse_pos: Vector2, shift_held: bool) -> void:
-	"""Try to select a single item at mouse position."""
+func try_select_single(mouse_pos: Vector2, modifier_held: bool) -> void:
+	"""Try to select a single item at mouse position.
+	modifier_held can be shift (add) or ctrl (toggle/deselect)."""
 	if not camera:
 		return
 
@@ -73,8 +74,9 @@ func try_select_single(mouse_pos: Vector2, shift_held: bool) -> void:
 		var item = result.collider as PhysicalItem
 		print("Raycast hit item: %s (instance: %s)" % [item.item_name, item.get_instance_id()])
 
-		# Check if Shift is held for multi-select
-		if shift_held:
+		# Check if modifier is held for multi-select/deselect
+		if modifier_held:
+			# Toggle selection - deselect if already selected, select if not
 			if item in selected_items:
 				deselect_item(item)
 			else:
@@ -85,8 +87,8 @@ func try_select_single(mouse_pos: Vector2, shift_held: bool) -> void:
 			select_item_with_cluster(item, false)  # Select entire cluster
 	else:
 		print("Raycast hit nothing")
-		# Clicked empty space - deselect all
-		if not shift_held:
+		# Clicked empty space - deselect all only if no modifier held
+		if not modifier_held:
 			clear_selection()
 
 
@@ -102,9 +104,9 @@ func update_box_select(mouse_pos: Vector2) -> void:
 	box_select_end = mouse_pos
 
 
-func finish_box_select() -> void:
+func finish_box_select(shift_held: bool = false, ctrl_held: bool = false) -> void:
 	"""Complete the box selection and select items within the box."""
-	try_box_select()
+	try_box_select(shift_held, ctrl_held)
 	is_box_selecting = false
 
 
@@ -113,7 +115,7 @@ func cancel_box_select() -> void:
 	is_box_selecting = false
 
 
-func try_box_select() -> void:
+func try_box_select(shift_held: bool = false, ctrl_held: bool = false) -> void:
 	"""Select all items within the box selection area."""
 	if not camera or not world:
 		return
@@ -126,11 +128,13 @@ func try_box_select() -> void:
 	# Check if box is too small (probably just a click)
 	if selection_rect.size.length() < 5.0:
 		# Treat as single click selection
-		try_select_single(box_select_start, false)
+		try_select_single(box_select_start, shift_held or ctrl_held)
 		return
 
-	# Find all PhysicalItems in the world
+	# Find all PhysicalItems in the world and test with raycasting for accuracy
+	var space_state = viewport.world_3d.direct_space_state
 	var items_to_select: Array[PhysicalItem] = []
+
 	for child in world.get_children():
 		if child is PhysicalItem:
 			var item = child as PhysicalItem
@@ -189,42 +193,68 @@ func try_box_select() -> void:
 				screen_max.y = max(screen_max.y, screen_pos.y)
 			var item_screen_rect = Rect2(screen_min, screen_max - screen_min)
 
-			# Proper intersection test: check if rectangles actually overlap
+			# Check if rectangles intersect (crossing mode - any overlap counts)
 			if selection_rect.intersects(item_screen_rect, true):
-				# Additional accuracy check: verify that at least one corner is actually inside
-				var has_real_overlap = false
+				# Generate multiple test points across the overlap area for raycasting
+				# This ensures we detect objects even if only part of them overlaps
+				var overlap_rect = selection_rect.intersection(item_screen_rect)
 
-				# Check if any object corner is inside selection rect
-				for screen_pos in screen_corners:
-					if selection_rect.has_point(screen_pos):
-						has_real_overlap = true
+				if not overlap_rect.has_area():
+					continue
+
+				var test_points: Array[Vector2] = []
+
+				# Sample points in a grid across the overlap area
+				# Use 3x3 grid for better coverage
+				var grid_size = 3
+				for i in range(grid_size):
+					for j in range(grid_size):
+						var x = overlap_rect.position.x + (overlap_rect.size.x * i / float(grid_size - 1) if grid_size > 1 else 0)
+						var y = overlap_rect.position.y + (overlap_rect.size.y * j / float(grid_size - 1) if grid_size > 1 else 0)
+						test_points.append(Vector2(x, y))
+
+				# Also add the center point
+				test_points.append(overlap_rect.position + overlap_rect.size * 0.5)
+
+				# Raycast test - if any test point hits this object, include it
+				var is_visible = false
+				for test_point in test_points:
+					var from = camera.project_ray_origin(test_point)
+					var to = from + camera.project_ray_normal(test_point) * 100.0
+
+					var query = PhysicsRayQueryParameters3D.create(from, to)
+					query.collision_mask = 4
+
+					var result = space_state.intersect_ray(query)
+					if result and result.collider == item:
+						is_visible = true
 						break
 
-				# Check if any selection rect corner is inside object rect
-				if not has_real_overlap:
-					var sel_corners = [
-						selection_rect.position,
-						selection_rect.position + Vector2(selection_rect.size.x, 0),
-						selection_rect.position + Vector2(0, selection_rect.size.y),
-						selection_rect.position + selection_rect.size
-					]
-					for sel_corner in sel_corners:
-						if item_screen_rect.has_point(sel_corner):
-							has_real_overlap = true
-							break
-
-				if has_real_overlap:
+				if is_visible:
 					items_to_select.append(item)
 
 	# Update selection
 	if items_to_select.size() > 0:
-		clear_selection()
-		for item in items_to_select:
-			select_item(item, true)
-		print("Box selected ", items_to_select.size(), " item(s)")
+		# Ctrl = deselect mode
+		if ctrl_held:
+			for item in items_to_select:
+				deselect_item(item)
+			print("Box deselected ", items_to_select.size(), " item(s)")
+		# Shift = add to selection
+		elif shift_held:
+			for item in items_to_select:
+				select_item(item, true)
+			print("Box selected ", items_to_select.size(), " item(s)")
+		# Normal = replace selection
+		else:
+			clear_selection()
+			for item in items_to_select:
+				select_item(item, true)
+			print("Box selected ", items_to_select.size(), " item(s)")
 	else:
-		# No items selected - clear selection
-		clear_selection()
+		# No items selected - clear selection only if neither shift nor ctrl is held
+		if not shift_held and not ctrl_held:
+			clear_selection()
 
 
 func select_item(item: PhysicalItem, add_to_selection: bool) -> void:
