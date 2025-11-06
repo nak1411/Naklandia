@@ -1148,7 +1148,7 @@ func _set_item_ghost_mode(item: PhysicalItem, enabled: bool) -> void:
 			mesh.transparency = 0.5
 		else:
 			# Disable transparency
-			mesh.transparency = 1.0
+			mesh.transparency = 0.0
 
 
 func _get_all_mesh_instances(node: Node, meshes: Array[MeshInstance3D]) -> void:
