@@ -1078,15 +1078,21 @@ func _on_validate_pressed() -> void:
 func _on_connect_mode_button_toggled(button_pressed: bool) -> void:
 	"""Handle connect mode button toggle."""
 	if button_pressed:
-		if selection_manager.selected_items.size() != 2:
-			print("Connect Mode requires exactly 2 items selected")
+		if selection_manager.selected_items.is_empty():
+			print("Connect Mode requires items to be selected")
 			var btn = ui_manager.connect_mode_button
 			if btn:
 				btn.button_pressed = false
 			return
 
-		if connect_mode.enter_connect_mode(selection_manager.selected_items):
-			_set_transform_mode(TransformMode.CONNECT)
+		# Try to enter connect mode (it will validate cluster count internally)
+		if not connect_mode.enter_connect_mode(selection_manager.selected_items):
+			var btn = ui_manager.connect_mode_button
+			if btn:
+				btn.button_pressed = false
+			return
+
+		_set_transform_mode(TransformMode.CONNECT)
 	else:
 		_exit_connect_mode()
 

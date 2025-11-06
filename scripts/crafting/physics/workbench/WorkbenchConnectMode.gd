@@ -60,28 +60,60 @@ func _init(
 
 
 func enter_connect_mode(selected_items: Array[PhysicalItem]) -> bool:
-	"""Enter Connect Mode with 2 selected items. Returns true if successful."""
-	if selected_items.size() != 2:
-		print("Connect Mode ERROR: Requires exactly 2 items selected. Currently selected: ", selected_items.size())
+	"""Enter Connect Mode with 2 items/clusters. Returns true if successful."""
+	if selected_items.is_empty():
+		print("Connect Mode ERROR: No items selected")
 		return false
 
+	# Group selected items into clusters
+	var clusters = _get_distinct_clusters(selected_items)
+
+	if clusters.size() < 2:
+		print("Connect Mode ERROR: Requires exactly 2 separate objects/clusters. Currently have %d cluster(s)" % clusters.size())
+		return false
+
+	if clusters.size() > 2:
+		print("Connect Mode ERROR: Too many separate objects/clusters selected. Need exactly 2, have %d" % clusters.size())
+		return false
+
+	# Use the first item from each cluster as the representative
 	connect_mode_active = true
-	connect_mode_target_a = selected_items[0]
-	connect_mode_target_b = selected_items[1]
+	connect_mode_target_a = clusters[0][0]
+	connect_mode_target_b = clusters[1][0]
 
 	print("\n=== CONNECT MODE ACTIVATED ===")
-	print("Target A: %s at %.2f,%.2f,%.2f" % [
-		connect_mode_target_a.item_name,
-		connect_mode_target_a.global_position.x,
-		connect_mode_target_a.global_position.y,
-		connect_mode_target_a.global_position.z
-	])
-	print("Target B: %s at %.2f,%.2f,%.2f" % [
-		connect_mode_target_b.item_name,
-		connect_mode_target_b.global_position.x,
-		connect_mode_target_b.global_position.y,
-		connect_mode_target_b.global_position.z
-	])
+	if clusters[0].size() > 1:
+		print("Target A: %s (cluster of %d items) at %.2f,%.2f,%.2f" % [
+			connect_mode_target_a.item_name,
+			clusters[0].size(),
+			connect_mode_target_a.global_position.x,
+			connect_mode_target_a.global_position.y,
+			connect_mode_target_a.global_position.z
+		])
+	else:
+		print("Target A: %s at %.2f,%.2f,%.2f" % [
+			connect_mode_target_a.item_name,
+			connect_mode_target_a.global_position.x,
+			connect_mode_target_a.global_position.y,
+			connect_mode_target_a.global_position.z
+		])
+
+	if clusters[1].size() > 1:
+		print("Target B: %s (cluster of %d items) at %.2f,%.2f,%.2f" % [
+			connect_mode_target_b.item_name,
+			clusters[1].size(),
+			connect_mode_target_b.global_position.x,
+			connect_mode_target_b.global_position.y,
+			connect_mode_target_b.global_position.z
+		])
+	else:
+		print("Target B: %s at %.2f,%.2f,%.2f" % [
+			connect_mode_target_b.item_name,
+			connect_mode_target_b.global_position.x,
+			connect_mode_target_b.global_position.y,
+			connect_mode_target_b.global_position.z
+		])
+
 	print("Click anywhere on visible surface to place fastener")
 	print("Press Q or click button to exit")
 
@@ -261,6 +293,34 @@ func clear_fasteners() -> void:
 
 
 # Private helper methods
+
+func _get_distinct_clusters(selected_items: Array[PhysicalItem]) -> Array:
+	"""
+	Group selected items into distinct clusters based on bonding relationships.
+	Returns an array of arrays, where each inner array is a cluster of bonded items.
+	"""
+	var clusters: Array = []
+	var processed_items: Array[PhysicalItem] = []
+
+	for item in selected_items:
+		if item in processed_items:
+			continue
+
+		# Get the full bonded cluster for this item
+		var cluster = item.get_bonded_cluster()
+
+		# Filter to only include items that are in the selection
+		var cluster_in_selection: Array[PhysicalItem] = []
+		for cluster_item in cluster:
+			if cluster_item in selected_items:
+				cluster_in_selection.append(cluster_item)
+				processed_items.append(cluster_item)
+
+		if cluster_in_selection.size() > 0:
+			clusters.append(cluster_in_selection)
+
+	return clusters
+
 
 func _perform_raycast(mouse_pos: Vector2) -> Dictionary:
 	"""
