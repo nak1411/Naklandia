@@ -1,7 +1,8 @@
-[gd_scene load_steps=17 format=3 uid="uid://cy8vn4m5xk2wp"]
+[gd_scene load_steps=18 format=3 uid="uid://cy8vn4m5xk2wp"]
 
 [ext_resource type="Script" uid="uid://btbmj78ppecj1" path="res://scripts/crafting/physics/workbench/WorkbenchWindow.gd" id="1_workbench"]
 [ext_resource type="Theme" uid="uid://bld6s83sdkmse" path="res://workbench_theme.tres" id="2_theme"]
+[ext_resource type="Texture2D" uid="uid://tqoyhh43ddbg" path="res://assets/textures/ui/icons/ghost_icon.png" id="ghost_icon"]
 [ext_resource type="Texture2D" uid="uid://dcb7cwk1t50xq" path="res://assets/textures/ui/icons/rotate_icon.png" id="rotate_icon"]
 [ext_resource type="Texture2D" uid="uid://bt488nahwybwn" path="res://assets/textures/ui/icons/scale_icon.png" id="scale_icon"]
 [ext_resource type="Texture2D" uid="uid://c7yqsufwuuxi4" path="res://assets/textures/ui/icons/select_icon.png" id="select_icon"]
@@ -487,15 +488,12 @@ layout_mode = 2
 mouse_filter = 2
 
 [node name="TransformModeButtons" type="HBoxContainer" parent="VBoxContainer/MainContent/ViewportContainer"]
-layout_mode = 1
-anchors_preset = 1
+layout_mode = 2
 anchor_left = 1.0
+anchor_top = 0.0
 anchor_right = 1.0
-offset_left = -180.0
-offset_top = 8.0
-offset_right = -8.0
-offset_bottom = 48.0
-grow_horizontal = 0
+anchor_bottom = 0.0
+offset_left= -180.0
 theme_override_constants/separation = 5
 alignment = 2
 
@@ -544,9 +542,10 @@ custom_minimum_size = Vector2(32, 32)
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-tooltip_text = "Toggle Ghost Mode (Semi-Transparent)"
-text = "G"
+icon = ExtResource("ghost_icon")
 flat = true
+icon_alignment = 1
+expand_icon = true
 
 [node name="TransformStatsLabel" type="Label" parent="VBoxContainer/MainContent/ViewportContainer"]
 layout_mode = 2
