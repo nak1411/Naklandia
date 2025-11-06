@@ -40,6 +40,7 @@ var is_shift_held: bool = false
 var is_ctrl_held: bool = false
 var initialized: bool = false
 var controls_visible: bool = false
+var ghost_mode_enabled: bool = false
 
 # Gizmo scale
 var gizmo_scale: float = 1.0
@@ -156,6 +157,7 @@ func _setup_ui() -> Dictionary:
 		"move_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/MoveButton,
 		"rotate_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/RotateButton,
 		"scale_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/ScaleButton,
+		"ghost_mode_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/GhostModeButton,
 		"transform_panel": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel,
 		"position_x_input": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionX/SpinBox,
 		"position_y_input": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionY/SpinBox,
@@ -247,6 +249,11 @@ func _connect_ui_button_signals(ui_refs: Dictionary) -> void:
 		"rotate_button": func(): _set_transform_mode(TransformMode.ROTATE),
 		"scale_button": func(): _set_transform_mode(TransformMode.SCALE),
 	}
+
+	# Ghost mode button (toggle)
+	var ghost_btn = ui_refs.get("ghost_mode_button")
+	if ghost_btn:
+		ghost_btn.toggled.connect(_on_ghost_mode_toggled)
 
 	for button_name in buttons:
 		var button = ui_refs.get(button_name)
@@ -353,15 +360,23 @@ func _handle_keyboard_shortcuts(event: InputEventKey) -> void:
 	"""Handle keyboard shortcut inputs."""
 	match event.keycode:
 		KEY_Q:
+			if connect_mode.is_active():
+				_exit_connect_mode()
 			_set_transform_mode(TransformMode.SELECT)
 			get_viewport().set_input_as_handled()
 		KEY_W:
+			if connect_mode.is_active():
+				_exit_connect_mode()
 			_set_transform_mode(TransformMode.MOVE)
 			get_viewport().set_input_as_handled()
 		KEY_E:
+			if connect_mode.is_active():
+				_exit_connect_mode()
 			_set_transform_mode(TransformMode.ROTATE)
 			get_viewport().set_input_as_handled()
 		KEY_R:
+			if connect_mode.is_active():
+				_exit_connect_mode()
 			_set_transform_mode(TransformMode.SCALE)
 			get_viewport().set_input_as_handled()
 		KEY_F:
@@ -397,7 +412,7 @@ func _handle_keyboard_shortcuts(event: InputEventKey) -> void:
 					undo_redo_manager.undo()
 				_update_gizmo()
 				# Update UI to reflect the undone/redone state
-				ui_manager.update_object_info(selection_manager.selected_items)
+				ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
 				get_viewport().set_input_as_handled()
 		KEY_ESCAPE:
 			if connect_mode.is_active():
@@ -431,7 +446,7 @@ func _process(delta: float) -> void:
 
 	# Update object info display
 	if not selection_manager.selected_items.is_empty():
-		ui_manager.update_object_info(selection_manager.selected_items)
+		ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
 
 
 func _update_joint_visual_helpers() -> void:
@@ -608,7 +623,7 @@ func _record_transform_operation() -> void:
 func _on_selection_changed(_selected_items: Array[PhysicalItem]) -> void:
 	"""Handle selection change events."""
 	_update_gizmo()
-	ui_manager.update_object_info(selection_manager.selected_items)
+	ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
 
 
 func _on_transform_updated(operation: String, value: float, axis: Vector3) -> void:
@@ -623,7 +638,7 @@ func _on_transform_completed(_mode: int) -> void:
 
 func _on_fastener_placed(_fastener: Fastener, _item_a: PhysicalItem, _item_b: PhysicalItem) -> void:
 	"""Handle fastener placement."""
-	ui_manager.update_object_info(selection_manager.selected_items)
+	ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
 
 
 func _on_connect_mode_toggled(active: bool) -> void:
@@ -672,7 +687,7 @@ func _on_fastener_selected(fastener_id: String) -> void:
 	"""Handle fastener selection from dialog."""
 	var count = connect_mode.attach_selected_items_with_fastener(selection_manager.selected_items, fastener_id)
 	if count > 0:
-		ui_manager.update_object_info(selection_manager.selected_items)
+		ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
 
 
 func _on_transform_input_focus_entered(component: String) -> void:
@@ -1017,11 +1032,11 @@ func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _co
 		"undo":
 			undo_redo_manager.undo()
 			_update_gizmo()
-			ui_manager.update_object_info(selection_manager.selected_items)
+			ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
 		"redo":
 			undo_redo_manager.redo()
 			_update_gizmo()
-			ui_manager.update_object_info(selection_manager.selected_items)
+			ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
 		"duplicate":
 			_duplicate_selected_items()
 		"delete":
@@ -1102,6 +1117,48 @@ func _exit_connect_mode() -> void:
 	connect_mode.exit_connect_mode()
 	_set_transform_mode(TransformMode.SELECT)
 
+	# Update the connect mode button state
+	if ui_manager and ui_manager.connect_mode_button:
+		ui_manager.connect_mode_button.button_pressed = false
+
+
+func _on_ghost_mode_toggled(enabled: bool) -> void:
+	"""Toggle ghost mode (semi-transparent objects)."""
+	ghost_mode_enabled = enabled
+	_apply_ghost_mode_to_all_items()
+	print("Ghost mode: ", "enabled" if enabled else "disabled")
+
+
+func _apply_ghost_mode_to_all_items() -> void:
+	"""Apply or remove ghost mode transparency to all items in the workbench."""
+	for child in world.get_children():
+		if child is PhysicalItem:
+			_set_item_ghost_mode(child, ghost_mode_enabled)
+
+
+func _set_item_ghost_mode(item: PhysicalItem, enabled: bool) -> void:
+	"""Set ghost mode (transparency) for a single item."""
+	# Get all MeshInstance3D children recursively
+	var meshes: Array[MeshInstance3D] = []
+	_get_all_mesh_instances(item, meshes)
+
+	for mesh in meshes:
+		if enabled:
+			# Enable transparency
+			mesh.transparency = 0.5
+		else:
+			# Disable transparency
+			mesh.transparency = 1.0
+
+
+func _get_all_mesh_instances(node: Node, meshes: Array[MeshInstance3D]) -> void:
+	"""Recursively find all MeshInstance3D nodes."""
+	if node is MeshInstance3D:
+		meshes.append(node)
+
+	for child in node.get_children():
+		_get_all_mesh_instances(child, meshes)
+
 
 # Public API
 
@@ -1127,6 +1184,9 @@ func spawn_part(scene_path: String) -> Node3D:
 
 	if node is PhysicalItem:
 		node.freeze = true
+		# Apply ghost mode if it's currently enabled
+		if ghost_mode_enabled:
+			_set_item_ghost_mode(node, true)
 		print("SUCCESS: Spawned PhysicalItem: %s at origin" % node.item_name)
 	else:
 		print("SUCCESS: Spawned node (not PhysicalItem): %s" % node.name)
@@ -1245,4 +1305,4 @@ func _is_mouse_over_viewport() -> bool:
 func _update_all_ui() -> void:
 	"""Update all UI elements."""
 	_update_gizmo()
-	ui_manager.update_object_info(selection_manager.selected_items)
+	ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)

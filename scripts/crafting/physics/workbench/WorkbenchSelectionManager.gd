@@ -235,22 +235,74 @@ func try_box_select(shift_held: bool = false, ctrl_held: bool = false) -> void:
 
 	# Update selection
 	if items_to_select.size() > 0:
+		# Build a set of all unique clusters/items to select
+		# This prevents selecting the same cluster multiple times
+		var clusters_to_select: Array[Array] = []
+		var processed_items: Array[PhysicalItem] = []
+
+		for item in items_to_select:
+			# Skip if already processed as part of another cluster
+			if item in processed_items:
+				continue
+
+			# Get the cluster for this item
+			var cluster = item.get_bonded_cluster()
+
+			# Mark all items in this cluster as processed
+			for cluster_item in cluster:
+				if cluster_item not in processed_items:
+					processed_items.append(cluster_item)
+
+			# Add the cluster to our list
+			clusters_to_select.append(cluster)
+
 		# Ctrl = deselect mode
 		if ctrl_held:
-			for item in items_to_select:
-				deselect_item(item)
-			print("Box deselected ", items_to_select.size(), " item(s)")
-		# Shift = add to selection
-		elif shift_held:
-			for item in items_to_select:
-				select_item(item, true)
-			print("Box selected ", items_to_select.size(), " item(s)")
-		# Normal = replace selection
+			for cluster in clusters_to_select:
+				for item in cluster:
+					deselect_item(item)
+			print("Box deselected ", clusters_to_select.size(), " cluster(s)")
+		# Shift = add to selection, Normal = replace selection
 		else:
-			clear_selection()
-			for item in items_to_select:
-				select_item(item, true)
-			print("Box selected ", items_to_select.size(), " item(s)")
+			if not shift_held:
+				clear_selection()
+
+			# Select all items from all clusters
+			var total_selected = 0
+			for cluster in clusters_to_select:
+				for item in cluster:
+					if item not in selected_items:
+						selected_items.append(item)
+						item.show_highlight(true)
+						total_selected += 1
+
+			# Determine if we should use cluster pivot
+			# Only use cluster pivot if we selected exactly ONE cluster with multiple items
+			if clusters_to_select.size() == 1 and clusters_to_select[0].size() > 1:
+				var cluster = clusters_to_select[0]
+				# Calculate cluster pivot point (average of all fastener connection points)
+				var connection_points: Array[Vector3] = []
+				for cluster_item in cluster:
+					for fastener in cluster_item.fasteners:
+						if fastener.joint and fastener.joint.joint_node:
+							connection_points.append(fastener.joint.joint_node.global_position)
+
+				if connection_points.size() > 0:
+					cluster_pivot_point = Vector3.ZERO
+					for point in connection_points:
+						cluster_pivot_point += point
+					cluster_pivot_point /= connection_points.size()
+					cluster_pivot_active = true
+					print("Box selected 1 cluster (%d items) - pivot active" % cluster.size())
+				else:
+					cluster_pivot_active = false
+					print("Box selected 1 cluster (%d items) - no pivot (no joints)" % cluster.size())
+			else:
+				# Multiple clusters or single items - no cluster pivot
+				cluster_pivot_active = false
+				print("Box selected %d cluster(s) with %d total items" % [clusters_to_select.size(), total_selected])
+
+			selection_changed.emit(selected_items)
 	else:
 		# No items selected - clear selection only if neither shift nor ctrl is held
 		if not shift_held and not ctrl_held:

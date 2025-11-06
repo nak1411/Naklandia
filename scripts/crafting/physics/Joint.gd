@@ -76,9 +76,20 @@ func create_physics_joint(parent: Node3D) -> bool:
 			physics_joint = _create_spring_joint()
 
 	if physics_joint:
+		# Add to tree first before setting positions
 		parent.add_child(physics_joint)
 		physics_joint.set_node_a(item_a.get_path())
 		physics_joint.set_node_b(item_b.get_path())
+
+		# NOW set position and transform (after being in tree)
+		physics_joint.global_position = item_a.global_position + item_a.global_transform.basis * anchor_point_a
+
+		# For hinge joints, also set rotation
+		if joint_type == JointType.HINGE:
+			var transform = Transform3D()
+			transform.basis = Basis.from_euler(anchor_rotation)
+			transform.origin = physics_joint.global_position
+			physics_joint.global_transform = transform
 
 		# Create visual helper gizmo
 		_create_visual_helper(parent)
@@ -189,9 +200,7 @@ func _create_fixed_joint() -> Generic6DOFJoint3D:
 		joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_LOWER_LIMIT, 0)
 		joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_UPPER_LIMIT, 0)
 
-	# Set position
-	joint.global_position = item_a.global_position + item_a.global_transform.basis * anchor_point_a
-
+	# Note: Position will be set after adding to tree
 	return joint
 
 
@@ -207,14 +216,7 @@ func _create_hinge_joint() -> HingeJoint3D:
 	joint.set_flag(HingeJoint3D.FLAG_USE_LIMIT, true)
 	joint.set_flag(HingeJoint3D.FLAG_ENABLE_MOTOR, false)
 
-	# Set position and rotation
-	joint.global_position = item_a.global_position + item_a.global_transform.basis * anchor_point_a
-
-	# Align joint axis
-	var transform = Transform3D()
-	transform.basis = Basis.from_euler(anchor_rotation)
-	joint.global_transform = transform
-
+	# Note: Position and rotation will be set after adding to tree
 	return joint
 
 
@@ -230,9 +232,7 @@ func _create_ball_socket_joint() -> ConeTwistJoint3D:
 	joint.set_param(ConeTwistJoint3D.PARAM_SOFTNESS, 0.8)
 	joint.set_param(ConeTwistJoint3D.PARAM_RELAXATION, 1.0)
 
-	# Set position
-	joint.global_position = item_a.global_position + item_a.global_transform.basis * anchor_point_a
-
+	# Note: Position will be set after adding to tree
 	return joint
 
 
@@ -281,9 +281,7 @@ func _create_slider_joint() -> Generic6DOFJoint3D:
 		joint.set_param_z(Generic6DOFJoint3D.PARAM_LINEAR_LOWER_LIMIT, min_limit)
 		joint.set_param_z(Generic6DOFJoint3D.PARAM_LINEAR_UPPER_LIMIT, max_limit)
 
-	# Set position
-	joint.global_position = item_a.global_position + item_a.global_transform.basis * anchor_point_a
-
+	# Note: Position will be set after adding to tree
 	return joint
 
 
@@ -305,9 +303,7 @@ func _create_spring_joint() -> Generic6DOFJoint3D:
 	joint.set_param_y(Generic6DOFJoint3D.PARAM_LINEAR_SPRING_DAMPING, friction * 5.0)
 	joint.set_param_z(Generic6DOFJoint3D.PARAM_LINEAR_SPRING_DAMPING, friction * 5.0)
 
-	# Set position
-	joint.global_position = item_a.global_position + item_a.global_transform.basis * anchor_point_a
-
+	# Note: Position will be set after adding to tree
 	return joint
 
 

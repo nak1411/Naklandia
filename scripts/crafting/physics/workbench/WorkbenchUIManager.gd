@@ -198,7 +198,7 @@ func clear_transform_stats() -> void:
 		transform_stats_label.text = ""
 
 
-func update_object_info(selected_items: Array[PhysicalItem]) -> void:
+func update_object_info(selected_items: Array[PhysicalItem], is_cluster: bool = false) -> void:
 	"""Update the object info label showing selected object's transform data."""
 	if not object_info_label:
 		return
@@ -212,7 +212,12 @@ func update_object_info(selected_items: Array[PhysicalItem]) -> void:
 
 	if selected_items.size() > 1:
 		# Multiple objects - show count and joint/fastener info
-		var text = "Multiple Selected (%d objects)" % selected_items.size()
+		var text = ""
+		if is_cluster:
+			text = "Cluster Selected (%d objects)" % selected_items.size()
+		else:
+			text = "Multiple Selected (%d objects)" % selected_items.size()
+
 		var total_joints = 0
 		var total_fasteners = 0
 

@@ -487,8 +487,17 @@ layout_mode = 2
 mouse_filter = 2
 
 [node name="TransformModeButtons" type="HBoxContainer" parent="VBoxContainer/MainContent/ViewportContainer"]
-layout_mode = 2
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -180.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = 48.0
+grow_horizontal = 0
 theme_override_constants/separation = 5
+alignment = 2
 
 [node name="SelectButton" type="Button" parent="VBoxContainer/MainContent/ViewportContainer/TransformModeButtons"]
 custom_minimum_size = Vector2(32, 32)
@@ -529,6 +538,15 @@ icon = ExtResource("scale_icon")
 flat = true
 icon_alignment = 1
 expand_icon = true
+
+[node name="GhostModeButton" type="Button" parent="VBoxContainer/MainContent/ViewportContainer/TransformModeButtons"]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+tooltip_text = "Toggle Ghost Mode (Semi-Transparent)"
+text = "G"
+flat = true
 
 [node name="TransformStatsLabel" type="Label" parent="VBoxContainer/MainContent/ViewportContainer"]
 layout_mode = 2

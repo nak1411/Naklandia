@@ -265,8 +265,8 @@ func update_gizmo_position(selected_items: Array[PhysicalItem], cluster_pivot_ac
 	if not transform_gizmo:
 		return
 
-	# Hide gizmo if nothing selected or in select mode
-	if selected_items.is_empty() or current_transform_mode == TransformMode.SELECT:
+	# Hide gizmo if nothing selected, in select mode, or in connect mode
+	if selected_items.is_empty() or current_transform_mode == TransformMode.SELECT or current_transform_mode == TransformMode.CONNECT:
 		transform_gizmo.visible = false
 		gizmo_visibility_changed.emit(false)
 		return
