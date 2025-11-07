@@ -11,9 +11,7 @@ extends PickupableItem
 func _configure_item_properties():
 	var item_database = get_node_or_null("/root/ItemDatabase")
 	if not item_database:
-		push_error(
-			"ResourcePickup: ItemDatabase singleton not found! Make sure it's set up as an AutoLoad."
-		)
+		push_error("ResourcePickup: ItemDatabase singleton not found! Make sure it's set up as an AutoLoad.")
 		return
 
 	var item_def = item_database.get_item(item_id)

@@ -1,72 +1,72 @@
 {
-  "resource_noxite": {
-    "name": "Noxite",
-    "description": "A liquid that can be used as a fuel source.",
-    "type": "RESOURCE",
-    "volume": 0.125,
-    "mass": 0.1,
-    "value": 10.0,
-    "icon_path": "res://assets/textures/ui/icons/resource.png",
-    "max_stack_size": 999999
-  },
-  "resource_iron_ore": {
-    "name": "Iron Ore",
-    "description": "Unrefined metallic mineral used in industrial production. Smelted to produce iron, the base metal for machinery, structures, and tools.",
-    "type": "RESOURCE",
-    "volume": 0.125,
-    "mass": 0.1,
-    "value": 10.0,
-    "icon_path": "res://assets/textures/ui/icons/iron_ore_slot.png",
-    "max_stack_size": 999999
-  },
-  "resource_copper_ore": {
-    "name": "Copper Ore",
-    "description": "Unrefined mineral containing traces of copper. Processed through smelting to produce copper ingots for electrical and mechanical applications.",
-    "type": "RESOURCE",
-    "volume": 0.125,
-    "mass": 0.1,
-    "value": 10.0,
-    "icon_path": "res://assets/textures/ui/icons/copper_ore_slot.png",
-    "max_stack_size": 999999
-  },
-  "resource_iron_ingot": {
-    "name": "Iron Ingot",
-    "description": "Refined from raw iron ore. A durable, versatile metal used in construction, machinery, and component fabrication.",
-    "type": "RESOURCE",
-    "volume": 0.125,
-    "mass": 0.1,
-    "value": 10.0,
-    "icon_path": "res://assets/textures/ui/icons/iron_ingot_slot.png",
-    "max_stack_size": 999999
-  },
-  "resource_steel_round_bar": {
-    "name": "Steel Round Bar",
-    "description": "Alloyed and forged from iron and carbon into cylindrical form. Used in high-strength frameworks, shafts, hardware, and assemblies.",
-    "type": "RESOURCE",
-    "volume": 0.125,
-    "mass": 0.1,
-    "value": 10.0,
-    "icon_path": "res://assets/textures/ui/icons/steel_round_bar_slot.png",
-    "max_stack_size": 999999
-  },
-  "resource_copper_ingot": {
-    "name": "Copper Ingot",
-    "description": "Refined from copper ore. A highly conductive metal used in wiring, electronics, and precision components.",
-    "type": "RESOURCE",
-    "volume": 0.125,
-    "mass": 0.1,
-    "value": 10.0,
-    "icon_path": "res://assets/textures/ui/icons/copper_ingot_slot.png",
-    "max_stack_size": 999999
-  },
-  "resource_resinwood_log": {
-    "name": "Resinwood Log",
-    "description": "A tough, fibrous log streaked with pale blue resin veins. Light yet strong, it's prized for building and crafting durable structures.",
-    "type": "RESOURCE",
-    "volume": 0.125,
-    "mass": 0.1,
-    "value": 10.0,
-    "icon_path": "res://assets/textures/ui/icons/resinwood_log_slot.png",
-    "max_stack_size": 999999
-  }
+	"resource_noxite": {
+		"name": "Noxite",
+		"description": "A liquid that can be used as a fuel source.",
+		"type": "RESOURCE",
+		"volume": 0.125,
+		"mass": 0.1,
+		"value": 10.0,
+		"icon_path": "res://assets/textures/ui/icons/resource.png",
+		"max_stack_size": 999999
+	},
+	"resource_iron_ore": {
+		"name": "Iron Ore",
+		"description": "Unrefined metallic mineral used in industrial production. Smelted to produce iron, the base metal for machinery, structures, and tools.",
+		"type": "RESOURCE",
+		"volume": 0.125,
+		"mass": 0.1,
+		"value": 10.0,
+		"icon_path": "res://assets/textures/ui/icons/iron_ore_slot.png",
+		"max_stack_size": 999999
+	},
+	"resource_copper_ore": {
+		"name": "Copper Ore",
+		"description": "Unrefined mineral containing traces of copper. Processed through smelting to produce copper ingots for electrical and mechanical applications.",
+		"type": "RESOURCE",
+		"volume": 0.125,
+		"mass": 0.1,
+		"value": 10.0,
+		"icon_path": "res://assets/textures/ui/icons/copper_ore_slot.png",
+		"max_stack_size": 999999
+	},
+	"resource_iron_ingot": {
+		"name": "Iron Ingot",
+		"description": "Refined from raw iron ore. A durable, versatile metal used in construction, machinery, and component fabrication.",
+		"type": "RESOURCE",
+		"volume": 0.125,
+		"mass": 0.1,
+		"value": 10.0,
+		"icon_path": "res://assets/textures/ui/icons/iron_ingot_slot.png",
+		"max_stack_size": 999999
+	},
+	"resource_steel_round_bar": {
+		"name": "Steel Round Bar",
+		"description": "Alloyed and forged from iron and carbon into cylindrical form. Used in high-strength frameworks, shafts, hardware, and assemblies.",
+		"type": "RESOURCE",
+		"volume": 0.125,
+		"mass": 0.1,
+		"value": 10.0,
+		"icon_path": "res://assets/textures/ui/icons/steel_round_bar_slot.png",
+		"max_stack_size": 999999
+	},
+	"resource_copper_ingot": {
+		"name": "Copper Ingot",
+		"description": "Refined from copper ore. A highly conductive metal used in wiring, electronics, and precision components.",
+		"type": "RESOURCE",
+		"volume": 0.125,
+		"mass": 0.1,
+		"value": 10.0,
+		"icon_path": "res://assets/textures/ui/icons/copper_ingot_slot.png",
+		"max_stack_size": 999999
+	},
+	"resource_resinwood_log": {
+		"name": "Resinwood Log",
+		"description": "A tough, fibrous log streaked with pale blue resin veins. Light yet strong, it's prized for building and crafting durable structures.",
+		"type": "RESOURCE",
+		"volume": 0.125,
+		"mass": 0.1,
+		"value": 10.0,
+		"icon_path": "res://assets/textures/ui/icons/resinwood_log_slot.png",
+		"max_stack_size": 999999
+	}
 }

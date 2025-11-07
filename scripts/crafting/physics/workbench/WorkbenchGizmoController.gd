@@ -278,9 +278,9 @@ func update_gizmo_position(selected_items: Array[PhysicalItem], cluster_pivot_ac
 	if cluster_pivot_active:
 		center = cluster_pivot_point
 	else:
-		# Default: average of all selected item positions
+		# Default: average of all selected item visual centers
 		for item in selected_items:
-			center += item.global_position
+			center += item.get_visual_center()
 		center /= selected_items.size()
 
 	# Distance-based culling: hide gizmo if too far away
@@ -550,8 +550,11 @@ func _update_rotate_drag(mouse_delta: Vector2, selected_items: Array[PhysicalIte
 	# Update stats display
 	transform_updated.emit("Rotate", rad_to_deg(angle), axis_world)
 
-	# Get the pivot point (gizmo position)
+	# Get the pivot point (gizmo position - this is the center of all selected items)
 	var pivot = gizmo_drag_plane_origin
+
+	# Create rotation around the axis
+	var rotation_basis = Basis(axis_world, angle)
 
 	# Apply rotation from initial state
 	for item in gizmo_drag_initial_rotations.keys():
@@ -559,13 +562,10 @@ func _update_rotate_drag(mouse_delta: Vector2, selected_items: Array[PhysicalIte
 			var initial_basis = gizmo_drag_initial_rotations[item]
 			var initial_position = gizmo_drag_initial_positions[item]
 
-			# Create rotation around the axis
-			var rotation_basis = Basis(axis_world, angle)
-
 			# Apply rotation to the item's basis
 			item.basis = rotation_basis * initial_basis
 
-			# Rotate position around the pivot point
+			# Rotate position around the pivot point (gizmo center, not item center)
 			var offset_from_pivot = initial_position - pivot
 			var rotated_offset = rotation_basis * offset_from_pivot
 			item.global_position = pivot + rotated_offset

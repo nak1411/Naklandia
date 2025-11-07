@@ -172,6 +172,18 @@ func set_rotation_smooth(target_basis: Basis, delta: float, speed: float = 10.0)
 		global_transform.basis = global_transform.basis.slerp(target_basis, delta * speed)
 
 
+func get_visual_center() -> Vector3:
+	"""Get the center of the visual mesh in world space."""
+	if mesh_instance and mesh_instance.mesh:
+		var aabb = mesh_instance.mesh.get_aabb()
+		var local_center = aabb.get_center()
+		# Transform from mesh's local space to world space
+		return mesh_instance.global_transform * local_center
+	else:
+		# Fallback to object position if no mesh
+		return global_position
+
+
 func get_info_text() -> String:
 	"""Get display text for UI."""
 	var info = "[b]%s[/b]\n" % item_name

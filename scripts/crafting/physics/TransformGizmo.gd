@@ -232,18 +232,8 @@ func _create_torus_circle(axis: Vector3, material: StandardMaterial3D) -> MeshIn
 	depth_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	depth_material.disable_receive_shadows = true
 
-	# Enable depth testing for rotation circles to show proper occlusion
-	# but disable depth writing so they don't occlude each other completely
-	depth_material.no_depth_test = false  # Enable depth test
-	depth_material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED  # But don't write depth
-
-	# Add slight transparency to show overlapping circles
-	depth_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	depth_material.albedo_color.a = 0.9  # Slightly transparent
-
-	# Render hint for better blending
-	depth_material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
-	depth_material.cull_mode = BaseMaterial3D.CULL_BACK  # Cull back faces for cleaner look
+	# Disable depth testing to render on top like other gizmos
+	depth_material.no_depth_test = true  # Always render on top
 
 	torus.material_override = depth_material
 
@@ -489,24 +479,8 @@ func _highlight_mesh(mesh: MeshInstance3D) -> void:
 	if not mesh:
 		return
 
-	# For rotation circles, create a depth-aware highlight material
-	if mesh.get_parent() == rotate_gizmo:
-		var highlight_mat = StandardMaterial3D.new()
-		highlight_mat.albedo_color = Color(1, 1, 0, 1)  # Bright yellow
-		highlight_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		highlight_mat.disable_receive_shadows = true
-
-		# Match the depth settings from rotation circles
-		highlight_mat.no_depth_test = false
-		highlight_mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
-		highlight_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		highlight_mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
-		highlight_mat.cull_mode = BaseMaterial3D.CULL_BACK
-
-		mesh.material_override = highlight_mat
-	else:
-		# For other meshes, use the standard highlight material
-		mesh.material_override = material_highlight
+	# Use standard highlight material for all meshes (always render on top)
+	mesh.material_override = material_highlight
 
 
 func _highlight_scale_handle(handle: Node3D) -> void:
@@ -592,12 +566,7 @@ func _restore_rotation_circle_material(circle: MeshInstance3D, base_material: St
 	depth_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	depth_material.disable_receive_shadows = true
 
-	# Restore depth-aware settings
-	depth_material.no_depth_test = false
-	depth_material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
-	depth_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	depth_material.albedo_color.a = 0.9
-	depth_material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
-	depth_material.cull_mode = BaseMaterial3D.CULL_BACK
+	# Restore to always render on top like other gizmos
+	depth_material.no_depth_test = true
 
 	circle.material_override = depth_material

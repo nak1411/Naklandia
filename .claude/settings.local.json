@@ -11,7 +11,8 @@
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" fsck --lost-found)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show --stat 025b193924b888bba1088c0f2b674d53d6f6415f)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show a908eb3 --stat)",
-      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show a908eb3:scripts/crafting/physics/WorkbenchWindow.gd)"
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show a908eb3:scripts/crafting/physics/WorkbenchWindow.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scenes/crafting/workbench_window.tscn)"
     ],
     "deny": [],
     "ask": []
