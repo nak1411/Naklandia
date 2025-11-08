@@ -13,7 +13,10 @@ enum SpawnMode { RANDOM, DESIGNATED }
 @export var designated_item_types: Array[String] = []
 
 # For random spawning
-@export var random_item_pool: Array[String] = ["AmmoPickup", "ModulePickup", "ResourcePickup", "BlueprintPickup"]
+@export var random_item_pool: Array[String] = ["AmmoPickup", "ModulePickup", "ResourcePickup", "BlueprintPickup", "ImportedMesh"]
+
+# For imported mesh spawning
+@export var mesh_scene_paths: Array[String] = []  # Paths to .glb or .tscn files to spawn
 
 # Spawn positioning
 @export var spawn_radius: float = 5.0
@@ -102,11 +105,14 @@ func create_item(item_type: String, position: Vector3) -> Node3D:
 			item = create_resource_pickup(position)
 		"BlueprintPickup":
 			item = create_blueprint_pickup(position)
+		"ImportedMesh":
+			item = create_imported_mesh(position)
 		_:
 			print("Unknown item type: ", item_type)
 			return null
 
-	get_tree().current_scene.add_child(item)
+	if item:
+		get_tree().current_scene.add_child(item)
 	return item
 
 
@@ -248,6 +254,49 @@ func create_blueprint_pickup(position: Vector3) -> BlueprintPickup:
 	raycast_target.add_child(target_collision)
 
 	return blueprint
+
+
+func create_imported_mesh(position: Vector3) -> Node3D:
+	if mesh_scene_paths.is_empty():
+		push_warning("ItemSpawner: No mesh scene paths configured for ImportedMesh spawning")
+		return null
+
+	# Select a random mesh from the configured paths
+	var mesh_path = mesh_scene_paths[randi() % mesh_scene_paths.size()]
+
+	# Load the scene
+	var mesh_scene = load(mesh_path)
+	if not mesh_scene:
+		push_error("ItemSpawner: Failed to load mesh scene at path: " + mesh_path)
+		return null
+
+	# Instantiate the scene
+	var mesh_instance = mesh_scene.instantiate()
+	if not mesh_instance is Node3D:
+		push_error("ItemSpawner: Loaded scene is not a Node3D: " + mesh_path)
+		mesh_instance.queue_free()
+		return null
+
+	mesh_instance.position = position
+
+	# If the mesh doesn't have a RigidBody3D or StaticBody3D, wrap it in one
+	if not mesh_instance is RigidBody3D and not mesh_instance is StaticBody3D:
+		# Check if it has collision shapes as children
+		var has_collision = false
+		for child in mesh_instance.get_children():
+			if child is CollisionShape3D:
+				has_collision = true
+				break
+
+		# If no collision, add a simple box collision based on the mesh bounds
+		if not has_collision:
+			var collision = CollisionShape3D.new()
+			var shape = BoxShape3D.new()
+			shape.size = Vector3(0.5, 0.5, 0.5)  # Default size, adjust as needed
+			collision.shape = shape
+			mesh_instance.add_child(collision)
+
+	return mesh_instance
 
 
 func _on_item_cleanup(item: Node3D):

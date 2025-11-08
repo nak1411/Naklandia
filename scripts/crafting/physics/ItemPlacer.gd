@@ -58,15 +58,12 @@ func _physics_process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# Pick up / drop item
-	if event.is_action_pressed("interact"):  # E key
-		print("Interact pressed! held_item: ", held_item, " hovered_item: ", hovered_item)
+	# Pick up / drop item with Z key (physical grab)
+	if event.is_action_pressed("physical_grab"):  # Z key
 		if held_item:
 			drop_item()
 		elif hovered_item:
 			pickup_item(hovered_item)
-		else:
-			print("No item to interact with")
 
 	# Rotation controls (only when holding item)
 	if held_item:
@@ -133,7 +130,6 @@ func _set_hovered_item(item: PhysicalItem) -> void:
 	# Set new hover
 	hovered_item = item
 	if hovered_item:
-		print("Now hovering: ", hovered_item.item_name)
 		hovered_item.show_highlight(true)
 
 

@@ -54,6 +54,8 @@ func update_raycast():
 	query.from = from
 	query.to = to
 	query.collision_mask = 1 << (raycast_layer - 1)  # Only layer 2
+	query.collide_with_areas = true  # IMPORTANT: Allow raycasts to hit Area3D nodes
+	query.collide_with_bodies = true
 	query.exclude = exclude_objects
 
 	var result = space_state.intersect_ray(query)
