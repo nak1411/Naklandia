@@ -739,6 +739,20 @@ func _place_items_compactly(items: Array[InventoryItem_Base]):
 	var placed_items = 0
 	var total_items = items.size()
 
+	# DEBUG: Log item placement for assemblies
+	var has_assembly = false
+	for item in items:
+		if item.has_meta("is_assembly") and item.get_meta("is_assembly"):
+			has_assembly = true
+			break
+
+	if has_assembly:
+		print("[InventoryGrid._place_items_compactly] Placing ", total_items, " items (including assembly)")
+		for i in range(items.size()):
+			var item = items[i]
+			var is_asm = item.has_meta("is_assembly") and item.get_meta("is_assembly")
+			print("  [", i, "] ", item.item_name, " (assembly: ", is_asm, ")")
+
 	for y in range(current_grid_height):
 		if placed_items >= total_items:
 			break
@@ -757,6 +771,11 @@ func _place_items_compactly(items: Array[InventoryItem_Base]):
 			slots[y][x].set_item(item)
 			item_positions[item] = Vector2i(x, y)
 			available_slots.erase(Vector2i(x, y))
+
+			# DEBUG: Log assembly placement
+			if item.has_meta("is_assembly") and item.get_meta("is_assembly"):
+				print("[InventoryGrid._place_items_compactly] Placed assembly '", item.item_name, "' at position (", x, ", ", y, ") - slot index ", placed_items)
+
 			placed_items += 1
 
 
@@ -1352,6 +1371,9 @@ func trigger_compact_refresh():
 
 func _trigger_compact_refresh():
 	"""Trigger a compact refresh without full reflow"""
+	# DEBUG: Log when compact refresh is triggered
+	print("[InventoryGrid._trigger_compact_refresh] Called - will compact all items")
+
 	if not container:
 		return
 
@@ -1550,7 +1572,13 @@ func _smart_refresh_slots():
 		for x in range(slots[y].size()):
 			var slot = slots[y][x]
 			if slot and slot.has_item():
-				current_slot_items[slot.get_item()] = Vector2i(x, y)
+				var item = slot.get_item()
+				var pos = Vector2i(x, y)
+				current_slot_items[item] = pos
+				# FIX: Ensure item_positions is always in sync with actual slot contents
+				if not item_positions.has(item) or item_positions[item] != pos:
+					print("[InventoryGrid._smart_refresh_slots] Syncing item_positions for '", item.item_name, "' to ", pos)
+					item_positions[item] = pos
 
 	# Clear cached visible items and rebuild
 	_cached_visible_items.clear()
@@ -1839,6 +1867,19 @@ func _on_slot_clicked(slot: InventorySlot, event: InputEvent):
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if slot.has_item():
+				var item = slot.get_item()
+
+				# FIX: Ensure item position is set if it's missing
+				if not item_positions.has(item) or item_positions.get(item) == Vector2i(-1, -1):
+					print("[InventoryGrid._on_slot_clicked] WARNING: Item '", item.item_name, "' has invalid position, setting to slot grid position")
+					item_positions[item] = slot.grid_position
+
+				# DEBUG: Log Assembly item clicks
+				if item.has_meta("is_assembly") and item.get_meta("is_assembly"):
+					print("[InventoryGrid._on_slot_clicked] Assembly item '", item.item_name, "' clicked at grid position ", slot.grid_position)
+					print("  Current item position in item_positions: ", item_positions.get(item, Vector2i(-1, -1)))
+					print("  Container items array index: ", container.items.find(item))
+
 				if Input.is_key_pressed(KEY_CTRL):
 					_toggle_slot_selection(slot)
 				else:
@@ -1846,6 +1887,10 @@ func _on_slot_clicked(slot: InventorySlot, event: InputEvent):
 					if not (selected_slots.size() == 1 and selected_slots[0] == slot):
 						clear_selection()
 					item_selected.emit(slot.get_item(), slot)
+
+					# DEBUG: Log after emit for Assembly items
+					if item.has_meta("is_assembly") and item.get_meta("is_assembly"):
+						print("[InventoryGrid._on_slot_clicked] After emit - Assembly item position: ", item_positions.get(item, Vector2i(-1, -1)))
 
 
 func _on_slot_right_clicked(slot: InventorySlot, event: InputEvent):
@@ -2507,13 +2552,23 @@ func get_slot_at_grid_position(grid_pos: Vector2i) -> InventorySlot:
 
 # Container event handlers - DISABLE these during drag operations
 func _on_container_item_added(_item: InventoryItem_Base, _position: Vector2i):
+	# DEBUG: Log when Assembly items are added
+	if _item.has_meta("is_assembly") and _item.get_meta("is_assembly"):
+		print("[InventoryGrid._on_container_item_added] Assembly '", _item.item_name, "' added to container")
+		print("  enable_virtual_scrolling: ", enable_virtual_scrolling)
+		print("  _is_refreshing_display: ", _is_refreshing_display)
+		print("  _resize_complete_timer.time_left: ", _resize_complete_timer.time_left)
+
 	if enable_virtual_scrolling:
 		# Just refresh virtual display
 		call_deferred("refresh_display")
 	else:
 		# Traditional handling - always compact when items are added from transfers
 		if not _is_refreshing_display and not _resize_complete_timer.time_left > 0.0:
+			print("[InventoryGrid._on_container_item_added] Calling deferred _trigger_compact_refresh")
 			call_deferred("_trigger_compact_refresh")
+		else:
+			print("[InventoryGrid._on_container_item_added] BLOCKED: Cannot trigger compact refresh (refreshing: ", _is_refreshing_display, ", resize timer: ", _resize_complete_timer.time_left, ")")
 
 
 func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i):

@@ -33,7 +33,10 @@ func handle_mouse_button(event: InputEventMouseButton):
 		else:
 			# Mouse button released
 			if is_dragging:
-				_handle_drag_end(event.global_position)
+				# FIX: Only handle drag end if a drag preview was actually created
+				# This prevents treating clicks as failed drags
+				if drag_preview_created:
+					_handle_drag_end(event.global_position)
 				is_dragging = false
 				drag_preview_created = false
 
@@ -217,18 +220,29 @@ func _find_best_drop_slot(_mouse_pos: Vector2) -> InventorySlot:
 	"""Find the best slot to drop on based on bounding box detection"""
 	var grid = _get_inventory_grid()
 	if not grid:
+		print("[_find_best_drop_slot] No grid found")
 		return null
 
 	# Get the drag preview for bounding box calculations
 	var drag_preview = _get_current_drag_preview()
 	if not drag_preview:
+		print("[_find_best_drop_slot] No drag preview found")
 		return null
+
+	# DEBUG: Log preview and grid info
+	var item = slot.get_item()
+	if item and item.has_meta("is_assembly") and item.get_meta("is_assembly"):
+		print("[_find_best_drop_slot] Assembly item drag detection:")
+		print("  Preview position: ", drag_preview.global_position)
+		print("  Preview size: ", drag_preview.size)
+		print("  Grid position: ", grid.global_position)
+		print("  Grid size: ", grid.size)
 
 	# CRITICAL: Check if drop position is within the grid's visible bounds
 	var grid_rect = Rect2(grid.global_position, grid.size)
 	var drop_position = drag_preview.global_position + drag_preview.size / 2
 	if not grid_rect.has_point(drop_position):
-		print("[_find_best_drop_slot] Drop position outside grid bounds - rejecting")
+		print("[_find_best_drop_slot] Drop position ", drop_position, " outside grid bounds ", grid_rect, " - rejecting")
 		return null
 
 	# Create bounding box for the dragged item
@@ -250,8 +264,11 @@ func _find_best_virtual_slot_with_bounds(preview_rect: Rect2, grid: InventoryGri
 
 	# Check each rendered slot for bounding box overlap
 	for slot_check in grid.virtual_rendered_slots:
-		if not slot_check or slot_check == slot:
+		if not slot_check:
 			continue
+
+		# FIX: Allow dropping back on the source slot (removed slot_check == slot check)
+		# This prevents failed drops when dragging an item just slightly
 
 		var slot_rect = Rect2(slot_check.global_position, slot_check.size)
 
@@ -278,8 +295,11 @@ func _find_best_traditional_slot_with_bounds(preview_rect: Rect2, grid: Inventor
 		for x in grid.current_grid_width:
 			if y < grid.slots.size() and x < grid.slots[y].size():
 				var slot_check = grid.slots[y][x]
-				if not slot_check or slot_check == slot:
+				if not slot_check:
 					continue
+
+				# FIX: Allow dropping back on the source slot (removed slot_check == slot check)
+				# This prevents failed drops when dragging an item just slightly
 
 				var slot_rect = Rect2(slot_check.global_position, slot_check.size)
 
@@ -526,6 +546,11 @@ func _attempt_drop_on_slot(target_slot: InventorySlot, _end_position: Vector2) -
 	"""Attempt to drop item on another slot"""
 	if not target_slot or not slot.has_item():
 		return false
+
+	# FIX: If dropping on the same slot, just cancel the drag successfully
+	if target_slot == slot:
+		print("[InventorySlotDragHandler._attempt_drop_on_slot] Dropping on same slot - canceling drag")
+		return true  # Return true to indicate successful "no-op" drop
 
 	# Emit the drop signal first
 	item_dropped_on_slot.emit(slot, target_slot)
