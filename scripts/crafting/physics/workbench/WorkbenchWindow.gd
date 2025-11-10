@@ -41,6 +41,8 @@ var is_ctrl_held: bool = false
 var initialized: bool = false
 var controls_visible: bool = false
 var ghost_mode_enabled: bool = false
+var input_enabled: bool = true  # Flag to completely disable input processing
+var is_closing: bool = false  # Flag to prevent re-enabling during close
 
 # Gizmo scale
 var gizmo_scale: float = 1.0
@@ -316,6 +318,11 @@ func _notification(what: int) -> void:
 	match what:
 		NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 			_reset_all_drag_states()
+		NOTIFICATION_VISIBILITY_CHANGED:
+			if not visible:
+				_on_window_hidden()
+			else:
+				_on_window_shown()
 
 
 func _reset_all_drag_states() -> void:
@@ -328,9 +335,65 @@ func _reset_all_drag_states() -> void:
 	selection_manager.cancel_box_select()
 
 
+func _on_window_shown() -> void:
+	"""Called when the window is shown - re-enable input processing."""
+	# Don't re-enable if we're in the process of closing
+	if is_closing:
+		return
+
+	# Reset closing flag when properly shown
+	is_closing = false
+
+	# Re-enable input processing when window becomes visible
+	input_enabled = true
+	set_process_input(true)
+	set_process_unhandled_input(true)
+
+
+func _on_window_hidden() -> void:
+	"""Called when the window is hidden - clean up all input state."""
+	# Set closing flag to prevent re-enabling
+	is_closing = true
+
+	# CRITICAL: Disable all input processing when hidden
+	input_enabled = false
+	set_process_input(false)
+	set_process_unhandled_input(false)
+
+	# Reset all input states
+	_reset_all_drag_states()
+
+	# Reset transform mode to SELECT
+	current_transform_mode = TransformMode.SELECT
+
+	# Exit connect mode if active
+	if connect_mode.is_active():
+		connect_mode.exit_connect_mode()
+
+	# Update UI to reflect default state
+	if ui_manager:
+		ui_manager.update_mode_buttons(TransformMode.SELECT as WorkbenchUIManager.TransformMode)
+
+		# Reset button states
+		if ui_manager.connect_mode_button:
+			ui_manager.connect_mode_button.button_pressed = false
+
+	# Hide and reset gizmo
+	if transform_gizmo:
+		transform_gizmo.visible = false
+
+	# Clear any manual transform editing state
+	if manual_transform_timer:
+		manual_transform_timer.stop()
+	manual_transform_is_editing = false
+	manual_transform_initial_values.clear()
+	manual_transform_operation_type = ""
+
+
 func _input(event: InputEvent) -> void:
 	"""Handle global input events."""
-	if not visible:
+	# CRITICAL: Stop processing ALL input when window is not visible, initialized, or input disabled
+	if not visible or not initialized or not input_enabled:
 		return
 
 	# Track Alt, Shift, and Ctrl keys globally
@@ -460,7 +523,7 @@ func _update_joint_visual_helpers() -> void:
 
 func _gui_input(event: InputEvent) -> void:
 	"""Handle GUI input events."""
-	if not initialized or not _is_mouse_over_viewport():
+	if not initialized or not _is_mouse_over_viewport() or not input_enabled:
 		return
 
 	if event is InputEventMouseButton:

@@ -62,6 +62,9 @@ func _on_workbench_validated(success: bool, report: Dictionary):
 
 func _on_workbench_content_closed():
 	"""Handle workbench content requesting to close"""
+	# Disable input on workbench content first
+	if workbench_content and workbench_content.has_method("_on_window_hidden"):
+		workbench_content._on_window_hidden()
 	# Close the window
 	hide_window()
 
@@ -71,6 +74,33 @@ func _on_window_closed():
 	if workbench_content:
 		# Clear the workbench when closing
 		workbench_content.clear_workbench()
+		# Disable input on the workbench content when window closes (AFTER clearing)
+		if workbench_content.has_method("_on_window_hidden"):
+			workbench_content._on_window_hidden()
+
+
+func hide_window():
+	"""Override hide_window to properly disable workbench input"""
+	# Disable input on workbench content BEFORE hiding
+	if workbench_content:
+		# Explicitly hide the workbench content
+		workbench_content.visible = false
+		if workbench_content.has_method("_on_window_hidden"):
+			workbench_content._on_window_hidden()
+	# Call parent hide
+	super.hide_window()
+
+
+func show_window():
+	"""Override show_window to properly enable workbench input"""
+	# Call parent show
+	super.show_window()
+	# Re-enable input on workbench content AFTER showing
+	if workbench_content:
+		# Explicitly show the workbench content
+		workbench_content.visible = true
+		if workbench_content.has_method("_on_window_shown"):
+			workbench_content._on_window_shown()
 
 
 # Public API for accessing workbench functionality
