@@ -17,6 +17,11 @@ var window_stack: Array[Window_Base] = []  # Z-order stack
 # Window management properties
 var next_tearoff_layer: int = 60  # Start tearoffs higher than inventory (50)
 
+# Window positioning properties
+var last_window_position: Vector2 = Vector2(200, 100)  # Track last opened window position
+var window_cascade_offset: Vector2 = Vector2(40, 40)  # Offset for cascade positioning
+var window_initial_positions: Dictionary = {}  # Track initial positions by window type
+
 # Canvas layers for different UI elements
 @onready var game_ui_canvas: CanvasLayer  # Layer 10 - HUD and game UI
 @onready var menu_ui_canvas: CanvasLayer  # Layer 20 - Menus and overlays
@@ -122,6 +127,10 @@ func register_window(window: Window_Base, window_type: String = "tearoff") -> Ca
 	window_stack.append(window)
 
 	window.set_meta("window_type", window_type)
+
+	# Apply smart positioning to prevent overlap (only if window hasn't been positioned yet)
+	if window.position == Vector2(200, 100):  # Default position from Window_Base
+		_apply_smart_window_position(window, window_type)
 
 	# Create appropriate canvas layer
 	var canvas_layer = _create_window_canvas(window, window_type)
@@ -296,6 +305,95 @@ func _cleanup_invalid_windows():
 	# Clean up focused_window
 	if focused_window and not is_instance_valid(focused_window):
 		focused_window = null
+
+
+func _apply_smart_window_position(window: Window_Base, window_type: String):
+	"""Apply smart positioning to prevent window overlap"""
+	# Get viewport size for bounds checking
+	var viewport = get_viewport()
+	if not viewport:
+		return
+
+	var screen_size = viewport.get_visible_rect().size
+
+	# Define different starting positions for different window types
+	var type_offsets = {
+		"main_inventory": Vector2(100, 80),
+		"equipment": Vector2(150, 120),
+		"crafting": Vector2(200, 160),
+		"workbench": Vector2(250, 200),
+		"character": Vector2(300, 240),
+		"tearoff": Vector2(350, 280),
+		"dialog": Vector2(400, 320)
+	}
+
+	# Get the base position for this window type
+	var base_position = type_offsets.get(window_type, Vector2(200, 100))
+
+	# Check if this is the first window of this type
+	if not window_initial_positions.has(window_type):
+		# First window of this type - use base position
+		window_initial_positions[window_type] = base_position
+		window.position = base_position
+		last_window_position = base_position
+	else:
+		# Not the first window - check for overlap with existing windows
+		var new_position = _find_non_overlapping_position(window, base_position, screen_size)
+		window.position = new_position
+		last_window_position = new_position
+
+
+func _find_non_overlapping_position(new_window: Window_Base, preferred_position: Vector2, screen_size: Vector2) -> Vector2:
+	"""Find a position that doesn't overlap with existing windows"""
+	var test_position = preferred_position
+	var max_attempts = 20  # Prevent infinite loops
+	var attempts = 0
+
+	# Try cascade positions
+	while attempts < max_attempts:
+		var overlaps = false
+
+		# Check if this position overlaps with any existing window
+		for existing_window in active_windows:
+			if not is_instance_valid(existing_window):
+				continue
+			if existing_window == new_window:
+				continue
+			if not existing_window.visible:
+				continue
+
+			# Check for overlap
+			var existing_rect = Rect2(existing_window.position, existing_window.size)
+			var new_rect = Rect2(test_position, new_window.size)
+
+			if existing_rect.intersects(new_rect):
+				overlaps = true
+				break
+
+		# If no overlap, use this position
+		if not overlaps:
+			return test_position
+
+		# Try next cascade position
+		test_position += window_cascade_offset
+
+		# If we've cascaded too far off screen, reset to a different area
+		if test_position.x + new_window.size.x > screen_size.x - 50 or test_position.y + new_window.size.y > screen_size.y - 50:
+			# Try a different quadrant
+			if attempts < 5:
+				test_position = Vector2(screen_size.x * 0.3, 100)
+			elif attempts < 10:
+				test_position = Vector2(100, screen_size.y * 0.3)
+			elif attempts < 15:
+				test_position = Vector2(screen_size.x * 0.5, screen_size.y * 0.3)
+			else:
+				# Last resort - just use preferred position
+				return preferred_position
+
+		attempts += 1
+
+	# If we couldn't find a non-overlapping position, return the preferred position
+	return preferred_position
 
 
 func _set_window_focus_state(window: Window_Base, has_focus: bool):
