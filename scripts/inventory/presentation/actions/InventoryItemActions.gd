@@ -704,10 +704,16 @@ func show_clear_container_confirmation():
 
 
 # Item action implementations
-func use_item(item: InventoryItem_Base, _slot: InventorySlot):
+func use_item(item: InventoryItem_Base, slot: InventorySlot):
 	"""Use an item (consume, activate, etc.)"""
 	print("Using item: ", item.item_name)
-	# TODO: Implement item usage logic
+
+	# Check if this is an assembly item
+	if item.has_meta("is_assembly") and item.get_meta("is_assembly"):
+		_spawn_assembly_item(item, slot)
+		return
+
+	# TODO: Implement other item usage logic
 
 
 func equip_item(item: InventoryItem_Base, _slot: InventorySlot):
@@ -906,6 +912,68 @@ func is_context_menu_visible() -> bool:
 func get_context_menu() -> ContextMenu_Base:
 	"""Get reference to the context menu for external use"""
 	return context_menu
+
+
+func _spawn_assembly_item(item: InventoryItem_Base, _slot: InventorySlot):
+	"""Spawn an assembly item from inventory into the world."""
+	# Get assembly ID from item metadata
+	var assembly_id = item.get_meta("assembly_id", "")
+	if assembly_id.is_empty():
+		print("InventoryItemActions: Assembly item has no assembly_id")
+		return
+
+	# Get scene tree from window_parent
+	if not window_parent:
+		print("InventoryItemActions: No window_parent available")
+		return
+
+	var tree = window_parent.get_tree()
+	if not tree:
+		print("InventoryItemActions: Could not access scene tree")
+		return
+
+	# Get player reference
+	var players = tree.get_nodes_in_group("player")
+	if players.is_empty():
+		print("InventoryItemActions: No player found")
+		return
+
+	var player = players[0]
+
+	# Get world reference (assuming player's parent is the world)
+	var world = player.get_parent()
+	if not world:
+		print("InventoryItemActions: Could not find world node")
+		return
+
+	# Get spawn position (in front of player)
+	var spawn_position = player.global_position
+	if player.has_method("get_look_direction"):
+		var look_dir = player.get_look_direction()
+		spawn_position += look_dir * 3.0  # 3 units in front
+	else:
+		spawn_position += player.global_transform.basis.z * -3.0  # Default forward
+
+	# Create a temporary assembly manager instance
+	var assembly_manager = WorkbenchAssemblyManager.new()
+
+	# Spawn the assembly
+	var spawned_items = await assembly_manager.spawn_assembly_from_inventory_item(item, world, spawn_position)
+
+	if not spawned_items.is_empty():
+		print("InventoryItemActions: Spawned assembly '%s' with %d items" % [item.item_name, spawned_items.size()])
+
+		# Remove the item from inventory
+		if current_container and inventory_manager:
+			current_container.remove_item(item)
+			await window_parent.get_tree().process_frame
+			container_refreshed.emit()
+
+			# Show notification
+			NotificationManager.show_notification("Placed %s in world" % item.item_name)
+	else:
+		print("InventoryItemActions: Failed to spawn assembly")
+		NotificationManager.show_error("Failed to place assembly")
 
 
 func _parse_target_container_id(action_id: String) -> String:
