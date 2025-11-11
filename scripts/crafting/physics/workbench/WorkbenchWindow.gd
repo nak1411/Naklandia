@@ -7,7 +7,6 @@ extends Control
 ## See the workbench/ subfolder for individual module documentation.
 
 # Signals
-signal item_validated(success: bool, report: Dictionary)
 signal workbench_closed
 
 # Transform modes
@@ -26,6 +25,8 @@ var assembly_manager: WorkbenchAssemblyManager
 # Core UI References (direct scene tree references)
 var viewport_container: SubViewportContainer
 var selection_overlay: Control
+var edit_mode_border: Panel
+var edit_mode_label: Label
 var viewport: SubViewport
 var camera: Camera3D
 var world: Node3D
@@ -34,6 +35,12 @@ var ground_plane: MeshInstance3D
 var world_environment: WorldEnvironment
 var transform_gizmo: TransformGizmo
 var context_menu: ContextMenu_Base
+var tab_container: TabContainer
+
+# Tab management
+var current_tab: int = 0  # 0 = Design, 1 = Assemblies
+var design_items: Array[Node] = []  # Items in design tab
+var assembly_items: Array[Node] = []  # Items in assemblies tab
 
 # Input state
 var is_alt_held: bool = false
@@ -96,6 +103,14 @@ func _ready() -> void:
 	# Connect signals
 	_connect_all_signals(ui_refs)
 
+	# Populate the assemblies list (assemblies are already loaded in manager's _init)
+	_refresh_assemblies_list()
+
+	# Initialize tab state - ensure we start on Design tab with no assembly items visible
+	current_tab = 0  # Design tab
+	_hide_all_items()  # Hide any items that might exist
+	_show_current_tab_items()  # Show only design items (if any)
+
 	initialized = true
 	print("WorkbenchWindow ready (Refactored) - Use Alt+Mouse to navigate, Q/W/E/R for tools")
 
@@ -104,12 +119,15 @@ func _setup_node_references() -> void:
 	"""Get all required node references from the scene tree."""
 	viewport_container = $VBoxContainer/MainContent/ViewportContainer
 	selection_overlay = $VBoxContainer/MainContent/ViewportContainer/SelectionOverlay
+	edit_mode_border = $VBoxContainer/MainContent/ViewportContainer/EditModeBorder
+	edit_mode_label = $VBoxContainer/MainContent/ViewportContainer/EditModeLabel
 	viewport = $VBoxContainer/MainContent/ViewportContainer/SubViewport
 	camera = $VBoxContainer/MainContent/ViewportContainer/SubViewport/Camera3D
 	world = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World
 	grid = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World/Grid
 	ground_plane = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World/GroundPlane
 	world_environment = $VBoxContainer/MainContent/ViewportContainer/SubViewport/WorldEnvironment
+	tab_container = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer
 
 	# Set up viewport
 	if viewport and viewport_container:
@@ -125,6 +143,10 @@ func _setup_node_references() -> void:
 	transform_gizmo = TransformGizmo.new()
 	world.add_child(transform_gizmo)
 	transform_gizmo.visible = false
+
+	# Connect tab change signal
+	if tab_container:
+		tab_container.tab_changed.connect(_on_tab_changed)
 
 
 func _initialize_managers() -> void:
@@ -156,28 +178,35 @@ func _setup_ui() -> Dictionary:
 	"""Setup UI elements and references. Returns the ui_refs dictionary."""
 	# Collect all UI references
 	var ui_refs = {
-		"part_list": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/PartsSection/PartList,
-		"category_filter": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/PartsSection/CategoryFilterContainer/CategoryFilter,
-		"add_object_button": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/PartsSection/ButtonContainer/AddObjectButton,
-		"validate_button": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/ValidateButton,
-		"clear_button": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/ClearButton,
-		"connect_mode_button": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/ConnectModeButton,
-		"help_label": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/HelpLabel,
+		"part_list": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/PartsSection/PartList,
+		"category_filter": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/PartsSection/CategoryFilterContainer/CategoryFilter,
+		"add_object_button": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/ButtonContainer/VBoxContainer/AddObjectButton,
+		"connect_mode_button": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/ButtonContainer/VBoxContainer/ConnectModeButton,
+		"help_label": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/HelpLabel,
 		"select_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/SelectButton,
 		"move_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/MoveButton,
 		"rotate_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/RotateButton,
 		"scale_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/ScaleButton,
 		"ghost_mode_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/GhostModeButton,
-		"transform_panel": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/TransformSection/TransformPanel,
-		"position_x_input": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionX/SpinBox,
-		"position_y_input": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionY/SpinBox,
-		"position_z_input": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionZ/SpinBox,
-		"rotation_x_input": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationX/SpinBox,
-		"rotation_y_input": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationY/SpinBox,
-		"rotation_z_input": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationZ/SpinBox,
-		"scale_x_input": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleX/SpinBox,
-		"scale_y_input": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleY/SpinBox,
-		"scale_z_input": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/VSplitContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleZ/SpinBox,
+		"transform_panel": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/TransformSection/TransformPanel,
+		"position_x_input":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionX/SpinBox,
+		"position_y_input":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionY/SpinBox,
+		"position_z_input":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/PositionZ/SpinBox,
+		"rotation_x_input":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationX/SpinBox,
+		"rotation_y_input":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationY/SpinBox,
+		"rotation_z_input":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/RotationZ/SpinBox,
+		"scale_x_input":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleX/SpinBox,
+		"scale_y_input":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleY/SpinBox,
+		"scale_z_input":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/TransformSection/TransformPanel/ScrollContainer/MarginContainer/VBoxContainer/ScaleZ/SpinBox,
 		"transform_stats_label": $VBoxContainer/MainContent/ViewportContainer/TransformStatsLabel,
 		"object_info_label": $VBoxContainer/MainContent/ViewportContainer/ObjectInfoLabel,
 		"sidebar_panel": $VBoxContainer/MainContent/SidebarPanel,
@@ -188,11 +217,13 @@ func _setup_ui() -> Dictionary:
 		"transform_gizmo": transform_gizmo,
 		"available_parts": available_parts,
 		"part_categories": part_categories,
-		"assemble_button": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembleButton,
-		"assemblies_list": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssembliesList,
-		"edit_assembly_button": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssemblyButtonContainer/HBoxContainer/EditAssemblyButton,
-		"add_to_inventory_button": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssemblyButtonContainer/HBoxContainer/AddToInventoryButton,
-		"delete_assembly_button": $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssemblyButtonContainer/HBoxContainer/DeleteAssemblyButton,
+		"assemble_button": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/ButtonContainer/VBoxContainer/AssembleButton,
+		"assemblies_list": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssembliesList,
+		"edit_assembly_button": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssemblyButtonContainer/HBoxContainer/EditAssemblyButton,
+		"add_to_inventory_button":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssemblyButtonContainer/HBoxContainer/AddToInventoryButton,
+		"delete_assembly_button":
+		$VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssemblyButtonContainer/HBoxContainer/DeleteAssemblyButton,
 	}
 
 	ui_manager.setup_ui_references(ui_refs)
@@ -240,6 +271,18 @@ func _connect_all_signals(ui_refs: Dictionary) -> void:
 	ui_manager.viewport_settings_changed.connect(_on_viewport_settings_changed)
 	ui_manager.fastener_selected.connect(_on_fastener_selected)
 
+	# Assembly manager signals
+	assembly_manager.assembly_created.connect(
+		func(_assembly):
+			print("WorkbenchWindow: assembly_created signal received for '%s'" % _assembly.assembly_name)
+			_refresh_assemblies_list.call_deferred()
+	)
+	assembly_manager.assembly_deleted.connect(
+		func(_assembly_id):
+			print("WorkbenchWindow: assembly_deleted signal received for '%s'" % _assembly_id)
+			_refresh_assemblies_list.call_deferred()
+	)
+
 	# Connect UI button signals
 	_connect_ui_button_signals(ui_refs)
 
@@ -256,8 +299,6 @@ func _connect_ui_button_signals(ui_refs: Dictionary) -> void:
 
 	# Buttons
 	var buttons = {
-		"validate_button": func(): _on_validate_pressed(),
-		"clear_button": func(): clear_workbench(),
 		"add_object_button": func(): _on_add_object_pressed(),
 		"select_button": func(): _set_transform_mode(TransformMode.SELECT),
 		"move_button": func(): _set_transform_mode(TransformMode.MOVE),
@@ -552,9 +593,35 @@ func _process(delta: float) -> void:
 	if selection_manager.cluster_pivot_active and not selection_manager.selected_items.is_empty():
 		selection_manager.update_cluster_pivot()
 
-	# Always update gizmo position if items are selected
+	# Always update gizmo position if items are selected AND we're in a mode where editing is allowed
+	# Only allow gizmo in: Design tab, OR Assembly tab + edit mode
+	var editing_allowed = (current_tab == 0) or (current_tab == 1 and is_editing_assembly)
+
 	if not selection_manager.selected_items.is_empty():
-		_update_gizmo()
+		if editing_allowed:
+			# Verify that selected items are actually visible
+			var has_visible_selection = false
+			for item in selection_manager.selected_items:
+				if item and item.visible:
+					has_visible_selection = true
+					break
+
+			if has_visible_selection:
+				_update_gizmo()
+			else:
+				# Selected items exist but aren't visible - clear selection
+				selection_manager.clear_selection()
+				if gizmo_controller:
+					gizmo_controller.reset_gizmo_state()
+				if transform_gizmo:
+					transform_gizmo.visible = false
+		else:
+			# Not in an editable mode - force clear selection and hide gizmo
+			selection_manager.clear_selection()
+			if gizmo_controller:
+				gizmo_controller.reset_gizmo_state()
+			if transform_gizmo:
+				transform_gizmo.visible = false
 
 	# Update gizmo scale based on camera distance
 	if transform_gizmo and transform_gizmo.visible and camera:
@@ -736,6 +803,8 @@ func _record_transform_operation() -> void:
 
 func _on_selection_changed(_selected_items: Array[PhysicalItem]) -> void:
 	"""Handle selection change events."""
+	print("WorkbenchWindow: _on_selection_changed called, _selected_items.size() = %d" % _selected_items.size())
+	print("  selection_manager.selected_items.size() = %d" % selection_manager.selected_items.size())
 	_update_gizmo()
 	ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
 
@@ -1197,13 +1266,6 @@ func _on_add_object_pressed() -> void:
 		print("Available parts: ", available_parts.keys())
 
 
-func _on_validate_pressed() -> void:
-	"""Validate the current workbench assembly."""
-	var report = {"valid": true, "errors": []}
-	item_validated.emit(true, report)
-	print("Workbench validated successfully")
-
-
 func _on_connect_mode_button_toggled(button_pressed: bool) -> void:
 	"""Handle connect mode button toggle."""
 	if button_pressed:
@@ -1305,6 +1367,10 @@ func spawn_part(scene_path: String) -> Node3D:
 	else:
 		print("SUCCESS: Spawned node (not PhysicalItem): %s" % node.name)
 
+	# Add to design items array (parts are always added to design tab)
+	if node not in design_items:
+		design_items.append(node)
+
 	return node
 
 
@@ -1313,6 +1379,10 @@ func clear_workbench() -> void:
 	for child in world.get_children():
 		if child is PhysicalItem:
 			child.queue_free()
+
+	# Clear tracking arrays
+	design_items.clear()
+	assembly_items.clear()
 
 	selection_manager.clear_selection()
 	connect_mode.clear_fasteners()
@@ -1328,12 +1398,95 @@ func clear_workbench() -> void:
 
 
 func get_all_items() -> Array[PhysicalItem]:
-	"""Get all PhysicalItem objects in the workbench."""
+	"""Get all PhysicalItem objects in the workbench (visible in current tab)."""
 	var items: Array[PhysicalItem] = []
 	for child in world.get_children():
-		if child is PhysicalItem:
+		if child is PhysicalItem and child.visible:
 			items.append(child)
 	return items
+
+
+func _clear_assembly_items() -> void:
+	"""Clear only items in the assemblies tab."""
+	for item in assembly_items:
+		if is_instance_valid(item) and item is PhysicalItem:
+			item.queue_free()
+	assembly_items.clear()
+	print("Cleared assembly items")
+
+
+# Tab Management
+
+
+func _on_tab_changed(tab: int) -> void:
+	"""Handle tab switching between Design and Assemblies."""
+	print("WorkbenchWindow: Tab changed to %d (0=Design, 1=Assemblies)" % tab)
+
+	# FIRST: Clear selection and reset gizmo state BEFORE any other operations
+	# This prevents the gizmo from appearing in the new tab
+	selection_manager.clear_selection()
+	if gizmo_controller:
+		gizmo_controller.reset_gizmo_state()
+	if transform_gizmo:
+		transform_gizmo.visible = false
+
+	# If switching away from Assemblies tab while in edit mode, exit edit mode
+	if current_tab == 1 and is_editing_assembly:
+		print("WorkbenchWindow: Exiting edit mode due to tab change")
+		_exit_assembly_edit_mode()
+
+	# Store current tab items before switching
+	_store_current_tab_items()
+
+	# Update current tab
+	current_tab = tab
+
+	# Hide all items in the world
+	_hide_all_items()
+
+	# Show items for the new tab
+	_show_current_tab_items()
+
+
+func _store_current_tab_items() -> void:
+	"""Store items visible in the current tab before switching."""
+	# Get all visible items in world
+	var visible_items: Array[Node] = []
+	for child in world.get_children():
+		if child is PhysicalItem and child.visible:
+			visible_items.append(child)
+
+	# Store based on current tab
+	if current_tab == 0:  # Design tab
+		design_items = visible_items
+		print("Stored %d design items" % design_items.size())
+	elif current_tab == 1:  # Assemblies tab
+		assembly_items = visible_items
+		print("Stored %d assembly items" % assembly_items.size())
+
+
+func _hide_all_items() -> void:
+	"""Hide all items in the world."""
+	for child in world.get_children():
+		if child is PhysicalItem:
+			child.visible = false
+
+
+func _show_current_tab_items() -> void:
+	"""Show items for the current tab."""
+	var items_to_show: Array[Node] = []
+
+	if current_tab == 0:  # Design tab
+		items_to_show = design_items
+		print("Showing %d design items" % items_to_show.size())
+	elif current_tab == 1:  # Assemblies tab
+		items_to_show = assembly_items
+		print("Showing %d assembly items" % items_to_show.size())
+
+	# Show the items
+	for item in items_to_show:
+		if is_instance_valid(item) and item is PhysicalItem:
+			item.visible = true
 
 
 # Helper methods
@@ -1434,17 +1587,23 @@ func _update_all_ui() -> void:
 
 func _on_assemble_button_pressed() -> void:
 	"""Handle the Assemble button press - create a new assembly from selected items."""
+	print("WorkbenchWindow: _on_assemble_button_pressed() called")
+	print("  Selected items count: %d" % selection_manager.selected_items.size())
+
 	if selection_manager.selected_items.is_empty():
 		print("WorkbenchWindow: Cannot assemble - no items selected")
 		return
 
+	print("WorkbenchWindow: Creating assembly name dialog...")
 	# Prompt for assembly name
 	var dialog = _create_assembly_name_dialog()
+	print("WorkbenchWindow: Showing dialog...")
 	dialog.popup_centered()
 
 
 func _create_assembly_name_dialog() -> AcceptDialog:
 	"""Create a dialog to input assembly name."""
+	print("WorkbenchWindow: _create_assembly_name_dialog() started")
 	var dialog = AcceptDialog.new()
 	dialog.title = "Create Assembly"
 	dialog.dialog_text = "Enter a name for this assembly:"
@@ -1469,25 +1628,35 @@ func _create_assembly_name_dialog() -> AcceptDialog:
 	add_child(dialog)
 
 	# Connect accept signal
-	dialog.confirmed.connect(func(): _finalize_assembly_creation(line_edit.text, dialog))
-	dialog.close_requested.connect(func(): dialog.queue_free())
+	dialog.confirmed.connect(
+		func():
+			print("WorkbenchWindow: Dialog confirmed! Assembly name: '%s'" % line_edit.text)
+			_finalize_assembly_creation(line_edit.text, dialog)
+	)
+	dialog.close_requested.connect(
+		func():
+			print("WorkbenchWindow: Dialog closed")
+			dialog.queue_free()
+	)
 
+	print("WorkbenchWindow: Dialog created and signals connected")
 	return dialog
 
 
 func _finalize_assembly_creation(assembly_name: String, dialog: AcceptDialog) -> void:
 	"""Finalize the assembly creation with the given name."""
+	print("WorkbenchWindow: _finalize_assembly_creation() called with name: '%s'" % assembly_name)
 	if assembly_name.strip_edges().is_empty():
 		assembly_name = "Assembly %d" % (assembly_manager.get_all_assemblies().size() + 1)
+		print("WorkbenchWindow: Using default assembly name: '%s'" % assembly_name)
 
 	# Frame the selected items for a good thumbnail shot
 	camera_controller.frame_objects(selection_manager.selected_items)
 
-	# Wait for camera to finish framing
-	await camera_controller.camera_framed
-
-	# Wait an additional frame to ensure rendering is complete
-	await get_tree().process_frame
+	# Wait for camera to finish framing and rendering to complete
+	# Note: We use a timer instead of await camera_framed to avoid potential deadlock
+	await get_tree().create_timer(0.2).timeout
+	print("WorkbenchWindow: Camera framed, capturing thumbnail...")
 
 	# Capture viewport image for thumbnail
 	var viewport_image = await camera_controller.capture_viewport_image()
@@ -1513,7 +1682,10 @@ func _finalize_assembly_creation(assembly_name: String, dialog: AcceptDialog) ->
 		else:
 			print("WorkbenchWindow: Created assembly '%s' but failed to capture viewport" % assembly.assembly_name)
 
+		# Wait a frame before refreshing to ensure everything is ready
+		await get_tree().process_frame
 		_refresh_assemblies_list()
+		print("WorkbenchWindow: Refreshed assemblies list after creation")
 	else:
 		print("WorkbenchWindow: Failed to create assembly")
 
@@ -1522,17 +1694,22 @@ func _finalize_assembly_creation(assembly_name: String, dialog: AcceptDialog) ->
 
 func _refresh_assemblies_list() -> void:
 	"""Refresh the assemblies list UI."""
-	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssembliesList
+	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssembliesList
 	if not assemblies_list:
+		print("WorkbenchWindow: ERROR - assemblies_list node not found in _refresh_assemblies_list")
 		return
+
+	var all_assemblies = assembly_manager.get_all_assemblies()
+	print("WorkbenchWindow: Refreshing assemblies list with %d assemblies" % all_assemblies.size())
 
 	assemblies_list.clear()
 
-	for assembly in assembly_manager.get_all_assemblies():
+	for assembly in all_assemblies:
 		assemblies_list.add_item(assembly.assembly_name)
 		# Store assembly_id as metadata
 		var index = assemblies_list.item_count - 1
 		assemblies_list.set_item_metadata(index, assembly.assembly_id)
+		print("  Added '%s' to list at index %d" % [assembly.assembly_name, index])
 
 
 func _on_assembly_selected(index: int) -> void:
@@ -1548,7 +1725,7 @@ func _on_assembly_selected(index: int) -> void:
 
 func _load_assembly_for_preview(index: int) -> void:
 	"""Load an assembly for preview only (not selectable/editable until Edit mode)."""
-	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssembliesList
+	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssembliesList
 	if not assemblies_list:
 		return
 
@@ -1562,8 +1739,8 @@ func _load_assembly_for_preview(index: int) -> void:
 	# Show assembly info in console
 	print("Loading assembly for preview:\n%s" % assembly.get_summary())
 
-	# Clear current workbench
-	clear_workbench()
+	# Clear only assembly items (not design items)
+	_clear_assembly_items()
 
 	# Spawn assembly into workbench (without physics, and non-interactive)
 	# Pass enable_selection=false to prevent selecting items in preview mode
@@ -1571,23 +1748,30 @@ func _load_assembly_for_preview(index: int) -> void:
 
 	if not spawned_items.is_empty():
 		print("WorkbenchWindow: Loaded assembly '%s' for preview (not editable)" % assembly.assembly_name)
-		# Debug: Print collision layers
+
+		# Add spawned items to assembly_items array
 		for item in spawned_items:
 			if item is PhysicalItem:
 				print("  Item '%s' - collision_layer: %d, collision_mask: %d" % [item.item_name, item.collision_layer, item.collision_mask])
+				if item not in assembly_items:
+					assembly_items.append(item)
+				# Hide if we're not on the assemblies tab
+				if current_tab != 1:
+					item.visible = false
 
 		# Wait a frame to ensure items are fully in the tree
 		await get_tree().process_frame
 
-		# Frame the items in view
-		camera_controller.frame_objects(spawned_items)
+		# Frame the items in view (only if we're on assemblies tab)
+		if current_tab == 1:
+			camera_controller.frame_objects(spawned_items)
 	else:
 		print("WorkbenchWindow: Failed to load assembly for preview")
 
 
 func _load_assembly_for_editing(index: int) -> void:
 	"""Load an assembly and make it editable (selectable/transformable)."""
-	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssembliesList
+	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssembliesList
 	if not assemblies_list:
 		return
 
@@ -1601,8 +1785,8 @@ func _load_assembly_for_editing(index: int) -> void:
 	# Show assembly info in console
 	print("Loading assembly for editing:\n%s" % assembly.get_summary())
 
-	# Clear current workbench
-	clear_workbench()
+	# Clear only assembly items (not design items)
+	_clear_assembly_items()
 
 	# Spawn assembly into workbench for editing (without physics, but selectable)
 	# Pass enable_selection=true to allow selecting items in edit mode
@@ -1612,11 +1796,21 @@ func _load_assembly_for_editing(index: int) -> void:
 		# Items spawned with enable_selection=true have collision_layer=4 for selection
 		print("WorkbenchWindow: Loaded assembly '%s' for editing with %d items" % [assembly.assembly_name, spawned_items.size()])
 
+		# Add spawned items to assembly_items array
+		for item in spawned_items:
+			if item is PhysicalItem:
+				if item not in assembly_items:
+					assembly_items.append(item)
+				# Hide if we're not on the assemblies tab
+				if current_tab != 1:
+					item.visible = false
+
 		# Wait a frame to ensure items are fully in the tree
 		await get_tree().process_frame
 
-		# Frame the items in view
-		camera_controller.frame_objects(spawned_items)
+		# Frame the items in view (only if we're on assemblies tab)
+		if current_tab == 1:
+			camera_controller.frame_objects(spawned_items)
 	else:
 		print("WorkbenchWindow: Failed to load assembly for editing")
 
@@ -1627,7 +1821,7 @@ func _enable_selection_on_loaded_items() -> void:
 	for item in items:
 		if item is PhysicalItem:
 			item.collision_layer = 4  # Enable layer 3 for workbench selection
-			item.collision_mask = 0   # Keep collisions disabled
+			item.collision_mask = 0  # Keep collisions disabled
 
 	print("WorkbenchWindow: Enabled selection on %d loaded items" % items.size())
 
@@ -1640,7 +1834,7 @@ func _disable_selection_on_loaded_items() -> void:
 		if item is PhysicalItem:
 			print("  Setting '%s' collision_layer from %d to 0" % [item.item_name, item.collision_layer])
 			item.collision_layer = 0  # Disable selection layer
-			item.collision_mask = 0   # Keep collisions disabled
+			item.collision_mask = 0  # Keep collisions disabled
 			print("  Verified '%s' collision_layer is now: %d" % [item.item_name, item.collision_layer])
 
 	# Clear any active selection
@@ -1661,7 +1855,7 @@ func _add_assembly_to_inventory_with_thumbnail() -> void:
 	"""Async function to capture thumbnail and add assembly to inventory."""
 	print("WorkbenchWindow: _add_assembly_to_inventory_with_thumbnail() called")
 
-	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssembliesList
+	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssembliesList
 	if not assemblies_list:
 		print("WorkbenchWindow: ERROR - assemblies_list is null")
 		return
@@ -1771,7 +1965,7 @@ func _on_delete_assembly_button_pressed() -> void:
 		return
 
 	# Otherwise, this is the Delete button
-	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssembliesList
+	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssembliesList
 	if not assemblies_list:
 		return
 
@@ -1822,7 +2016,7 @@ func _on_edit_assembly_button_pressed() -> void:
 
 func _enter_assembly_edit_mode() -> void:
 	"""Enter edit mode for the selected assembly."""
-	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssembliesList
+	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssembliesList
 	if not assemblies_list:
 		return
 
@@ -1951,7 +2145,7 @@ func _discard_assembly_edits() -> void:
 	clear_workbench()
 
 	# Reload the original assembly
-	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssembliesList
+	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssembliesList
 	if assemblies_list:
 		# Find the index of the assembly we're editing
 		for i in range(assemblies_list.item_count):
@@ -1975,8 +2169,11 @@ func _exit_assembly_edit_mode() -> void:
 	if gizmo_controller.is_gizmo_dragging:
 		gizmo_controller.cancel_gizmo_drag(selection_manager.selected_items)
 
-	# Clear selection and hide gizmo
+	# Clear selection and reset gizmo state completely
 	selection_manager.clear_selection()
+	if gizmo_controller:
+		gizmo_controller.reset_gizmo_state()
+
 	if transform_gizmo:
 		transform_gizmo.visible = false
 
@@ -1991,8 +2188,8 @@ func _exit_assembly_edit_mode() -> void:
 
 func _update_assembly_buttons_for_edit_mode(in_edit_mode: bool) -> void:
 	"""Update assembly button text based on edit mode state."""
-	var edit_button = $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssemblyButtonContainer/HBoxContainer/EditAssemblyButton
-	var delete_button = $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssemblyButtonContainer/HBoxContainer/DeleteAssemblyButton
+	var edit_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssemblyButtonContainer/HBoxContainer/EditAssemblyButton
+	var delete_button = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Assemblies/VBoxContainer/AssembliesSection/AssemblyButtonContainer/HBoxContainer/DeleteAssemblyButton
 
 	if in_edit_mode:
 		# In edit mode: Edit -> Update, Delete -> Discard
@@ -2000,9 +2197,19 @@ func _update_assembly_buttons_for_edit_mode(in_edit_mode: bool) -> void:
 			edit_button.text = "Update"
 		if delete_button:
 			delete_button.text = "Discard"
+		# Show yellow border and label to indicate edit mode
+		if edit_mode_border:
+			edit_mode_border.visible = true
+		if edit_mode_label:
+			edit_mode_label.visible = true
 	else:
 		# Normal mode: Update -> Edit, Discard -> Delete
 		if edit_button:
 			edit_button.text = "Edit"
 		if delete_button:
 			delete_button.text = "Delete"
+		# Hide yellow border and label
+		if edit_mode_border:
+			edit_mode_border.visible = false
+		if edit_mode_label:
+			edit_mode_label.visible = false

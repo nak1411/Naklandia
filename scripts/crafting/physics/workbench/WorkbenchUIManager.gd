@@ -254,15 +254,30 @@ func update_object_info(selected_items: Array[PhysicalItem], is_cluster: bool = 
 
 func update_transform_panel(selected_items: Array[PhysicalItem]) -> void:
 	"""Update the transform panel with current selection's transform values."""
+	print("WorkbenchUIManager: update_transform_panel called, selected_items.size() = %d" % selected_items.size())
+	print("  transform_panel is null: %s" % str(transform_panel == null))
+
 	if not transform_panel:
+		print("  ERROR: transform_panel is null!")
 		return
 
 	# Show panel only when items are selected
 	if selected_items.is_empty():
+		print("  Hiding transform panel (no items selected)")
 		transform_panel.visible = false
 		return
 
+	print("  Showing transform panel")
 	transform_panel.visible = true
+	print("  Panel.visible = %s" % transform_panel.visible)
+	print("  Panel size: %s" % transform_panel.size)
+	print("  Panel position: %s" % transform_panel.position)
+	print("  Panel custom_minimum_size: %s" % transform_panel.custom_minimum_size)
+
+	# Check if parent TransformSection exists and is visible
+	var parent = transform_panel.get_parent()
+	if parent:
+		print("  Parent (TransformSection) visible: %s, size: %s" % [parent.visible, parent.size])
 
 	# Determine what values to display
 	var pos: Vector3

@@ -13,7 +13,11 @@
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show a908eb3 --stat)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show a908eb3:scripts/crafting/physics/WorkbenchWindow.gd)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scenes/crafting/workbench_window.tscn)",
-      "Bash(scripts/crafting/physics/PhysicalItem.gd)"
+      "Bash(scripts/crafting/physics/PhysicalItem.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" log --oneline --all -20)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff 2b80243 scenes/crafting/workbench_window.tscn)",
+      "Bash(git checkout:*)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "ask": []

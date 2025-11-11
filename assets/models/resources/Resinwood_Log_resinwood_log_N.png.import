@@ -1,0 +1,38 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://n6rey1cwhjwi"
+path.s3tc="res://.godot/imported/Resinwood_Log_resinwood_log_N.png-a5e74d58124dddda70a8e18b182dd15a.s3tc.ctex"
+metadata={
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
+}
+generator_parameters={
+"md5": "298d6c5c5ae2aca11805a5d82c09063c"
+}
+
+[deps]
+
+source_file="res://assets/models/resources/Resinwood_Log_resinwood_log_N.png"
+dest_files=["res://.godot/imported/Resinwood_Log_resinwood_log_N.png-a5e74d58124dddda70a8e18b182dd15a.s3tc.ctex"]
+
+[params]
+
+compress/mode=2
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=1
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=1
+roughness/src_normal="res://assets/models/resources/Resinwood_Log_resinwood_log_N.png"
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=0

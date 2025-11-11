@@ -260,6 +260,21 @@ func cancel_gizmo_drag(selected_items: Array[PhysicalItem]) -> void:
 	print("Gizmo drag canceled")
 
 
+func reset_gizmo_state() -> void:
+	"""Completely reset gizmo state - useful when switching contexts or clearing selection."""
+	# Clear any drag state
+	is_gizmo_dragging = false
+	gizmo_drag_axis = Vector3.ZERO
+	gizmo_drag_initial_positions.clear()
+	gizmo_drag_initial_rotations.clear()
+	gizmo_drag_initial_scales.clear()
+	negative_scale_warning_active = false
+
+	# Clear hover highlighting on the gizmo visual
+	if transform_gizmo:
+		transform_gizmo.set_hover(Vector3.ZERO)
+
+
 func update_gizmo_position(selected_items: Array[PhysicalItem], cluster_pivot_active: bool, cluster_pivot_point: Vector3) -> void:
 	"""Update gizmo position and visibility based on selection."""
 	if not transform_gizmo:
@@ -278,10 +293,22 @@ func update_gizmo_position(selected_items: Array[PhysicalItem], cluster_pivot_ac
 	if cluster_pivot_active:
 		center = cluster_pivot_point
 	else:
-		# Default: average of all selected item visual centers
+		# Filter to only visible items (prevents ghost positioning from hidden items)
+		var visible_items: Array[PhysicalItem] = []
 		for item in selected_items:
+			if item and item.visible:
+				visible_items.append(item)
+
+		# If no visible items, hide gizmo
+		if visible_items.is_empty():
+			transform_gizmo.visible = false
+			gizmo_visibility_changed.emit(false)
+			return
+
+		# Calculate average of all visible selected item visual centers
+		for item in visible_items:
 			center += item.get_visual_center()
-		center /= selected_items.size()
+		center /= visible_items.size()
 
 	# Distance-based culling: hide gizmo if too far away
 	if camera:
