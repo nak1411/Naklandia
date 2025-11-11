@@ -55,11 +55,19 @@ static func from_physical_items(items: Array[PhysicalItem], name: String = "") -
 	# Calculate center of mass / pivot point
 	var center_point = Vector3.ZERO
 	for item in items:
+		# Check if item is still valid (not freed)
+		if not is_instance_valid(item):
+			push_error("AssemblyData: Item is no longer valid (freed)")
+			return null
 		center_point += item.global_position
 	center_point /= items.size()
 
 	# Store each part with its transform relative to center point
 	for item in items:
+		# Check if item is still valid (not freed)
+		if not is_instance_valid(item):
+			push_error("AssemblyData: Item is no longer valid (freed)")
+			return null
 		var part_data = {
 			"scene_path": item.scene_file_path,
 			"item_id": item.item_id,
@@ -146,8 +154,15 @@ func get_bounds_size() -> Vector3:
 
 
 ## Spawn the assembly as a collection of PhysicalItems in the world
-func spawn_assembly(parent: Node3D, spawn_position: Vector3 = Vector3.ZERO, enable_physics: bool = true) -> Array[PhysicalItem]:
-	"""Instantiate the assembly at a given position, recreating all parts and connections."""
+func spawn_assembly(parent: Node3D, spawn_position: Vector3 = Vector3.ZERO, enable_physics: bool = true, enable_selection: bool = true) -> Array[PhysicalItem]:
+	"""Instantiate the assembly at a given position, recreating all parts and connections.
+
+	Args:
+		parent: The parent node to spawn items under
+		spawn_position: World position to spawn at
+		enable_physics: If true, enable physics simulation
+		enable_selection: If true, enable selection layer (only applies when enable_physics=false)
+	"""
 	var spawned_items: Array[PhysicalItem] = []
 
 	# Spawn all parts
@@ -170,18 +185,32 @@ func spawn_assembly(parent: Node3D, spawn_position: Vector3 = Vector3.ZERO, enab
 		world_transform.origin += spawn_position
 		item.global_transform = world_transform
 
+		spawned_items.append(item)
+
+	# Wait for items to be in tree and _ready() to complete before setting collision layers
+	# This is crucial because PhysicalItem._ready() sets collision_layer=4 by default
+	await parent.get_tree().process_frame
+
+	# Wait one more frame to be absolutely sure _ready() completed
+	await parent.get_tree().process_frame
+
+	# Now configure collision layers AFTER _ready() has been called
+	for item in spawned_items:
 		if item is PhysicalItem:
 			# Control physics based on parameter
 			item.freeze = not enable_physics
-			# In workbench mode, keep layer 3 active for selection but disable collision mask
+			# In workbench mode, configure collision layers based on selection parameter
 			if not enable_physics:
-				item.collision_layer = 4  # Keep layer 3 (binary: 100) for workbench selection
+				if enable_selection:
+					item.collision_layer = 4  # Keep layer 3 (binary: 100) for workbench selection
+					print("AssemblyData: Set item '%s' collision_layer to 4 (selectable)" % item.item_name)
+				else:
+					item.collision_layer = 0  # No selection layer (preview only)
+					print("AssemblyData: Set item '%s' collision_layer to 0 (NOT selectable)" % item.item_name)
 				item.collision_mask = 0  # Don't collide with anything
-
-		spawned_items.append(item)
-
-	# Wait for items to be in tree before creating fasteners
-	await parent.get_tree().process_frame
+			# Verify the setting stuck
+			if not enable_physics:
+				print("AssemblyData: Verified item '%s' has collision_layer=%d" % [item.item_name, item.collision_layer])
 
 	# Recreate fastener connections
 	for fastener_data in fasteners:

@@ -1480,11 +1480,39 @@ func _finalize_assembly_creation(assembly_name: String, dialog: AcceptDialog) ->
 	if assembly_name.strip_edges().is_empty():
 		assembly_name = "Assembly %d" % (assembly_manager.get_all_assemblies().size() + 1)
 
+	# Frame the selected items for a good thumbnail shot
+	camera_controller.frame_objects(selection_manager.selected_items)
+
+	# Wait for camera to finish framing
+	await camera_controller.camera_framed
+
+	# Wait an additional frame to ensure rendering is complete
+	await get_tree().process_frame
+
+	# Capture viewport image for thumbnail
+	var viewport_image = await camera_controller.capture_viewport_image()
+
 	# Create assembly from selected items
 	var assembly = assembly_manager.create_assembly_from_items(selection_manager.selected_items, assembly_name)
 
 	if assembly:
-		print("WorkbenchWindow: Created assembly '%s'" % assembly.assembly_name)
+		# Generate and save thumbnail
+		if viewport_image:
+			var thumbnail_path = assembly_manager.generate_thumbnail_from_image(viewport_image, assembly.assembly_id)
+			if not thumbnail_path.is_empty():
+				assembly.icon_path = thumbnail_path
+				assembly.preview_texture = assembly_manager.load_thumbnail(thumbnail_path)
+
+				# Save assembly with updated thumbnail info
+				var save_path = assembly_manager.ASSEMBLY_SAVE_DIR + assembly.assembly_id + ".tres"
+				assembly.save_to_file(save_path)
+
+				print("WorkbenchWindow: Created assembly '%s' with thumbnail" % assembly.assembly_name)
+			else:
+				print("WorkbenchWindow: Created assembly '%s' but failed to generate thumbnail" % assembly.assembly_name)
+		else:
+			print("WorkbenchWindow: Created assembly '%s' but failed to capture viewport" % assembly.assembly_name)
+
 		_refresh_assemblies_list()
 	else:
 		print("WorkbenchWindow: Failed to create assembly")
@@ -1538,16 +1566,15 @@ func _load_assembly_for_preview(index: int) -> void:
 	clear_workbench()
 
 	# Spawn assembly into workbench (without physics, and non-interactive)
-	var spawned_items = await assembly_manager.spawn_assembly(assembly_id, world, Vector3.ZERO, false)
+	# Pass enable_selection=false to prevent selecting items in preview mode
+	var spawned_items = await assembly_manager.spawn_assembly(assembly_id, world, Vector3.ZERO, false, false)
 
 	if not spawned_items.is_empty():
-		# Make items non-interactive (can't select or transform until edit mode)
+		print("WorkbenchWindow: Loaded assembly '%s' for preview (not editable)" % assembly.assembly_name)
+		# Debug: Print collision layers
 		for item in spawned_items:
 			if item is PhysicalItem:
-				item.collision_layer = 0  # Disable selection layer
-				item.collision_mask = 0   # No collisions
-
-		print("WorkbenchWindow: Loaded assembly '%s' for preview (not editable)" % assembly.assembly_name)
+				print("  Item '%s' - collision_layer: %d, collision_mask: %d" % [item.item_name, item.collision_layer, item.collision_mask])
 
 		# Wait a frame to ensure items are fully in the tree
 		await get_tree().process_frame
@@ -1578,10 +1605,11 @@ func _load_assembly_for_editing(index: int) -> void:
 	clear_workbench()
 
 	# Spawn assembly into workbench for editing (without physics, but selectable)
-	var spawned_items = await assembly_manager.spawn_assembly(assembly_id, world, Vector3.ZERO, false)
+	# Pass enable_selection=true to allow selecting items in edit mode
+	var spawned_items = await assembly_manager.spawn_assembly(assembly_id, world, Vector3.ZERO, false, true)
 
 	if not spawned_items.is_empty():
-		# Items spawned with enable_physics=false already have collision_layer=4 for selection
+		# Items spawned with enable_selection=true have collision_layer=4 for selection
 		print("WorkbenchWindow: Loaded assembly '%s' for editing with %d items" % [assembly.assembly_name, spawned_items.size()])
 
 		# Wait a frame to ensure items are fully in the tree
@@ -1607,10 +1635,13 @@ func _enable_selection_on_loaded_items() -> void:
 func _disable_selection_on_loaded_items() -> void:
 	"""Disable selection on items (make them preview-only)."""
 	var items = get_all_items()
+	print("WorkbenchWindow: Disabling selection on %d items..." % items.size())
 	for item in items:
 		if item is PhysicalItem:
+			print("  Setting '%s' collision_layer from %d to 0" % [item.item_name, item.collision_layer])
 			item.collision_layer = 0  # Disable selection layer
 			item.collision_mask = 0   # Keep collisions disabled
+			print("  Verified '%s' collision_layer is now: %d" % [item.item_name, item.collision_layer])
 
 	# Clear any active selection
 	selection_manager.clear_selection()
@@ -1620,8 +1651,19 @@ func _disable_selection_on_loaded_items() -> void:
 
 func _on_add_to_inventory_button_pressed() -> void:
 	"""Add the selected assembly as an item to the player's inventory."""
+	# Disable input while processing to prevent double-clicks
+	input_enabled = false
+	await _add_assembly_to_inventory_with_thumbnail()
+	input_enabled = true
+
+
+func _add_assembly_to_inventory_with_thumbnail() -> void:
+	"""Async function to capture thumbnail and add assembly to inventory."""
+	print("WorkbenchWindow: _add_assembly_to_inventory_with_thumbnail() called")
+
 	var assemblies_list = $VBoxContainer/MainContent/SidebarPanel/ScrollContainer/VBoxContainer/AssembliesSection/AssembliesList
 	if not assemblies_list:
+		print("WorkbenchWindow: ERROR - assemblies_list is null")
 		return
 
 	var selected = assemblies_list.get_selected_items()
@@ -1637,6 +1679,33 @@ func _on_add_to_inventory_button_pressed() -> void:
 		print("WorkbenchWindow: Assembly not found")
 		return
 
+	# Capture thumbnail from current viewport view (without framing to avoid window closing)
+	print("WorkbenchWindow: Capturing thumbnail from current view...")
+	var current_items = get_all_items()
+	print("WorkbenchWindow: Found %d items in workbench" % current_items.size())
+
+	if not current_items.is_empty():
+		# Wait one frame for rendering
+		await get_tree().process_frame
+
+		# Capture and save thumbnail
+		print("WorkbenchWindow: Capturing viewport image...")
+		var viewport_image = await camera_controller.capture_viewport_image()
+		if viewport_image:
+			print("WorkbenchWindow: Image captured, generating thumbnail...")
+			var thumbnail_path = assembly_manager.generate_thumbnail_from_image(viewport_image, assembly.assembly_id)
+			if not thumbnail_path.is_empty():
+				assembly.icon_path = thumbnail_path
+				assembly.preview_texture = assembly_manager.load_thumbnail(thumbnail_path)
+
+				# Save assembly with updated thumbnail
+				var save_path = assembly_manager.ASSEMBLY_SAVE_DIR + assembly.assembly_id + ".tres"
+				assembly.save_to_file(save_path)
+				print("WorkbenchWindow: Generated fresh thumbnail for inventory at: %s" % thumbnail_path)
+		else:
+			print("WorkbenchWindow: WARNING - Failed to capture viewport image")
+
+	print("WorkbenchWindow: Getting player reference...")
 	# Get player reference
 	var players = get_tree().get_nodes_in_group("player")
 	if players.is_empty():
@@ -1659,31 +1728,39 @@ func _on_add_to_inventory_button_pressed() -> void:
 		print("WorkbenchWindow: No player inventory found")
 		return
 
+	print("WorkbenchWindow: Converting assembly to inventory item...")
 	# Convert assembly to inventory item
 	var item_data = assembly_manager.convert_assembly_to_inventory_item(assembly)
 	if not item_data:
 		print("WorkbenchWindow: Failed to convert assembly to inventory item")
 		return
 
+	print("WorkbenchWindow: Checking if can add item...")
 	# Check if can add
 	if not player_inventory.can_add_item(item_data):
 		NotificationManager.show_warning("Inventory is full!")
+		print("WorkbenchWindow: Inventory is full!")
 		return
 
+	print("WorkbenchWindow: Adding item to inventory...")
 	# Add to inventory
 	var success = player_inventory.add_item(item_data)
 
 	if success:
 		NotificationManager.show_item_pickup(assembly.assembly_name, 1)
-		print("WorkbenchWindow: Added assembly '%s' to inventory" % assembly.assembly_name)
+		print("WorkbenchWindow: SUCCESS - Added assembly '%s' to inventory" % assembly.assembly_name)
 
 		# Update inventory window if open
 		if inventory_integration.is_inventory_window_open():
 			var inventory_window = inventory_integration.get_inventory_window()
 			if inventory_window and inventory_window.content:
 				inventory_window.content.refresh_display()
+				print("WorkbenchWindow: Refreshed inventory display")
 	else:
 		NotificationManager.show_error("Failed to add assembly to inventory")
+		print("WorkbenchWindow: ERROR - Failed to add assembly to inventory")
+
+	print("WorkbenchWindow: _add_assembly_to_inventory_with_thumbnail() completed")
 
 
 func _on_delete_assembly_button_pressed() -> void:
@@ -1795,13 +1872,23 @@ func _update_assembly_edits() -> void:
 		print("WorkbenchWindow: No items to update assembly")
 		return
 
-	# Create updated assembly data from current items
+	# Exit edit mode FIRST before async operations to prevent getting stuck
+	# This also clears selection and cancels any active transforms
+	_exit_assembly_edit_mode()
+
+	# Disable selection IMMEDIATELY to prevent interaction during async operations
+	_disable_selection_on_loaded_items()
+
+	# Create updated assembly data from current items BEFORE any async operations
+	# (framing might cause async issues with item validity)
 	var updated_assembly = AssemblyData.from_physical_items(current_items, assembly.assembly_name)
 	if not updated_assembly:
 		print("WorkbenchWindow: Failed to create updated assembly data")
 		return
 
-	# Copy over the new data to the existing assembly (preserving ID and metadata)
+	# Copy over the new data to the existing assembly (preserving ID and metadata) IMMEDIATELY
+	# This must happen BEFORE async operations to ensure the assembly is saved even if async fails
+	print("WorkbenchWindow: Copying updated assembly data...")
 	assembly.parts = updated_assembly.parts
 	assembly.fasteners = updated_assembly.fasteners
 	assembly.total_mass = updated_assembly.total_mass
@@ -1809,18 +1896,39 @@ func _update_assembly_edits() -> void:
 	assembly.assembly_value = updated_assembly.assembly_value
 	assembly.bounds_min = updated_assembly.bounds_min
 	assembly.bounds_max = updated_assembly.bounds_max
+	print("WorkbenchWindow: Assembly data copied")
 
-	# Save to file
+	# Save to file IMMEDIATELY before async operations
+	print("WorkbenchWindow: Saving assembly to file...")
 	var save_path = assembly_manager.ASSEMBLY_SAVE_DIR + assembly.assembly_id + ".tres"
 	assembly.save_to_file(save_path)
-
 	print("WorkbenchWindow: Updated assembly '%s' with %d parts" % [assembly.assembly_name, assembly.parts.size()])
 
-	# Exit edit mode
-	_exit_assembly_edit_mode()
+	# Now try to generate thumbnail (async operations below may fail, but assembly is already saved)
+	# Frame all items for a good thumbnail shot
+	camera_controller.frame_objects(current_items)
 
-	# Disable selection on all items (they should only be selectable in edit mode)
-	_disable_selection_on_loaded_items()
+	# Wait for camera to finish framing
+	await camera_controller.camera_framed
+
+	# Wait an additional frame to ensure rendering is complete
+	await get_tree().process_frame
+
+	# Capture viewport image for updated thumbnail
+	var viewport_image = await camera_controller.capture_viewport_image()
+
+	# Generate and save updated thumbnail (if async operations succeeded)
+	if viewport_image:
+		print("WorkbenchWindow: Generating thumbnail...")
+		var thumbnail_path = assembly_manager.generate_thumbnail_from_image(viewport_image, assembly.assembly_id)
+		if not thumbnail_path.is_empty():
+			assembly.icon_path = thumbnail_path
+			assembly.preview_texture = assembly_manager.load_thumbnail(thumbnail_path)
+			print("WorkbenchWindow: Updated thumbnail for assembly '%s'" % assembly.assembly_name)
+			# Re-save assembly with updated thumbnail info
+			assembly.save_to_file(save_path)
+	else:
+		print("WorkbenchWindow: No viewport image captured")
 
 	# Refresh the list
 	_refresh_assemblies_list()
@@ -1863,6 +1971,15 @@ func _discard_assembly_edits() -> void:
 
 func _exit_assembly_edit_mode() -> void:
 	"""Exit edit mode."""
+	# Cancel any active transforms
+	if gizmo_controller.is_gizmo_dragging:
+		gizmo_controller.cancel_gizmo_drag(selection_manager.selected_items)
+
+	# Clear selection and hide gizmo
+	selection_manager.clear_selection()
+	if transform_gizmo:
+		transform_gizmo.visible = false
+
 	is_editing_assembly = false
 	editing_assembly_id = ""
 

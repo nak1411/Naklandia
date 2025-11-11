@@ -1,4 +1,4 @@
-[gd_scene load_steps=26 format=3 uid="uid://u68ixamg76uy"]
+[gd_scene load_steps=28 format=3 uid="uid://u68ixamg76uy"]
 
 [ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
 [ext_resource type="PackedScene" uid="uid://dvusnrd1ps7xx" path="res://scenes/objects/interactable_container.tscn" id="2_1swwb"]
@@ -39,13 +39,21 @@ adjustment_enabled = true
 adjustment_contrast = 1.14
 adjustment_saturation = 1.58
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_w0gou"]
+albedo_color = Color(0.28485, 0.28485, 0.28485, 1)
+
 [sub_resource type="BoxMesh" id="BoxMesh_2nij2"]
+material = SubResource("StandardMaterial3D_w0gou")
 size = Vector3(20, 0.4, 20)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_7cbxl"]
 size = Vector3(20, 0.2, 20)
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_m0jab"]
+albedo_color = Color(0.458405, 0.458405, 0.458405, 1)
+
 [sub_resource type="BoxMesh" id="BoxMesh_8pr8v"]
+material = SubResource("StandardMaterial3D_m0jab")
 size = Vector3(0.2, 4, 20)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_buypi"]
@@ -153,6 +161,7 @@ environment = SubResource("Environment_coq8p")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.0314054, 0)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Level/Floor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0577078, 0, -0.0421538)
 extra_cull_margin = 16.0
 mesh = SubResource("BoxMesh_2nij2")
 

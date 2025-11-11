@@ -13,6 +13,8 @@ var assemblies: Array[AssemblyData] = []
 
 # Assembly save directory
 const ASSEMBLY_SAVE_DIR = "user://assemblies/"
+const THUMBNAIL_SAVE_DIR = "res://assets/textures/ui/icons/assemblies/"
+const THUMBNAIL_SIZE = Vector2i(120, 120)  # Thumbnail resolution to match inventory icons
 
 
 func _init() -> void:
@@ -144,14 +146,22 @@ func _load_saved_assemblies() -> void:
 
 
 ## Spawn an assembly into the world as PhysicalItems
-func spawn_assembly(assembly_id: String, parent: Node3D, spawn_position: Vector3 = Vector3.ZERO, enable_physics: bool = true) -> Array[PhysicalItem]:
-	"""Spawn an assembly at the given position."""
+func spawn_assembly(assembly_id: String, parent: Node3D, spawn_position: Vector3 = Vector3.ZERO, enable_physics: bool = true, enable_selection: bool = true) -> Array[PhysicalItem]:
+	"""Spawn an assembly at the given position.
+
+	Args:
+		assembly_id: ID of the assembly to spawn
+		parent: Parent node to spawn under
+		spawn_position: World position to spawn at
+		enable_physics: If true, enable physics simulation
+		enable_selection: If true, enable selection layer (only applies when enable_physics=false)
+	"""
 	var assembly = get_assembly(assembly_id)
 	if not assembly:
 		push_error("WorkbenchAssemblyManager: Assembly not found: %s" % assembly_id)
 		return []
 
-	return await assembly.spawn_assembly(parent, spawn_position, enable_physics)
+	return await assembly.spawn_assembly(parent, spawn_position, enable_physics, enable_selection)
 
 
 ## Convert an assembly into a single InventoryItem
@@ -170,6 +180,8 @@ func convert_assembly_to_inventory_item(assembly: AssemblyData) -> InventoryItem
 	item.base_value = assembly.assembly_value
 	item.quantity = 1
 	item.max_stack_size = 1  # Assemblies don't stack
+
+	# Set icon_path - res:// paths work with normal loading
 	item.icon_path = assembly.icon_path
 
 	# Store assembly reference in metadata
@@ -219,3 +231,52 @@ func get_assembly_stats() -> Dictionary:
 		"total_fasteners": total_fasteners,
 		"total_mass": total_mass,
 	}
+
+
+## Generate a thumbnail from a captured viewport image
+func generate_thumbnail_from_image(image: Image, assembly_id: String) -> String:
+	"""Generate and save a thumbnail image for an assembly.
+	Returns the path to the saved thumbnail, or empty string on failure."""
+	if not image:
+		push_error("WorkbenchAssemblyManager: No image provided for thumbnail generation")
+		return ""
+
+	# Resize image to thumbnail size
+	var thumbnail = image.duplicate()
+	thumbnail.resize(THUMBNAIL_SIZE.x, THUMBNAIL_SIZE.y, Image.INTERPOLATE_LANCZOS)
+
+	# Save as PNG to res:// path (convert to absolute path for saving)
+	var thumbnail_filename = assembly_id + ".png"
+	var thumbnail_path = THUMBNAIL_SAVE_DIR + thumbnail_filename
+	var absolute_path = ProjectSettings.globalize_path(thumbnail_path)
+
+	var error = thumbnail.save_png(absolute_path)
+	if error != OK:
+		push_error("WorkbenchAssemblyManager: Failed to save thumbnail to %s (error: %d)" % [absolute_path, error])
+		return ""
+
+	print("WorkbenchAssemblyManager: Saved thumbnail to %s" % thumbnail_path)
+	return thumbnail_path
+
+
+## Load a thumbnail as a Texture2D
+func load_thumbnail(icon_path: String) -> Texture2D:
+	"""Load a thumbnail image as a Texture2D."""
+	if icon_path.is_empty():
+		return null
+
+	# Convert any path to absolute for loading
+	var absolute_path = ProjectSettings.globalize_path(icon_path)
+
+	# Check if file exists
+	if not FileAccess.file_exists(absolute_path):
+		push_warning("WorkbenchAssemblyManager: Thumbnail file not found: %s" % absolute_path)
+		return null
+
+	# Load image directly from file (works for both res:// and user:// paths at runtime)
+	var image = Image.load_from_file(absolute_path)
+	if not image:
+		push_error("WorkbenchAssemblyManager: Failed to load thumbnail image: %s" % absolute_path)
+		return null
+
+	return ImageTexture.create_from_image(image)

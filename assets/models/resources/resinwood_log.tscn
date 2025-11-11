@@ -22,5 +22,5 @@ item_volume = 0.005
 transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0)
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-transform = Transform3D(-4.37114e-09, -1, 0, 1, -4.37114e-09, 0, 0, 0, 1, 0, 0, 0)
+transform = Transform3D(-4.37114e-09, -1, 0, 1, -4.37114e-09, 0, 0, 0, 1, 0.0915692, 0.041366, 0)
 shape = SubResource("CapsuleShape3D_uv3xk")

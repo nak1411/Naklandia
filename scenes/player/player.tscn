@@ -10,7 +10,7 @@
 [ext_resource type="Script" uid="uid://2kdu455x8lmy" path="res://scripts/core/interaction/InteractionRaycaster.gd" id="6_raycaster"]
 [ext_resource type="Script" uid="uid://bar11whdhhkdq" path="res://scripts/ui/core/InteractionUI.gd" id="7_ui"]
 [ext_resource type="Script" uid="uid://cwq0mlyrqq3dl" path="res://scripts/crafting/integration/CraftingIntegration.gd" id="9_5gtgg"]
-[ext_resource type="Script" path="res://scripts/crafting/physics/ItemPlacer.gd" id="10_itemplacer"]
+[ext_resource type="Script" uid="uid://dvs5b7agifjv7" path="res://scripts/crafting/physics/ItemPlacer.gd" id="10_itemplacer"]
 [ext_resource type="Script" uid="uid://blu4pe5oh1y2l" path="res://scripts/inventory/integration/EquipmentIntegration.gd" id="11_je7p5"]
 [ext_resource type="Script" uid="uid://behpvbg7ffycf" path="res://scripts/equipment/EquipmentVisualManager.gd" id="12_visual"]
 [ext_resource type="Script" uid="uid://ckar5cvroyc4y" path="res://scripts/equipment/EquipmentSocket.gd" id="13_socket"]
@@ -21,7 +21,6 @@
 
 [node name="Player" type="CharacterBody3D" groups=["player"]]
 collision_layer = 16
-collision_mask = 1
 script = ExtResource("1_hqtel")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]

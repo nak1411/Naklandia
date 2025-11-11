@@ -228,9 +228,34 @@ func _calculate_min_pitch_for_target() -> float:
 	var target_height = camera_target.y
 	var floor_clearance = 0.1  # Keep camera 0.1 units above floor
 
-	# Calculate the pitch angle where camera would be at floor level
+	# Calculate the pitch angle where camera would be at floor levelq
 	# Negative pitch means looking down past the target toward the floor
 	var critical_pitch = rad_to_deg(atan2(-(target_height - floor_clearance), camera_distance))
 
 	# Add a small safety margin (5 degrees) above the critical angle
 	return critical_pitch + 5.0
+
+
+func capture_viewport_image() -> Image:
+	"""Capture the current viewport as an Image for thumbnail generation."""
+	if not viewport:
+		push_error("WorkbenchCameraController: No viewport available for capture")
+		return null
+
+	# Wait for rendering to complete
+	await viewport.get_tree().process_frame
+
+	# Get the viewport texture
+	var viewport_texture = viewport.get_texture()
+	if not viewport_texture:
+		push_error("WorkbenchCameraController: Failed to get viewport texture")
+		return null
+
+	# Get the image from the texture
+	var image = viewport_texture.get_image()
+	if not image:
+		push_error("WorkbenchCameraController: Failed to get image from viewport texture")
+		return null
+
+	print("WorkbenchCameraController: Captured viewport image (%dx%d)" % [image.get_width(), image.get_height()])
+	return image
