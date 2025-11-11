@@ -44,7 +44,7 @@ func _generate_assembly_id() -> String:
 
 ## Create AssemblyData from a collection of PhysicalItems in the workbench
 static func from_physical_items(items: Array[PhysicalItem], name: String = "") -> AssemblyData:
-	"""Create an assembly from a list of PhysicalItems with their current transforms."""
+	"""Create an assembly prefab from a list of PhysicalItems - like CAD grouping."""
 	if items.is_empty():
 		push_error("AssemblyData: Cannot create assembly from empty items array")
 		return null
@@ -52,77 +52,72 @@ static func from_physical_items(items: Array[PhysicalItem], name: String = "") -
 	var assembly = AssemblyData.new()
 	assembly.assembly_name = name if not name.is_empty() else "Assembly_%d" % Time.get_ticks_msec()
 
-	# Calculate center of mass / pivot point
-	var center_point = Vector3.ZERO
-	for item in items:
-		# Check if item is still valid (not freed)
-		if not is_instance_valid(item):
-			push_error("AssemblyData: Item is no longer valid (freed)")
-			return null
-		center_point += item.global_position
-	center_point /= items.size()
+	# Calculate the bounding box center as the assembly pivot
+	var min_pos = Vector3(INF, INF, INF)
+	var max_pos = Vector3(-INF, -INF, -INF)
 
-	# Store each part with its transform relative to center point
+	# Find bounding box of all items
 	for item in items:
-		# Check if item is still valid (not freed)
 		if not is_instance_valid(item):
 			push_error("AssemblyData: Item is no longer valid (freed)")
 			return null
+
+		var pos = item.global_position
+		min_pos.x = min(min_pos.x, pos.x)
+		min_pos.y = min(min_pos.y, pos.y)
+		min_pos.z = min(min_pos.z, pos.z)
+		max_pos.x = max(max_pos.x, pos.x)
+		max_pos.y = max(max_pos.y, pos.y)
+		max_pos.z = max(max_pos.z, pos.z)
+
+	# Use bounding box center as assembly origin
+	var assembly_origin = (min_pos + max_pos) / 2.0
+	print("AssemblyData: Assembly origin at %s (bbox center)" % assembly_origin)
+
+	# Store each part with its transform relative to assembly origin
+	var part_count = 0
+	for item in items:
+		if not is_instance_valid(item):
+			continue
+
+		# Store the item's world transform relative to assembly origin
+		# This is SIMPLE: just subtract the origin from position, keep rotation as-is
+		var local_position = item.global_position - assembly_origin
+		var local_rotation = item.global_rotation  # Keep exact rotation
+
+		print("AssemblyData SAVE: '%s' world_pos=%s world_rot_deg=%s" % [item.item_name, item.global_position, item.global_rotation_degrees])
+		print("AssemblyData SAVE: '%s' local_pos=%s local_rot_deg=%s" % [item.item_name, local_position, local_rotation * 180.0 / PI])
+
 		var part_data = {
 			"scene_path": item.scene_file_path,
 			"item_id": item.item_id,
 			"item_name": item.item_name,
-			"transform": _make_relative_transform(item.global_transform, center_point),
+			"local_position": local_position,
+			"local_rotation": local_rotation,  # Store as euler angles (radians)
+			"local_scale": item.scale,
 			"mass": item.item_mass,
 			"volume": item.item_volume,
 		}
 		assembly.parts.append(part_data)
+		part_count += 1
 
 		# Accumulate totals
 		assembly.total_mass += item.item_mass
 		assembly.total_volume += item.item_volume
 
-	# Store fastener connections
-	var processed_fasteners: Array[Fastener] = []
-	for i in range(items.size()):
-		var item = items[i]
-		for fastener in item.fasteners:
-			# Skip if already processed
-			if fastener in processed_fasteners:
-				continue
-			processed_fasteners.append(fastener)
-
-			# Find indices of connected items
-			var item_a_index = items.find(fastener.item_a)
-			var item_b_index = items.find(fastener.item_b)
-
-			if item_a_index >= 0 and item_b_index >= 0:
-				var fastener_data = {
-					"item_a_index": item_a_index,
-					"item_b_index": item_b_index,
-					"fastener_id": fastener.fastener_item_id,
-					"connection_point": fastener.connection_point - center_point,  # Relative to center
-				}
-				assembly.fasteners.append(fastener_data)
+	if part_count == 0:
+		push_error("AssemblyData: No valid parts found to save")
+		return null
 
 	# Calculate bounds
 	assembly._calculate_bounds()
 
-	# Estimate value (could be sum of parts, or have crafting bonus)
-	assembly.assembly_value = assembly.total_mass * 10.0  # Simple value calculation
+	# Estimate value
+	assembly.assembly_value = assembly.total_mass * 10.0
 
-	print("AssemblyData: Created assembly '%s' with %d parts and %d fasteners" % [assembly.assembly_name, assembly.parts.size(), assembly.fasteners.size()])
+	print("AssemblyData: Created assembly '%s' with %d parts (simplified - no fasteners)" % [assembly.assembly_name, assembly.parts.size()])
 
 	return assembly
-
-
-## Make a transform relative to a center point
-static func _make_relative_transform(world_transform: Transform3D, center_point: Vector3) -> Transform3D:
-	"""Convert a world transform to be relative to a center point."""
-	var relative_transform = Transform3D()
-	relative_transform.basis = world_transform.basis  # Keep rotation as-is
-	relative_transform.origin = world_transform.origin - center_point  # Make position relative
-	return relative_transform
 
 
 ## Calculate the bounding box of the assembly
@@ -131,14 +126,24 @@ func _calculate_bounds() -> void:
 	if parts.is_empty():
 		return
 
-	# Initialize with first part's position
-	var first_pos = parts[0].transform.origin
+	# Get first part's position (handle both new and old format)
+	var first_pos = Vector3.ZERO
+	if parts[0].has("local_position"):
+		first_pos = parts[0].local_position
+	elif parts[0].has("transform"):
+		first_pos = parts[0].transform.origin
+
 	bounds_min = first_pos
 	bounds_max = first_pos
 
 	# Expand bounds to include all parts
 	for part in parts:
-		var pos = part.transform.origin
+		var pos = Vector3.ZERO
+		if part.has("local_position"):
+			pos = part.local_position
+		elif part.has("transform"):
+			pos = part.transform.origin
+
 		bounds_min.x = min(bounds_min.x, pos.x)
 		bounds_min.y = min(bounds_min.y, pos.y)
 		bounds_min.z = min(bounds_min.z, pos.z)
@@ -155,15 +160,17 @@ func get_bounds_size() -> Vector3:
 
 ## Spawn the assembly as a collection of PhysicalItems in the world
 func spawn_assembly(parent: Node3D, spawn_position: Vector3 = Vector3.ZERO, enable_physics: bool = true, enable_selection: bool = true) -> Array[PhysicalItem]:
-	"""Instantiate the assembly at a given position, recreating all parts and connections.
+	"""Instantiate the assembly prefab at a given position - simple and clean like CAD.
 
 	Args:
 		parent: The parent node to spawn items under
-		spawn_position: World position to spawn at
+		spawn_position: World position to spawn at (assembly origin goes here)
 		enable_physics: If true, enable physics simulation
 		enable_selection: If true, enable selection layer (only applies when enable_physics=false)
 	"""
 	var spawned_items: Array[PhysicalItem] = []
+
+	print("AssemblyData LOAD: Spawning assembly '%s' at world position %s" % [assembly_name, spawn_position])
 
 	# Spawn all parts
 	for part_data in parts:
@@ -178,55 +185,63 @@ func spawn_assembly(parent: Node3D, spawn_position: Vector3 = Vector3.ZERO, enab
 			push_error("AssemblyData: Failed to instantiate part: %s" % scene_path)
 			continue
 
-		parent.add_child(item)
+		# SIMPLE: Add the local position to spawn position, apply local rotation
+		# Handle both new format (local_position/local_rotation) and old format (transform)
+		var local_pos = Vector3.ZERO
+		var local_rot = Vector3.ZERO
+		var local_scale = Vector3.ONE
 
-		# Apply transform (relative to spawn position)
-		var world_transform = part_data.transform
-		world_transform.origin += spawn_position
-		item.global_transform = world_transform
+		if part_data.has("local_position"):
+			# New simplified format
+			local_pos = part_data.local_position
+			local_rot = part_data.local_rotation
+			if part_data.has("local_scale"):
+				local_scale = part_data.local_scale
+		elif part_data.has("transform"):
+			# Old format - convert
+			var transform = part_data.transform as Transform3D
+			local_pos = transform.origin
+			local_rot = transform.basis.get_euler()
+			local_scale = transform.basis.get_scale()
+
+		# Apply world transform
+		# Position: simple offset from spawn position
+		var world_pos = spawn_position + local_pos
+
+		# Rotation: use the exact rotation (no transformation needed)
+		var world_rot = local_rot
+
+		print("AssemblyData LOAD: '%s' local_pos=%s local_rot_deg=%s" % [part_data.item_name, local_pos, local_rot * 180.0 / PI])
+		print("AssemblyData LOAD: '%s' world_pos=%s world_rot_deg=%s" % [part_data.item_name, world_pos, world_rot * 180.0 / PI])
+
+		# Set transform BEFORE adding to tree
+		item.position = world_pos
+		item.rotation = world_rot
+		item.scale = local_scale
+		item.freeze = true  # Freeze immediately
+
+		# Now add to tree
+		parent.add_child(item)
 
 		spawned_items.append(item)
 
-	# Wait for items to be in tree and _ready() to complete before setting collision layers
-	# This is crucial because PhysicalItem._ready() sets collision_layer=4 by default
+	# Wait for items to be in tree and _ready() to complete
+	await parent.get_tree().process_frame
 	await parent.get_tree().process_frame
 
-	# Wait one more frame to be absolutely sure _ready() completed
-	await parent.get_tree().process_frame
-
-	# Now configure collision layers AFTER _ready() has been called
+	# Configure collision layers
 	for item in spawned_items:
 		if item is PhysicalItem:
-			# Control physics based on parameter
 			item.freeze = not enable_physics
-			# In workbench mode, configure collision layers based on selection parameter
+
 			if not enable_physics:
 				if enable_selection:
-					item.collision_layer = 4  # Keep layer 3 (binary: 100) for workbench selection
-					print("AssemblyData: Set item '%s' collision_layer to 4 (selectable)" % item.item_name)
+					item.collision_layer = 4  # Selectable in workbench
 				else:
-					item.collision_layer = 0  # No selection layer (preview only)
-					print("AssemblyData: Set item '%s' collision_layer to 0 (NOT selectable)" % item.item_name)
-				item.collision_mask = 0  # Don't collide with anything
-			# Verify the setting stuck
-			if not enable_physics:
-				print("AssemblyData: Verified item '%s' has collision_layer=%d" % [item.item_name, item.collision_layer])
+					item.collision_layer = 0  # Preview only
+				item.collision_mask = 0
 
-	# Recreate fastener connections
-	for fastener_data in fasteners:
-		var item_a_index = fastener_data.item_a_index
-		var item_b_index = fastener_data.item_b_index
-		var fastener_id = fastener_data.fastener_id
-		var connection_point = fastener_data.connection_point + spawn_position
-
-		if item_a_index < spawned_items.size() and item_b_index < spawned_items.size():
-			var item_a = spawned_items[item_a_index]
-			var item_b = spawned_items[item_b_index]
-
-			# Create fastener connection
-			item_a.attach_with_fastener(item_b, fastener_id, connection_point, parent)
-
-	print("AssemblyData: Spawned assembly '%s' with %d items" % [assembly_name, spawned_items.size()])
+	print("AssemblyData: Spawned assembly '%s' with %d items (simplified - no fasteners)" % [assembly_name, spawned_items.size()])
 	return spawned_items
 
 

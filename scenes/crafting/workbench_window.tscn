@@ -216,12 +216,6 @@ layout_mode = 2
 focus_mode = 0
 text = "Add Object"
 
-[node name="ConnectModeButton" type="Button" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/ButtonContainer/VBoxContainer"]
-layout_mode = 2
-focus_mode = 0
-toggle_mode = true
-text = "Connect Mode (Bolt Gun)"
-
 [node name="AssembleButton" type="Button" parent="VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/ButtonContainer/VBoxContainer"]
 layout_mode = 2
 focus_mode = 0

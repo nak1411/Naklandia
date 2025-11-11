@@ -21,17 +21,7 @@ class ItemDefinition:
 	var model_path: String  # For future 3D model reference
 	var custom_properties: Dictionary  # For item-specific data (ammo damage, fuel capacity, etc.)
 
-	func _init(
-		id: String,
-		n: String,
-		desc: String,
-		type: ItemTypes.Type,
-		vol: float,
-		m: float,
-		val: float,
-		icon: String,
-		stack: int = 999999
-	):
+	func _init(id: String, n: String, desc: String, type: ItemTypes.Type, vol: float, m: float, val: float, icon: String, stack: int = 999999):
 		item_id = id
 		name = n
 		description = desc
@@ -210,16 +200,7 @@ func _load_items_from_json():
 	"""Load all item definitions from JSON files"""
 	print("ItemDatabase: Loading items from JSON files...")
 
-	var json_files = [
-		"tools.json",
-		"ammunition.json",
-		"resources.json",
-		"modules.json",
-		"blueprints.json",
-		"miscellaneous.json",
-		"parts.json",
-		"fasteners.json"
-	]
+	var json_files = ["tools.json", "ammunition.json", "resources.json", "modules.json", "blueprints.json", "miscellaneous.json", "parts.json", "fasteners.json"]
 
 	var total_items = 0
 	for file_name in json_files:
@@ -252,12 +233,7 @@ func _load_json_file(file_path: String) -> int:
 	var parse_result = json.parse(json_text)
 
 	if parse_result != OK:
-		push_error(
-			(
-				"ItemDatabase: JSON parse error in %s at line %d: %s"
-				% [file_path, json.get_error_line(), json.get_error_message()]
-			)
-		)
+		push_error("ItemDatabase: JSON parse error in %s at line %d: %s" % [file_path, json.get_error_line(), json.get_error_message()])
 		return 0
 
 	var data = json.data
@@ -349,9 +325,7 @@ func _parse_item_type(item_type_string: String) -> ItemTypes.Type:
 func _load_hardcoded_items():
 	"""Load hardcoded item definitions (legacy/fallback)"""
 	print("ItemDatabase: Using hardcoded item definitions...")
-	push_warning(
-		"ItemDatabase: Hardcoded items are deprecated. Please enable JSON loading or add items to JSON files."
-	)
+	push_warning("ItemDatabase: Hardcoded items are deprecated. Please enable JSON loading or add items to JSON files.")
 
 	# Note: Hardcoded items have been removed. All items should be defined in JSON files.
 	# If you need fallback items, add them here temporarily.
@@ -427,12 +401,7 @@ func create_item_instance(item_id: String, quantity: int = 1) -> InventoryItem_B
 
 	# Debug: Verify metadata was set
 	if item.has_meta("model_path"):
-		print(
-			"ItemDatabase: Created ",
-			item.item_id,
-			" with model_path: ",
-			item.get_meta("model_path")
-		)
+		print("ItemDatabase: Created ", item.item_id, " with model_path: ", item.get_meta("model_path"))
 
 	return item
 

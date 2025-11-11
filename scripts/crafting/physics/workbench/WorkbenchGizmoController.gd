@@ -275,7 +275,7 @@ func reset_gizmo_state() -> void:
 		transform_gizmo.set_hover(Vector3.ZERO)
 
 
-func update_gizmo_position(selected_items: Array[PhysicalItem], cluster_pivot_active: bool, cluster_pivot_point: Vector3) -> void:
+func update_gizmo_position(selected_items: Array[PhysicalItem], use_selection_pivot: bool, selection_pivot_point: Vector3) -> void:
 	"""Update gizmo position and visibility based on selection."""
 	if not transform_gizmo:
 		return
@@ -290,8 +290,8 @@ func update_gizmo_position(selected_items: Array[PhysicalItem], cluster_pivot_ac
 	var center = Vector3.ZERO
 
 	# Use cluster pivot if active (for bonded assemblies)
-	if cluster_pivot_active:
-		center = cluster_pivot_point
+	if use_selection_pivot:
+		center = selection_pivot_point
 	else:
 		# Filter to only visible items (prevents ghost positioning from hidden items)
 		var visible_items: Array[PhysicalItem] = []

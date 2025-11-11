@@ -7,8 +7,8 @@ extends RefCounted
 ## reverting or reapplying changes with Ctrl+Z and Ctrl+Shift+Z.
 
 signal operation_recorded(operation_type: String)
-signal undo_performed()
-signal redo_performed()
+signal undo_performed
+signal redo_performed
 signal history_changed(undo_count: int, redo_count: int)
 
 const MAX_UNDO_OPERATIONS: int = 10
@@ -17,12 +17,7 @@ var undo_history: Array = []  # Array of command dictionaries
 var redo_history: Array = []  # Array of command dictionaries for redo
 
 
-func record_transform(
-	operation_type: String,
-	items: Array,
-	initial_values: Dictionary,
-	final_values: Dictionary
-) -> void:
+func record_transform(operation_type: String, items: Array, initial_values: Dictionary, final_values: Dictionary) -> void:
 	"""
 	Record a transform operation for undo/redo.
 
@@ -35,12 +30,7 @@ func record_transform(
 	if items.is_empty() or initial_values.is_empty():
 		return
 
-	var command = {
-		"type": operation_type,
-		"items": items.duplicate(),
-		"old_values": initial_values.duplicate(true),
-		"new_values": final_values.duplicate(true)
-	}
+	var command = {"type": operation_type, "items": items.duplicate(), "old_values": initial_values.duplicate(true), "new_values": final_values.duplicate(true)}
 
 	# Only record if values actually changed
 	var has_changes = false
@@ -160,6 +150,7 @@ func get_redo_count() -> int:
 
 
 # Private helper methods
+
 
 func _verify_items_exist(items: Array) -> bool:
 	"""Verify that all items in the array still exist and are valid."""

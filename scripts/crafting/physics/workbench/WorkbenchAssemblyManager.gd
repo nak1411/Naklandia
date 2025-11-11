@@ -217,18 +217,15 @@ func spawn_assembly_from_inventory_item(item: InventoryItem_Base, parent: Node3D
 func get_assembly_stats() -> Dictionary:
 	"""Get statistics about all assemblies."""
 	var total_parts = 0
-	var total_fasteners = 0
 	var total_mass = 0.0
 
 	for assembly in assemblies:
 		total_parts += assembly.parts.size()
-		total_fasteners += assembly.fasteners.size()
 		total_mass += assembly.total_mass
 
 	return {
 		"total_assemblies": assemblies.size(),
 		"total_parts": total_parts,
-		"total_fasteners": total_fasteners,
 		"total_mass": total_mass,
 	}
 

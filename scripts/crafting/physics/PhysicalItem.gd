@@ -10,8 +10,6 @@ extends RigidBody3D
 signal item_grabbed(item: PhysicalItem)
 signal item_released(item: PhysicalItem)
 signal item_bonded(item: PhysicalItem, target: PhysicalItem)
-signal joint_created(item: PhysicalItem, joint: Joint)
-signal fastener_attached(item: PhysicalItem, fastener: Fastener)
 
 # Item identification
 @export var item_id: String = ""
@@ -40,11 +38,6 @@ signal fastener_attached(item: PhysicalItem, fastener: Fastener)
 var is_held: bool = false
 var is_bonded: bool = false
 var bonded_items: Array[PhysicalItem] = []
-
-# Joint and fastener system
-var joints: Array[Joint] = []  # Physics joints connecting this item
-var fasteners: Array[Fastener] = []  # Fasteners holding connections
-var connection_points: Array[Dictionary] = []  # Available connection points
 
 # Highlighting for interaction
 var outline_material: StandardMaterial3D
@@ -206,150 +199,7 @@ func get_info_text() -> String:
 	info += "Mass: %.2f kg\n" % item_mass
 	if is_bonded:
 		info += "Bonded to %d items\n" % bonded_items.size()
-	if not joints.is_empty():
-		info += "Joints: %d\n" % joints.size()
-	if not fasteners.is_empty():
-		info += "Fasteners: %d\n" % fasteners.size()
 	return info
-
-
-## Create a joint connection to another item using a fastener
-func attach_with_fastener(target: PhysicalItem, fastener_item_id: String, connection_point: Vector3 = Vector3.ZERO, parent_node: Node3D = null) -> Fastener:
-	"""Attach this item to another using a fastener (nail, screw, bolt, hinge, etc.)."""
-
-	if not target:
-		push_error("PhysicalItem: Cannot attach - target is null")
-		return null
-
-	# Default to parent node if none provided
-	if not parent_node:
-		# Use the item's parent as the joint parent
-		parent_node = get_parent()
-
-	# Create fastener
-	var fastener = Fastener.new(self, target, fastener_item_id)
-	fastener.connection_point = connection_point if connection_point != Vector3.ZERO else global_position
-
-	# Create joint through fastener
-	if fastener.create_joint(parent_node):
-		# Store fastener and joint
-		fasteners.append(fastener)
-		if fastener.joint:
-			joints.append(fastener.joint)
-
-		# Also add to target item
-		target.fasteners.append(fastener)
-		if fastener.joint:
-			target.joints.append(fastener.joint)
-
-		# Update bonding
-		bond_to(target)
-
-		# Emit signals
-		fastener_attached.emit(self, fastener)
-		if fastener.joint:
-			joint_created.emit(self, fastener.joint)
-
-		print("PhysicalItem: Attached %s to %s with %s" % [item_name, target.item_name, fastener_item_id])
-		return fastener
-
-	# Failed to create
-	push_error("PhysicalItem: Failed to create fastener joint")
-	return null
-
-
-## Remove a fastener and its joint
-func remove_fastener(fastener: Fastener, has_tool: bool = false) -> bool:
-	"""Remove a fastener connection (requires appropriate tool)."""
-
-	if not fastener in fasteners:
-		push_warning("PhysicalItem: Fastener not found on this item")
-		return false
-
-	# Try to remove
-	if fastener.remove(has_tool):
-		# Remove from both items
-		fasteners.erase(fastener)
-		if fastener.joint:
-			joints.erase(fastener.joint)
-
-		if fastener.item_b and fastener in fastener.item_b.fasteners:
-			fastener.item_b.fasteners.erase(fastener)
-			if fastener.joint:
-				fastener.item_b.joints.erase(fastener.joint)
-
-		# Update bonding
-		if fastener.item_b:
-			unbond_from(fastener.item_b)
-
-		print("PhysicalItem: Removed fastener from %s" % item_name)
-		return true
-
-	return false
-
-
-## Get all items connected via joints
-func get_jointed_items() -> Array[PhysicalItem]:
-	"""Get all items connected to this one through joints."""
-	var connected: Array[PhysicalItem] = []
-
-	for joint in joints:
-		if joint.item_a == self and joint.item_b:
-			if joint.item_b not in connected:
-				connected.append(joint.item_b)
-		elif joint.item_b == self and joint.item_a:
-			if joint.item_a not in connected:
-				connected.append(joint.item_a)
-
-	return connected
-
-
-## Get all joints and fasteners as cluster
-func get_assembly_cluster() -> Dictionary:
-	"""Get all items, joints, and fasteners in the connected assembly."""
-	var items: Array[PhysicalItem] = get_bonded_cluster()
-	var all_joints: Array[Joint] = []
-	var all_fasteners: Array[Fastener] = []
-
-	for item in items:
-		for joint in item.joints:
-			if joint not in all_joints:
-				all_joints.append(joint)
-		for fastener in item.fasteners:
-			if fastener not in all_fasteners:
-				all_fasteners.append(fastener)
-
-	return {"items": items, "joints": all_joints, "fasteners": all_fasteners}
-
-
-## Load connection points from item metadata
-func load_connection_points():
-	"""Load connection points from ItemDatabase metadata."""
-	connection_points.clear()
-
-	if not ItemDatabase:
-		return
-
-	var item_def = ItemDatabase.get_item(item_id)
-	if not item_def:
-		return
-
-	if item_def.custom_properties.has("connection_points"):
-		var points = item_def.custom_properties.get("connection_points", [])
-		for point_data in points:
-			var point = {"position": Vector3.ZERO, "type": "surface"}
-
-			if point_data.has("position"):
-				var pos_array = point_data.get("position", [0, 0, 0])
-				if pos_array is Array and pos_array.size() == 3:
-					point.position = Vector3(pos_array[0], pos_array[1], pos_array[2])
-
-			if point_data.has("type"):
-				point.type = point_data.get("type", "surface")
-
-			connection_points.append(point)
-
-	print("PhysicalItem: Loaded %d connection points for %s" % [connection_points.size(), item_name])
 
 
 ## Set up interactable area for E key inventory pickup

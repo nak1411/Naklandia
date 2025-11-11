@@ -17,7 +17,6 @@ var current_transform_mode: TransformMode = TransformMode.SELECT
 var camera_controller: WorkbenchCameraController
 var selection_manager: WorkbenchSelectionManager
 var gizmo_controller: WorkbenchGizmoController
-var connect_mode: WorkbenchConnectMode
 var undo_redo_manager: WorkbenchUndoRedo
 var ui_manager: WorkbenchUIManager
 var assembly_manager: WorkbenchAssemblyManager
@@ -161,9 +160,6 @@ func _initialize_managers() -> void:
 	gizmo_controller = WorkbenchGizmoController.new(camera, viewport, viewport_container, transform_gizmo, gizmo_scale)
 	gizmo_controller.set_transform_mode(current_transform_mode as WorkbenchGizmoController.TransformMode)
 
-	# Connect mode
-	connect_mode = WorkbenchConnectMode.new(camera, viewport, viewport_container, world)
-
 	# Undo/redo manager
 	undo_redo_manager = WorkbenchUndoRedo.new()
 
@@ -181,7 +177,6 @@ func _setup_ui() -> Dictionary:
 		"part_list": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/PartsSection/PartList,
 		"category_filter": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/PartsSection/CategoryFilterContainer/CategoryFilter,
 		"add_object_button": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/ButtonContainer/VBoxContainer/AddObjectButton,
-		"connect_mode_button": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer/Design/VBoxContainer/ButtonContainer/VBoxContainer/ConnectModeButton,
 		"help_label": $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/HelpLabel,
 		"select_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/SelectButton,
 		"move_button": $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons/MoveButton,
@@ -257,10 +252,6 @@ func _connect_all_signals(ui_refs: Dictionary) -> void:
 	gizmo_controller.transform_completed.connect(_on_transform_completed)
 	gizmo_controller.gizmo_visibility_changed.connect(func(_vis): pass)
 
-	# Connect mode signals
-	connect_mode.fastener_placed.connect(_on_fastener_placed)
-	connect_mode.connect_mode_toggled.connect(_on_connect_mode_toggled)
-
 	# Undo/redo signals
 	undo_redo_manager.history_changed.connect(func(_undo_count, _redo_count): pass)
 
@@ -269,7 +260,6 @@ func _connect_all_signals(ui_refs: Dictionary) -> void:
 
 	# UI Manager signals
 	ui_manager.viewport_settings_changed.connect(_on_viewport_settings_changed)
-	ui_manager.fastener_selected.connect(_on_fastener_selected)
 
 	# Assembly manager signals
 	assembly_manager.assembly_created.connect(
@@ -319,11 +309,6 @@ func _connect_ui_button_signals(ui_refs: Dictionary) -> void:
 		var button = ui_refs.get(button_name)
 		if button:
 			button.pressed.connect(buttons[button_name])
-
-	# Connect mode button (toggle)
-	var connect_btn = ui_refs.get("connect_mode_button")
-	if connect_btn:
-		connect_btn.toggled.connect(_on_connect_mode_button_toggled)
 
 	# Category filter
 	var cat_filter = ui_refs.get("category_filter")
@@ -435,17 +420,9 @@ func _on_window_hidden() -> void:
 	# Reset transform mode to SELECT
 	current_transform_mode = TransformMode.SELECT
 
-	# Exit connect mode if active
-	if connect_mode.is_active():
-		connect_mode.exit_connect_mode()
-
 	# Update UI to reflect default state
 	if ui_manager:
 		ui_manager.update_mode_buttons(TransformMode.SELECT as WorkbenchUIManager.TransformMode)
-
-		# Reset button states
-		if ui_manager.connect_mode_button:
-			ui_manager.connect_mode_button.button_pressed = false
 
 	# Hide and reset gizmo
 	if transform_gizmo:
@@ -517,23 +494,15 @@ func _handle_keyboard_shortcuts(event: InputEventKey) -> void:
 	"""Handle keyboard shortcut inputs."""
 	match event.keycode:
 		KEY_Q:
-			if connect_mode.is_active():
-				_exit_connect_mode()
 			_set_transform_mode(TransformMode.SELECT)
 			get_viewport().set_input_as_handled()
 		KEY_W:
-			if connect_mode.is_active():
-				_exit_connect_mode()
 			_set_transform_mode(TransformMode.MOVE)
 			get_viewport().set_input_as_handled()
 		KEY_E:
-			if connect_mode.is_active():
-				_exit_connect_mode()
 			_set_transform_mode(TransformMode.ROTATE)
 			get_viewport().set_input_as_handled()
 		KEY_R:
-			if connect_mode.is_active():
-				_exit_connect_mode()
 			_set_transform_mode(TransformMode.SCALE)
 			get_viewport().set_input_as_handled()
 		KEY_F:
@@ -569,29 +538,21 @@ func _handle_keyboard_shortcuts(event: InputEventKey) -> void:
 					undo_redo_manager.undo()
 				_update_gizmo()
 				# Update UI to reflect the undone/redone state
-				ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
+				ui_manager.update_object_info(selection_manager.selected_items, false)
 				get_viewport().set_input_as_handled()
 		KEY_ESCAPE:
-			if connect_mode.is_active():
-				_exit_connect_mode()
-				get_viewport().set_input_as_handled()
+			get_viewport().set_input_as_handled()
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	"""Process frame updates."""
-	# Update fire line timer for connect mode
-	connect_mode.update_fire_line_timer(delta)
 
 	# Redraw selection box if needed
 	if selection_manager.is_box_selecting and selection_overlay:
 		selection_overlay.queue_redraw()
 
-	# Update all joint visual helpers
-	_update_joint_visual_helpers()
-
-	# Update cluster pivot if needed
-	if selection_manager.cluster_pivot_active and not selection_manager.selected_items.is_empty():
-		selection_manager.update_cluster_pivot()
+	# Update selection pivot - now done automatically in select_item()
+	# (pivot is average center of all selected items)
 
 	# Always update gizmo position if items are selected AND we're in a mode where editing is allowed
 	# Only allow gizmo in: Design tab, OR Assembly tab + edit mode
@@ -629,16 +590,7 @@ func _process(delta: float) -> void:
 
 	# Update object info display
 	if not selection_manager.selected_items.is_empty():
-		ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
-
-
-func _update_joint_visual_helpers() -> void:
-	"""Update all joint visual helpers to follow moving objects."""
-	for item in world.get_children():
-		if item is PhysicalItem:
-			for fastener in item.fasteners:
-				if fastener.joint:
-					fastener.joint.update_visual_helper_position()
+		ui_manager.update_object_info(selection_manager.selected_items, false)
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -667,11 +619,6 @@ func _handle_mouse_press(event: InputEventMouseButton) -> void:
 
 	# Left click
 	if event.button_index == MOUSE_BUTTON_LEFT:
-		# Connect mode click
-		if connect_mode.is_active():
-			connect_mode.place_fastener_at_ray(event.position)
-			return
-
 		# Try gizmo drag
 		if gizmo_controller.try_start_gizmo_drag(event.position, selection_manager.selected_items):
 			return
@@ -744,9 +691,6 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 
 func _set_transform_mode(mode: TransformMode) -> void:
 	"""Set the current transform mode."""
-	# Exit connect mode if switching away
-	if connect_mode.is_active() and mode != TransformMode.CONNECT:
-		_exit_connect_mode()
 
 	current_transform_mode = mode
 	gizmo_controller.set_transform_mode(mode as WorkbenchGizmoController.TransformMode)
@@ -758,7 +702,7 @@ func _set_transform_mode(mode: TransformMode) -> void:
 
 func _update_gizmo() -> void:
 	"""Update gizmo position and visibility."""
-	gizmo_controller.update_gizmo_position(selection_manager.selected_items, selection_manager.cluster_pivot_active, selection_manager.cluster_pivot_point)
+	gizmo_controller.update_gizmo_position(selection_manager.selected_items, false, selection_manager.selection_pivot_point)
 
 
 func _record_transform_operation() -> void:
@@ -806,7 +750,7 @@ func _on_selection_changed(_selected_items: Array[PhysicalItem]) -> void:
 	print("WorkbenchWindow: _on_selection_changed called, _selected_items.size() = %d" % _selected_items.size())
 	print("  selection_manager.selected_items.size() = %d" % selection_manager.selected_items.size())
 	_update_gizmo()
-	ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
+	ui_manager.update_object_info(selection_manager.selected_items, false)
 
 
 func _on_transform_updated(operation: String, value: float, axis: Vector3) -> void:
@@ -817,19 +761,6 @@ func _on_transform_updated(operation: String, value: float, axis: Vector3) -> vo
 func _on_transform_completed(_mode: int) -> void:
 	"""Handle transform completion."""
 	ui_manager.clear_transform_stats()
-
-
-func _on_fastener_placed(_fastener: Fastener, _item_a: PhysicalItem, _item_b: PhysicalItem) -> void:
-	"""Handle fastener placement."""
-	ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
-
-
-func _on_connect_mode_toggled(active: bool) -> void:
-	"""Handle connect mode toggle."""
-	if active:
-		_set_transform_mode(TransformMode.CONNECT)
-	else:
-		_set_transform_mode(TransformMode.SELECT)
 
 
 func _on_viewport_settings_changed(grid_size: float, new_gizmo_scale: float, bg_color: Color, floor_color: Color) -> void:
@@ -864,13 +795,6 @@ func _on_viewport_settings_changed(grid_size: float, new_gizmo_scale: float, bg_
 		var floor_material = ground_plane.get_surface_override_material(0) as StandardMaterial3D
 		if floor_material:
 			floor_material.albedo_color = floor_color
-
-
-func _on_fastener_selected(fastener_id: String) -> void:
-	"""Handle fastener selection from dialog."""
-	var count = connect_mode.attach_selected_items_with_fastener(selection_manager.selected_items, fastener_id)
-	if count > 0:
-		ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
 
 
 func _on_transform_input_focus_entered(component: String) -> void:
@@ -1012,8 +936,8 @@ func _on_transform_input_changed(component: String, axis: String, value: float) 
 
 		# For clustered objects, also store the initial pivot point
 		var initial_pivot: Vector3
-		if selection_manager.selected_items.size() > 1 and selection_manager.cluster_pivot_active:
-			initial_pivot = selection_manager.cluster_pivot_point
+		if selection_manager.selected_items.size() > 1 and false:
+			initial_pivot = selection_manager.selection_pivot_point
 			manual_transform_initial_values["__pivot__"] = initial_pivot
 			print("  Storing cluster pivot: ", initial_pivot)
 
@@ -1215,17 +1139,15 @@ func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _co
 		"undo":
 			undo_redo_manager.undo()
 			_update_gizmo()
-			ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
+			ui_manager.update_object_info(selection_manager.selected_items, false)
 		"redo":
 			undo_redo_manager.redo()
 			_update_gizmo()
-			ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
+			ui_manager.update_object_info(selection_manager.selected_items, false)
 		"duplicate":
 			_duplicate_selected_items()
 		"delete":
 			selection_manager.delete_selected_items()
-		"attach_fastener":
-			ui_manager.show_fastener_selection_dialog(selection_manager.selected_items, self)
 
 
 func _on_part_selected(index: int) -> void:
@@ -1264,38 +1186,6 @@ func _on_add_object_pressed() -> void:
 	else:
 		print("ERROR: Part '%s' not found in available_parts" % part_name)
 		print("Available parts: ", available_parts.keys())
-
-
-func _on_connect_mode_button_toggled(button_pressed: bool) -> void:
-	"""Handle connect mode button toggle."""
-	if button_pressed:
-		if selection_manager.selected_items.is_empty():
-			print("Connect Mode requires items to be selected")
-			var btn = ui_manager.connect_mode_button
-			if btn:
-				btn.button_pressed = false
-			return
-
-		# Try to enter connect mode (it will validate cluster count internally)
-		if not connect_mode.enter_connect_mode(selection_manager.selected_items):
-			var btn = ui_manager.connect_mode_button
-			if btn:
-				btn.button_pressed = false
-			return
-
-		_set_transform_mode(TransformMode.CONNECT)
-	else:
-		_exit_connect_mode()
-
-
-func _exit_connect_mode() -> void:
-	"""Exit connect mode."""
-	connect_mode.exit_connect_mode()
-	_set_transform_mode(TransformMode.SELECT)
-
-	# Update the connect mode button state
-	if ui_manager and ui_manager.connect_mode_button:
-		ui_manager.connect_mode_button.button_pressed = false
 
 
 func _on_ghost_mode_toggled(enabled: bool) -> void:
@@ -1385,7 +1275,6 @@ func clear_workbench() -> void:
 	assembly_items.clear()
 
 	selection_manager.clear_selection()
-	connect_mode.clear_fasteners()
 	undo_redo_manager.clear_history()
 
 	# Exit edit mode if active
@@ -1505,20 +1394,11 @@ func _show_context_menu(_mouse_pos: Vector2) -> void:
 		context_menu.add_menu_item("duplicate", "Duplicate")
 		context_menu.add_menu_item("delete", "Delete")
 		context_menu.add_separator()
-
-		if selection_manager.selected_items.size() >= 2:
-			context_menu.add_menu_item("attach_fastener", "Attach with Fastener...")
-			context_menu.add_separator()
-
 		context_menu.add_menu_item("frame_selected", "Frame Selected", null, not selection_manager.selected_items.is_empty())
 		context_menu.add_separator()
 		context_menu.add_menu_item("select_all", "Select All")
 		context_menu.add_menu_item("select_none", "Select None", null, not selection_manager.selected_items.is_empty())
 	else:
-		if selection_manager.selected_items.size() >= 2:
-			context_menu.add_menu_item("attach_fastener", "Attach with Fastener...")
-			context_menu.add_separator()
-
 		context_menu.add_menu_item("select_all", "Select All")
 		context_menu.add_menu_item("select_none", "Select None", null, not selection_manager.selected_items.is_empty())
 		context_menu.add_separator()
@@ -1579,7 +1459,7 @@ func _is_mouse_over_viewport() -> bool:
 func _update_all_ui() -> void:
 	"""Update all UI elements."""
 	_update_gizmo()
-	ui_manager.update_object_info(selection_manager.selected_items, selection_manager.cluster_pivot_active)
+	ui_manager.update_object_info(selection_manager.selected_items, false)
 
 
 # Assembly Management
@@ -2084,7 +1964,6 @@ func _update_assembly_edits() -> void:
 	# This must happen BEFORE async operations to ensure the assembly is saved even if async fails
 	print("WorkbenchWindow: Copying updated assembly data...")
 	assembly.parts = updated_assembly.parts
-	assembly.fasteners = updated_assembly.fasteners
 	assembly.total_mass = updated_assembly.total_mass
 	assembly.total_volume = updated_assembly.total_volume
 	assembly.assembly_value = updated_assembly.assembly_value

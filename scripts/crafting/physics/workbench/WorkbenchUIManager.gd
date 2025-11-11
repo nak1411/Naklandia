@@ -10,16 +10,14 @@ extends RefCounted
 ## - Transform stats display
 ## - Object info display
 ## - Viewport settings dialog
-## - Fastener selection dialog
 
 signal mode_button_pressed(mode: int)
 signal part_spawn_requested(scene_path: String)
-signal clear_requested()
-signal validate_requested()
+signal clear_requested
+signal validate_requested
 signal category_filter_changed(category: int)
 signal transform_input_changed(component: String, axis: String, value: float)
 signal viewport_settings_changed(grid_size: float, gizmo_scale: float, bg_color: Color, floor_color: Color)
-signal fastener_selected(fastener_id: String)
 
 # Transform modes enum
 enum TransformMode { SELECT, MOVE, ROTATE, SCALE, CONNECT }
@@ -40,7 +38,6 @@ var select_button: Button
 var move_button: Button
 var rotate_button: Button
 var scale_button: Button
-var connect_mode_button: Button
 
 # Transform input panel
 var transform_panel: PanelContainer
@@ -74,15 +71,6 @@ var available_parts: Dictionary = {}
 var part_categories: Dictionary = {}
 var current_category_filter: CategoryFilter = CategoryFilter.ALL
 
-# Available fasteners
-var available_fasteners: Array[String] = [
-	"fastener_iron_nail",
-	"fastener_steel_screw",
-	"fastener_steel_bolt",
-	"fastener_hinge",
-	"fastener_ball_joint"
-]
-
 # Scene references
 var world_environment: WorldEnvironment
 var ground_plane: MeshInstance3D
@@ -105,7 +93,6 @@ func setup_ui_references(ui_refs: Dictionary) -> void:
 	move_button = ui_refs.get("move_button")
 	rotate_button = ui_refs.get("rotate_button")
 	scale_button = ui_refs.get("scale_button")
-	connect_mode_button = ui_refs.get("connect_mode_button")
 
 	# Transform panel
 	transform_panel = ui_refs.get("transform_panel")
@@ -211,24 +198,12 @@ func update_object_info(selected_items: Array[PhysicalItem], is_cluster: bool = 
 		return
 
 	if selected_items.size() > 1:
-		# Multiple objects - show count and joint/fastener info
+		# Multiple objects - show count
 		var text = ""
 		if is_cluster:
 			text = "Cluster Selected (%d objects)" % selected_items.size()
 		else:
 			text = "Multiple Selected (%d objects)" % selected_items.size()
-
-		var total_joints = 0
-		var total_fasteners = 0
-
-		for item in selected_items:
-			total_joints += item.joints.size()
-			total_fasteners += item.fasteners.size()
-
-		if total_joints > 0:
-			text += "\nJoints: %d" % total_joints
-		if total_fasteners > 0:
-			text += "\nFasteners: %d" % total_fasteners
 
 		object_info_label.text = text
 		return
@@ -242,12 +217,6 @@ func update_object_info(selected_items: Array[PhysicalItem], is_cluster: bool = 
 	var text = "Position: (%.2f, %.2f, %.2f)\n" % [pos.x, pos.y, pos.z]
 	text += "Rotation: (%.1f°, %.1f°, %.1f°)\n" % [rot.x, rot.y, rot.z]
 	text += "Scale: (%.2f, %.2f, %.2f)" % [scale_vec.x, scale_vec.y, scale_vec.z]
-
-	# Add joint and fastener info
-	if not item.joints.is_empty():
-		text += "\nJoints: %d" % item.joints.size()
-	if not item.fasteners.is_empty():
-		text += "\nFasteners: %d" % item.fasteners.size()
 
 	object_info_label.text = text
 
@@ -332,40 +301,6 @@ func update_transform_panel(selected_items: Array[PhysicalItem]) -> void:
 	is_updating_transform_inputs = false
 
 
-func show_fastener_selection_dialog(selected_items: Array[PhysicalItem], parent_node: Node) -> void:
-	"""Show a dialog to select which fastener to use for attaching selected items."""
-	print("show_fastener_selection_dialog called with %d selected items" % selected_items.size())
-
-	if selected_items.size() < 2:
-		print("ERROR: Need at least 2 items selected to attach with fastener")
-		return
-
-	# Remove any existing popup
-	var existing_popup = parent_node.get_node_or_null("FastenerSelectionPopup")
-	if existing_popup:
-		existing_popup.queue_free()
-
-	# Create simple popup menu for fastener selection
-	var popup = PopupMenu.new()
-	popup.name = "FastenerSelectionPopup"
-
-	# Add fastener options
-	for i in range(available_fasteners.size()):
-		var fastener_id = available_fasteners[i]
-		var fastener_name = get_fastener_display_name(fastener_id)
-		popup.add_item(fastener_name, i)
-
-	# Connect signals
-	popup.id_pressed.connect(func(index: int): _on_fastener_popup_selected(index))
-	popup.popup_hide.connect(func(): popup.queue_free())
-
-	# Add to scene and show
-	parent_node.add_child(popup)
-	var mouse_pos = parent_node.get_global_mouse_position()
-	popup.position = Vector2i(mouse_pos)
-	popup.popup()
-
-
 func show_viewport_settings_dialog(parent_node: Node, grid_snap_size: float) -> void:
 	"""Show viewport settings dialog for configuring grid size, gizmo scale, etc."""
 	print("ViewportSettings: Opening dialog")
@@ -391,12 +326,7 @@ func show_viewport_settings_dialog(parent_node: Node, grid_snap_size: float) -> 
 			current_floor_color = floor_material.albedo_color
 
 	# Create the settings dialog
-	var settings_dialog = ViewportSettingsDialog.new(
-		current_grid_size,
-		current_gizmo_scale,
-		current_bg_color,
-		current_floor_color
-	)
+	var settings_dialog = ViewportSettingsDialog.new(current_grid_size, current_gizmo_scale, current_bg_color, current_floor_color)
 
 	# Add to scene
 	var ui_manager = parent_node.get_tree().get_first_node_in_group("ui_manager")
@@ -445,25 +375,11 @@ func load_viewport_settings() -> void:
 		if floor_material:
 			floor_material.albedo_color = saved_settings["floor_color"]
 
-	print("Loaded viewport settings: grid=%.2f, gizmo=%.2f" % [
-		saved_settings["grid_size"],
-		saved_settings["gizmo_scale"]
-	])
-
-
-func get_fastener_display_name(fastener_id: String) -> String:
-	"""Get display name for fastener from ItemDatabase."""
-	if not ItemDatabase:
-		return fastener_id
-
-	var item_def = ItemDatabase.get_item(fastener_id)
-	if item_def:
-		return item_def.name
-
-	return fastener_id
+	print("Loaded viewport settings: grid=%.2f, gizmo=%.2f" % [saved_settings["grid_size"], saved_settings["gizmo_scale"]])
 
 
 # Private helper methods
+
 
 func _should_show_part(part_name: String) -> bool:
 	"""Check if a part should be shown based on the current category filter."""
@@ -513,16 +429,6 @@ func _get_axis_name(axis: Vector3) -> String:
 		return axis_name
 
 
-func _on_fastener_popup_selected(index: int) -> void:
-	"""Handle fastener selection from popup menu."""
-	if index < 0 or index >= available_fasteners.size():
-		return
-
-	var selected_fastener_id = available_fasteners[index]
-	print("Selected fastener: %s" % selected_fastener_id)
-	fastener_selected.emit(selected_fastener_id)
-
-
 func _setup_viewport_dialog_async(settings_dialog: ViewportSettingsDialog, parent_node: Node) -> void:
 	"""Setup viewport dialog connections asynchronously."""
 	# Wait for dialog to be ready
@@ -537,8 +443,7 @@ func _setup_viewport_dialog_async(settings_dialog: ViewportSettingsDialog, paren
 
 	# Connect signals
 	settings_dialog.settings_changed.connect(
-		func(grid_size: float, gizmo_scale: float, bg_color: Color, floor_color: Color):
-			viewport_settings_changed.emit(grid_size, gizmo_scale, bg_color, floor_color)
+		func(grid_size: float, gizmo_scale: float, bg_color: Color, floor_color: Color): viewport_settings_changed.emit(grid_size, gizmo_scale, bg_color, floor_color)
 	)
 
 	settings_dialog.dialog_closed.connect(func(): is_dialog_open = false)
