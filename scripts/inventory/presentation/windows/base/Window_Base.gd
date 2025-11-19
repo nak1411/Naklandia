@@ -98,6 +98,7 @@ func _init():
 
 
 func _ready():
+	add_to_group("screen_responsive_ui")
 	_setup_window_ui()
 	_setup_resize_overlay()
 	_setup_edge_bloom()
@@ -1255,6 +1256,36 @@ func _setup_resize_area_geometry(area: Control, mode: ResizeMode):
 
 func _on_window_resized(_new_size: Vector2i):
 	_update_edge_bloom_size()
+
+
+func _on_screen_resized(_new_size: Vector2):
+	"""Called when screen is resized or mode changed (fullscreen/windowed)"""
+	# Window position validation is handled by UIManager
+	# Just ensure the window stays within bounds if it somehow got out
+	_validate_window_position()
+
+
+func _validate_window_position():
+	"""Ensure window stays within screen bounds"""
+	var viewport_size = get_viewport().get_visible_rect().size
+	var min_visible = 100.0  # Keep at least 100px visible
+
+	var adjusted_pos = position
+
+	# Keep window mostly on screen
+	if position.x + size.x < min_visible:
+		adjusted_pos.x = min_visible - size.x
+	elif position.x > viewport_size.x - min_visible:
+		adjusted_pos.x = viewport_size.x - min_visible
+
+	if position.y < 0:
+		adjusted_pos.y = 0
+	elif position.y + title_bar_height > viewport_size.y:
+		adjusted_pos.y = viewport_size.y - title_bar_height
+
+	if adjusted_pos != position:
+		position = adjusted_pos
+		window_moved.emit(Vector2i(position))
 
 
 func _update_edge_bloom_size():

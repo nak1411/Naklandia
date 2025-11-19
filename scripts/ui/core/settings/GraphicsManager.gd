@@ -195,6 +195,17 @@ func apply_window_mode(mode: String):
 	current_settings["window_mode"] = mode
 	settings_changed.emit("window_mode", mode)
 
+	# Notify UI elements of screen mode change (triggers after a frame to let display update)
+	call_deferred("_notify_ui_screen_mode_changed", mode)
+
+
+func _notify_ui_screen_mode_changed(_mode: String):
+	"""Notify all UI elements that the screen mode has changed"""
+	# This will trigger after the display mode has actually changed
+	# UI elements in the "screen_responsive_ui" group will receive the callback
+	var viewport_size = get_viewport().get_visible_rect().size
+	get_tree().call_group("screen_responsive_ui", "_on_screen_resized", viewport_size)
+
 
 func apply_vsync_mode(mode: String):
 	"""Apply VSync setting"""

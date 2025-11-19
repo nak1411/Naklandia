@@ -528,6 +528,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 focus_mode = 0
 stretch = true
+stretch_shrink = 1
 
 [node name="SelectionOverlay" type="Control" parent="VBoxContainer/MainContent/ViewportContainer"]
 layout_mode = 2

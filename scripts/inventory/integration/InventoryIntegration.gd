@@ -442,7 +442,7 @@ func _should_restore_player_input() -> bool:
 		if window.visible:
 			var window_type = window.get_meta("window_type", "")
 			# Count all window types that require input disabled
-			if window_type in ["main_inventory", "tearoff", "dialog", "crafting", "character", "equipment"]:
+			if window_type in ["main_inventory", "tearoff", "dialog", "crafting", "character", "equipment", "workbench"]:
 				ui_windows_open += 1
 				print("[InventoryIntegration] Found open window: ", window.name, " (type: ", window_type, ")")
 

@@ -753,3 +753,56 @@ func _on_workbench_button_pressed():
 func _on_workbench_window_closed():
 	"""Handle workbench window being closed"""
 	print("Workbench window closed")
+
+	# Only restore player input and hide cursor if NO other UI windows are open
+	if _should_restore_player_input():
+		print("[CraftingStationWindow] Restoring player input and hiding cursor")
+		# Re-enable player input
+		_set_player_input_enabled(true)
+		# Restore mouse mode
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	else:
+		print("[CraftingStationWindow] NOT restoring input - other windows still open")
+
+
+func _should_restore_player_input() -> bool:
+	"""Check if player input should be restored (no UI windows open)"""
+	var ui_mgr = _get_ui_manager()
+	if not ui_mgr:
+		print("[CraftingStationWindow] No UI manager found, safe to restore input")
+		return true  # No UI manager, safe to restore
+
+	# Check if any UI windows are still open
+	var all_windows = ui_mgr.get_all_windows()
+	var ui_windows_open = 0
+
+	for window in all_windows:
+		if not is_instance_valid(window):
+			continue
+
+		# Only count visible windows
+		if window.visible:
+			var window_type = window.get_meta("window_type", "")
+			# Count all window types that require input disabled
+			if window_type in ["main_inventory", "tearoff", "dialog", "crafting", "character", "equipment", "workbench"]:
+				ui_windows_open += 1
+				print("[CraftingStationWindow] Found open window: ", window.name, " (type: ", window_type, ")")
+
+	var should_restore = ui_windows_open == 0
+	print("[CraftingStationWindow] Open UI windows: ", ui_windows_open, " - Should restore input: ", should_restore)
+	return should_restore
+
+
+func _get_ui_manager():
+	"""Get UIManager instance"""
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		return ui_managers[0]
+	return null
+
+
+func _set_player_input_enabled(enabled: bool):
+	"""Enable or disable player input"""
+	var player_node = get_tree().get_first_node_in_group("player")
+	if player_node and player_node.has_method("set_input_enabled"):
+		player_node.set_input_enabled(enabled)

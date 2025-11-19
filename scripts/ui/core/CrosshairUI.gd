@@ -26,6 +26,7 @@ var player_ref: CharacterBody3D
 
 
 func _ready():
+	add_to_group("screen_responsive_ui")
 	_setup_crosshair()
 	_find_player_reference()
 	z_index = 50
@@ -33,11 +34,21 @@ func _ready():
 
 func _setup_crosshair():
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	set_size(get_viewport().get_visible_rect().size)
+	_update_size_for_screen()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	# Start hidden
 	modulate.a = 0.0
+
+
+func _update_size_for_screen():
+	"""Update crosshair size to match viewport"""
+	set_size(get_viewport().get_visible_rect().size)
+
+
+func _on_screen_resized(_new_size: Vector2):
+	"""Called when screen is resized or mode changed (fullscreen/windowed)"""
+	_update_size_for_screen()
 
 
 func _find_player_reference():

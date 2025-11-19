@@ -339,13 +339,55 @@ func _on_container_window_closed():
 	# Clear reference
 	container_window = null
 
-	# Re-enable player input
-	var player = get_player_reference()
-	if player and player.has_method("set_input_enabled"):
-		player.set_input_enabled(true)
+	# Only restore player input and hide cursor if NO other UI windows are open
+	if _should_restore_player_input():
+		print("[InteractableContainer] Restoring player input and hiding cursor")
+		# Re-enable player input
+		var player = get_player_reference()
+		if player and player.has_method("set_input_enabled"):
+			player.set_input_enabled(true)
+		# Restore mouse mode
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	else:
+		print("[InteractableContainer] NOT restoring input - other windows still open")
 
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	container_closed.emit()
+
+
+func _should_restore_player_input() -> bool:
+	"""Check if player input should be restored (no UI windows open)"""
+	var ui_mgr = _get_ui_manager()
+	if not ui_mgr:
+		print("[InteractableContainer] No UI manager found, safe to restore input")
+		return true  # No UI manager, safe to restore
+
+	# Check if any UI windows are still open
+	var all_windows = ui_mgr.get_all_windows()
+	var ui_windows_open = 0
+
+	for window in all_windows:
+		if not is_instance_valid(window):
+			continue
+
+		# Only count visible windows
+		if window.visible:
+			var window_type = window.get_meta("window_type", "")
+			# Count all window types that require input disabled
+			if window_type in ["main_inventory", "tearoff", "dialog", "crafting", "character", "equipment", "workbench"]:
+				ui_windows_open += 1
+				print("[InteractableContainer] Found open window: ", window.name, " (type: ", window_type, ")")
+
+	var should_restore = ui_windows_open == 0
+	print("[InteractableContainer] Open UI windows: ", ui_windows_open, " - Should restore input: ", should_restore)
+	return should_restore
+
+
+func _get_ui_manager():
+	"""Get UIManager instance"""
+	var ui_managers = get_tree().get_nodes_in_group("ui_manager")
+	if ui_managers.size() > 0:
+		return ui_managers[0]
+	return null
 
 
 func close_container():

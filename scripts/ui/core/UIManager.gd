@@ -41,6 +41,7 @@ func _ready():
 	setup_default_ui_elements()
 	setup_ui_debugger()
 	setup_window_management()
+	setup_viewport_resize_detection()
 
 
 func setup_ui_debugger():
@@ -109,6 +110,12 @@ func setup_window_management():
 	cleanup_timer.timeout.connect(_cleanup_invalid_windows)
 	cleanup_timer.autostart = true
 	add_child(cleanup_timer)
+
+
+func setup_viewport_resize_detection():
+	"""Set up viewport resize detection for screen mode changes"""
+	# Connect to viewport size changes
+	get_tree().root.size_changed.connect(_on_viewport_resized)
 
 
 func force_cleanup_windows():
@@ -307,6 +314,46 @@ func _cleanup_invalid_windows():
 		focused_window = null
 
 
+func _on_viewport_resized():
+	"""Handle viewport resize events (fullscreen/windowed mode changes)"""
+	var new_size = get_viewport().get_visible_rect().size
+
+	# Notify all screen-responsive UI elements
+	get_tree().call_group("screen_responsive_ui", "_on_screen_resized", new_size)
+
+	# Validate and adjust window positions to stay within screen bounds
+	_validate_all_window_positions()
+
+
+func _validate_all_window_positions():
+	"""Validate and adjust all window positions to stay within screen bounds"""
+	var viewport_size = get_viewport().get_visible_rect().size
+
+	for window in active_windows:
+		if not is_instance_valid(window):
+			continue
+
+		# Adjust position if window is partially or fully off-screen
+		var adjusted_pos = window.position
+
+		# Keep at least 100px of the window visible
+		var min_visible = 100.0
+
+		if window.position.x + window.size.x < min_visible:
+			adjusted_pos.x = min_visible - window.size.x
+		elif window.position.x > viewport_size.x - min_visible:
+			adjusted_pos.x = viewport_size.x - min_visible
+
+		if window.position.y < 0:
+			adjusted_pos.y = 0
+		elif window.position.y + 60 > viewport_size.y:  # Keep title bar visible
+			adjusted_pos.y = viewport_size.y - 60
+
+		# Apply adjusted position if changed
+		if adjusted_pos != window.position:
+			window.position = adjusted_pos
+
+
 func _apply_smart_window_position(window: Window_Base, window_type: String):
 	"""Apply smart positioning to prevent window overlap"""
 	# Get viewport size for bounds checking
@@ -448,7 +495,7 @@ func unregister_window(window: Window_Base):
 
 	var window_type = window.get_meta("window_type", "")
 	var is_main_inventory = window_type == "main_inventory"
-	var is_persistent = window_type in ["main_inventory", "equipment", "crafting", "character"]
+	var is_persistent = window_type in ["main_inventory", "equipment", "crafting", "character", "workbench"]
 	print("[UIManager] Unregistering window type: ", window_type, " persistent:", is_persistent)
 
 	# For persistent windows, DON'T remove from active_windows - just remove from stack

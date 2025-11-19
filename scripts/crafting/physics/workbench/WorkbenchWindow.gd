@@ -118,8 +118,9 @@ func _setup_node_references() -> void:
 	"""Get all required node references from the scene tree."""
 	viewport_container = $VBoxContainer/MainContent/ViewportContainer
 	selection_overlay = $VBoxContainer/MainContent/ViewportContainer/SelectionOverlay
-	edit_mode_border = $VBoxContainer/MainContent/ViewportContainer/EditModeBorder
-	edit_mode_label = $VBoxContainer/MainContent/ViewportContainer/EditModeLabel
+	# Optional nodes - may not exist in scene
+	edit_mode_border = get_node_or_null("VBoxContainer/MainContent/ViewportContainer/EditModeBorder")
+	edit_mode_label = get_node_or_null("VBoxContainer/MainContent/ViewportContainer/EditModeLabel")
 	viewport = $VBoxContainer/MainContent/ViewportContainer/SubViewport
 	camera = $VBoxContainer/MainContent/ViewportContainer/SubViewport/Camera3D
 	world = $VBoxContainer/MainContent/ViewportContainer/SubViewport/World
@@ -129,9 +130,9 @@ func _setup_node_references() -> void:
 	tab_container = $VBoxContainer/MainContent/SidebarPanel/VBoxContainer/TabContainer
 
 	# Set up viewport
-	if viewport and viewport_container:
-		viewport.size = viewport_container.size
+	if viewport:
 		viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		# Note: stretch = true on SubViewportContainer handles automatic sizing
 
 	# Create context menu
 	context_menu = ContextMenu_Base.new()
@@ -1877,6 +1878,14 @@ func _finalize_assembly_deletion(assembly_id: String, dialog: ConfirmationDialog
 	"""Finalize the assembly deletion."""
 	if assembly_manager.delete_assembly(assembly_id):
 		print("WorkbenchWindow: Deleted assembly")
+
+		# Clear the assembly items from the viewport
+		_clear_assembly_items()
+
+		# Clear selection since the items are gone
+		selection_manager.clear_selection()
+
+		# Refresh the assemblies list UI
 		_refresh_assemblies_list()
 	else:
 		print("WorkbenchWindow: Failed to delete assembly")

@@ -24,6 +24,7 @@ var selected_slot_index: int = 0
 
 
 func _ready():
+	add_to_group("screen_responsive_ui")
 	_setup_hud()
 
 	# Wait a frame before finding inventory manager
@@ -35,7 +36,7 @@ func _ready():
 func _setup_hud():
 	# Set HUD position (bottom center of screen)
 	set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	position.y -= 60  # Offset from bottom
+	_update_position_for_screen_size()
 
 	# Background panel
 	background_panel = Panel.new()
@@ -441,6 +442,19 @@ func animate_item_pickup(item: InventoryItem_Base):
 			pickup_icon.queue_free()
 			_refresh_quick_slots()
 	)
+
+
+func _on_screen_resized(_new_size: Vector2):
+	"""Called when screen is resized or mode changed (fullscreen/windowed)"""
+	_update_position_for_screen_size()
+
+
+func _update_position_for_screen_size():
+	"""Update HUD position based on current screen size"""
+	# Reset to center bottom anchor
+	set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	# Apply responsive offset from bottom (60px from bottom edge)
+	position.y = -60
 
 
 # Save/Load quick slot configuration

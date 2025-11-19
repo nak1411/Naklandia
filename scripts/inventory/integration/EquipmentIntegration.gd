@@ -154,9 +154,17 @@ func _on_equipment_window_closed():
 			print("  visible: ", equipment_window.visible)
 			print("  is_queued_for_deletion: ", equipment_window.is_queued_for_deletion())
 
-	# UIManager will emit window_closed signal
-	# InventoryIntegration will check if input should be restored
 	is_equipment_open_flag = false
+
+	# Only restore player input and hide cursor if NO other UI windows are open
+	if _should_restore_player_input():
+		print("[EquipmentIntegration] Restoring player input and hiding cursor")
+		# Re-enable player input
+		_set_player_input_enabled(true)
+		# Restore mouse mode
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	else:
+		print("[EquipmentIntegration] NOT restoring input - other windows still open")
 
 	# Debug: Check window state AFTER setting flag
 	print("  equipment_window reference after: ", equipment_window)
@@ -173,6 +181,33 @@ func _sync_equipment_visuals():
 		var visual_manager = player.get_node("EquipmentVisualManager")
 		if visual_manager.has_method("sync_with_equipment_window"):
 			visual_manager.sync_with_equipment_window(equipment_window)
+
+
+func _should_restore_player_input() -> bool:
+	"""Check if player input should be restored (no UI windows open)"""
+	if not ui_manager:
+		print("[EquipmentIntegration] No UI manager found, safe to restore input")
+		return true  # No UI manager, safe to restore
+
+	# Check if any UI windows are still open
+	var all_windows = ui_manager.get_all_windows()
+	var ui_windows_open = 0
+
+	for window in all_windows:
+		if not is_instance_valid(window):
+			continue
+
+		# Only count visible windows
+		if window.visible:
+			var window_type = window.get_meta("window_type", "")
+			# Count all window types that require input disabled
+			if window_type in ["main_inventory", "tearoff", "dialog", "crafting", "character", "equipment", "workbench"]:
+				ui_windows_open += 1
+				print("[EquipmentIntegration] Found open window: ", window.name, " (type: ", window_type, ")")
+
+	var should_restore = ui_windows_open == 0
+	print("[EquipmentIntegration] Open UI windows: ", ui_windows_open, " - Should restore input: ", should_restore)
+	return should_restore
 
 
 func _set_player_input_enabled(enabled: bool):
