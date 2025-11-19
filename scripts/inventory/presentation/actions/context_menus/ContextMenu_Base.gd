@@ -834,6 +834,9 @@ func setup_item_context_menu(item: InventoryItem_Base):
 		ItemTypes.Type.BLUEPRINT:
 			menu_actions.append({"id": "view_blueprint", "text": "View Blueprint"})
 
+	# Add drop item action
+	menu_actions.append({"id": "drop_item", "text": "Drop Item"})
+
 	# Add destroy action if applicable
 	if item.can_be_destroyed:
 		menu_actions.append({"id": "destroy_item", "text": "Destroy Item"})

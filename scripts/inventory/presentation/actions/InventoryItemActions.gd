@@ -158,6 +158,8 @@ func _handle_item_action(action_id: String, context_data: Dictionary):
 			open_container_item(item)
 		"view_blueprint":
 			view_blueprint(item)
+		"drop_item":
+			drop_item(item, slot)
 		"destroy_item":
 			show_destroy_item_confirmation(item, slot)
 		_:
@@ -732,6 +734,126 @@ func view_blueprint(item: InventoryItem_Base):
 	"""View blueprint details"""
 	print("Viewing blueprint: ", item.item_name)
 	# TODO: Implement blueprint viewer
+
+
+func drop_item(item: InventoryItem_Base, _slot: InventorySlot):
+	"""Drop an item from inventory into the world as a physical object"""
+	print("Dropping item: ", item.item_name)
+
+	# Get scene tree from window_parent
+	if not window_parent:
+		print("InventoryItemActions: No window_parent available")
+		NotificationManager.show_error("Cannot drop item")
+		return
+
+	var tree = window_parent.get_tree()
+	if not tree:
+		print("InventoryItemActions: Could not access scene tree")
+		NotificationManager.show_error("Cannot drop item")
+		return
+
+	# Get player reference
+	var players = tree.get_nodes_in_group("player")
+	if players.is_empty():
+		print("InventoryItemActions: No player found")
+		NotificationManager.show_error("Cannot drop item")
+		return
+
+	var player = players[0]
+
+	# Get world reference (assuming player's parent is the world)
+	var world = player.get_parent()
+	if not world:
+		print("InventoryItemActions: Could not find world node")
+		NotificationManager.show_error("Cannot drop item")
+		return
+
+	# Get spawn position (slightly in front and above player)
+	var spawn_position = player.global_position
+	var forward_offset = Vector3.ZERO
+
+	if player.has_method("get_look_direction"):
+		var look_dir = player.get_look_direction()
+		forward_offset = look_dir * 0.5  # Just slightly in front
+	else:
+		# Use player's forward direction from transform
+		forward_offset = -player.global_transform.basis.z * 0.5
+
+	# Place it in front and above the player
+	spawn_position += forward_offset + Vector3(0, 1.5, 0)
+
+	# Try to load the physical item scene based on item_id
+	var physical_scene_path = _get_physical_scene_path(item.item_id)
+	if physical_scene_path.is_empty():
+		print("InventoryItemActions: No physical scene found for item: ", item.item_id)
+		NotificationManager.show_error("Cannot drop this item type")
+		return
+
+	var physical_scene = load(physical_scene_path)
+	if not physical_scene:
+		print("InventoryItemActions: Failed to load physical scene: ", physical_scene_path)
+		NotificationManager.show_error("Cannot drop item")
+		return
+
+	# Instantiate the physical item
+	var physical_item = physical_scene.instantiate()
+	if not physical_item:
+		print("InventoryItemActions: Failed to instantiate physical item")
+		NotificationManager.show_error("Cannot drop item")
+		return
+
+	# Disable interactable area setup temporarily to avoid errors
+	if physical_item.has_method("set"):
+		physical_item.set("can_pickup_to_inventory", false)
+
+	# Add to world first
+	world.add_child(physical_item)
+
+	# Now set position (must be after adding to tree)
+	physical_item.global_position = spawn_position
+
+	# Wait for the item to be fully in the tree
+	await tree.process_frame
+
+	# Now re-enable pickup and setup interactable area
+	if physical_item.has_method("set") and physical_item.has_method("call_deferred"):
+		physical_item.set("can_pickup_to_inventory", true)
+		physical_item.call_deferred("_setup_interactable_area")
+
+	# Item just drops straight down - no velocity needed
+	if physical_item is RigidBody3D:
+		# Add slight angular velocity for more natural motion
+		physical_item.angular_velocity = Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1))
+
+		# Reduce gravity scale slightly to make it feel less "heavy"
+		physical_item.gravity_scale = 0.7  # 70% of default gravity
+
+	# Remove one from inventory
+	if current_container and inventory_manager:
+		item.quantity -= 1
+
+		if item.quantity <= 0:
+			current_container.remove_item(item)
+
+		await window_parent.get_tree().process_frame
+		container_refreshed.emit()
+
+		# Show notification
+		NotificationManager.show_notification("Dropped %s" % item.item_name)
+		print("InventoryItemActions: Dropped %s at position %s" % [item.item_name, spawn_position])
+
+
+func _get_physical_scene_path(item_id: String) -> String:
+	"""Map item IDs to their physical scene paths"""
+	# Define mappings for items that have physical representations
+	var scene_mappings = {
+		"resource_resinwood_log": "res://assets/models/resources/resinwood_log.tscn",
+		"resource_iron_ore": "res://assets/models/resources/iron_ore.tscn",
+		"resource_copper_ore": "res://assets/models/resources/copper_ore.tscn",
+		# Add more mappings as needed
+	}
+
+	return scene_mappings.get(item_id, "")
 
 
 # Container action implementations

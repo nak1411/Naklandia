@@ -187,9 +187,9 @@ func get_visual_center() -> Vector3:
 		var local_center = aabb.get_center()
 		# Transform from mesh's local space to world space
 		return mesh_instance.global_transform * local_center
-	else:
-		# Fallback to object position if no mesh
-		return global_position
+
+	# Fallback to object position if no mesh
+	return global_position
 
 
 func get_info_text() -> String:
@@ -205,6 +205,12 @@ func get_info_text() -> String:
 ## Set up interactable area for E key inventory pickup
 func _setup_interactable_area():
 	"""Create an Area3D child that acts as an Interactable for inventory pickup."""
+	# Ensure we're in the tree before setting up
+	if not is_inside_tree():
+		push_warning("PhysicalItem: Tried to setup interactable area before being in tree. Deferring...")
+		call_deferred("_setup_interactable_area")
+		return
+
 	print("PhysicalItem: Setting up interactable area for ", item_name)
 
 	# Create Area3D for interaction detection (Layer 2)
