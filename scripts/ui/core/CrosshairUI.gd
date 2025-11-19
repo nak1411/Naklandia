@@ -11,13 +11,13 @@ extends Control
 @export var outline_thickness: float = 1.0
 
 @export_group("Interaction Behavior")
-@export var max_interaction_distance: float = 2.0
-@export var min_opacity: float = 0.0  # Hidden when no interactable
+@export var max_interaction_distance: float = 5.0
+@export var min_opacity: float = 1.0  # Hidden when no interactable
 @export var max_opacity: float = 1.0  # Full opacity when very close
 
 # Internal state
-var current_opacity: float = 0.0
-var target_opacity: float = 0.0
+var current_opacity: float = 1.0
+var target_opacity: float = 1.0
 var current_distance: float = 0.0
 var has_interactable: bool = false
 
@@ -38,7 +38,7 @@ func _setup_crosshair():
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	# Start hidden
-	modulate.a = 0.0
+	modulate.a = 1.0
 
 
 func _update_size_for_screen():

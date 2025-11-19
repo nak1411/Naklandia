@@ -9,8 +9,8 @@ extends Control
 @export var crosshair_offset: Vector2 = Vector2(0, 40)  # Offset below crosshair
 
 @export_group("Proximity Settings")
-@export var text_show_distance: float = 1.5  # Distance when text appears
-@export var max_interaction_distance: float = 3.0  # Maximum interaction range
+@export var text_show_distance: float = 2.0  # Distance when text appears
+@export var max_interaction_distance: float = 2.0  # Maximum interaction range
 
 @export_group("Animation")
 @export var fade_duration: float = 0.2
