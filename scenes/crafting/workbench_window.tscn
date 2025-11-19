@@ -73,7 +73,7 @@ void fragment() {
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_grid"]
 render_priority = 0
-shader = SubResource("Shader_grid")
+shader = SubResource("Shader_grid")w
 shader_parameter/grid_color = Color(0.3, 0.3, 0.3, 1)
 shader_parameter/axis_x_color = Color(1, 0.3, 0.3, 1)
 shader_parameter/axis_z_color = Color(0.3, 0.3, 1, 1)
