@@ -60,7 +60,14 @@ func _setup_minimap_layer():
 	minimap = Minimap.new()
 	minimap.name = "Minimap"
 
-	minimap.position = Vector2(get_viewport().get_visible_rect().size.x - 220, 20)
+	# Use anchors to position the minimap in the top-right corner
+	minimap.anchor_left = 1.0
+	minimap.anchor_right = 1.0
+	minimap.anchor_top = 0.0
+	minimap.offset_left = -220.0  # Negative offset from right edge
+	minimap.offset_right = -20.0
+	minimap.offset_top = 20.0
+	minimap.offset_bottom = 220.0  # 20 + 200 (minimap_size)
 
 	minimap_layer.add_child(minimap)
 
