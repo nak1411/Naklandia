@@ -80,33 +80,38 @@ shader_parameter/axis_z_color = Color(0.3, 0.3, 1, 1)
 shader_parameter/grid_scale = 1.0
 shader_parameter/line_width = 0.02
 
-[sub_resource type="Shader" id="Shader_gradient_sky"]
-code = "shader_type sky;
+[sub_resource type="Environment" id="Environment_workbench"]
+background_mode = 1
+background_color = Color(0.5, 0.5, 0.5, 1)
+ambient_light_source = 1
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 1.0
+tonemap_mode = 2
 
-uniform vec4 top_color : source_color = vec4(0.3, 0.3, 0.4, 1.0);
-uniform vec4 bottom_color : source_color = vec4(0.15, 0.15, 0.2, 1.0);
+[sub_resource type="Shader" id="Shader_background_gradient"]
+code = "shader_type spatial;
+render_mode unshaded, cull_front;
 
-void sky() {
-	float y = EYEDIR.y;
-	COLOR = mix(bottom_color.rgb, top_color.rgb, clamp(y * 0.5 + 0.5, 0.0, 1.0));
+uniform vec4 top_color : source_color = vec4(0.1, 0.1, 0.1, 1.0);
+uniform vec4 bottom_color : source_color = vec4(0.2, 0.2, 0.2, 1.0);
+
+void fragment() {
+	ALBEDO = mix(bottom_color.rgb, top_color.rgb, UV.y);
 }
 "
 
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_gradient_sky"]
-shader = SubResource("Shader_gradient_sky")
-shader_parameter/top_color = Color(0.3, 0.3, 0.4, 1)
-shader_parameter/bottom_color = Color(0.15, 0.15, 0.2, 1)
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_background_gradient"]
+render_priority = -128
+shader = SubResource("Shader_background_gradient")
+shader_parameter/top_color = Color(0.1, 0.1, 0.1, 1)
+shader_parameter/bottom_color = Color(0.2, 0.2, 0.2, 1)
 
-[sub_resource type="Sky" id="Sky_gradient"]
-sky_material = SubResource("ShaderMaterial_gradient_sky")
-
-[sub_resource type="Environment" id="Environment_workbench"]
-background_mode = 2
-sky = SubResource("Sky_gradient")
-sky_custom_fov = 90.0
-ambient_light_source = 3
-ambient_light_color = Color(0.7, 0.7, 0.7, 1)
-tonemap_mode = 2
+[sub_resource type="SphereMesh" id="SphereMesh_background"]
+radius = 500.0
+height = 1000.0
+radial_segments = 32
+rings = 16
+is_hemisphere = false
 
 [node name="WorkbenchWindow" type="Control"]
 layout_mode = 3
@@ -613,11 +618,15 @@ render_target_update_mode = 4
 
 [node name="Camera3D" type="Camera3D" parent="VBoxContainer/MainContent/ViewportContainer/SubViewport"]
 transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 5, 5)
+cull_mask = 1048575
+near = 0.05
+far = 4000.0
 current = true
 
 [node name="World" type="Node3D" parent="VBoxContainer/MainContent/ViewportContainer/SubViewport"]
 
 [node name="GroundPlane" type="MeshInstance3D" parent="VBoxContainer/MainContent/ViewportContainer/SubViewport/World"]
+visible = false
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.01, 0)
 mesh = SubResource("PlaneMesh_ground")
 surface_material_override/0 = SubResource("StandardMaterial3D_ground")
@@ -625,6 +634,14 @@ surface_material_override/0 = SubResource("StandardMaterial3D_ground")
 [node name="Grid" type="MeshInstance3D" parent="VBoxContainer/MainContent/ViewportContainer/SubViewport/World"]
 mesh = SubResource("PlaneMesh_grid")
 surface_material_override/0 = SubResource("ShaderMaterial_grid")
+
+[node name="BackgroundGradient" type="MeshInstance3D" parent="VBoxContainer/MainContent/ViewportContainer/SubViewport"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+layers = 2
+cast_shadow = 0
+gi_mode = 0
+mesh = SubResource("SphereMesh_background")
+surface_material_override/0 = SubResource("ShaderMaterial_background_gradient")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="VBoxContainer/MainContent/ViewportContainer/SubViewport"]
 transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 5, 0)

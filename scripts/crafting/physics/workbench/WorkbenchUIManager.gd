@@ -362,12 +362,11 @@ func load_viewport_settings() -> void:
 		# Restore the current mode
 		transform_gizmo.set_mode(transform_gizmo.current_mode)
 
-	# Apply background color
+	# Apply background - use sky gradient instead of solid color
 	if world_environment:
 		if not world_environment.environment:
 			world_environment.environment = Environment.new()
-		world_environment.environment.background_mode = Environment.BG_COLOR
-		world_environment.environment.background_color = saved_settings["background_color"]
+		world_environment.environment.background_mode = Environment.BG_SKY
 
 	# Apply floor color
 	if ground_plane:

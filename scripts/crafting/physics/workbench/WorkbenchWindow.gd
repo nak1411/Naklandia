@@ -780,7 +780,7 @@ func _on_transform_completed(_mode: int) -> void:
 	ui_manager.clear_transform_stats()
 
 
-func _on_viewport_settings_changed(grid_size: float, new_gizmo_scale: float, bg_color: Color, floor_color: Color) -> void:
+func _on_viewport_settings_changed(grid_size: float, new_gizmo_scale: float, _bg_color: Color, floor_color: Color) -> void:
 	"""Apply viewport settings changes."""
 	gizmo_controller.set_grid_snap_size(grid_size)
 
@@ -805,8 +805,8 @@ func _on_viewport_settings_changed(grid_size: float, new_gizmo_scale: float, bg_
 	if world_environment:
 		if not world_environment.environment:
 			world_environment.environment = Environment.new()
-		world_environment.environment.background_mode = Environment.BG_COLOR
-		world_environment.environment.background_color = bg_color
+		# Use sky background mode to show gradient
+		world_environment.environment.background_mode = Environment.BG_SKY
 
 	if ground_plane:
 		var floor_material = ground_plane.get_surface_override_material(0) as StandardMaterial3D
@@ -1398,6 +1398,135 @@ func _show_current_tab_items() -> void:
 # Helper methods
 
 
+func _prepare_viewport_for_icon_capture() -> Dictionary:
+	"""Hide grid and UI elements before capturing icon. Returns state to restore."""
+	var state = {
+		"grid_visible": grid.visible if grid else false,
+		"ground_plane_visible": ground_plane.visible if ground_plane else false,
+		"transform_buttons_visible": false,
+		"transform_stats_visible": false,
+		"object_info_visible": false,
+		"edit_mode_border_visible": false,
+		"edit_mode_label_visible": false,
+		"bg_mode": Environment.BG_COLOR,
+		"bg_color": Color(0.3, 0.3, 0.3, 1.0),
+		"bg_sky": null,
+		"ambient_light_source": Environment.AMBIENT_SOURCE_BG,
+		"ambient_light_sky_contribution": 1.0
+	}
+
+	# Hide grid
+	if grid:
+		state["grid_visible"] = grid.visible
+		grid.visible = false
+
+	# Hide ground plane
+	if ground_plane:
+		state["ground_plane_visible"] = ground_plane.visible
+		ground_plane.visible = false
+
+	# Set gradient background (dark gray to black, top to bottom)
+	if world_environment and world_environment.environment:
+		state["bg_mode"] = world_environment.environment.background_mode
+		state["bg_color"] = world_environment.environment.background_color
+		state["bg_sky"] = world_environment.environment.sky
+		state["ambient_light_source"] = world_environment.environment.ambient_light_source
+		state["ambient_light_sky_contribution"] = world_environment.environment.ambient_light_sky_contribution
+
+		# Create gradient sky for background
+		var sky = Sky.new()
+		var gradient_material = ProceduralSkyMaterial.new()
+
+		# Configure smooth gradient: dark gray at top, fading to black at bottom
+		# Make both sky and ground use the same gradient to avoid horizon line
+		gradient_material.sky_top_color = Color(0.3, 0.3, 0.3, 1.0)  # Dark gray at top
+		gradient_material.sky_horizon_color = Color(0.15, 0.15, 0.15, 1.0)  # Mid-dark gray
+		gradient_material.ground_horizon_color = Color(0.08, 0.08, 0.08, 1.0)  # Darker gray (seamless with sky)
+		gradient_material.ground_bottom_color = Color(0.0, 0.0, 0.0, 1.0)  # Full black at bottom
+		gradient_material.ground_curve = 0.8  # Very smooth gradual transition
+		gradient_material.sky_curve = 0.8  # Very smooth gradual transition
+		gradient_material.sun_angle_max = 0  # No sun
+		gradient_material.energy_multiplier = 1.0
+
+		sky.sky_material = gradient_material
+		world_environment.environment.background_mode = Environment.BG_SKY
+		world_environment.environment.sky = sky
+
+		# Ensure ambient light is consistent to avoid lighting artifacts
+		world_environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+		world_environment.environment.ambient_light_sky_contribution = 0.0
+
+	# Hide transform mode buttons
+	var transform_buttons = $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons
+	if transform_buttons:
+		state["transform_buttons_visible"] = transform_buttons.visible
+		transform_buttons.visible = false
+
+	# Hide transform stats label
+	var transform_stats = ui_manager.transform_stats_label if ui_manager else null
+	if transform_stats:
+		state["transform_stats_visible"] = transform_stats.visible
+		transform_stats.visible = false
+
+	# Hide object info label
+	var object_info = ui_manager.object_info_label if ui_manager else null
+	if object_info:
+		state["object_info_visible"] = object_info.visible
+		object_info.visible = false
+
+	# Hide edit mode border and label
+	if edit_mode_border:
+		state["edit_mode_border_visible"] = edit_mode_border.visible
+		edit_mode_border.visible = false
+
+	if edit_mode_label:
+		state["edit_mode_label_visible"] = edit_mode_label.visible
+		edit_mode_label.visible = false
+
+	return state
+
+
+func _restore_viewport_after_icon_capture(state: Dictionary) -> void:
+	"""Restore grid and UI elements after capturing icon."""
+	# Restore grid
+	if grid:
+		grid.visible = state.get("grid_visible", false)
+
+	# Restore ground plane
+	if ground_plane:
+		ground_plane.visible = state.get("ground_plane_visible", false)
+
+	# Restore background settings
+	if world_environment and world_environment.environment:
+		world_environment.environment.background_mode = state.get("bg_mode", Environment.BG_COLOR)
+		world_environment.environment.background_color = state.get("bg_color", Color(0.3, 0.3, 0.3, 1.0))
+		world_environment.environment.sky = state.get("bg_sky", null)
+		world_environment.environment.ambient_light_source = state.get("ambient_light_source", Environment.AMBIENT_SOURCE_BG)
+		world_environment.environment.ambient_light_sky_contribution = state.get("ambient_light_sky_contribution", 1.0)
+
+	# Restore transform mode buttons
+	var transform_buttons = $VBoxContainer/MainContent/ViewportContainer/TransformModeButtons
+	if transform_buttons:
+		transform_buttons.visible = state.get("transform_buttons_visible", false)
+
+	# Restore transform stats label
+	var transform_stats = ui_manager.transform_stats_label if ui_manager else null
+	if transform_stats:
+		transform_stats.visible = state.get("transform_stats_visible", false)
+
+	# Restore object info label
+	var object_info = ui_manager.object_info_label if ui_manager else null
+	if object_info:
+		object_info.visible = state.get("object_info_visible", false)
+
+	# Restore edit mode border and label
+	if edit_mode_border:
+		edit_mode_border.visible = state.get("edit_mode_border_visible", false)
+
+	if edit_mode_label:
+		edit_mode_label.visible = state.get("edit_mode_label_visible", false)
+
+
 func _show_context_menu(_mouse_pos: Vector2) -> void:
 	"""Show context menu at mouse position."""
 	if not context_menu:
@@ -1547,16 +1676,23 @@ func _finalize_assembly_creation(assembly_name: String, dialog: AcceptDialog) ->
 		assembly_name = "Assembly %d" % (assembly_manager.get_all_assemblies().size() + 1)
 		print("WorkbenchWindow: Using default assembly name: '%s'" % assembly_name)
 
-	# Frame the selected items for a good thumbnail shot
-	camera_controller.frame_objects(selection_manager.selected_items)
+	# Frame the selected items for a good thumbnail shot with tight zoom
+	camera_controller.frame_objects(selection_manager.selected_items, 0.95)
 
 	# Wait for camera to finish framing and rendering to complete
 	# Note: We use a timer instead of await camera_framed to avoid potential deadlock
 	await get_tree().create_timer(0.2).timeout
 	print("WorkbenchWindow: Camera framed, capturing thumbnail...")
 
+	# Hide grid and UI elements before capturing
+	var capture_state = _prepare_viewport_for_icon_capture()
+	await get_tree().process_frame  # Wait a frame for visibility changes to take effect
+
 	# Capture viewport image for thumbnail
 	var viewport_image = await camera_controller.capture_viewport_image()
+
+	# Restore grid and UI elements after capturing
+	_restore_viewport_after_icon_capture(capture_state)
 
 	# Create assembly from selected items
 	var assembly = assembly_manager.create_assembly_from_items(selection_manager.selected_items, assembly_name)
@@ -1779,9 +1915,17 @@ func _add_assembly_to_inventory_with_thumbnail() -> void:
 		# Wait one frame for rendering
 		await get_tree().process_frame
 
+		# Hide grid and UI elements before capturing
+		var capture_state = _prepare_viewport_for_icon_capture()
+		await get_tree().process_frame  # Wait a frame for visibility changes to take effect
+
 		# Capture and save thumbnail
 		print("WorkbenchWindow: Capturing viewport image...")
 		var viewport_image = await camera_controller.capture_viewport_image()
+
+		# Restore grid and UI elements after capturing
+		_restore_viewport_after_icon_capture(capture_state)
+
 		if viewport_image:
 			print("WorkbenchWindow: Image captured, generating thumbnail...")
 			var thumbnail_path = assembly_manager.generate_thumbnail_from_image(viewport_image, assembly.assembly_id)
@@ -2003,8 +2147,8 @@ func _update_assembly_edits() -> void:
 	print("WorkbenchWindow: Updated assembly '%s' with %d parts" % [assembly.assembly_name, assembly.parts.size()])
 
 	# Now try to generate thumbnail (async operations below may fail, but assembly is already saved)
-	# Frame all items for a good thumbnail shot
-	camera_controller.frame_objects(current_items)
+	# Frame all items for a good thumbnail shot with tight zoom
+	camera_controller.frame_objects(current_items, 0.95)
 
 	# Wait for camera to finish framing
 	await camera_controller.camera_framed
@@ -2012,8 +2156,15 @@ func _update_assembly_edits() -> void:
 	# Wait an additional frame to ensure rendering is complete
 	await get_tree().process_frame
 
+	# Hide grid and UI elements before capturing
+	var capture_state = _prepare_viewport_for_icon_capture()
+	await get_tree().process_frame  # Wait a frame for visibility changes to take effect
+
 	# Capture viewport image for updated thumbnail
 	var viewport_image = await camera_controller.capture_viewport_image()
+
+	# Restore grid and UI elements after capturing
+	_restore_viewport_after_icon_capture(capture_state)
 
 	# Generate and save updated thumbnail (if async operations succeeded)
 	if viewport_image:

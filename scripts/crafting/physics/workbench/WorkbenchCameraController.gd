@@ -118,8 +118,13 @@ func handle_scroll_zoom(scroll_delta: float, sensitivity: float = 0.1) -> void:
 	update_transform()
 
 
-func frame_objects(objects: Array) -> void:
-	"""Frame the given objects in view and zoom to fit them (F key)."""
+func frame_objects(objects: Array, zoom_padding: float = 1.2) -> void:
+	"""Frame the given objects in view and zoom to fit them (F key).
+
+	Args:
+		objects: Array of objects to frame
+		zoom_padding: Multiplier for camera distance (1.0 = tight fit, higher = more padding)
+	"""
 	if objects.is_empty():
 		return
 
@@ -163,8 +168,8 @@ func frame_objects(objects: Array) -> void:
 		var horizontal_distance = radius / tan(horizontal_fov / 2.0)
 
 		# Use the larger distance to ensure everything fits
-		# Reduce padding to 20% for tighter framing
-		camera_distance = max(vertical_distance, horizontal_distance) * 1.2
+		# Apply custom zoom padding
+		camera_distance = max(vertical_distance, horizontal_distance) * zoom_padding
 		camera_distance = max(1.5, camera_distance)  # Lower minimum distance
 	else:
 		# Fallback if no camera
@@ -172,7 +177,7 @@ func frame_objects(objects: Array) -> void:
 
 	update_transform()
 	camera_framed.emit()
-	print("Framed and zoomed to extents")
+	print("Framed and zoomed to extents (padding: %.2f)" % zoom_padding)
 
 
 func start_drag(mouse_button: int, mouse_pos: Vector2) -> void:
