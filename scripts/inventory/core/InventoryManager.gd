@@ -5,6 +5,8 @@ extends Node
 # Signals (delegate to subsystems)
 signal container_added(container: InventoryContainer_Base)
 signal container_removed(container_id: String)
+signal item_added(item: InventoryItem_Base, container: InventoryContainer_Base)
+signal item_removed(item: InventoryItem_Base, container: InventoryContainer_Base)
 signal item_transferred(item: InventoryItem_Base, from_container: String, to_container: String)
 signal transaction_completed(transaction: Dictionary)
 signal inventory_loaded
@@ -99,10 +101,10 @@ func add_container(container: InventoryContainer_Base) -> bool:
 	containers[container.container_id] = container
 	_update_subsystem_references()
 
-	# Connect container signals (simplified)
-	container.item_added.connect(_on_container_item_added)
-	container.item_removed.connect(_on_container_item_removed)
-	container.item_moved.connect(_on_container_item_moved)
+	# Connect container signals (simplified) - use lambdas to capture container reference
+	container.item_added.connect(func(item, pos): _on_container_item_added(item, pos, container))
+	container.item_removed.connect(func(item, pos): _on_container_item_removed(item, pos, container))
+	container.item_moved.connect(func(item, old_pos, new_pos): _on_container_item_moved(item, old_pos, new_pos))
 
 	container_added.emit(container)
 	return true
@@ -272,18 +274,18 @@ func get_hangar_containers() -> Array[InventoryContainer_Base]:
 
 
 # Signal handlers (simplified)
-func _on_container_item_added(item: InventoryItem_Base, _position: Vector2i):
+func _on_container_item_added(item: InventoryItem_Base, _position: Vector2i, _container: InventoryContainer_Base):
 	if settings.auto_stack:
-		# Find which container this came from
-		for container in containers.values():
-			if item in container.items:
-				auto_stack_with_container(container, item)
-				break
+		# Auto-stack with the container that received the item
+		auto_stack_with_container(_container, item)
+
+	# Emit signal for item addition
+	item_added.emit(item, _container)
 
 
-func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i):
-	# Handle item removal if needed
-	pass
+func _on_container_item_removed(_item: InventoryItem_Base, _position: Vector2i, _container: InventoryContainer_Base):
+	# Emit signal for item removal with the container reference
+	item_removed.emit(_item, _container)
 
 
 func _on_container_item_moved(_item: InventoryItem_Base, _old_position: Vector2i, _new_position: Vector2i):

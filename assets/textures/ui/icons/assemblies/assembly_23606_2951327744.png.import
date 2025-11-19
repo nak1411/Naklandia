@@ -2,16 +2,12 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cxo2w2ulc6ian"
-path="res://.godot/imported/assembly_21047_435483780.png-04b32eb757e25efa8f5c5cb65c25a367.ctex"
-metadata={
-"vram_texture": false
-}
+uid="uid://djospvaugdpth"
+valid=false
 
 [deps]
 
-source_file="res://assets/textures/ui/icons/assemblies/assembly_21047_435483780.png"
-dest_files=["res://.godot/imported/assembly_21047_435483780.png-04b32eb757e25efa8f5c5cb65c25a367.ctex"]
+source_file="res://assets/textures/ui/icons/assemblies/assembly_23606_2951327744.png"
 
 [params]
 

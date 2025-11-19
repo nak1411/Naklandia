@@ -167,7 +167,23 @@ func _initialize_managers() -> void:
 	# UI manager
 	ui_manager = WorkbenchUIManager.new()
 
-	# Assembly manager
+	# Assembly manager - get the shared instance from crafting integration
+	_get_shared_assembly_manager()
+
+
+func _get_shared_assembly_manager() -> void:
+	"""Get the shared assembly manager from CraftingIntegration."""
+	# Try to find the shared assembly manager node
+	var crafting_integrations = get_tree().get_nodes_in_group("crafting_integration")
+	if not crafting_integrations.is_empty():
+		var crafting_integration = crafting_integrations[0]
+		if crafting_integration.has_method("get") and "assembly_manager" in crafting_integration:
+			assembly_manager = crafting_integration.assembly_manager
+			print("WorkbenchWindow: Using shared assembly manager from CraftingIntegration")
+			return
+
+	# Fallback: create a local one if not found (shouldn't happen in normal gameplay)
+	push_warning("WorkbenchWindow: No shared assembly manager found, creating local instance")
 	assembly_manager = WorkbenchAssemblyManager.new()
 
 

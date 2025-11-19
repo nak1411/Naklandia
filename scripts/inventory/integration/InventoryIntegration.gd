@@ -493,6 +493,17 @@ func _on_item_added(_item: InventoryItem_Base, _container: InventoryContainer_Ba
 
 func _on_item_removed(_item: InventoryItem_Base, _container: InventoryContainer_Base):
 	"""Handle item being removed from inventory"""
+	# Handle assembly item cleanup (decrement icon reference count)
+	if _item and _item.has_meta("is_assembly") and _item.get_meta("is_assembly"):
+		# Get the assembly manager from crafting integration (sibling to this integration)
+		var player = get_parent()
+		if player:
+			var crafting_integration = player.get_node_or_null("CraftingIntegration")
+			if crafting_integration and crafting_integration.assembly_manager:
+				crafting_integration.assembly_manager.on_assembly_item_removed(_item)
+			else:
+				push_warning("InventoryIntegration: No assembly manager available for reference counting")
+
 	_refresh_inventory_display()
 
 

@@ -11,6 +11,7 @@ signal item_modified
 @export var item_name: String = "Unknown Item"
 @export var description: String = ""
 @export var icon_path: String = ""
+@export var icon_texture: Texture2D = null  # Embedded icon texture (used for assemblies)
 
 # Physical properties (EVE-like)
 @export var volume: float = 1.0  # m³
@@ -89,6 +90,7 @@ func split_stack(split_quantity: int) -> InventoryItem_Base:
 	new_item.item_name = item_name
 	new_item.description = description
 	new_item.icon_path = icon_path
+	new_item.icon_texture = icon_texture  # Copy embedded texture
 	new_item.volume = volume
 	new_item.mass = mass
 	new_item.quantity = split_quantity
@@ -142,6 +144,11 @@ func get_type_color() -> Color:
 
 # Icon management
 func get_icon_texture() -> Texture2D:
+	# Prefer embedded texture over path (for assemblies and items with embedded icons)
+	if icon_texture != null:
+		return icon_texture
+
+	# Fall back to loading from path
 	if icon_path.is_empty():
 		return null
 
@@ -149,7 +156,7 @@ func get_icon_texture() -> Texture2D:
 
 
 func has_icon() -> bool:
-	return not icon_path.is_empty()
+	return icon_texture != null or not icon_path.is_empty()
 
 
 # Validation

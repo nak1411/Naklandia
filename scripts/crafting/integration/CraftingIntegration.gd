@@ -7,6 +7,7 @@ var crafting_manager: CraftingManager
 var crafting_window: CraftingStationWindow
 var ui_manager: UIManager
 var inventory_integration: InventoryIntegration
+var assembly_manager: WorkbenchAssemblyManager  # Shared assembly manager for reference counting
 
 var is_crafting_open_flag: bool = false
 
@@ -20,6 +21,7 @@ func _initialize_crafting_system():
 	"""Initialize crafting system after other systems are ready"""
 	_get_manager_references()
 	_create_crafting_manager()
+	_create_assembly_manager()
 	_connect_to_inventory()
 
 	print("✓ Crafting system initialized")
@@ -51,6 +53,13 @@ func _create_crafting_manager():
 	crafting_manager.name = "CraftingManager"
 	add_child(crafting_manager)
 	print("✓ Created CraftingManager")
+
+
+func _create_assembly_manager():
+	"""Create the shared assembly manager for reference counting"""
+	assembly_manager = WorkbenchAssemblyManager.new()
+	# Note: WorkbenchAssemblyManager extends RefCounted, not Node, so we just store the reference
+	print("✓ Created WorkbenchAssemblyManager")
 
 
 func _connect_to_inventory():
