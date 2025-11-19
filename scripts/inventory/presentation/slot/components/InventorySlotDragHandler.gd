@@ -443,9 +443,17 @@ func _handle_drag_end(end_position: Vector2):
 		print("  Attempting drop on target slot...")
 		drop_successful = _attempt_drop_on_slot(target_slot, end_position)
 	else:
-		# Try other targets
+		# Try other targets (synchronous checks)
 		print("  No target slot, trying other targets...")
-		drop_successful = _attempt_drop_on_other_targets(end_position)
+		drop_successful = _attempt_drop_on_other_targets_sync(end_position)
+
+		# If no UI target found, try world drop (async)
+		# We need to handle this specially since it's async
+		if not drop_successful and not _is_drop_over_ui_window(end_position):
+			print("  Attempting world drop (async)...")
+			# Call the async world drop and return early - it will handle cleanup
+			_handle_async_world_drop(end_position)
+			return  # Early return - world drop will handle everything
 
 	# If drop failed, notify the source slot and refresh display
 	if not drop_successful:
@@ -604,10 +612,10 @@ func _attempt_drop_on_slot(target_slot: InventorySlot, _end_position: Vector2) -
 	return success
 
 
-func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
-	"""Attempt to drop on other valid targets"""
-	print("  [_attempt_drop_on_other_targets] Called at position: ", end_position)
-	print("  [_attempt_drop_on_other_targets] Slot container_id: ", slot.container_id)
+func _attempt_drop_on_other_targets_sync(end_position: Vector2) -> bool:
+	"""Attempt to drop on other valid targets (synchronous UI checks only)"""
+	print("  [_attempt_drop_on_other_targets_sync] Called at position: ", end_position)
+	print("  [_attempt_drop_on_other_targets_sync] Slot container_id: ", slot.container_id)
 
 	# SPECIAL HANDLING: Equipment slots to inventory grid/list/container-list
 	if slot.container_id == "equipment":
@@ -674,7 +682,7 @@ func _attempt_drop_on_other_targets(end_position: Vector2) -> bool:
 	if _attempt_drop_on_equipment_slot(end_position):
 		return true
 
-	print("  [_attempt_drop_on_other_targets] No valid drop target found")
+	print("  [_attempt_drop_on_other_targets_sync] No valid drop target found")
 	return false
 
 
@@ -1033,6 +1041,216 @@ func _find_equipment_slot_type(equipment_window):
 func should_handle_input(event: InputEvent) -> bool:
 	"""Check if this handler should process the input event"""
 	return event is InputEventMouseButton or (event is InputEventMouseMotion and is_dragging)
+
+
+func _handle_async_world_drop(drop_position: Vector2):
+	"""Handle async world drop with proper cleanup"""
+	# This function handles the entire async drop process
+	var success = await _attempt_drop_into_world(drop_position)
+
+	if not success:
+		print("  [_handle_async_world_drop] World drop failed, performing cleanup")
+		# Notify slot that drop failed - this restores the item
+		if slot and slot.has_method("_on_external_drop_result"):
+			slot._on_external_drop_result(false)
+
+		# Force refresh to update visuals
+		_force_refresh_display()
+
+	# Reset all drag state
+	is_dragging = false
+	drag_preview_created = false
+
+	drag_ended.emit(slot, success)
+
+	# Clear drag data AFTER everything else is done
+	call_deferred("_cleanup_drag_data")
+
+
+func _is_drop_over_ui_window(drop_position: Vector2) -> bool:
+	"""Check if the drop position is over any UI window"""
+	if not slot.is_inside_tree():
+		return false
+
+	# Get all Window_Base nodes (inventory, equipment, etc.)
+	var all_windows = slot.get_tree().get_nodes_in_group("external_container_windows")
+
+	for window in all_windows:
+		if not is_instance_valid(window) or not window.visible:
+			continue
+
+		# Check if window has a valid global_position and size
+		if not window.has_method("get_global_position") or not window.has_method("get_size"):
+			continue
+
+		var window_rect = Rect2(window.global_position, window.size)
+		if window_rect.has_point(drop_position):
+			print("  [_is_drop_over_ui_window] Drop IS over window: ", window.name)
+			return true
+
+	print("  [_is_drop_over_ui_window] Drop is NOT over any UI window")
+	return false
+
+
+func _attempt_drop_into_world(drop_position: Vector2) -> bool:
+	"""Drop the item into the world as a physical object"""
+	if not slot or not slot.has_item():
+		print("  [_attempt_drop_into_world] ERROR: No slot or no item")
+		return false
+
+	var item = slot.get_item()
+	if not item:
+		print("  [_attempt_drop_into_world] ERROR: No item in slot")
+		return false
+
+	# Store item data before any operations that might clear it
+	var item_name = item.item_name
+	var item_id = item.item_id
+
+	print("  [_attempt_drop_into_world] Dropping item: ", item_name, " (ID: ", item_id, ")")
+
+	# Get scene tree
+	if not slot.is_inside_tree():
+		print("  [_attempt_drop_into_world] ERROR: Slot not in tree")
+		return false
+
+	var tree = slot.get_tree()
+	if not tree:
+		print("  [_attempt_drop_into_world] ERROR: Could not access scene tree")
+		return false
+
+	# Get player reference
+	var players = tree.get_nodes_in_group("player")
+	if players.is_empty():
+		print("  [_attempt_drop_into_world] ERROR: No player found")
+		return false
+
+	var player = players[0]
+
+	# Get world reference
+	var world = player.get_parent()
+	if not world:
+		print("  [_attempt_drop_into_world] ERROR: Could not find world node")
+		return false
+
+	# Calculate spawn position in 3D world
+	var spawn_position = _calculate_world_spawn_position(player, drop_position)
+
+	# Get the physical scene path for this item
+	var physical_scene_path = _get_physical_scene_path_for_item(item)
+	if physical_scene_path.is_empty():
+		print("  [_attempt_drop_into_world] ERROR: No physical scene found for item: ", item.item_id)
+		NotificationManager.show_error("Cannot drop this item type")
+		return false
+
+	# Load the physical item scene
+	var physical_scene = load(physical_scene_path)
+	if not physical_scene:
+		print("  [_attempt_drop_into_world] ERROR: Failed to load physical scene: ", physical_scene_path)
+		NotificationManager.show_error("Cannot drop item")
+		return false
+
+	# Instantiate the physical item
+	var physical_item = physical_scene.instantiate()
+	if not physical_item:
+		print("  [_attempt_drop_into_world] ERROR: Failed to instantiate physical item")
+		NotificationManager.show_error("Cannot drop item")
+		return false
+
+	print("  [_attempt_drop_into_world] Physical item instantiated: ", physical_item.name)
+
+	# Add to world first (must be in tree before setting properties)
+	world.add_child(physical_item)
+	physical_item.global_position = spawn_position
+
+	print("  [_attempt_drop_into_world] Physical item added to world at: ", spawn_position)
+
+	# Wait for item to be fully in tree
+	await tree.process_frame
+
+	# Add slight physics effects
+	if physical_item is RigidBody3D:
+		# Add slight angular velocity for natural motion
+		physical_item.angular_velocity = Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1))
+		physical_item.gravity_scale = 0.7
+		print("  [_attempt_drop_into_world] Applied physics to RigidBody3D")
+
+	# Ensure pickup is enabled and setup interactable area
+	if physical_item.has_method("_setup_interactable_area"):
+		# Wait another frame to ensure the item is fully initialized
+		await tree.process_frame
+		physical_item._setup_interactable_area()
+		print("  [_attempt_drop_into_world] Called _setup_interactable_area directly")
+
+	# Remove one from inventory
+	print("  [_attempt_drop_into_world] Attempting to remove item from inventory...")
+	var inventory_manager = _get_inventory_manager()
+	if not inventory_manager:
+		print("  [_attempt_drop_into_world] ERROR: No inventory manager found")
+		return false
+
+	print("  [_attempt_drop_into_world] Inventory manager found, container_id: ", slot.container_id)
+	var source_container = inventory_manager.get_container(slot.container_id)
+	if not source_container:
+		print("  [_attempt_drop_into_world] ERROR: Could not find source container: ", slot.container_id)
+		return false
+
+	print("  [_attempt_drop_into_world] Source container found: ", source_container.container_name)
+	print("  [_attempt_drop_into_world] Item quantity before: ", item.quantity)
+
+	item.quantity -= 1
+	print("  [_attempt_drop_into_world] Item quantity after: ", item.quantity)
+
+	if item.quantity <= 0:
+		print("  [_attempt_drop_into_world] Removing item completely from container")
+		source_container.remove_item(item)
+
+	# Refresh display
+	print("  [_attempt_drop_into_world] Refreshing inventory display...")
+	var inventory_window = _find_inventory_window()
+	if inventory_window and inventory_window.content:
+		await tree.process_frame
+		inventory_window.content.refresh_display()
+		print("  [_attempt_drop_into_world] Display refreshed")
+	else:
+		print("  [_attempt_drop_into_world] WARNING: Could not find inventory window to refresh")
+
+	# Show notification
+	NotificationManager.show_notification("Dropped %s into world" % item_name)
+	print("  [_attempt_drop_into_world] ✓ Successfully dropped %s at position %s" % [item_name, spawn_position])
+	return true
+
+
+func _calculate_world_spawn_position(player: Node, _drop_position: Vector2) -> Vector3:
+	"""Calculate the 3D world position to spawn the dropped item"""
+	var spawn_position = player.global_position
+	var forward_offset = Vector3.ZERO
+
+	# Get player's look direction
+	if player.has_method("get_look_direction"):
+		var look_dir = player.get_look_direction()
+		forward_offset = look_dir * 1.5  # Drop slightly in front
+	else:
+		# Use player's forward direction from transform
+		forward_offset = -player.global_transform.basis.z * 1.5
+
+	# Place in front and slightly above the player
+	spawn_position += forward_offset + Vector3(0, 1.2, 0)
+
+	return spawn_position
+
+
+func _get_physical_scene_path_for_item(item: InventoryItem_Base) -> String:
+	"""Get the physical scene path for an inventory item"""
+	# Define mappings for items that have physical representations
+	var scene_mappings = {
+		"resource_resinwood_log": "res://assets/models/resources/resinwood_log.tscn",
+		"resource_iron_ore": "res://assets/models/resources/iron_ore.tscn",
+		"resource_copper_ore": "res://assets/models/resources/copper_ore.tscn",
+		# Add more mappings as needed
+	}
+
+	return scene_mappings.get(item.item_id, "")
 
 
 func cleanup():
