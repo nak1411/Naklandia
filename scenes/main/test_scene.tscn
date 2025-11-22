@@ -11,8 +11,8 @@
 [ext_resource type="Script" uid="uid://ve4ia0rua13g" path="res://scripts/world/objects/ItemSpawner.gd" id="6_1swwb"]
 [ext_resource type="Script" uid="uid://bes7x5gnitjur" path="res://scripts/ui/core/PauseMenu.gd" id="6_sa75b"]
 [ext_resource type="Script" uid="uid://ymb36pafa48d" path="res://scripts/ui/map/MapManager.gd" id="11_w0gou"]
-[ext_resource type="PackedScene" uid="uid://degfmxlhc2u5j" path="res://assets/models/foliage/resinwood_tree_s.tscn" id="12_m0jab"]
 [ext_resource type="Script" uid="uid://bhkk6ggqm5gd4" path="res://scripts/world/environment/ProceduralTreeSpawner.gd" id="13_tree_spawner"]
+[ext_resource type="Texture2D" uid="uid://xvysnbaqgu8h" path="res://assets/models/foliage/tree_4.png" id="14_3uiii"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_6mm6u"]
 panorama = ExtResource("2_6i17e")
@@ -49,7 +49,7 @@ material = SubResource("StandardMaterial3D_w0gou")
 size = Vector3(20, 0.4, 20)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_7cbxl"]
-size = Vector3(20, 0.2, 20)
+size = Vector3(20, 0.4, 20)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_m0jab"]
 albedo_color = Color(0.458405, 0.458405, 0.458405, 1)
@@ -169,6 +169,8 @@ mesh = SubResource("BoxMesh_2nij2")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Level/Floor"]
 shape = SubResource("BoxShape3D_7cbxl")
+debug_color = Color(0.399163, 0.890485, 1, 1)
+debug_fill = false
 
 [node name="Wall1" type="StaticBody3D" parent="Level"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 2.03141, 0)
@@ -243,7 +245,7 @@ spawn_interval = 1.0
 auto_spawn = true
 max_spawned_items = 5
 designated_item_types = Array[String](["ImportedMesh"])
-mesh_scene_paths = Array[String](["res://assets/models/resources/resinwood_log.tscn"])
+mesh_scene_paths = Array[String](["res://assets/models/resources/iron_ingot.tscn"])
 spawn_height = 1.0
 
 [node name="InventoryIntegration" type="Node" parent="."]
@@ -251,13 +253,14 @@ spawn_height = 1.0
 [node name="MapManager" type="Node" parent="."]
 script = ExtResource("11_w0gou")
 
-[node name="ResinwoodTree_s" parent="." instance=ExtResource("12_m0jab")]
-transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, -3.89896, -4.76837e-07, -14.1693)
-
 [node name="ProceduralTreeSpawner" type="Node3D" parent="."]
 script = ExtResource("13_tree_spawner")
 tree_density = 0.01
 min_tree_scale = 0.1
 max_tree_scale = 0.3
+use_impostors = true
+impostor_texture = ExtResource("14_3uiii")
+impostor_size = Vector2(10, 50)
 debug_show_on_minimap = true
 debug_performance = true
+debug_detailed_profiling = true
