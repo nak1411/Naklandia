@@ -12,8 +12,21 @@ func _ready():
 	await get_tree().process_frame
 	_load_window_position()
 
+	# Generate procedural trees
+	generate_trees()
+
 	await get_tree().create_timer(2.0).timeout
 	create_test_items()
+
+
+func generate_trees():
+	# Find the ProceduralTreeSpawner in the scene
+	var tree_spawner = get_node_or_null("ProceduralTreeSpawner")
+	if tree_spawner and tree_spawner.has_method("generate_trees"):
+		print("Generating procedural trees...")
+		tree_spawner.generate_trees()
+	else:
+		print("ProceduralTreeSpawner not found or not ready")
 
 
 func create_test_items():

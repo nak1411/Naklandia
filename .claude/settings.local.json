@@ -18,7 +18,9 @@
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff 2b80243 scenes/crafting/workbench_window.tscn)",
       "Bash(git checkout:*)",
       "Bash(git stash:*)",
-      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/crafting/physics/ItemPlacer.gd)"
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/crafting/physics/ItemPlacer.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff addons/terrain_3d/src/asset_dock.gd addons/terrain_3d/src/ui.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" status --short scripts/world/environment/ProceduralTreeSpawner.gd)"
     ],
     "deny": [],
     "ask": []

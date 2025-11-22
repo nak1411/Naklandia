@@ -1,0 +1,999 @@
+# ProceduralTreeSpawner.gd
+# Procedurally generates trees using MULTIPLE MultiMesh instances (one per mesh component)
+# This approach gives us GPU instancing performance while supporting complex multi-mesh trees
+class_name ProceduralTreeSpawner
+extends Node3D
+
+# Tree configuration
+@export_group("Tree Settings")
+@export var tree_scene_path: String = "res://assets/models/foliage/resinwood_tree_s.tscn"
+@export var tree_density: float = 0.05  # Trees per square meter (approx)
+@export var min_tree_scale: float = 0.8
+@export var max_tree_scale: float = 1.4
+@export var random_rotation: bool = true
+
+# Spawn area configuration
+@export_group("Spawn Area")
+@export var spawn_radius: float = 100.0
+@export var spawn_center: Vector3 = Vector3.ZERO
+@export var follow_player: bool = true
+@export var use_chunks: bool = true
+@export var chunk_size: float = 32.0
+
+# Terrain constraints
+@export_group("Terrain Constraints")
+@export var min_slope: float = 0.0
+@export var max_slope: float = 0.5
+@export var min_height: float = -100.0
+@export var max_height: float = 100.0
+@export var water_level: float = 0.0
+
+# Noise settings for natural distribution
+@export_group("Distribution Noise")
+@export var use_noise_distribution: bool = false
+@export var noise_threshold: float = -0.5
+@export var noise_scale: float = 0.02
+@export var noise_seed: int = 0
+
+# Performance settings - Manual culling with scale optimization
+@export_group("Performance")
+@export var spawn_on_ready: bool = false
+@export var trees_per_frame: int = 200  # Fast with MultiMesh
+@export var use_visibility_range: bool = false  # Does NOT work with MultiMesh - use enable_manual_culling instead
+@export var max_draw_distance: float = 200.0  # Maximum distance trees are visible
+@export var fade_distance: float = 20.0  # Distance over which trees fade out before max_draw_distance
+@export var chunk_despawn_distance: float = 400.0  # Distance at which chunks are unloaded (should be > max_draw_distance)
+@export var enable_manual_culling: bool = true  # Per-instance culling (REQUIRED for MultiMesh)
+@export var culling_check_interval: float = 0.5
+@export var culling_move_threshold: float = 10.0  # Only do full culling check after player moves this far
+@export var max_chunks_per_spawn: int = 10
+
+# Debug settings
+@export_group("Debug")
+@export var debug_show_on_minimap: bool = false
+@export var debug_performance: bool = false
+
+# Internal variables - MULTI-MULTIMESH BASED!
+var terrain: Terrain3D = null
+var tree_scene: PackedScene = null
+var multimesh_parent: Node3D = null  # Parent for all MultiMesh instances
+var multimesh_instances: Array[MultiMeshInstance3D] = []  # One per mesh component
+var multimeshes: Array[MultiMesh] = []  # Corresponding MultiMesh resources
+var mesh_local_transforms: Array[Transform3D] = []  # Local transform for each mesh component
+var noise: FastNoiseLite = null
+var spawn_queue: Array[Dictionary] = []
+var is_spawning: bool = false
+var player: Node3D = null
+var culling_timer: float = 0.0
+var last_player_position: Vector3 = Vector3.ZERO
+var last_culling_position: Vector3 = Vector3.ZERO
+var spawned_chunks: Dictionary = {}
+var tree_spawn_data: Dictionary = {}  # ALL tree data by hash
+var chunk_tree_lookup: Dictionary = {}
+var tree_hash_to_index: Dictionary = {}  # Maps tree_hash -> instance index
+var tree_visible_state: Dictionary = {}  # Track visibility state (only used for manual culling)
+var available_indices: Array[int] = []  # Pool of reusable MultiMesh indices from despawned trees
+var next_available_index: int = 0
+var initial_generation_done: bool = false
+
+# Performance tracking
+var perf_spawn_time: float = 0.0
+var perf_culling_time: float = 0.0
+var perf_trees_generated: int = 0
+var perf_timer: float = 0.0
+
+
+func _ready():
+	print("ProceduralTreeSpawner: _ready() called")
+	add_to_group("tree_spawner")
+	setup_noise()
+	load_tree_meshes()
+	find_terrain()
+	print("ProceduralTreeSpawner: terrain found: ", terrain != null)
+	find_player()
+	print("ProceduralTreeSpawner: player found: ", player != null)
+	print("ProceduralTreeSpawner: spawn_on_ready = ", spawn_on_ready)
+
+	if spawn_on_ready:
+		call_deferred("generate_trees")
+
+
+func setup_noise():
+	noise = FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	noise.frequency = noise_scale
+	noise.seed = noise_seed if noise_seed != 0 else randi()
+
+
+func load_tree_meshes():
+	"""Load tree scene and extract all meshes to create separate MultiMesh instances"""
+	if tree_scene_path.is_empty():
+		push_error("ProceduralTreeSpawner: No tree scene path specified!")
+		return
+
+	tree_scene = load(tree_scene_path)
+	if not tree_scene:
+		push_error("ProceduralTreeSpawner: Failed to load tree scene: " + tree_scene_path)
+		return
+
+	# Instantiate scene temporarily to extract meshes
+	var temp_instance = tree_scene.instantiate()
+	var meshes_found = extract_all_meshes(temp_instance)
+
+	if meshes_found.is_empty():
+		push_error("ProceduralTreeSpawner: No meshes found in tree scene!")
+		temp_instance.queue_free()
+		return
+
+	# Create parent for MultiMesh instances
+	multimesh_parent = Node3D.new()
+	multimesh_parent.name = "TreeMultiMeshes"
+	add_child(multimesh_parent)
+
+	# Create a MultiMeshInstance3D for each unique mesh
+	for mesh_data in meshes_found:
+		var mmi = MultiMeshInstance3D.new()
+		mmi.name = "TreeMesh_" + str(multimesh_instances.size())
+		multimesh_parent.add_child(mmi)
+
+		var mm = MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.instance_count = 0
+		mm.mesh = mesh_data["mesh"]
+
+		mmi.multimesh = mm
+
+		# Apply material if available
+		if mesh_data.has("material") and mesh_data["material"] != null:
+			mmi.material_override = mesh_data["material"]
+
+		# Note: visibility_range doesn't work per-instance for MultiMesh
+		# It only culls the entire MultiMeshInstance3D node based on distance to origin
+		if use_visibility_range:
+			mmi.visibility_range_begin = 0.0
+			mmi.visibility_range_begin_margin = 0.0
+			mmi.visibility_range_end = max_draw_distance
+			mmi.visibility_range_end_margin = fade_distance
+			# Use SELF mode for smooth alpha fade
+			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+
+		multimesh_instances.append(mmi)
+		multimeshes.append(mm)
+		mesh_local_transforms.append(mesh_data["transform"])  # Store local transform!
+
+	temp_instance.queue_free()
+
+	print("ProceduralTreeSpawner: Created ", multimesh_instances.size(), " MultiMesh instances for tree components")
+	print("  GPU-side culling (visibility_range): ", use_visibility_range)
+	print("  Max draw distance: ", max_draw_distance)
+	print("  Fade distance: ", fade_distance)
+	print("  Manual CPU culling: ", enable_manual_culling)
+	for i in range(mesh_local_transforms.size()):
+		print("  Mesh ", i, " local transform: ", mesh_local_transforms[i])
+
+
+func extract_all_meshes(node: Node, parent_transform: Transform3D = Transform3D()) -> Array:
+	"""Recursively extract all MeshInstance3D meshes and their materials from a node tree"""
+	var meshes = []
+
+	# Calculate accumulated transform from root - INCLUDING root transform
+	# The root transform (e.g., 0.1 scale) is baked into the mesh offsets
+	var current_transform = parent_transform
+	if node is Node3D:
+		current_transform = parent_transform * (node as Node3D).transform
+
+	if node is MeshInstance3D:
+		var mesh_instance = node as MeshInstance3D
+		if mesh_instance.mesh:
+			var mesh_data = {"mesh": mesh_instance.mesh, "material": mesh_instance.get_surface_override_material(0), "transform": current_transform}  # Accumulated transform INCLUDING root scale
+			meshes.append(mesh_data)
+
+	for child in node.get_children():
+		meshes.append_array(extract_all_meshes(child, current_transform))
+
+	return meshes
+
+
+func find_terrain():
+	var terrains = get_tree().get_nodes_in_group("terrain")
+	if terrains.size() > 0 and terrains[0] is Terrain3D:
+		terrain = terrains[0]
+	else:
+		push_warning("ProceduralTreeSpawner: No Terrain3D found in scene")
+
+
+func find_player():
+	var players = get_tree().get_nodes_in_group("player")
+	if players.size() > 0:
+		player = players[0]
+		print("ProceduralTreeSpawner: Found player for dynamic chunk spawning")
+	else:
+		var root = get_tree().current_scene
+		for child in root.get_children():
+			if child.name == "Player" or child is CharacterBody3D:
+				player = child
+				print("ProceduralTreeSpawner: Found player by name/type")
+				break
+
+		if not player:
+			push_warning("ProceduralTreeSpawner: No player found - culling will be disabled")
+
+
+func generate_trees():
+	print("ProceduralTreeSpawner: generate_trees() CALLED")
+	print("  multimeshes.size() = ", multimeshes.size())
+	print("  initial_generation_done = ", initial_generation_done)
+
+	if multimeshes.is_empty():
+		push_error("ProceduralTreeSpawner: Cannot generate trees - no MultiMesh instances")
+		return
+
+	if initial_generation_done:
+		print("ProceduralTreeSpawner: generate_trees() called but initial generation already done")
+		return
+
+	initial_generation_done = true
+	print("ProceduralTreeSpawner: Starting initial tree generation...")
+	print("  Player: ", player)
+	print("  follow_player: ", follow_player)
+
+	spawn_queue.clear()
+
+	var center = spawn_center
+	var radius = spawn_radius
+
+	if follow_player and player:
+		center = player.global_position
+		last_player_position = center
+		radius = max_draw_distance
+
+	if use_chunks:
+		generate_trees_chunked_at(center, radius)
+	else:
+		generate_trees_simple_at(center, radius)
+
+
+func generate_trees_simple_at(center: Vector3, radius: float = 0.0):
+	if radius == 0.0:
+		radius = spawn_radius
+
+	var area = PI * radius * radius
+	var tree_count = int(area * tree_density)
+
+	print("ProceduralTreeSpawner: Generating approximately ", tree_count, " trees...")
+
+	# Pre-allocate MultiMesh size with 3x buffer to avoid growth (which corrupts instances!)
+	# The buffer accommodates dynamic chunk spawning as player moves
+	var allocation_size = tree_count * 3
+	for mm in multimeshes:
+		mm.instance_count = allocation_size
+	print("  Pre-allocated MultiMesh to ", allocation_size, " instances (", tree_count, " initial + buffer for dynamic spawning)")
+
+	for i in range(tree_count):
+		var spawn_data = get_random_spawn_position_at(center, radius)
+		if spawn_data:
+			spawn_queue.append(spawn_data)
+
+	if spawn_queue.is_empty():
+		push_warning("ProceduralTreeSpawner: No trees were queued! Check terrain constraints.")
+	is_spawning = true
+
+
+func generate_trees_chunked_at(center: Vector3, radius: float = 0.0):
+	if radius == 0.0:
+		radius = spawn_radius
+
+	var center_chunk_x = int(floor(center.x / chunk_size))
+	var center_chunk_z = int(floor(center.z / chunk_size))
+	var chunk_radius = int(ceil(radius / chunk_size))
+
+	var chunks_to_spawn = []
+
+	for x in range(-chunk_radius, chunk_radius + 1):
+		for z in range(-chunk_radius, chunk_radius + 1):
+			var world_chunk_x = center_chunk_x + x
+			var world_chunk_z = center_chunk_z + z
+			var chunk_key = str(world_chunk_x) + "_" + str(world_chunk_z)
+
+			var chunk_world_x = float(world_chunk_x) * chunk_size
+			var chunk_world_z = float(world_chunk_z) * chunk_size
+
+			var chunk_center = Vector3(chunk_world_x + chunk_size / 2, 0, chunk_world_z + chunk_size / 2)
+			var distance = chunk_center.distance_to(Vector3(center.x, 0, center.z))
+
+			if distance > radius:
+				continue
+
+			if spawned_chunks.has(chunk_key):
+				continue
+
+			chunks_to_spawn.append({"chunk_x": chunk_world_x, "chunk_z": chunk_world_z, "chunk_key": chunk_key, "distance": distance})
+
+	chunks_to_spawn.sort_custom(func(a, b): return a["distance"] < b["distance"])
+
+	var total_trees = 0
+	for chunk_data in chunks_to_spawn:
+		spawned_chunks[chunk_data["chunk_key"]] = true
+
+		var chunk_area = chunk_size * chunk_size
+		var trees_in_chunk = int(chunk_area * tree_density)
+
+		for i in range(trees_in_chunk):
+			var rand_x = get_seeded_random(chunk_data["chunk_key"], i * 7 + 3)
+			var rand_z = get_seeded_random(chunk_data["chunk_key"], i * 11 + 5)
+
+			var local_x = rand_x * chunk_size + chunk_data["chunk_x"]
+			var local_z = rand_z * chunk_size + chunk_data["chunk_z"]
+
+			var spawn_data = get_spawn_pos_at(Vector3(local_x, 0, local_z))
+			if spawn_data:
+				spawn_data["tree_hash"] = get_tree_hash(Vector3(local_x, 0, local_z))
+				spawn_data["distance"] = Vector3(local_x, 0, local_z).distance_to(Vector3(center.x, 0, center.z))
+				spawn_queue.append(spawn_data)
+				total_trees += 1
+
+	if total_trees > 0:
+		spawn_queue.sort_custom(func(a, b): return a.get("distance", 0) < b.get("distance", 0))
+
+		# Pre-allocate MultiMesh size with 3x buffer to avoid growth (which corrupts instances!)
+		# The buffer accommodates dynamic chunk spawning as player moves
+		var allocation_size = total_trees * 3
+		for mm in multimeshes:
+			mm.instance_count = allocation_size
+		print("  Pre-allocated MultiMesh to ", allocation_size, " instances (", total_trees, " initial + buffer for dynamic spawning)")
+
+	print("ProceduralTreeSpawner: Queued ", total_trees, " trees for spawning in ", chunks_to_spawn.size(), " chunks")
+	if spawn_queue.is_empty():
+		push_warning("ProceduralTreeSpawner: No trees were queued! Check terrain constraints.")
+	is_spawning = true
+
+
+func get_chunk_key(x: float, z: float) -> String:
+	var chunk_x = int(floor(x / chunk_size))
+	var chunk_z = int(floor(z / chunk_size))
+	return str(chunk_x) + "_" + str(chunk_z)
+
+
+func get_tree_hash(pos: Vector3) -> String:
+	var x = snappedf(pos.x, 0.001)
+	var z = snappedf(pos.z, 0.001)
+	return str(x) + "_" + str(z)
+
+
+func get_seeded_random(chunk_key: String, tree_index: int) -> float:
+	var hash_input = chunk_key + "_" + str(tree_index)
+	var hash_value = hash_input.hash()
+
+	hash_value = (hash_value * 1103515245 + 12345) & 0x7FFFFFFF
+	hash_value = (hash_value * 48271 + 0) & 0x7FFFFFFF
+	hash_value = (hash_value ^ (hash_value >> 16)) & 0x7FFFFFFF
+
+	return float(hash_value) / float(0x7FFFFFFF)
+
+
+func get_random_spawn_position_at(center: Vector3, radius: float = 0.0) -> Dictionary:
+	if radius == 0.0:
+		radius = spawn_radius
+
+	var angle = randf() * TAU
+	var distance = sqrt(randf()) * radius
+	var x = cos(angle) * distance + center.x
+	var z = sin(angle) * distance + center.z
+
+	return get_spawn_pos_at(Vector3(x, 0, z))
+
+
+func get_spawn_pos_at(pos: Vector3) -> Dictionary:
+	if use_noise_distribution:
+		var noise_value = noise.get_noise_2d(pos.x, pos.z)
+		if noise_value < noise_threshold:
+			return {}
+
+	var height = get_terrain_height(pos)
+	if is_nan(height):
+		return {}
+
+	if height < min_height or height > max_height or height < water_level:
+		return {}
+
+	if terrain:
+		var slope = get_terrain_slope(pos)
+		if slope < min_slope or slope > max_slope:
+			return {}
+
+	var spawn_position = Vector3(pos.x, height, pos.z)
+
+	var pos_hash = get_tree_hash(Vector3(pos.x, 0, pos.z))
+	var scale_seed = (pos_hash + "_scale").hash()
+	var rot_seed = (pos_hash + "_rot").hash()
+
+	var tree_scale = min_tree_scale + ((scale_seed % 10000) / 10000.0) * (max_tree_scale - min_tree_scale)
+	var tree_rotation = ((rot_seed % 10000) / 10000.0) * TAU if random_rotation else 0.0
+
+	return {"position": spawn_position, "scale": tree_scale, "rotation": tree_rotation}
+
+
+func get_terrain_height(pos: Vector3) -> float:
+	if terrain and terrain.data:
+		var height = terrain.data.get_height(pos)
+		return height if not is_nan(height) else 0.0
+	return 0.0
+
+
+func get_terrain_slope(pos: Vector3) -> float:
+	if not terrain or not terrain.data:
+		return 0.0
+
+	var sample_distance = 1.0
+	var north_height = terrain.data.get_height(pos + Vector3(0, 0, -sample_distance))
+	var south_height = terrain.data.get_height(pos + Vector3(0, 0, sample_distance))
+	var east_height = terrain.data.get_height(pos + Vector3(sample_distance, 0, 0))
+	var west_height = terrain.data.get_height(pos + Vector3(-sample_distance, 0, 0))
+
+	var slope_ns = abs(north_height - south_height) / (sample_distance * 2)
+	var slope_ew = abs(east_height - west_height) / (sample_distance * 2)
+
+	return max(slope_ns, slope_ew)
+
+
+func _process(delta):
+	# Performance tracking
+	if debug_performance:
+		perf_timer += delta
+		if perf_timer >= 1.0:
+			if perf_trees_generated > 0 or perf_spawn_time > 0 or perf_culling_time > 0:
+				print(
+					"TreeSpawner Perf: Generated=",
+					perf_trees_generated,
+					" SpawnTime=",
+					snapped(perf_spawn_time * 1000, 0.1),
+					"ms",
+					" CullTime=",
+					snapped(perf_culling_time * 1000, 0.1),
+					"ms",
+					" Total=",
+					tree_spawn_data.size(),
+					" Visible=",
+					get_visible_tree_count()
+				)
+			perf_spawn_time = 0.0
+			perf_culling_time = 0.0
+			perf_trees_generated = 0
+			perf_timer = 0.0
+
+	# Handle tree spawning - FAST with MultiMesh!
+	if is_spawning and not spawn_queue.is_empty():
+		var spawn_start = Time.get_ticks_usec()
+
+		var trees_to_add = min(trees_per_frame, spawn_queue.size())
+
+		for i in range(trees_to_add):
+			var spawn_data = spawn_queue.pop_front()
+			add_tree_to_multimeshes(spawn_data)
+			if debug_performance:
+				perf_trees_generated += 1
+
+		if debug_performance:
+			perf_spawn_time += (Time.get_ticks_usec() - spawn_start) / 1000000.0
+
+		if spawn_queue.is_empty():
+			is_spawning = false
+			print("ProceduralTreeSpawner: Finished generating ", tree_spawn_data.size(), " trees")
+			var counts = []
+			for mm in multimeshes:
+				counts.append(mm.instance_count)
+			print("  MultiMesh instance counts: ", counts)
+			if use_visibility_range:
+				print("  GPU-side culling ENABLED - trees will automatically fade/cull at ", max_draw_distance, "m")
+			else:
+				print("  Visible tree count: ", get_visible_tree_count())
+			
+
+	# Handle manual CPU-side culling and dynamic spawning
+	if enable_manual_culling and player:
+		culling_timer += delta
+		if culling_timer >= culling_check_interval:
+			culling_timer = 0.0
+			var cull_start = Time.get_ticks_usec()
+
+			# Update visibility if not using visibility_range
+			if not use_visibility_range:
+				update_visible_trees()
+
+			# Check for new chunks to spawn
+			if follow_player:
+				check_and_spawn_around_player()
+
+			if debug_performance:
+				perf_culling_time += (Time.get_ticks_usec() - cull_start) / 1000000.0
+
+
+func add_tree_to_multimeshes(spawn_data: Dictionary):
+	"""Add a tree instance to ALL MultiMesh components - GPU culling handles visibility!"""
+	var tree_hash = spawn_data.get("tree_hash", "")
+	if tree_hash.is_empty():
+		var pos = spawn_data["position"]
+		tree_hash = get_tree_hash(Vector3(pos.x, 0, pos.z))
+
+	# Store spawn data
+	if not tree_spawn_data.has(tree_hash):
+		tree_spawn_data[tree_hash] = spawn_data
+
+		# Add to chunk lookup
+		var tree_chunk_key = get_chunk_key(spawn_data["position"].x, spawn_data["position"].z)
+		if not chunk_tree_lookup.has(tree_chunk_key):
+			chunk_tree_lookup[tree_chunk_key] = []
+		chunk_tree_lookup[tree_chunk_key].append(tree_hash)
+
+		# Assign index - reuse despawned indices first, otherwise use next available
+		var index: int
+		if available_indices.size() > 0:
+			index = available_indices.pop_back()
+		else:
+			index = next_available_index
+			next_available_index += 1
+		tree_hash_to_index[tree_hash] = index
+
+		# Calculate initial visibility for culling
+		var should_be_visible = true
+		if player and enable_manual_culling:
+			var player_pos = player.global_position
+			var pos = spawn_data["position"]
+			var dx = pos.x - player_pos.x
+			var dz = pos.z - player_pos.z
+			var dist_sq = dx * dx + dz * dz
+			var cull_dist_sq = max_draw_distance * max_draw_distance
+			should_be_visible = dist_sq <= cull_dist_sq
+
+		# Create base transform with appropriate scale (visible or hidden)
+		var base_transform = Transform3D()
+		base_transform = base_transform.rotated(Vector3.UP, spawn_data["rotation"])
+		if should_be_visible:
+			base_transform = base_transform.scaled(Vector3.ONE * spawn_data["scale"])
+		else:
+			# Hide distant trees immediately on spawn
+			base_transform = base_transform.scaled(Vector3.ONE * 0.001)
+		base_transform.origin = spawn_data["position"]
+
+		# Add to ALL MultiMesh instances with local offsets
+		for i in range(multimeshes.size()):
+			var mm = multimeshes[i]
+			var local_transform = mesh_local_transforms[i]
+
+			# Check if we've exceeded pre-allocated size
+			if index >= mm.instance_count:
+				push_error("ProceduralTreeSpawner: Tree index ", index, " exceeds pre-allocated MultiMesh size ", mm.instance_count, "! Increase buffer or reduce tree density. SKIPPING THIS TREE to avoid corruption.")
+				return  # Skip this tree to avoid growing MultiMesh (which corrupts existing instances)
+
+			# CRITICAL: Apply local transform offset POSITION/ROTATION only (not scale, it's already in base_transform)
+			# The local_transform contains the mesh component's offset from tree origin
+			var local_offset = Transform3D()
+			local_offset.origin = local_transform.origin
+			local_offset.basis = local_transform.basis.orthonormalized()  # Remove scale, keep rotation only
+
+			var final_transform = base_transform * local_offset
+			mm.set_instance_transform(index, final_transform)
+
+		# Initialize visibility state
+		tree_visible_state[tree_hash] = should_be_visible
+
+
+func update_visible_trees():
+	"""Manual CPU-side culling - only used if visibility_range is disabled"""
+	if not player or use_visibility_range:
+		return
+
+	var player_pos = player.global_position
+
+	# Skip culling if player hasn't moved significantly since last check
+	var distance_moved = player_pos.distance_to(last_culling_position)
+	if distance_moved < culling_move_threshold and last_culling_position != Vector3.ZERO:
+		return
+
+	last_culling_position = player_pos
+	var cull_dist_sq = max_draw_distance * max_draw_distance
+
+	# Debug: Count currently visible trees BEFORE update (only if debug enabled)
+	var visible_before = 0
+	if debug_performance:
+		for was_vis in tree_visible_state.values():
+			if was_vis:
+				visible_before += 1
+
+	# Build set of trees in nearby chunks (broad-phase filter)
+	var center_chunk_x = int(floor(player_pos.x / chunk_size))
+	var center_chunk_z = int(floor(player_pos.z / chunk_size))
+	# Use fade_distance for buffer instead of +1 chunk to avoid checking too many chunks
+	var check_distance = max_draw_distance + fade_distance
+	var chunk_check_radius = int(ceil(check_distance / chunk_size))
+
+	var trees_in_nearby_chunks = {}
+	var check_distance_sq = check_distance * check_distance
+
+	for x in range(-chunk_check_radius, chunk_check_radius + 1):
+		for z in range(-chunk_check_radius, chunk_check_radius + 1):
+			# Skip chunks that are too far (circle instead of square)
+			var chunk_dx = x * chunk_size
+			var chunk_dz = z * chunk_size
+			var chunk_dist_sq = chunk_dx * chunk_dx + chunk_dz * chunk_dz
+			if chunk_dist_sq > check_distance_sq:
+				continue
+
+			var world_chunk_x = center_chunk_x + x
+			var world_chunk_z = center_chunk_z + z
+			var chunk_key = str(world_chunk_x) + "_" + str(world_chunk_z)
+
+			if not chunk_tree_lookup.has(chunk_key):
+				continue
+
+			var tree_hashes_in_chunk = chunk_tree_lookup[chunk_key]
+			for tree_hash in tree_hashes_in_chunk:
+				if tree_hash_to_index.has(tree_hash):
+					trees_in_nearby_chunks[tree_hash] = true
+
+	# Check ALL trees that might need updates:
+	# - Trees in nearby chunks (might become visible OR stay visible)
+	# - Trees that were visible last frame but might now be far (might become hidden)
+	var trees_to_check = {}
+	for tree_hash in trees_in_nearby_chunks.keys():
+		trees_to_check[tree_hash] = true
+	# Also check previously visible trees (they might have moved far away)
+	for tree_hash in tree_visible_state.keys():
+		if tree_visible_state[tree_hash]:  # Was visible last frame
+			trees_to_check[tree_hash] = true
+
+	var trees_shown = 0
+	var trees_hidden = 0
+
+	for tree_hash in trees_to_check.keys():
+		if not tree_spawn_data.has(tree_hash):
+			continue
+
+		var spawn_data = tree_spawn_data[tree_hash]
+		var pos = spawn_data["position"]
+
+		var dx = pos.x - player_pos.x
+		var dz = pos.z - player_pos.z
+		var dist_sq = dx * dx + dz * dz
+
+		# Use hysteresis to prevent flickering at the boundary
+		# Trees appear at max_draw_distance, but don't disappear until max_draw_distance + fade_distance
+		var was_visible = tree_visible_state.get(tree_hash, false)
+		var show_distance_sq = cull_dist_sq
+		var hide_distance_sq = (max_draw_distance + fade_distance) * (max_draw_distance + fade_distance)
+
+		var should_be_visible: bool
+		if was_visible:
+			# If already visible, use larger distance to hide (add hysteresis)
+			should_be_visible = dist_sq <= hide_distance_sq
+		else:
+			# If hidden, use normal distance to show
+			should_be_visible = dist_sq <= show_distance_sq
+
+		# CRITICAL: Only update if visibility state CHANGED
+		if should_be_visible != was_visible:
+			var index = tree_hash_to_index[tree_hash]
+
+			if should_be_visible:
+				trees_shown += 1
+
+				# Show with correct scale
+				var base_transform = Transform3D()
+				base_transform = base_transform.rotated(Vector3.UP, spawn_data["rotation"])
+				base_transform = base_transform.scaled(Vector3.ONE * spawn_data["scale"])
+				base_transform.origin = spawn_data["position"]
+
+				# Apply to all mesh components with their local offsets
+				for i in range(multimeshes.size()):
+					var mm = multimeshes[i]
+					var local_transform = mesh_local_transforms[i]
+
+					# Apply position/rotation offset only, not scale
+					var local_offset = Transform3D()
+					local_offset.origin = local_transform.origin
+					local_offset.basis = local_transform.basis.orthonormalized()
+
+					var final_transform = base_transform * local_offset
+					mm.set_instance_transform(index, final_transform)
+			else:
+				trees_hidden += 1
+
+				# Hide by setting scale to very small (zero causes degenerate transforms)
+				var base_transform = Transform3D()
+				base_transform = base_transform.scaled(Vector3.ONE * 0.001)
+				base_transform.origin = pos
+
+				# Apply to all mesh components
+				for i in range(multimeshes.size()):
+					var mm = multimeshes[i]
+					var local_transform = mesh_local_transforms[i]
+
+					# Apply position/rotation offset only, not scale
+					var local_offset = Transform3D()
+					local_offset.origin = local_transform.origin
+					local_offset.basis = local_transform.basis.orthonormalized()
+
+					var final_transform = base_transform * local_offset
+					mm.set_instance_transform(index, final_transform)
+
+			# Update state
+			tree_visible_state[tree_hash] = should_be_visible
+
+	# Debug output (only if debug_performance is enabled)
+	if debug_performance and (trees_shown > 0 or trees_hidden > 0):
+		var visible_after = 0
+		for is_vis in tree_visible_state.values():
+			if is_vis:
+				visible_after += 1
+		print("  Culling: shown=", trees_shown, " hidden=", trees_hidden, " visible: ", visible_before, "->", visible_after, " checked=", trees_to_check.size(), " in_nearby_chunks=", trees_in_nearby_chunks.size())
+
+
+func check_and_spawn_around_player():
+	if not player:
+		return
+
+	if is_spawning:
+		return
+
+	var current_player_pos = player.global_position
+	var distance_moved = current_player_pos.distance_to(last_player_position)
+
+	if distance_moved > chunk_size / 2:
+		last_player_position = current_player_pos
+		despawn_far_chunks(current_player_pos)
+		spawn_nearby_chunks(current_player_pos)
+
+
+func despawn_far_chunks(center: Vector3):
+	"""Remove trees from chunks that are too far from the player to free up memory and improve performance"""
+	if not use_chunks:
+		return
+
+	var despawn_dist_sq = chunk_despawn_distance * chunk_despawn_distance
+	var chunks_to_remove: Array[String] = []
+
+	# Find chunks that are too far
+	for chunk_key in spawned_chunks.keys():
+		# Parse chunk coordinates from key "x_z"
+		var parts = chunk_key.split("_")
+		if parts.size() != 2:
+			continue
+
+		var chunk_x = int(parts[0])
+		var chunk_z = int(parts[1])
+		var chunk_world_x = float(chunk_x) * chunk_size
+		var chunk_world_z = float(chunk_z) * chunk_size
+		var chunk_center = Vector3(chunk_world_x + chunk_size / 2, 0, chunk_world_z + chunk_size / 2)
+
+		var dx = chunk_center.x - center.x
+		var dz = chunk_center.z - center.z
+		var dist_sq = dx * dx + dz * dz
+
+		if dist_sq > despawn_dist_sq:
+			chunks_to_remove.append(chunk_key)
+
+	# Despawn trees in far chunks
+	if chunks_to_remove.size() > 0:
+		var trees_despawned = 0
+		for chunk_key in chunks_to_remove:
+			if chunk_tree_lookup.has(chunk_key):
+				var tree_hashes = chunk_tree_lookup[chunk_key]
+				for tree_hash in tree_hashes:
+					# Free up the MultiMesh index for reuse
+					if tree_hash_to_index.has(tree_hash):
+						var index = tree_hash_to_index[tree_hash]
+						available_indices.append(index)
+						tree_hash_to_index.erase(tree_hash)
+
+					# Remove tree data
+					tree_spawn_data.erase(tree_hash)
+					tree_visible_state.erase(tree_hash)
+					trees_despawned += 1
+
+				# Remove chunk data
+				chunk_tree_lookup.erase(chunk_key)
+
+			spawned_chunks.erase(chunk_key)
+
+		if debug_performance:
+			print("  Despawned ", trees_despawned, " trees from ", chunks_to_remove.size(), " chunks beyond ", chunk_despawn_distance, "m")
+
+
+func spawn_nearby_chunks(center: Vector3):
+	if not use_chunks:
+		return
+
+	var spawn_dist = max_draw_distance
+	var center_chunk_x = int(floor(center.x / chunk_size))
+	var center_chunk_z = int(floor(center.z / chunk_size))
+	var chunk_radius = int(ceil(spawn_dist / chunk_size))
+
+	var chunks_to_process = []
+
+	for x in range(-chunk_radius, chunk_radius + 1):
+		for z in range(-chunk_radius, chunk_radius + 1):
+			var world_chunk_x = center_chunk_x + x
+			var world_chunk_z = center_chunk_z + z
+			var chunk_key = str(world_chunk_x) + "_" + str(world_chunk_z)
+
+			var chunk_world_x = float(world_chunk_x) * chunk_size
+			var chunk_world_z = float(world_chunk_z) * chunk_size
+
+			var chunk_center = Vector3(chunk_world_x + chunk_size / 2, 0, chunk_world_z + chunk_size / 2)
+			var distance = chunk_center.distance_to(Vector3(center.x, 0, center.z))
+
+			if distance > spawn_dist:
+				continue
+
+			if spawned_chunks.has(chunk_key):
+				continue
+
+			chunks_to_process.append({"chunk_x": chunk_world_x, "chunk_z": chunk_world_z, "chunk_key": chunk_key, "distance": distance})
+
+	if chunks_to_process.is_empty():
+		return
+
+	chunks_to_process.sort_custom(func(a, b): return a["distance"] < b["distance"])
+
+	var chunks_to_generate = min(chunks_to_process.size(), max_chunks_per_spawn)
+
+	var new_trees = 0
+	for chunk_idx in range(chunks_to_generate):
+		var chunk_data = chunks_to_process[chunk_idx]
+		spawned_chunks[chunk_data["chunk_key"]] = true
+
+		var chunk_area = chunk_size * chunk_size
+		var trees_in_chunk = int(chunk_area * tree_density)
+
+		for i in range(trees_in_chunk):
+			var rand_x = get_seeded_random(chunk_data["chunk_key"], i * 7 + 3)
+			var rand_z = get_seeded_random(chunk_data["chunk_key"], i * 11 + 5)
+
+			var local_x = rand_x * chunk_size + chunk_data["chunk_x"]
+			var local_z = rand_z * chunk_size + chunk_data["chunk_z"]
+
+			var spawn_data = get_spawn_pos_at(Vector3(local_x, 0, local_z))
+			if spawn_data:
+				spawn_data["tree_hash"] = get_tree_hash(Vector3(local_x, 0, local_z))
+				spawn_data["distance"] = Vector3(local_x, 0, local_z).distance_to(Vector3(center.x, 0, center.z))
+				spawn_queue.append(spawn_data)
+				new_trees += 1
+
+	if new_trees > 0:
+		spawn_queue.sort_custom(func(a, b): return a.get("distance", 0) < b.get("distance", 0))
+		is_spawning = true
+
+
+func clear_all_trees():
+	"""Clear all tree data and reset MultiMeshes"""
+	tree_spawn_data.clear()
+	tree_hash_to_index.clear()
+	tree_visible_state.clear()
+	chunk_tree_lookup.clear()
+	spawned_chunks.clear()
+	spawn_queue.clear()
+	next_available_index = 0
+
+	for mm in multimeshes:
+		mm.instance_count = 0
+
+	is_spawning = false
+
+
+func regenerate_trees():
+	clear_all_trees()
+	initial_generation_done = false
+	generate_trees()
+
+
+# Public API
+func set_tree_density(density: float):
+	tree_density = density
+
+
+func set_spawn_radius(radius: float):
+	spawn_radius = radius
+
+
+func set_noise_threshold(threshold: float):
+	noise_threshold = threshold
+
+
+func get_tree_count() -> int:
+	return tree_spawn_data.size()
+
+
+func get_visible_tree_count() -> int:
+	"""Count trees within draw distance"""
+	if not player:
+		return tree_spawn_data.size()
+
+	var player_pos = player.global_position
+	var cull_dist_sq = max_draw_distance * max_draw_distance
+	var visible_count = 0
+
+	for tree_hash in tree_spawn_data.keys():
+		var spawn_data = tree_spawn_data[tree_hash]
+		var pos = spawn_data["position"]
+
+		var dx = pos.x - player_pos.x
+		var dz = pos.z - player_pos.z
+		var dist_sq = dx * dx + dz * dz
+
+		if dist_sq <= cull_dist_sq:
+			visible_count += 1
+
+	return visible_count
+
+
+# Debug API for minimap
+func get_all_tree_positions() -> Array[Vector3]:
+	"""Get positions of all trees from spawn data"""
+	var positions: Array[Vector3] = []
+	for tree_hash in tree_spawn_data.keys():
+		var spawn_data = tree_spawn_data[tree_hash]
+		positions.append(spawn_data["position"])
+	return positions
+
+
+func get_nearby_tree_positions(center: Vector3, radius: float) -> Array[Vector3]:
+	"""Get tree positions within radius from spawn data"""
+	var positions: Array[Vector3] = []
+	var radius_sq = radius * radius
+
+	var center_chunk_x = int(floor(center.x / chunk_size))
+	var center_chunk_z = int(floor(center.z / chunk_size))
+	var chunk_check_radius = int(ceil(radius / chunk_size))
+
+	for x in range(-chunk_check_radius, chunk_check_radius + 1):
+		for z in range(-chunk_check_radius, chunk_check_radius + 1):
+			var world_chunk_x = center_chunk_x + x
+			var world_chunk_z = center_chunk_z + z
+			var chunk_key = str(world_chunk_x) + "_" + str(world_chunk_z)
+
+			if not chunk_tree_lookup.has(chunk_key):
+				continue
+
+			var tree_hashes_in_chunk = chunk_tree_lookup[chunk_key]
+			for tree_hash in tree_hashes_in_chunk:
+				if not tree_spawn_data.has(tree_hash):
+					continue
+
+				var spawn_data = tree_spawn_data[tree_hash]
+				var pos = spawn_data["position"]
+
+				var dx = pos.x - center.x
+				var dz = pos.z - center.z
+				var distance_sq = dx * dx + dz * dz
+
+				if distance_sq <= radius_sq:
+					positions.append(pos)
+
+	return positions
+
+
+func get_visible_tree_positions() -> Array[Vector3]:
+	"""Get positions of visible trees (within draw distance of player)"""
+	if not player:
+		return get_all_tree_positions()
+
+	var positions: Array[Vector3] = []
+	var player_pos = player.global_position
+	var cull_dist_sq = max_draw_distance * max_draw_distance
+
+	for tree_hash in tree_spawn_data.keys():
+		var spawn_data = tree_spawn_data[tree_hash]
+		var pos = spawn_data["position"]
+
+		var dx = pos.x - player_pos.x
+		var dz = pos.z - player_pos.z
+		var dist_sq = dx * dx + dz * dz
+
+		if dist_sq <= cull_dist_sq:
+			positions.append(pos)
+
+	return positions
+
+
+func is_debug_mode_enabled() -> bool:
+	return debug_show_on_minimap

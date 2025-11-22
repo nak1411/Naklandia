@@ -12,11 +12,19 @@ extends Control
 @export var marker_icon_color: Color = Color(1.0, 0.0, 0.0, 1.0)
 @export var marker_size: float = 6.0
 
+# Debug settings
+@export_group("Debug Visualization")
+@export var show_tree_debug: bool = true  # Enable tree debug visualization
+@export var tree_visible_color: Color = Color(1.0, 0.4, 0.8, 1.0)  # Pink for visible trees
+@export var tree_hidden_color: Color = Color(0.6, 0.2, 0.4, 0.5)  # Dark pink for hidden trees
+@export var tree_dot_size: float = 1.0
+
 # References
 var player: Node3D
 var camera: Camera3D
 var camera_pivot: Node3D
 var map_manager: Node
+var tree_spawner: Node  # Reference to ProceduralTreeSpawner for debug vis
 
 # Minimap texture
 var minimap_image: Image
@@ -30,6 +38,7 @@ func _ready():
 	_setup_minimap_viewport()
 	_find_player_reference()
 	_find_map_manager()
+	_find_tree_spawner()
 
 
 func _setup_minimap_viewport():
@@ -90,6 +99,15 @@ func _find_map_manager():
 		map_manager = map_managers[0]
 
 
+func _find_tree_spawner():
+	var tree_spawners = get_tree().get_nodes_in_group("tree_spawner")
+	if tree_spawners.size() > 0:
+		tree_spawner = tree_spawners[0]
+		print("Minimap: Found tree spawner: ", tree_spawner.name)
+	else:
+		print("Minimap: No tree spawner found in group 'tree_spawner'")
+
+
 func _process(_delta):
 	if player and minimap_camera:
 		var player_pos = player.global_position
@@ -109,6 +127,7 @@ func _draw():
 		draw_texture_rect(render_viewport.get_texture(), rect, false)
 
 	var center = minimap_size / 2.0
+	_draw_debug_trees(center)
 	_draw_map_markers(center)
 	_draw_player_marker(center)
 	_draw_north_indicator(center)
@@ -134,6 +153,84 @@ func _draw_north_indicator(center: Vector2):
 	var north_pos = center + Vector2(0, -minimap_size.y / 2.0 + 15)
 	draw_circle(north_pos, 3, north_indicator_color)
 	draw_string(ThemeDB.fallback_font, north_pos + Vector2(-3, -5), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, north_indicator_color)
+
+
+func _draw_debug_trees(center: Vector2):
+	"""Draw tree positions as colored dots for debugging culling and rendering"""
+	if not show_tree_debug:
+		return
+
+	if not tree_spawner:
+		# Try to find it again if we don't have it yet
+		_find_tree_spawner()
+		if not tree_spawner:
+			return
+
+	if not player or not minimap_camera:
+		return
+
+	# Check if tree spawner has debug mode enabled
+	if not tree_spawner.has_method("is_debug_mode_enabled"):
+		print("Minimap Debug: Tree spawner doesn't have is_debug_mode_enabled method")
+		return
+
+	if not tree_spawner.is_debug_mode_enabled():
+		print("Minimap Debug: Tree spawner debug mode is disabled. Enable 'Debug Show On Minimap' on the ProceduralTreeSpawner node")
+		return
+
+	var player_pos = player.global_position
+	var pixels_per_unit = minimap_size.y / minimap_camera.size
+
+	# OPTIMIZATION: Only get trees within minimap view radius
+	var view_radius = minimap_camera.size  # Camera size = view radius in world units
+	var all_tree_positions: Array[Vector3] = []
+
+	# Use optimized spatial query if available, otherwise fall back to all trees
+	if tree_spawner.has_method("get_nearby_tree_positions"):
+		all_tree_positions = tree_spawner.get_nearby_tree_positions(player_pos, view_radius)
+	elif tree_spawner.has_method("get_all_tree_positions"):
+		all_tree_positions = tree_spawner.get_all_tree_positions()
+
+	# Get visible trees to differentiate colors
+	var visible_tree_positions: Array[Vector3] = []
+	if tree_spawner.has_method("get_visible_tree_positions"):
+		visible_tree_positions = tree_spawner.get_visible_tree_positions()
+
+	# Debug output (only print once per second to avoid spam)
+	var time = Time.get_ticks_msec() / 1000.0
+	if int(time) != int(time - get_process_delta_time()):
+		print("Minimap Debug Trees: All=", all_tree_positions.size(), " Visible=", visible_tree_positions.size())
+
+	# Create a set of visible positions for quick lookup
+	var visible_set = {}
+	for tree_pos in visible_tree_positions:
+		var key = str(snappedf(tree_pos.x, 0.01)) + "_" + str(snappedf(tree_pos.z, 0.01))
+		visible_set[key] = true
+
+	# Draw all trees
+	for tree_pos in all_tree_positions:
+		# Calculate offset from player (who is at center)
+		var offset_x = tree_pos.x - player_pos.x
+		var offset_z = tree_pos.z - player_pos.z
+
+		# Convert to screen coordinates (relative to center) - negate to flip
+		var screen_offset_x = -offset_x * pixels_per_unit
+		var screen_offset_z = -offset_z * pixels_per_unit
+
+		var tree_screen_pos = center + Vector2(screen_offset_x, screen_offset_z)
+
+		# Only draw if within minimap bounds (with small padding)
+		if tree_screen_pos.x < -5 or tree_screen_pos.x > minimap_size.x + 5:
+			continue
+		if tree_screen_pos.y < -5 or tree_screen_pos.y > minimap_size.y + 5:
+			continue
+
+		# Determine color based on visibility
+		var key = str(snappedf(tree_pos.x, 0.01)) + "_" + str(snappedf(tree_pos.z, 0.01))
+		var tree_color = tree_visible_color if visible_set.has(key) else tree_hidden_color
+
+		# Draw the tree dot
+		draw_circle(tree_screen_pos, tree_dot_size, tree_color)
 
 
 func _draw_map_markers(center: Vector2):

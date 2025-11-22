@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://degfmxlhc2u5j"]
+
+[ext_resource type="PackedScene" uid="uid://bp576mieh7lfr" path="res://assets/models/foliage/tree.glb" id="1_k53sf"]
+
+[node name="ResinwoodTree_s" type="Node3D"]
+transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0)
+
+[node name="resinwoodtree_s" parent="." instance=ExtResource("1_k53sf")]

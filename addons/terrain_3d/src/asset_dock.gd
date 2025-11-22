@@ -142,6 +142,8 @@ func _ready() -> void:
 
 
 func get_current_list() -> ListContainer:
+	if not _initialized or not _current_list:
+		return null
 	return _current_list
 
 

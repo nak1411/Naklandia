@@ -7,9 +7,11 @@ const MAP_ACTION = "toggle_map"
 var minimap_layer: CanvasLayer
 var compass_layer: CanvasLayer
 var map_layer: CanvasLayer
+var performance_layer: CanvasLayer
 var minimap: Control
 var compass_bar: Control
 var full_map: Control
+var performance_counter: Control
 
 
 func _ready():
@@ -18,6 +20,7 @@ func _ready():
 	_setup_compass_layer()
 	_setup_minimap_layer()
 	_setup_map_layer()
+	_setup_performance_layer()
 
 
 func _setup_input_actions():
@@ -92,6 +95,18 @@ func _setup_map_layer():
 		full_map.map_opened.connect(_on_map_opened)
 
 
+func _setup_performance_layer():
+	performance_layer = CanvasLayer.new()
+	performance_layer.name = "PerformanceLayer"
+	performance_layer.layer = 101  # Above everything else
+	add_child(performance_layer)
+
+	performance_counter = PerformanceCounter.new()
+	performance_counter.name = "PerformanceCounter"
+
+	performance_layer.add_child(performance_counter)
+
+
 func _input(event):
 	if event.is_action_pressed(MAP_ACTION):
 		toggle_map()
@@ -125,6 +140,8 @@ func _on_map_opened():
 		minimap.visible = false
 	if compass_bar:
 		compass_bar.visible = false
+	if performance_counter:
+		performance_counter.visible = false
 	_set_player_input_enabled(false)
 
 
@@ -133,6 +150,8 @@ func _on_map_closed():
 		minimap.visible = true
 	if compass_bar:
 		compass_bar.visible = true
+	if performance_counter:
+		performance_counter.visible = true
 	_set_player_input_enabled(true)
 
 
@@ -158,3 +177,13 @@ func set_compass_visible(is_visible: bool):
 func set_minimap_zoom(zoom: float):
 	if minimap and minimap.has_method("set_zoom"):
 		minimap.set_zoom(zoom)
+
+
+func set_performance_counter_visible(is_visible: bool):
+	if performance_counter:
+		performance_counter.visible = is_visible
+
+
+func toggle_performance_counter():
+	if performance_counter:
+		performance_counter.visible = not performance_counter.visible
