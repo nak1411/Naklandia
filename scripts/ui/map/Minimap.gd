@@ -14,9 +14,10 @@ extends Control
 
 # Debug settings
 @export_group("Debug Visualization")
-@export var show_tree_debug: bool = true  # Enable tree debug visualization
+@export var show_tree_debug: bool = false  # Enable tree debug visualization (expensive!)
 @export var tree_visible_color: Color = Color(1.0, 0.4, 0.8, 1.0)  # Pink for visible trees
 @export var tree_hidden_color: Color = Color(0.6, 0.2, 0.4, 0.5)  # Dark pink for hidden trees
+@export var tree_culled_color: Color = Color(0.0, 0.0, 0.0, 0.8)  # Black for frustum-culled trees
 @export var tree_dot_size: float = 1.0
 
 # References
@@ -155,6 +156,18 @@ func _draw_north_indicator(center: Vector2):
 	draw_string(ThemeDB.fallback_font, north_pos + Vector2(-3, -5), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, north_indicator_color)
 
 
+func _is_point_in_frustum(point: Vector3, cam: Camera3D) -> bool:
+	"""Check if a point is inside the camera's view frustum"""
+	if not cam:
+		return false
+	var frustum = cam.get_frustum()
+	for plane in frustum:
+		# Godot frustum planes point inward, so positive distance = inside
+		if plane.distance_to(point) > 0:
+			return false
+	return true
+
+
 func _draw_debug_trees(center: Vector2):
 	"""Draw tree positions as colored dots for debugging culling and rendering"""
 	if not show_tree_debug:
@@ -196,10 +209,10 @@ func _draw_debug_trees(center: Vector2):
 	if tree_spawner.has_method("get_visible_tree_positions"):
 		visible_tree_positions = tree_spawner.get_visible_tree_positions()
 
-	# Debug output (only print once per second to avoid spam)
-	var time = Time.get_ticks_msec() / 1000.0
-	if int(time) != int(time - get_process_delta_time()):
-		print("Minimap Debug Trees: All=", all_tree_positions.size(), " Visible=", visible_tree_positions.size())
+	# Count trees by state for debugging
+	var count_loaded = 0
+	var count_in_frustum = 0
+	var count_culled = 0
 
 	# Create a set of visible positions for quick lookup
 	var visible_set = {}
@@ -225,12 +238,48 @@ func _draw_debug_trees(center: Vector2):
 		if tree_screen_pos.y < -5 or tree_screen_pos.y > minimap_size.y + 5:
 			continue
 
-		# Determine color based on visibility
+		# Determine color based on visibility and frustum culling
 		var key = str(snappedf(tree_pos.x, 0.01)) + "_" + str(snappedf(tree_pos.z, 0.01))
-		var tree_color = tree_visible_color if visible_set.has(key) else tree_hidden_color
+		var tree_color: Color
+
+		if not visible_set.has(key):
+			# Tree is not loaded (not in visible_tree_positions from spawner)
+			tree_color = tree_hidden_color  # Dark pink
+		elif camera and _is_point_in_frustum(tree_pos, camera):
+			# Tree is loaded AND in camera frustum
+			tree_color = tree_visible_color  # Pink
+			count_in_frustum += 1
+		else:
+			# Tree is loaded but frustum-culled
+			tree_color = tree_culled_color  # Black
+			count_culled += 1
+
+		if visible_set.has(key):
+			count_loaded += 1
 
 		# Draw the tree dot
 		draw_circle(tree_screen_pos, tree_dot_size, tree_color)
+
+	# Debug output (only print once per second to avoid spam)
+	var time = Time.get_ticks_msec() / 1000.0
+	if int(time) != int(time - get_process_delta_time()):
+		print("Minimap Trees: Loaded=", count_loaded, " InFrustum=", count_in_frustum, " Culled=", count_culled, " Total=", all_tree_positions.size())
+		if camera:
+			print("  Camera pos: ", camera.global_position, " rot: ", camera.global_rotation_degrees)
+			print("  Camera FOV: ", camera.fov if camera.projection == Camera3D.PROJECTION_PERSPECTIVE else "N/A (orthogonal)")
+			var frustum = camera.get_frustum()
+			print("  Frustum planes: ", frustum.size())
+			# Test a tree position if we have any
+			if all_tree_positions.size() > 0:
+				var test_tree = all_tree_positions[0]
+				print("  Test tree pos: ", test_tree)
+				var in_frustum = _is_point_in_frustum(test_tree, camera)
+				print("  Test tree in frustum: ", in_frustum)
+				for i in range(frustum.size()):
+					var dist = frustum[i].distance_to(test_tree)
+					print("    Plane ", i, " distance: ", dist, " (negative = outside)")
+		else:
+			print("  Camera is null!")
 
 
 func _draw_map_markers(center: Vector2):

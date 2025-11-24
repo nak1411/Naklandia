@@ -7,18 +7,19 @@ extends Node3D
 # Tree configuration
 @export_group("Tree Settings")
 @export var tree_scene_path: String = "res://assets/models/foliage/resinwood_tree_s.tscn"
-@export var tree_density: float = 0.03  # Trees per square meter (reduced for performance)
+@export var tree_density: float = 0.015  # Trees per square meter (reduced for performance with large chunks)
 @export var min_tree_scale: float = 0.8
 @export var max_tree_scale: float = 1.4
 @export var random_rotation: bool = true
 
 # Chunk configuration
 @export_group("Chunk Settings")
-@export var chunk_size: float = 128.0  # Size of each chunk in meters (larger = fewer chunks, more trees per chunk)
-@export var chunk_load_distance: float = 150.0  # Distance to load chunks (reduced for performance)
-@export var chunk_unload_distance: float = 180.0  # Distance to unload chunks (should be > load_distance)
-@export var chunks_per_frame: int = 2  # Max chunks to load/unload per frame (lower for larger chunks)
+@export var chunk_size: float = 256.0  # Size of each chunk in meters (larger = fewer chunks, more trees per chunk)
+@export var chunk_load_distance: float = 300.0  # Distance to load chunks (must be > visibility range to prevent pop-in)
+@export var chunk_unload_distance: float = 350.0  # Distance to unload chunks (should be > load_distance)
+@export var chunks_per_frame: int = 2  # Max chunks to load/unload per frame (increase for smoother loading)
 @export var follow_player: bool = true
+@export var use_custom_aabb: bool = true  # Set custom AABB for better frustum culling
 
 # Terrain constraints
 @export_group("Terrain Constraints")
@@ -43,27 +44,27 @@ extends Node3D
 @export_group("GPU Culling")
 @export var use_visibility_range: bool = true  # Use GPU-based culling
 @export var visibility_range_begin: float = 0.0
-@export var visibility_range_end: float = 150.0  # Reduced for performance
-@export var visibility_fade_margin: float = 20.0
-@export var shadow_distance: float = 60.0  # Distance beyond which shadows are disabled (aggressive)
+@export var visibility_range_end: float = 120.0  # Trees fade out before chunk unloads (prevents pop-in)
+@export var visibility_fade_margin: float = 20.0  # Fade margin (smooth fade)
+@export var shadow_distance: float = 50.0  # Distance beyond which shadows are disabled (aggressive)
 @export var use_distance_fade_shadows: bool = true  # Fade shadows based on distance
 
 # LOD settings
 @export_group("LOD Settings")
 @export var use_lod: bool = true  # Enable distance-based LOD
-@export var lod_distance_near: float = 50.0  # Full detail up to this distance (reduced)
-@export var lod_distance_mid: float = 100.0  # Medium detail up to this distance (reduced)
-@export var lod_mid_scale_factor: float = 0.4  # Keep 40% of trees at mid range
+@export var lod_distance_near: float = 50.0  # Full detail up to this distance
+@export var lod_distance_mid: float = 90.0  # Medium detail up to this distance
+@export var lod_mid_scale_factor: float = 0.40  # Keep 40% of trees at mid range
 @export var lod_far_scale_factor: float = 0.15  # Keep 15% of trees at far range
 
 # Impostor/Billboard settings (for very far trees)
 @export_group("Impostor Settings")
 @export var use_impostors: bool = false  # Enable billboard impostors for far trees
 @export var impostor_texture: Texture2D = null  # Billboard texture (optional)
-@export var impostor_distance: float = 120.0  # Distance beyond which to use impostors
+@export var impostor_distance: float = 150.0  # Distance beyond which to use impostors
 @export var impostor_size: Vector2 = Vector2(4.0, 8.0)  # Billboard size (width, height)
 @export var lod_fade_range: float = 20.0  # Distance over which LOD transition fades (smooth blend zone)
-@export var chunk_fade_in_duration: float = 0.5  # Time in seconds for chunks to fade in when loaded
+@export var chunk_fade_in_duration: float = 0.0  # Time in seconds for chunks to fade in when loaded (0 = disabled for performance)
 
 # Debug settings
 @export_group("Debug")
@@ -685,6 +686,15 @@ func load_chunk(chunk_x: int, chunk_z: int):
 		mmi.multimesh = multimesh
 		mmi.position = chunk_center
 
+		# Set custom AABB for proper frustum culling
+		# Without this, Godot may not cull the MultiMesh efficiently
+		if use_custom_aabb:
+			var aabb = AABB(
+				Vector3(-chunk_size * 0.5, -10, -chunk_size * 0.5),  # min corner (relative to chunk center)
+				Vector3(chunk_size, 50, chunk_size)  # size (height estimate for trees)
+			)
+			mmi.custom_aabb = aabb
+
 		# Apply fade shader for smooth LOD transition and chunk fade-in
 		if use_impostors and tree_fade_shader:
 			var fade_mat = ShaderMaterial.new()
@@ -705,8 +715,8 @@ func load_chunk(chunk_x: int, chunk_z: int):
 			# Even without impostors, apply fade-in shader for chunk loading
 			var fade_mat = ShaderMaterial.new()
 			fade_mat.shader = tree_fade_shader
-			fade_mat.set_shader_parameter("fade_start", 99999.0)  # Disable distance fade
-			fade_mat.set_shader_parameter("fade_end", 99999.0)
+			fade_mat.set_shader_parameter("fade_start", visibility_range_end - lod_fade_range)
+			fade_mat.set_shader_parameter("fade_end", visibility_range_end)
 			fade_mat.set_shader_parameter("chunk_load_time", chunk_data.load_time)
 			fade_mat.set_shader_parameter("chunk_fade_duration", chunk_fade_in_duration)
 			if mesh.surface_get_material(0) is StandardMaterial3D:
@@ -811,12 +821,11 @@ func unload_chunk(chunk_key: String):
 
 
 func generate_trees_for_chunk(chunk_x: float, chunk_z: float) -> Array[Transform3D]:
-	"""Generate tree transforms for a chunk using random placement with minimum spacing.
+	"""Generate tree transforms for a chunk using spatial hashing for O(1) spacing checks.
 	Uses a two-pass approach for better performance:
-	1. Generate candidate positions with spacing checks (cheap)
-	2. Batch validate terrain constraints (expensive but batched)"""
+	1. Generate candidate positions with fast spatial hash spacing checks
+	2. Batch validate terrain constraints"""
 	var trees: Array[Transform3D] = []
-	var placed_positions: Array[Vector2] = []
 
 	# Create a seeded RNG for this chunk - deterministic but truly random distribution
 	var rng = RandomNumberGenerator.new()
@@ -827,9 +836,13 @@ func generate_trees_for_chunk(chunk_x: float, chunk_z: float) -> Array[Transform
 	var max_attempts = target_tree_count * 4  # Allow more attempts for better coverage
 	var attempts = 0
 
-	# Pass 1: Generate candidate positions with spacing checks
+	# Spatial hash grid for O(1) spacing checks instead of O(n^2)
+	# Cell size should be >= min_tree_spacing for efficient lookups
+	var cell_size = min_tree_spacing
+	var grid: Dictionary = {}  # Vector2i -> Array[Vector2]
+
+	# Pass 1: Generate candidate positions with fast spatial hash spacing checks
 	var candidates: Array[Dictionary] = []  # {pos: Vector3, scale: float, rotation: float}
-	var candidate_positions: Array[Vector2] = []
 
 	while candidates.size() < target_tree_count and attempts < max_attempts:
 		var rand_x = rng.randf()
@@ -840,19 +853,36 @@ func generate_trees_for_chunk(chunk_x: float, chunk_z: float) -> Array[Transform
 
 		attempts += 1
 
-		# Check minimum spacing against already placed candidates
+		# Spatial hash check - only check nearby cells instead of all positions
 		var spacing_start = Time.get_ticks_usec()
-		var too_close = false
 		var new_pos = Vector2(local_x, local_z)
-		for existing_pos in candidate_positions:
-			if new_pos.distance_to(existing_pos) < min_tree_spacing:
-				too_close = true
+		var cell = Vector2i(int(floor(local_x / cell_size)), int(floor(local_z / cell_size)))
+
+		var too_close = false
+		# Check 3x3 grid of cells around this position
+		for dx in range(-1, 2):
+			if too_close:
 				break
+			for dz in range(-1, 2):
+				if too_close:
+					break
+				var check_cell = Vector2i(cell.x + dx, cell.y + dz)
+				if grid.has(check_cell):
+					for existing_pos in grid[check_cell]:
+						if new_pos.distance_squared_to(existing_pos) < min_tree_spacing * min_tree_spacing:
+							too_close = true
+							break
+
 		if debug_detailed_profiling:
 			prof_spacing_check_time += float(Time.get_ticks_usec() - spacing_start) / 1000000.0
 
 		if too_close:
 			continue
+
+		# Add to spatial hash grid
+		if not grid.has(cell):
+			grid[cell] = []
+		grid[cell].append(new_pos)
 
 		# Pre-generate random values for this candidate
 		var tree_scale = rng.randf_range(min_tree_scale, max_tree_scale)
@@ -863,7 +893,6 @@ func generate_trees_for_chunk(chunk_x: float, chunk_z: float) -> Array[Transform
 			"scale": tree_scale,
 			"rotation": tree_rotation
 		})
-		candidate_positions.append(new_pos)
 
 	# Pass 2: Batch validate terrain constraints
 	var query_start = Time.get_ticks_usec()
@@ -876,7 +905,6 @@ func generate_trees_for_chunk(chunk_x: float, chunk_z: float) -> Array[Transform
 			tree_transform = tree_transform.scaled(Vector3.ONE * candidate["scale"])
 			tree_transform.origin = Vector3(pos.x, spawn_result["height"], pos.z)
 			trees.append(tree_transform)
-			placed_positions.append(Vector2(pos.x, pos.z))
 
 	if debug_detailed_profiling:
 		prof_terrain_query_time += float(Time.get_ticks_usec() - query_start) / 1000000.0

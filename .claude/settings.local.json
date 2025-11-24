@@ -22,7 +22,8 @@
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff addons/terrain_3d/src/asset_dock.gd addons/terrain_3d/src/ui.gd)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" status --short scripts/world/environment/ProceduralTreeSpawner.gd)",
       "Bash(find:*)",
-      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/world/environment/ProceduralTreeSpawner.gd)"
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/world/environment/ProceduralTreeSpawner.gd)",
+      "Bash(powershell -Command:*)"
     ],
     "deny": [],
     "ask": []
