@@ -248,12 +248,24 @@ void fragment() {
 	fade_mat.set_shader_parameter("fade_end", fade_end)
 
 	# Copy texture from original mesh material if available
-	if mesh.surface_get_material(0) is StandardMaterial3D:
-		var orig_mat = mesh.surface_get_material(0) as StandardMaterial3D
-		if orig_mat.albedo_texture:
-			fade_mat.set_shader_parameter("albedo_texture", orig_mat.albedo_texture)
-			fade_mat.set_shader_parameter("use_texture", true)
-		fade_mat.set_shader_parameter("albedo_color", orig_mat.albedo_color)
+	if mesh.get_surface_count() > 0:
+		var orig_mat = mesh.surface_get_material(0)
+		if orig_mat is StandardMaterial3D:
+			var std_mat = orig_mat as StandardMaterial3D
+			if std_mat.albedo_texture:
+				fade_mat.set_shader_parameter("albedo_texture", std_mat.albedo_texture)
+				fade_mat.set_shader_parameter("use_texture", true)
+			else:
+				fade_mat.set_shader_parameter("use_texture", false)
+			fade_mat.set_shader_parameter("albedo_color", std_mat.albedo_color)
+		else:
+			# Material exists but isn't StandardMaterial3D - use default color
+			fade_mat.set_shader_parameter("use_texture", false)
+			fade_mat.set_shader_parameter("albedo_color", Color.WHITE)
+	else:
+		# No material - use default
+		fade_mat.set_shader_parameter("use_texture", false)
+		fade_mat.set_shader_parameter("albedo_color", Color.WHITE)
 
 	return fade_mat
 
@@ -262,6 +274,12 @@ func _load_initial_chunks():
 	"""Load chunks around player on startup"""
 	if not player:
 		print("ProceduralFoliageSpawner: Cannot load initial chunks - no player found")
+		return
+
+	# Check if terrain data is ready
+	if not terrain or not terrain.data:
+		print("ProceduralFoliageSpawner: Terrain data not ready, deferring initial chunk load")
+		call_deferred("_load_initial_chunks")
 		return
 
 	var player_pos = player.global_position
@@ -439,7 +457,10 @@ func load_chunk(chunk_x: int, chunk_z: int):
 
 		# Create MultiMesh instances for this layer
 		var mm_start = Time.get_ticks_usec()
-		for mesh in layer.cached_meshes:
+		for mesh_idx in range(layer.cached_meshes.size()):
+			var mesh = layer.cached_meshes[mesh_idx]
+			var local_transform = layer.cached_mesh_transforms[mesh_idx] if mesh_idx < layer.cached_mesh_transforms.size() else Transform3D.IDENTITY
+
 			var multimesh = MultiMesh.new()
 			multimesh.transform_format = MultiMesh.TRANSFORM_3D
 			multimesh.mesh = mesh
@@ -448,19 +469,31 @@ func load_chunk(chunk_x: int, chunk_z: int):
 			if debug_detailed_profiling:
 				prof_multimesh_creation_time += float(Time.get_ticks_usec() - mm_start) / 1000000.0
 
-			# Set transforms for all items (relative to chunk center)
+			# Set transforms for all items (relative to chunk center, with local mesh offset)
 			var transform_start = Time.get_ticks_usec()
 			for i in range(items_to_render.size()):
 				var item_transform: Transform3D = items_to_render[i]
+				# Make item position relative to chunk center
 				var relative_transform = item_transform
 				relative_transform.origin -= chunk_center
-				multimesh.set_instance_transform(i, relative_transform)
+
+				# Apply local mesh transform offset (like the old system)
+				var local_offset = Transform3D()
+				local_offset.origin = local_transform.origin
+				local_offset.basis = local_transform.basis.orthonormalized()
+				var final_transform = relative_transform * local_offset
+
+				multimesh.set_instance_transform(i, final_transform)
 			if debug_detailed_profiling:
 				prof_transform_set_time += float(Time.get_ticks_usec() - transform_start) / 1000000.0
 
 			var mmi = _get_pooled_mmi()
 			mmi.multimesh = multimesh
 			mmi.position = chunk_center
+
+			# Set sorting mode for proper depth testing
+			mmi.sorting_offset = 0.0
+			mmi.gi_mode = GeometryInstance3D.GI_MODE_STATIC
 
 			# Set custom AABB for proper frustum culling
 			if use_custom_aabb:
@@ -470,22 +503,20 @@ func load_chunk(chunk_x: int, chunk_z: int):
 				)
 				mmi.custom_aabb = aabb
 
-			# Apply shader-based distance fading if layer uses custom visibility range
+			# Use GPU-based visibility range fading
+			# Distance is calculated from camera to MMI position (chunk center)
+			# So we add chunk_size/2 to range to account for items at chunk edges
+			var vis_range_end = global_visibility_range_end + chunk_size * 0.5
+			var fade_margin = global_visibility_fade_margin
 			if layer.use_custom_visibility_range:
-				var fade_mat = _create_shader_fade_material(layer, mesh, chunk_load_time)
-				mmi.material_override = fade_mat
-			else:
-				mmi.material_override = null
-
-			# Setup visibility range (NOT GPU-based, just for hard culling)
-			# Shader handles the fading
-			var vis_range_end = global_visibility_range_end
-			if layer.use_custom_visibility_range:
-				vis_range_end = layer.visibility_range_end
+				vis_range_end = layer.visibility_range_end + chunk_size * 0.5
+				fade_margin = layer.visibility_fade_margin
 
 			mmi.visibility_range_begin = global_visibility_range_begin
 			mmi.visibility_range_end = vis_range_end
-			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+			mmi.visibility_range_begin_margin = fade_margin
+			mmi.visibility_range_end_margin = fade_margin
 
 			# Shadow settings
 			if layer.cast_shadows:
@@ -505,6 +536,16 @@ func load_chunk(chunk_x: int, chunk_z: int):
 		loaded_chunks[chunk_key] = chunk_data
 		if debug_performance or debug_detailed_profiling:
 			perf_chunks_loaded += 1
+			# Debug: Check if MMI is visible
+			for layer_name in chunk_data.layers.keys():
+				var layer_data: LayerInstanceData = chunk_data.layers[layer_name]
+				for mmi in layer_data.multimesh_instances:
+					if not mmi.visible:
+						print("WARNING: MMI for layer '", layer_name, "' in chunk ", chunk_key, " is NOT visible!")
+					if not mmi.multimesh:
+						print("WARNING: MMI for layer '", layer_name, "' in chunk ", chunk_key, " has no multimesh!")
+					elif mmi.multimesh.instance_count == 0:
+						print("WARNING: MMI for layer '", layer_name, "' in chunk ", chunk_key, " has 0 instances!")
 
 
 func unload_chunk(chunk_key: String):
@@ -598,10 +639,12 @@ func generate_items_for_layer(chunk_x: float, chunk_z: float, layer: FoliageLaye
 
 	# Pass 2: Batch validate terrain constraints
 	var query_start = Time.get_ticks_usec()
+	var valid_count = 0
 	for candidate in candidates:
 		var pos: Vector3 = candidate["pos"]
 		var spawn_result = layer.validate_spawn_position(pos, terrain)
 		if spawn_result["valid"]:
+			valid_count += 1
 			var item_transform = Transform3D()
 
 			# Align to terrain normal if requested
@@ -622,6 +665,8 @@ func generate_items_for_layer(chunk_x: float, chunk_z: float, layer: FoliageLaye
 	if debug_detailed_profiling:
 		prof_terrain_query_time += float(Time.get_ticks_usec() - query_start) / 1000000.0
 		prof_terrain_query_count += candidates.size() * 2  # height + normal per candidate
+		if candidates.size() > 0:
+			print("  Layer '", layer.layer_name, "' chunk [", int(chunk_x/chunk_size), ",", int(chunk_z/chunk_size), "]: ", candidates.size(), " candidates, ", valid_count, " valid, ", items.size(), " items created")
 
 	return items
 

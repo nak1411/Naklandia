@@ -37,7 +37,13 @@
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show 025b193924b888bba1088c0f2b674d53d6f6415f --stat)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show 43d37fe29946272f958046cdcfb9037633cacc10 --stat)",
       "Bash(git log:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" log --oneline -10)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff 48844be~1 48844be --name-only)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff 48844be~1 48844be scripts/world/environment/ProceduralFoliageSpawner.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show 48844be~1:scripts/world/environment/ProceduralTreeSpawner.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" log --all --oneline -- \"*ProceduralTree*\" \"*ProceduralFoliage*\")",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show d7f9e3d:scripts/world/environment/ProceduralTreeSpawner.gd)"
     ],
     "deny": [],
     "ask": []

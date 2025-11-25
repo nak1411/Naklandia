@@ -67,6 +67,7 @@ extends Resource
 
 # Runtime cache
 var cached_meshes: Array[Mesh] = []
+var cached_mesh_transforms: Array[Transform3D] = []  # Local transforms for each mesh
 var noise: FastNoiseLite = null
 var scene: PackedScene = null
 
@@ -94,16 +95,18 @@ func initialize() -> bool:
 	return true
 
 func cache_meshes() -> void:
-	"""Cache meshes from the scene for MultiMesh usage"""
+	"""Cache meshes and their local transforms from the scene for MultiMesh usage"""
 	if not scene:
 		return
 
 	cached_meshes.clear()
+	cached_mesh_transforms.clear()
 	var temp_instance = scene.instantiate()
 	var mesh_nodes = _get_all_mesh_instances(temp_instance)
 	for mesh_node in mesh_nodes:
 		if mesh_node.mesh:
 			cached_meshes.append(mesh_node.mesh)
+			cached_mesh_transforms.append(mesh_node.transform)
 	temp_instance.queue_free()
 
 func _get_all_mesh_instances(node: Node) -> Array[MeshInstance3D]:
