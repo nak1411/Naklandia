@@ -23,7 +23,21 @@
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" status --short scripts/world/environment/ProceduralTreeSpawner.gd)",
       "Bash(find:*)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/world/environment/ProceduralTreeSpawner.gd)",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" checkout scripts/world/environment/ProceduralTreeSpawner.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" log --all --oneline --grep=\"terrain\" -20)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" log --all --oneline -20 -- \"addons/terrain_3d/src/editor_plugin.gd\")",
+      "Bash(git -C c:/Users/Justin/Documents/GitHub/Naklandia show 762565c:addons/terrain_3d/src/editor_plugin.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff addons/terrain_3d/src/asset_dock.tscn)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff addons/terrain_3d/src/asset_dock.gd)",
+      "Bash(git mv:*)",
+      "Bash(cat:*)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/world/environment/ProceduralFoliageSpawner.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" status --short scripts/world/environment/ProceduralFoliageSpawner.gd)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show 025b193924b888bba1088c0f2b674d53d6f6415f --stat)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show 43d37fe29946272f958046cdcfb9037633cacc10 --stat)",
+      "Bash(git log:*)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []

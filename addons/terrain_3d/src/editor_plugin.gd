@@ -7,7 +7,7 @@ extends EditorPlugin
 # Includes
 const UI: Script = preload("res://addons/terrain_3d/src/ui.gd")
 const RegionGizmo: Script = preload("res://addons/terrain_3d/src/region_gizmo.gd")
-const ASSET_DOCK: String = "res://addons/terrain_3d/src/asset_dock.tscn"
+const ASSET_DOCK: PackedScene = preload("res://addons/terrain_3d/src/asset_dock.tscn")
 
 var modifier_ctrl: bool
 var modifier_alt: bool
@@ -51,7 +51,7 @@ func _enter_tree() -> void:
 
 	scene_changed.connect(_on_scene_changed)
 
-	asset_dock = load(ASSET_DOCK).instantiate()
+	asset_dock = ASSET_DOCK.instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE)
 	asset_dock.initialize(self)
 
 
@@ -97,7 +97,8 @@ func _handles(p_object: Object) -> bool:
 func _make_visible(p_visible: bool, p_redraw: bool = false) -> void:
 	if p_visible and is_selected():
 		ui.set_visible(true)
-		asset_dock.update_dock()
+		if asset_dock and asset_dock._initialized:
+			asset_dock.update_dock()
 	else:
 		ui.set_visible(false)
 
@@ -120,9 +121,10 @@ func _edit(p_object: Object) -> void:
 		terrain.set_meta("_edit_lock_", true)
 
 		# Get alerted when a new asset list is loaded
-		if not terrain.assets_changed.is_connected(asset_dock.update_assets):
-			terrain.assets_changed.connect(asset_dock.update_assets)
-		asset_dock.update_assets()
+		if asset_dock and asset_dock._initialized:
+			if not terrain.assets_changed.is_connected(asset_dock.update_assets):
+				terrain.assets_changed.connect(asset_dock.update_assets)
+			asset_dock.update_assets()
 		# Get alerted when the region map changes
 		if not terrain.data.region_map_changed.is_connected(update_region_grid):
 			terrain.data.region_map_changed.connect(update_region_grid)

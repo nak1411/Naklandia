@@ -2,20 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://xvysnbaqgu8h"
-path.s3tc="res://.godot/imported/tree_4.png-4fcf39c5a62564cc4f24e8561ae7d2cc.s3tc.ctex"
+uid="uid://u87nnes2r1hl"
+path.s3tc="res://.godot/imported/bush01_1.png-b8f112529f7a945d29d99f99c7125c34.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "a6c38e45c6d48e4048a895a1ffa0d345"
+"md5": "436c6b0f5bd6298ef5a2ea6460289902"
 }
 
 [deps]
 
-source_file="res://assets/models/foliage/tree_4.png"
-dest_files=["res://.godot/imported/tree_4.png-4fcf39c5a62564cc4f24e8561ae7d2cc.s3tc.ctex"]
+source_file="res://assets/models/foliage/materials/bush01_1.png"
+dest_files=["res://.godot/imported/bush01_1.png-b8f112529f7a945d29d99f99c7125c34.s3tc.ctex"]
 
 [params]
 

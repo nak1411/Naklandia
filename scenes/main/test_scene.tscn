@@ -1,4 +1,4 @@
-[gd_scene load_steps=30 format=3 uid="uid://u68ixamg76uy"]
+[gd_scene load_steps=32 format=3 uid="uid://u68ixamg76uy"]
 
 [ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
 [ext_resource type="PackedScene" uid="uid://dvusnrd1ps7xx" path="res://scenes/objects/interactable_container.tscn" id="2_1swwb"]
@@ -11,8 +11,10 @@
 [ext_resource type="Script" uid="uid://ve4ia0rua13g" path="res://scripts/world/objects/ItemSpawner.gd" id="6_1swwb"]
 [ext_resource type="Script" uid="uid://bes7x5gnitjur" path="res://scripts/ui/core/PauseMenu.gd" id="6_sa75b"]
 [ext_resource type="Script" uid="uid://ymb36pafa48d" path="res://scripts/ui/map/MapManager.gd" id="11_w0gou"]
-[ext_resource type="Script" uid="uid://bhkk6ggqm5gd4" path="res://scripts/world/environment/ProceduralTreeSpawner.gd" id="13_tree_spawner"]
-[ext_resource type="Texture2D" uid="uid://xvysnbaqgu8h" path="res://assets/models/foliage/tree_4.png" id="14_3uiii"]
+[ext_resource type="Script" uid="uid://4a8s0ucu515o" path="res://scripts/world/environment/ProceduralFoliageSpawner.gd" id="12_m0jab"]
+[ext_resource type="Script" uid="uid://dh07duejch1vv" path="res://scripts/world/environment/FoliageLayer.gd" id="13_3uiii"]
+[ext_resource type="Resource" uid="uid://bciakaedl3yrv" path="res://assets/models/foliage/trees.tres" id="14_0g8h2"]
+[ext_resource type="Resource" uid="uid://sj1t05nb2eea" path="res://assets/models/foliage/bushes.tres" id="15_0g8h2"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_6mm6u"]
 panorama = ExtResource("2_6i17e")
@@ -254,11 +256,7 @@ spawn_height = 1.0
 script = ExtResource("11_w0gou")
 
 [node name="ProceduralTreeSpawner" type="Node3D" parent="."]
-script = ExtResource("13_tree_spawner")
-tree_density = 0.01
-min_tree_scale = 0.1
-max_tree_scale = 0.3
-noise_seed = 453
-use_impostors = true
-impostor_texture = ExtResource("14_3uiii")
-impostor_size = Vector2(10, 50)
+script = ExtResource("12_m0jab")
+foliage_layers = Array[ExtResource("13_3uiii")]([ExtResource("14_0g8h2"), ExtResource("15_0g8h2")])
+debug_performance = true
+debug_detailed_profiling = true

@@ -1,0 +1,152 @@
+# FoliageLayer.gd
+# Resource class for defining a single foliage layer (trees, rocks, bushes, grass, etc.)
+# Multiple layers can be used in ProceduralFoliageSpawner for varied environments
+class_name FoliageLayer
+extends Resource
+
+# Layer identification
+@export var layer_name: String = "Trees"
+@export var enabled: bool = true
+
+# Scene/Mesh configuration
+@export_group("Asset Settings")
+@export var scene_path: String = ""
+@export var density: float = 0.015  # Items per square meter
+@export var min_scale: float = 0.8
+@export var max_scale: float = 1.4
+@export var random_rotation: bool = true
+@export var align_to_terrain_normal: bool = false  # Align to surface slope
+
+# Terrain constraints
+@export_group("Terrain Constraints")
+@export var min_slope: float = 0.0
+@export var max_slope: float = 0.5
+@export var min_height: float = -100.0
+@export var max_height: float = 100.0
+@export var water_level: float = 0.0
+
+# Distribution settings
+@export_group("Distribution")
+@export var use_noise_distribution: bool = false
+@export var noise_threshold: float = -0.5
+@export var noise_scale: float = 0.02
+@export var noise_seed: int = 0
+@export var min_spacing: float = 2.5  # Minimum distance between items in this layer
+
+# LOD settings
+@export_group("LOD Settings")
+@export var use_lod: bool = true
+@export var lod_distance_near: float = 50.0
+@export var lod_distance_mid: float = 90.0
+@export var lod_mid_scale_factor: float = 0.40
+@export var lod_far_scale_factor: float = 0.15
+
+# Rendering settings
+@export_group("Rendering")
+@export var cast_shadows: bool = true
+@export var shadow_distance: float = 50.0  # Distance beyond which shadows are disabled
+@export var use_distance_fade_shadows: bool = true
+
+# Visibility/Fade settings
+@export_group("Visibility & Fade")
+@export var use_custom_visibility_range: bool = false  # Override global visibility range for this layer
+@export var visibility_range_end: float = 120.0  # Distance where items fade out completely
+@export var visibility_fade_margin: float = 20.0  # Fade distance (smooth transition)
+
+# Impostor settings (for distant billboards)
+@export_group("Impostor Settings")
+@export var use_impostors: bool = false
+@export var impostor_texture: Texture2D = null
+@export var impostor_distance: float = 150.0
+@export var impostor_size: Vector2 = Vector2(4.0, 8.0)
+
+# Cross-layer interaction
+@export_group("Layer Interactions")
+@export var avoid_layers: Array[String] = []  # Layer names to avoid spawning near
+@export var avoidance_distance: float = 5.0
+
+# Runtime cache
+var cached_meshes: Array[Mesh] = []
+var noise: FastNoiseLite = null
+var scene: PackedScene = null
+
+func initialize() -> bool:
+	"""Initialize the layer - load scene and setup noise"""
+	if not enabled:
+		return false
+
+	# Load scene
+	if not FileAccess.file_exists(scene_path):
+		push_error("FoliageLayer [", layer_name, "]: Scene not found: ", scene_path)
+		return false
+
+	scene = load(scene_path)
+	if not scene:
+		push_error("FoliageLayer [", layer_name, "]: Failed to load scene: ", scene_path)
+		return false
+
+	# Setup noise if needed
+	if use_noise_distribution:
+		noise = FastNoiseLite.new()
+		noise.seed = noise_seed
+		noise.frequency = noise_scale
+
+	return true
+
+func cache_meshes() -> void:
+	"""Cache meshes from the scene for MultiMesh usage"""
+	if not scene:
+		return
+
+	cached_meshes.clear()
+	var temp_instance = scene.instantiate()
+	var mesh_nodes = _get_all_mesh_instances(temp_instance)
+	for mesh_node in mesh_nodes:
+		if mesh_node.mesh:
+			cached_meshes.append(mesh_node.mesh)
+	temp_instance.queue_free()
+
+func _get_all_mesh_instances(node: Node) -> Array[MeshInstance3D]:
+	"""Recursively find all MeshInstance3D nodes"""
+	var meshes: Array[MeshInstance3D] = []
+
+	if node is MeshInstance3D:
+		meshes.append(node)
+
+	for child in node.get_children():
+		meshes.append_array(_get_all_mesh_instances(child))
+
+	return meshes
+
+func validate_spawn_position(pos: Vector3, terrain: Terrain3D) -> Dictionary:
+	"""Check if this position is valid for spawning this layer's items.
+	Returns {valid: bool, height: float}"""
+	if not terrain or not terrain.data:
+		return {"valid": false, "height": 0.0}
+
+	# Get terrain height
+	var height = terrain.data.get_height(pos)
+	if is_nan(height):
+		return {"valid": false, "height": 0.0}
+
+	# Check height constraints
+	if height < min_height or height > max_height:
+		return {"valid": false, "height": 0.0}
+
+	# Check water level
+	if height < water_level:
+		return {"valid": false, "height": 0.0}
+
+	# Check slope
+	var normal = terrain.data.get_normal(pos)
+	var slope = 1.0 - normal.y
+	if slope < min_slope or slope > max_slope:
+		return {"valid": false, "height": 0.0}
+
+	# Check noise distribution
+	if use_noise_distribution and noise:
+		var noise_value = noise.get_noise_2d(pos.x, pos.z)
+		if noise_value < noise_threshold:
+			return {"valid": false, "height": 0.0}
+
+	return {"valid": true, "height": height, "normal": normal}

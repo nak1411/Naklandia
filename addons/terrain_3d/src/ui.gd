@@ -273,7 +273,7 @@ func _on_tool_changed(p_tool: Terrain3DEditor.Tool, p_operation: Terrain3DEditor
 
 
 func _on_setting_changed(p_setting: Variant = null) -> void:
-	if not plugin.asset_dock: # Skip function if not _ready()
+	if not plugin.asset_dock or not plugin.asset_dock._initialized: # Skip function if not _ready()
 		return
 	brush_data = tool_settings.get_settings()
 	var current_list = plugin.asset_dock.get_current_list()

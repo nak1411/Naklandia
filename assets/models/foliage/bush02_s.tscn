@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://bgk46qlhctbox"]
+
+[ext_resource type="PackedScene" uid="uid://bq1kfujatbb0g" path="res://assets/models/foliage/bush02.glb" id="1_thc7o"]
+
+[node name="Bush02_s" type="Node3D"]
+transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0)
+
+[node name="AuxScene2" parent="." instance=ExtResource("1_thc7o")]
