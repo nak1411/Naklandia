@@ -37,6 +37,7 @@ var player: Node3D = null
 # Chunk management
 var loaded_chunks: Dictionary = {}  # chunk_key -> ChunkData
 var last_player_chunk: Vector2i = Vector2i.MAX
+var is_doing_initial_load: bool = false  # Track if we're doing initial chunk load
 
 # MultiMesh pooling - reuse nodes instead of create/destroy
 var mmi_pool: Array[MultiMeshInstance3D] = []
@@ -285,7 +286,9 @@ func _load_initial_chunks():
 	var player_pos = player.global_position
 	print("ProceduralFoliageSpawner: Loading initial chunks around player at ", player_pos)
 	last_player_chunk = Vector2i(int(floor(player_pos.x / chunk_size)), int(floor(player_pos.z / chunk_size)))
+	is_doing_initial_load = true
 	update_chunks(player_pos)
+	is_doing_initial_load = false
 	print("ProceduralFoliageSpawner: Loaded initial chunks. Total chunks loaded: ", loaded_chunks.size())
 
 
@@ -379,10 +382,11 @@ func update_chunks(player_pos: Vector3):
 			return player_pos.distance_squared_to(pos_a) < player_pos.distance_squared_to(pos_b)
 	)
 
-	# Load chunks (limited per frame)
+	# Load chunks (limited per frame, unless doing initial load)
 	var loaded_this_frame = 0
+	var max_loads = chunks_per_frame if not is_doing_initial_load else 999
 	for chunk_coord in chunks_to_load:
-		if loaded_this_frame >= chunks_per_frame:
+		if loaded_this_frame >= max_loads:
 			break
 		load_chunk(chunk_coord.x, chunk_coord.y)
 		loaded_this_frame += 1
@@ -421,11 +425,33 @@ func load_chunk(chunk_x: int, chunk_z: int):
 	var player_pos = player.global_position if player else Vector3.ZERO
 	var chunk_distance = chunk_center.distance_to(player_pos)
 
+	# Calculate minimum distance from player to any point in chunk (closest edge/corner)
+	var closest_point_in_chunk = Vector3(
+		clamp(player_pos.x, chunk_world_x, chunk_world_x + chunk_size),
+		0,
+		clamp(player_pos.z, chunk_world_z, chunk_world_z + chunk_size)
+	)
+	var min_distance_to_chunk = player_pos.distance_to(closest_point_in_chunk)
+
 	var has_any_items = false
 
 	# Generate foliage for each layer
 	for layer in foliage_layers:
 		if not layer.enabled:
+			continue
+
+		# For layers with very short visibility ranges, only skip if the chunk
+		# is being newly loaded and is very close (to prevent pop-in)
+		# Don't skip for initial chunks or chunks far enough away
+		var layer_vis_range = global_visibility_range_end
+		if layer.use_custom_visibility_range:
+			layer_vis_range = layer.visibility_range_end
+
+		# Only skip new chunks that are spawning too close (within fade start distance)
+		# This allows initial chunks to have bushes, but prevents pop-in during movement
+		var is_too_close = min_distance_to_chunk < (layer_vis_range - layer.visibility_fade_margin) * 0.5
+
+		if not is_doing_initial_load and is_too_close:
 			continue
 
 		# Generate items for this layer
@@ -503,20 +529,34 @@ func load_chunk(chunk_x: int, chunk_z: int):
 				)
 				mmi.custom_aabb = aabb
 
-			# Use GPU-based visibility range fading
-			# Distance is calculated from camera to MMI position (chunk center)
-			# So we add chunk_size/2 to range to account for items at chunk edges
-			var vis_range_end = global_visibility_range_end + chunk_size * 0.5
+			# For layers with short visibility range (relative to chunk size),
+			# use shader-based per-instance fading instead of chunk-based GPU fading
+			var vis_range_end = global_visibility_range_end
 			var fade_margin = global_visibility_fade_margin
 			if layer.use_custom_visibility_range:
-				vis_range_end = layer.visibility_range_end + chunk_size * 0.5
+				vis_range_end = layer.visibility_range_end
 				fade_margin = layer.visibility_fade_margin
 
-			mmi.visibility_range_begin = global_visibility_range_begin
-			mmi.visibility_range_end = vis_range_end
-			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-			mmi.visibility_range_begin_margin = fade_margin
-			mmi.visibility_range_end_margin = fade_margin
+			var use_shader_fade = (vis_range_end < chunk_size * 0.75)  # If range is small relative to chunk
+
+			if use_shader_fade:
+				# Use custom shader for per-instance distance fading
+				var fade_mat = _create_shader_fade_material(layer, mesh, chunk_load_time)
+				mmi.material_override = fade_mat
+				# For shader fade, extend GPU culling range to account for chunk size
+				# Since GPU culling is from chunk center, we need extra range for edge items
+				mmi.visibility_range_begin = global_visibility_range_begin
+				mmi.visibility_range_end = vis_range_end + chunk_size
+				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+			else:
+				# Use GPU-based chunk fading for larger visibility ranges
+				# Distance is calculated from camera to MMI position (chunk center)
+				# So we add chunk_size/2 to range to account for items at chunk edges
+				mmi.visibility_range_begin = global_visibility_range_begin
+				mmi.visibility_range_end = vis_range_end + chunk_size * 0.5
+				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+				mmi.visibility_range_begin_margin = fade_margin
+				mmi.visibility_range_end_margin = fade_margin
 
 			# Shadow settings
 			if layer.cast_shadows:
