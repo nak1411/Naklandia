@@ -10,12 +10,14 @@ height = 1.1127
 [node name="ResinwoodLog" type="RigidBody3D"]
 collision_layer = 4
 collision_mask = 5
-mass = 1.5
+mass = 15.0
+linear_damp = 2.0
+angular_damp = 3.0
 script = ExtResource("1_t5c5q")
 item_id = "resource_resinwood_log"
 item_name = "Resinwood Log"
 item_description = "A log"
-item_mass = 1.5
+item_mass = 15.0
 item_volume = 0.005
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]

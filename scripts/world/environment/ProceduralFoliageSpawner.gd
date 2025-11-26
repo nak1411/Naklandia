@@ -545,6 +545,14 @@ func _spawn_interactable_nodes(layer: FoliageLayer, items: Array[Transform3D], l
 		interactable_node.harvest_items = layer.harvest_items.duplicate()
 		interactable_node.harvest_experience = layer.harvest_experience
 
+		# Configure physical drop properties
+		interactable_node.drop_physical_items = layer.drop_physical_items
+		interactable_node.physical_item_scene_path = layer.physical_item_scene_path
+		interactable_node.physical_drop_count_min = layer.physical_drop_count_min
+		interactable_node.physical_drop_count_max = layer.physical_drop_count_max
+		interactable_node.scale_affects_drops = layer.scale_affects_drops
+		interactable_node.drop_spread_radius = layer.drop_spread_radius
+
 		# Add collision shape if needed (check after adding children)
 		call_deferred("_setup_collision_for_interactable", interactable_node, layer)
 

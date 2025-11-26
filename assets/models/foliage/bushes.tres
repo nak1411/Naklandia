@@ -7,7 +7,7 @@
 script = ExtResource("1_wmtd0")
 layer_name = "Bushes"
 enabled = true
-scene_path = "res://assets/models/foliage/bush03_s.tscn"
+scene_path = "res://assets/models/foliage/bush02_s.tscn"
 density = 0.05
 min_scale = 0.1
 max_scale = 0.3
@@ -57,11 +57,4 @@ harvest_items = Array[Dictionary]([{
 "min_amount": 1
 }])
 harvest_experience = 5
-collision_shape_type = "Sphere"
-collision_radius = 2.0
-collision_box_size = Vector3(2, 2, 2)
-collision_capsule_radius = 1.0
-collision_capsule_height = 3.0
-collision_offset = Vector3(0, 0, 0)
-collision_scale_multiplier = 1.0
 metadata/_custom_type_script = "uid://dh07duejch1vv"

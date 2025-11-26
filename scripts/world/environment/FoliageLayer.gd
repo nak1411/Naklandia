@@ -75,6 +75,15 @@ extends Resource
 @export var harvest_items: Array[Dictionary] = []  # {item_id: String, min_amount: int, max_amount: int, chance: float}
 @export var harvest_experience: int = 5
 
+# Physical item drops
+@export_group("Physical Drops")
+@export var drop_physical_items: bool = false  # Spawn PhysicalItem nodes when harvested
+@export var physical_item_scene_path: String = ""  # Path to PhysicalItem scene
+@export var physical_drop_count_min: int = 1
+@export var physical_drop_count_max: int = 3
+@export var scale_affects_drops: bool = true  # Larger foliage drops more items
+@export var drop_spread_radius: float = 1.5
+
 # Runtime cache
 var cached_meshes: Array[Mesh] = []
 var cached_mesh_transforms: Array[Transform3D] = []  # Local transforms for each mesh

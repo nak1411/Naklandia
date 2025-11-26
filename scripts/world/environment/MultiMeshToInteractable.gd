@@ -10,7 +10,7 @@ var active_source_mmi: MultiMeshInstance3D = null
 var active_all_mmis: Array[MultiMeshInstance3D] = []  # ALL MMIs for this layer (trunk, leaves, etc.)
 var active_instance_index: int = -1
 var active_layer: FoliageLayer = null
-var active_original_transform: Transform3D  # Store original transform for restoration
+var active_original_transforms: Dictionary = {}  # MMI -> Transform3D mapping for restoration
 
 # Reference to spawner
 var foliage_spawner: ProceduralFoliageSpawner = null
@@ -84,16 +84,58 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	if not mmi.multimesh or instance_index >= mmi.multimesh.instance_count:
 		return null
 
-	# Get the transform of this specific instance (relative to MMI)
-	var instance_transform = mmi.multimesh.get_instance_transform(instance_index)
+	# Find ALL MMIs for this layer FIRST to get consistent transform
+	var all_mmis = _find_all_mmis_for_layer(mmi, layer)
 
-	# IMPORTANT: Store original transform BEFORE hiding
-	active_original_transform = instance_transform
+	# IMPORTANT: Use the FIRST MMI's transform as the reference point
+	# This ensures consistent positioning regardless of which mesh part was hit
+	var reference_mmi = all_mmis[0] if all_mmis.size() > 0 else mmi
+	print("[DEBUG] Hit MMI: ", mmi.name, " | Using reference MMI: ", reference_mmi.name, " | Total MMIs: ", all_mmis.size())
 
-	# Convert to world space
-	var world_transform = mmi.global_transform * instance_transform
+	# Get the transform of this specific instance (relative to reference MMI)
+	var instance_transform = reference_mmi.multimesh.get_instance_transform(instance_index)
+
+	# CRITICAL: The instance_transform includes a mesh-specific local offset that was applied
+	# in ProceduralFoliageSpawner at line 744: final_transform = relative_transform * local_offset
+	# We need to REMOVE this local offset to get back to the base item transform
+	# The local offset is stored in layer.cached_mesh_transforms[0] for the reference MMI
+	var reference_local_offset = layer.cached_mesh_transforms[0] if layer.cached_mesh_transforms.size() > 0 else Transform3D.IDENTITY
+
+	# IMPORTANT: Extract the scale BEFORE removing the local offset
+	# The instance_transform contains the randomized scale we need to preserve
+	var original_scale = instance_transform.basis.get_scale()
+
+	# Create a transform from instance_transform but with scale normalized
+	var instance_no_scale = Transform3D()
+	instance_no_scale.origin = instance_transform.origin
+	instance_no_scale.basis = instance_transform.basis.orthonormalized()
+
+	# Create a local offset without scale (only position and rotation)
+	var local_offset_no_scale = Transform3D()
+	local_offset_no_scale.origin = reference_local_offset.origin
+	local_offset_no_scale.basis = reference_local_offset.basis.orthonormalized()
+
+	# Remove the local offset from the position/rotation
+	var base_transform_no_scale = instance_no_scale * local_offset_no_scale.inverse()
+
+	# Now create the final base_transform with the original scale applied
+	var base_transform = Transform3D()
+	base_transform.origin = base_transform_no_scale.origin
+	base_transform.basis = base_transform_no_scale.basis.scaled(original_scale)
+
+	print("[DEBUG] Instance transform origin: ", instance_transform.origin)
+	print("[DEBUG] Instance transform basis scale: ", instance_transform.basis.get_scale())
+	print("[DEBUG] Original scale from MMI: ", original_scale)
+	print("[DEBUG] Local offset: ", reference_local_offset.origin)
+	print("[DEBUG] Base transform origin: ", base_transform.origin)
+	print("[DEBUG] Base transform basis scale: ", base_transform.basis.get_scale())
+
+	# Convert to world space using reference MMI position and base transform
+	var world_transform = reference_mmi.global_transform * base_transform
 
 	# Create the interactable node
+	print("[DEBUG] Converting MMI to interactable - Layer: ", layer.layer_name, " | Scene: ", layer.scene_path)
+	print("[DEBUG] Layer has ", layer.cached_meshes.size(), " cached meshes")
 	var foliage_instance = layer.scene.instantiate()
 	var interactable_node: InteractableFoliage
 
@@ -117,6 +159,14 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	interactable_node.harvest_items = layer.harvest_items.duplicate()
 	interactable_node.harvest_experience = layer.harvest_experience
 
+	# Configure physical drop properties
+	interactable_node.drop_physical_items = layer.drop_physical_items
+	interactable_node.physical_item_scene_path = layer.physical_item_scene_path
+	interactable_node.physical_drop_count_min = layer.physical_drop_count_min
+	interactable_node.physical_drop_count_max = layer.physical_drop_count_max
+	interactable_node.scale_affects_drops = layer.scale_affects_drops
+	interactable_node.drop_spread_radius = layer.drop_spread_radius
+
 	# Check if the scene already has a collision shape - if so, don't add another one
 	var existing_collision = _find_collision_shape(foliage_instance)
 	if not existing_collision:
@@ -139,27 +189,45 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	# Add to scene FIRST
 	get_tree().current_scene.add_child(interactable_node)
 
-	# THEN set position and rotation
-	interactable_node.global_position = world_transform.origin
-	interactable_node.global_rotation = world_transform.basis.get_euler()
+	# THEN set position, rotation, and scale using the transform directly
+	# Extract rotation basis without scale (orthonormalized)
+	var rotation_basis = world_transform.basis.orthonormalized()
 
-	# Apply scale - the MultiMesh scale needs to be adjusted for the scene's base scale
-	# If scene is 0.1 and MultiMesh is 0.163, we want final scale of 0.163
-	# So we need to set node scale to: 0.163 / 0.1 = 1.63
-	var multimesh_scale = instance_transform.basis.get_scale()
+	# Set position
+	interactable_node.global_position = world_transform.origin
+
+	# Apply scale and rotation together to avoid overwriting
+	# The MMI scale is already the absolute final scale we want
+	# The scene has a base scale of 0.1, but the MMI scale already accounts for this
+	var multimesh_scale = original_scale
 	var adjusted_scale = multimesh_scale / scene_default_scale
-	interactable_node.scale = adjusted_scale
+
+	# IMPORTANT: Apply scale to the rotation basis BEFORE setting it
+	# Otherwise setting global_transform.basis will overwrite the scale we just set!
+	var scaled_rotation_basis = rotation_basis.scaled(adjusted_scale)
+	interactable_node.global_transform.basis = scaled_rotation_basis
 
 	print("[DEBUG] MultiMesh scale: ", multimesh_scale, " | Scene default: ", scene_default_scale, " | Adjusted: ", adjusted_scale)
+	print("[DEBUG] After setting scale - Node scale: ", interactable_node.scale, " | Global scale: ", interactable_node.global_transform.basis.get_scale())
 
-	# Find ALL MMIs for this layer (trunk, leaves, etc.) by checking the spawner
-	active_all_mmis = _find_all_mmis_for_layer(mmi, layer)
+	# CRITICAL: Set original_scale AFTER adding to tree and setting the scale
+	# This is needed for the scale-based drop calculation in _spawn_physical_drops()
+	interactable_node.original_scale = interactable_node.scale
+
+	# Store ALL MMIs for this layer (already found at the beginning of this function)
+	active_all_mmis = all_mmis
 
 	# Store references
 	active_interactable = interactable_node
 	active_source_mmi = mmi
 	active_instance_index = instance_index
 	active_layer = layer
+
+	# Store original transforms for ALL MMIs BEFORE hiding
+	active_original_transforms.clear()
+	for mmi_to_hide in active_all_mmis:
+		if mmi_to_hide.multimesh and instance_index < mmi_to_hide.multimesh.instance_count:
+			active_original_transforms[mmi_to_hide] = mmi_to_hide.multimesh.get_instance_transform(instance_index)
 
 	# Hide this instance in ALL MultiMeshes (trunk, leaves, etc.)
 	for mmi_to_hide in active_all_mmis:
@@ -201,11 +269,21 @@ func _hide_multimesh_instance(mmi: MultiMeshInstance3D, instance_index: int):
 	if not mmi.multimesh or instance_index >= mmi.multimesh.instance_count:
 		return
 
+	# Get the original transform for this specific MMI
+	if not active_original_transforms.has(mmi):
+		print("[ERROR] No original transform stored for MMI!")
+		return
+
 	# Move the instance 10000 units down (underground) to hide it
 	# This avoids the "determinant == 0" warning from using zero scale
-	# IMPORTANT: Make a copy of the transform so we don't modify the original!
-	var hidden_transform = Transform3D(active_original_transform)
+	# IMPORTANT: Create a proper deep copy of the transform so we don't modify the original!
+	var original = active_original_transforms[mmi]
+	var hidden_transform = Transform3D()
+	hidden_transform.basis = original.basis
+	hidden_transform.origin = original.origin
 	hidden_transform.origin.y -= 10000.0  # Move underground
+
+	print("[DEBUG] Hiding instance ", instance_index, " - Original Y: ", original.origin.y, " | Hidden Y: ", hidden_transform.origin.y)
 	mmi.multimesh.set_instance_transform(instance_index, hidden_transform)
 
 
@@ -217,13 +295,45 @@ func _restore_multimesh_instance(mmi: MultiMeshInstance3D, instance_index: int, 
 	mmi.multimesh.set_instance_transform(instance_index, original_transform)
 
 
+func _disable_collision_for_instance(mmi: MultiMeshInstance3D, instance_index: int):
+	"""Disable the collision shape for a specific instance (when harvested)"""
+	if not is_instance_valid(mmi):
+		return
+
+	# Find the FoliageCollision Area3D
+	var foliage_area = mmi.get_node_or_null("FoliageCollision")
+	if not foliage_area:
+		print("[DEBUG] No FoliageCollision found on MMI")
+		return
+
+	# Find and disable the collision shape for this instance
+	for child in foliage_area.get_children():
+		if child is CollisionShape3D:
+			var shape_instance_index = child.get_meta("multimesh_instance_index", -1)
+			if shape_instance_index == instance_index:
+				print("[DEBUG] Disabling collision shape for instance ", instance_index)
+				# Disable the collision shape instead of removing it
+				# (removing causes issues with physics updates)
+				child.disabled = true
+
+				# Also hide any debug visualization
+				var debug_mesh = foliage_area.get_node_or_null("DebugMesh_" + str(instance_index))
+				if debug_mesh:
+					debug_mesh.queue_free()
+
+				return
+
+
 func _cleanup_active_interactable(restore_multimesh: bool = true):
 	"""Remove the active interactable and optionally restore the MultiMesh instance"""
 	if not active_interactable:
 		return
 
+	print("[DEBUG] _cleanup_active_interactable called - restore:", restore_multimesh)
+
 	# Check if the interactable was harvested
 	var was_harvested = active_interactable.is_destroyed if is_instance_valid(active_interactable) else false
+	print("[DEBUG] Was harvested:", was_harvested, " | Valid:", is_instance_valid(active_interactable))
 
 	# Clean up the interactable node
 	if is_instance_valid(active_interactable):
@@ -233,14 +343,19 @@ func _cleanup_active_interactable(restore_multimesh: bool = true):
 	# 1. It wasn't harvested
 	# 2. We're told to restore it (not switching to another instance)
 	if restore_multimesh and not was_harvested:
-		# Restore ALL MMIs (trunk, leaves, etc.)
+		print("[DEBUG] Restoring ", active_all_mmis.size(), " MMIs for instance ", active_instance_index)
+		# Restore ALL MMIs (trunk, leaves, etc.) using their individual original transforms
 		for mmi_to_restore in active_all_mmis:
-			if is_instance_valid(mmi_to_restore):
-				_restore_multimesh_instance(mmi_to_restore, active_instance_index, active_original_transform)
+			if is_instance_valid(mmi_to_restore) and active_original_transforms.has(mmi_to_restore):
+				var original = active_original_transforms[mmi_to_restore]
+				print("[DEBUG] Original transform for MMI: ", original.origin)
+				_restore_multimesh_instance(mmi_to_restore, active_instance_index, original)
+				print("[DEBUG] Restored MMI - new transform: ", mmi_to_restore.multimesh.get_instance_transform(active_instance_index).origin)
 
 	active_interactable = null
 	active_source_mmi = null
 	active_all_mmis.clear()
+	active_original_transforms.clear()
 	active_instance_index = -1
 	active_layer = null
 
@@ -248,13 +363,23 @@ func _cleanup_active_interactable(restore_multimesh: bool = true):
 func _on_interactable_harvested(_player):
 	"""Called when the interactable is harvested"""
 	# Don't restore the MultiMesh instance - it's been harvested
-	# Just cleanup the interactable node
+	# But we need to remove the collision shapes for this instance
+
+	print("[DEBUG] Bush harvested - removing collision shapes for instance ", active_instance_index)
+
+	# Remove collision shapes from ALL MMIs for this harvested instance
+	for mmi in active_all_mmis:
+		if is_instance_valid(mmi):
+			_disable_collision_for_instance(mmi, active_instance_index)
+
+	# Cleanup the interactable node
 	if active_interactable and is_instance_valid(active_interactable):
 		active_interactable.queue_free()
 
 	active_interactable = null
 	active_source_mmi = null
 	active_all_mmis.clear()
+	active_original_transforms.clear()
 	active_instance_index = -1
 	active_layer = null
 
@@ -342,8 +467,9 @@ func convert_to_interactable(hit_data: Dictionary) -> InteractableFoliage:
 	if active_interactable and active_source_mmi == mmi and active_instance_index == instance_index:
 		return active_interactable
 
-	# Different instance - cleanup old one WITHOUT restoring (we're about to create a new one)
-	_cleanup_active_interactable(false)
+	# Different instance - cleanup old one WITH restore (so it doesn't stay hidden)
+	# When switching between overlapping bushes, we need to restore the previous one
+	_cleanup_active_interactable(true)
 
 	# Check if layer is interactable
 	if not layer.is_interactable:

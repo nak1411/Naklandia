@@ -16,6 +16,15 @@ extends Interactable
 @export var harvest_items: Array[Dictionary] = []  # {item_id: String, min_amount: int, max_amount: int, chance: float}
 @export var harvest_experience: int = 5
 
+# Physical item drops (spawned in world as PhysicalItem nodes)
+@export_group("Physical Item Drops")
+@export var drop_physical_items: bool = false  # If true, spawns PhysicalItem nodes in world
+@export var physical_item_scene_path: String = ""  # Path to PhysicalItem scene to spawn
+@export var physical_drop_count_min: int = 1  # Minimum drops
+@export var physical_drop_count_max: int = 3  # Maximum drops
+@export var scale_affects_drops: bool = true  # If true, larger foliage drops more items
+@export var drop_spread_radius: float = 1.5  # How far drops spread from origin
+
 # Visual feedback
 @export_group("Harvest Visuals")
 @export var damage_shake_intensity: float = 0.1
@@ -106,6 +115,10 @@ func harvest():
 	var player = get_player_reference()
 	if player:
 		_give_harvest_rewards(player)
+
+	# Spawn physical item drops in world
+	if drop_physical_items:
+		_spawn_physical_drops()
 
 	# Visual feedback
 	_play_harvest_effects()
@@ -274,3 +287,68 @@ func set_foliage_data(data: Dictionary):
 
 	# Update interaction text
 	interaction_text = "Harvest " + foliage_type
+
+
+func _spawn_physical_drops():
+	"""Spawn physical items (like logs) in the world when harvested"""
+	if physical_item_scene_path.is_empty():
+		push_warning("InteractableFoliage: drop_physical_items is true but no physical_item_scene_path set")
+		return
+
+	# Load the physical item scene
+	var item_scene = load(physical_item_scene_path)
+	if not item_scene:
+		push_error("InteractableFoliage: Failed to load physical item scene: ", physical_item_scene_path)
+		return
+
+	# Calculate drop count based on scale if enabled
+	var drop_count = randi_range(physical_drop_count_min, physical_drop_count_max)
+
+	if scale_affects_drops:
+		# Use the average scale to determine bonus drops
+		var avg_scale = (original_scale.x + original_scale.y + original_scale.z) / 3.0
+		# Larger trees drop more items (e.g., 2x scale = 2x items)
+		drop_count = int(drop_count * avg_scale)
+		drop_count = max(1, drop_count)  # At least 1 item
+
+	print("InteractableFoliage: Spawning ", drop_count, " physical items from ", foliage_type)
+
+	# Spawn the items
+	for i in range(drop_count):
+		var item_instance = item_scene.instantiate()
+
+		if not item_instance is Node3D:
+			push_error("InteractableFoliage: Physical item scene must be a Node3D")
+			item_instance.queue_free()
+			continue
+
+		# Calculate spawn position with random spread
+		var angle = randf() * TAU
+		var distance = randf() * drop_spread_radius
+		var offset = Vector3(
+			cos(angle) * distance,
+			0.5,  # Spawn slightly above ground so items fall
+			sin(angle) * distance
+		)
+
+		item_instance.global_position = global_position + offset
+
+		# Add slight random rotation for variety
+		item_instance.rotation = Vector3(
+			randf() * TAU,
+			randf() * TAU,
+			randf() * TAU
+		)
+
+		# Add to scene
+		get_tree().current_scene.add_child(item_instance)
+
+		# If it's a RigidBody3D, give it a small random impulse
+		if item_instance is RigidBody3D:
+			var impulse_direction = Vector3(
+				randf_range(-1, 1),
+				randf_range(0.5, 1.5),
+				randf_range(-1, 1)
+			).normalized()
+			var impulse_strength = randf_range(1.0, 3.0)
+			item_instance.apply_central_impulse(impulse_direction * impulse_strength)

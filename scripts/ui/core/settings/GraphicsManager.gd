@@ -176,7 +176,10 @@ func apply_resolution(resolution: String, force_apply: bool = false):
 			var primary_screen = DisplayServer.get_primary_screen()
 			var screen_size = DisplayServer.screen_get_size(primary_screen)
 			var screen_position = DisplayServer.screen_get_position(primary_screen)
-			var window_pos = screen_position + (screen_size - new_size) / 2
+			# Use floating point division and round to properly center the window
+			var centered_x = screen_position.x + roundi((screen_size.x - new_size.x) / 2.0)
+			var centered_y = screen_position.y + roundi((screen_size.y - new_size.y) / 2.0)
+			var window_pos = Vector2i(centered_x, centered_y)
 			DisplayServer.window_set_position(window_pos)
 
 	settings_changed.emit("resolution", resolution)

@@ -8,7 +8,7 @@ radius = 5.0
 [node name="Bush01_s" type="Node3D"]
 transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0)
 
-[node name="AuxScene" parent="." instance=ExtResource("1_a5pp6")]
+[node name="bush01_s" parent="." instance=ExtResource("1_a5pp6")]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 9.8285, 0)
