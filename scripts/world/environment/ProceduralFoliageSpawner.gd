@@ -29,6 +29,7 @@ extends Node3D
 @export var debug_show_on_minimap: bool = false
 @export var debug_performance: bool = false
 @export var debug_detailed_profiling: bool = false  # Detailed timing breakdown
+@export var debug_show_collision_shapes: bool = false  # Visualize collision shapes in game
 
 # Internal variables
 var terrain: Terrain3D = null
@@ -558,25 +559,42 @@ func _setup_collision_for_interactable(interactable_node: InteractableFoliage, l
 		print("  WARNING: Interactable node became invalid before collision setup")
 		return
 
-	# Check if collision already exists
-	if interactable_node.get_node_or_null("CollisionShape3D"):
+	# Check if collision already exists (either from scene or already added)
+	var existing_collision = _find_existing_collision_shape(interactable_node)
+	if existing_collision:
 		print("  Collision shape already exists for ", interactable_node.foliage_type)
 		return
 
-	# Create appropriate collision shape based on foliage type
+	# Only add collision if the scene has a collision shape defined
+	if not layer.cached_collision_shape:
+		push_warning("  No collision shape found in scene for ", interactable_node.foliage_type)
+		return
+
+	# Use the collision shape defined in the scene file
 	var collision_shape = CollisionShape3D.new()
-
-	# Calculate size from layer scale
-	var avg_scale = (layer.min_scale + layer.max_scale) / 2.0
-	var collision_radius = avg_scale * 2.0  # Make it larger for easier interaction
-
-	var shape = SphereShape3D.new()
-	shape.radius = collision_radius
-	collision_shape.shape = shape
-
-	# Add as child
+	collision_shape.shape = layer.cached_collision_shape
+	collision_shape.transform = layer.cached_collision_transform
 	interactable_node.add_child(collision_shape)
-	print("  Added collision sphere (radius: ", "%.2f" % collision_radius, ") to ", interactable_node.foliage_type)
+	print("  Added collision from scene to ", interactable_node.foliage_type)
+
+	# Add debug visualization if enabled
+	if debug_show_collision_shapes:
+		var debug_mesh = _create_debug_collision_mesh(collision_shape)
+		if debug_mesh:
+			interactable_node.add_child(debug_mesh)
+
+
+func _find_existing_collision_shape(node: Node) -> CollisionShape3D:
+	"""Recursively find if a CollisionShape3D already exists"""
+	if node is CollisionShape3D:
+		return node
+
+	for child in node.get_children():
+		var result = _find_existing_collision_shape(child)
+		if result:
+			return result
+
+	return null
 
 
 func _verify_collision_setup(mmi: MultiMeshInstance3D, layer_name: String):
@@ -603,28 +621,33 @@ func _add_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[Transform3D
 	area.collision_mask = 0   # No collision mask
 
 	# Add a collision shape for each instance
-	var avg_scale = (layer.min_scale + layer.max_scale) / 2.0
-	# Use a reasonable collision radius - scale it properly based on foliage size
-	var collision_radius = avg_scale * 8.0  # 8x the scale should cover most foliage
-	if collision_radius < 1.0:
-		collision_radius = 1.0  # Minimum 1 meter radius
-
 	var collision_count = items.size()  # Add collision to ALL instances!
 
 	for i in range(collision_count):
 		var item_transform = items[i]
 
-		# Create collision shape
+		# Only add collision if the scene has a collision shape defined
+		if not layer.cached_collision_shape:
+			continue
+
+		# Create collision shape using the cached shape from scene
 		var collision_shape = CollisionShape3D.new()
-		var shape = SphereShape3D.new()
-		shape.radius = collision_radius
-		collision_shape.shape = shape
+		collision_shape.shape = layer.cached_collision_shape
 		collision_shape.name = "Shape_" + str(i)
+
+		# Get the item's scale from its transform
+		var item_scale = item_transform.basis.get_scale()
 
 		# Position relative to MMI (not chunk center, since Area3D is child of MMI)
 		var relative_pos = item_transform.origin - chunk_center
-		# Add small vertical offset to center collision on foliage (they vary in height)
-		relative_pos.y += collision_radius * 0.5  # Center the sphere on the foliage
+
+		# Apply collision transform from the scene's collision shape, scaled by item scale
+		var scaled_offset = layer.cached_collision_transform.origin * item_scale
+		relative_pos += scaled_offset
+
+		# Apply rotation and scale to the collision shape
+		collision_shape.rotation = layer.cached_collision_transform.basis.get_euler()
+		collision_shape.scale = item_scale
 		collision_shape.position = relative_pos
 
 		# Store metadata about which instance this is
@@ -633,6 +656,12 @@ func _add_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[Transform3D
 
 		area.add_child(collision_shape)
 
+		# Add debug visualization if enabled
+		if debug_show_collision_shapes:
+			var debug_mesh = _create_debug_collision_mesh(collision_shape)
+			if debug_mesh:
+				area.add_child(debug_mesh)
+
 	# Add Area3D to MMI AFTER all shapes are added
 	mmi.add_child(area)
 
@@ -640,7 +669,51 @@ func _add_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[Transform3D
 	area.call_deferred("force_update_transform")
 
 
-func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], layer_data: LayerInstanceData, chunk_center: Vector3, chunk_distance: float, chunk_load_time: float):
+func _create_debug_collision_mesh(collision_shape: CollisionShape3D) -> MeshInstance3D:
+	"""Create a visible debug mesh for a collision shape"""
+	if not collision_shape or not collision_shape.shape:
+		return null
+
+	var mesh_instance = MeshInstance3D.new()
+	var shape = collision_shape.shape
+	var debug_mesh: Mesh
+
+	# Create appropriate debug mesh based on shape type
+	if shape is SphereShape3D:
+		var sphere = SphereMesh.new()
+		sphere.radius = shape.radius
+		sphere.height = shape.radius * 2.0
+		debug_mesh = sphere
+	elif shape is BoxShape3D:
+		var box = BoxMesh.new()
+		box.size = shape.size
+		debug_mesh = box
+	elif shape is CapsuleShape3D:
+		var capsule = CapsuleMesh.new()
+		capsule.radius = shape.radius
+		capsule.height = shape.height
+		debug_mesh = capsule
+	else:
+		return null
+
+	mesh_instance.mesh = debug_mesh
+	mesh_instance.position = collision_shape.position
+	mesh_instance.rotation = collision_shape.rotation
+	mesh_instance.scale = collision_shape.scale  # Apply the same scale as the collision shape
+
+	# Create wireframe material for visibility
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color(0, 1, 0, 0.3)  # Green semi-transparent
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.disable_receive_shadows = true
+	mat.no_depth_test = true  # Show through objects
+	mesh_instance.material_override = mat
+
+	return mesh_instance
+
+
+func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], layer_data: LayerInstanceData, chunk_center: Vector3, _chunk_distance: float, chunk_load_time: float):
 	"""Spawn MultiMesh instances for far foliage (original behavior)"""
 	# Create MultiMesh instances for this layer
 	var mm_start = Time.get_ticks_usec()
@@ -724,11 +797,10 @@ func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], 
 			mmi.visibility_range_end_margin = fade_margin
 
 		# Shadow settings
+		# IMPORTANT: Always enable shadows for the multimesh if layer has cast_shadows=true
+		# Distance-based shadow fading should be handled by the engine's LOD system, not by disabling shadows entirely
 		if layer.cast_shadows:
-			if layer.use_distance_fade_shadows and chunk_distance > layer.shadow_distance:
-				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			else:
-				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		else:
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 

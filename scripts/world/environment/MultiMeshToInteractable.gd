@@ -117,13 +117,24 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	interactable_node.harvest_items = layer.harvest_items.duplicate()
 	interactable_node.harvest_experience = layer.harvest_experience
 
-	# Add collision shape
-	var collision_shape = CollisionShape3D.new()
-	var avg_scale = (layer.min_scale + layer.max_scale) / 2.0
-	var shape = SphereShape3D.new()
-	shape.radius = avg_scale * 2.0
-	collision_shape.shape = shape
-	interactable_node.add_child(collision_shape)
+	# Check if the scene already has a collision shape - if so, don't add another one
+	var existing_collision = _find_collision_shape(foliage_instance)
+	if not existing_collision:
+		# Only add collision if the scene has a collision shape defined
+		if layer.cached_collision_shape:
+			# Use the collision shape defined in the scene file
+			var collision_shape = CollisionShape3D.new()
+			collision_shape.shape = layer.cached_collision_shape
+			collision_shape.transform = layer.cached_collision_transform
+			interactable_node.add_child(collision_shape)
+
+			# Add debug visualization if spawner has it enabled
+			if foliage_spawner and foliage_spawner.debug_show_collision_shapes:
+				var debug_mesh = _create_debug_collision_mesh(collision_shape)
+				if debug_mesh:
+					interactable_node.add_child(debug_mesh)
+		else:
+			print("WARNING: No collision shape found in scene for layer ", layer.layer_name)
 
 	# Add to scene FIRST
 	get_tree().current_scene.add_child(interactable_node)
@@ -192,7 +203,8 @@ func _hide_multimesh_instance(mmi: MultiMeshInstance3D, instance_index: int):
 
 	# Move the instance 10000 units down (underground) to hide it
 	# This avoids the "determinant == 0" warning from using zero scale
-	var hidden_transform = active_original_transform
+	# IMPORTANT: Make a copy of the transform so we don't modify the original!
+	var hidden_transform = Transform3D(active_original_transform)
 	hidden_transform.origin.y -= 10000.0  # Move underground
 	mmi.multimesh.set_instance_transform(instance_index, hidden_transform)
 
@@ -250,6 +262,63 @@ func _on_interactable_harvested(_player):
 func get_active_interactable() -> InteractableFoliage:
 	"""Get the currently active interactable node"""
 	return active_interactable
+
+
+func _find_collision_shape(node: Node) -> CollisionShape3D:
+	"""Recursively find the first CollisionShape3D node"""
+	if node is CollisionShape3D:
+		return node
+
+	for child in node.get_children():
+		var result = _find_collision_shape(child)
+		if result:
+			return result
+
+	return null
+
+
+func _create_debug_collision_mesh(collision_shape: CollisionShape3D) -> MeshInstance3D:
+	"""Create a visible debug mesh for a collision shape"""
+	if not collision_shape or not collision_shape.shape:
+		return null
+
+	var mesh_instance = MeshInstance3D.new()
+	var shape = collision_shape.shape
+	var debug_mesh: Mesh
+
+	# Create appropriate debug mesh based on shape type
+	if shape is SphereShape3D:
+		var sphere = SphereMesh.new()
+		sphere.radius = shape.radius
+		sphere.height = shape.radius * 2.0
+		debug_mesh = sphere
+	elif shape is BoxShape3D:
+		var box = BoxMesh.new()
+		box.size = shape.size
+		debug_mesh = box
+	elif shape is CapsuleShape3D:
+		var capsule = CapsuleMesh.new()
+		capsule.radius = shape.radius
+		capsule.height = shape.height
+		debug_mesh = capsule
+	else:
+		return null
+
+	mesh_instance.mesh = debug_mesh
+	mesh_instance.position = collision_shape.position
+	mesh_instance.rotation = collision_shape.rotation
+	mesh_instance.scale = collision_shape.scale  # Apply the same scale as the collision shape
+
+	# Create wireframe material for visibility
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color(1, 0, 0, 0.5)  # Red semi-transparent (to distinguish from MultiMesh debug)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.disable_receive_shadows = true
+	mat.no_depth_test = true  # Show through objects
+	mesh_instance.material_override = mat
+
+	return mesh_instance
 
 
 func convert_to_interactable(hit_data: Dictionary) -> InteractableFoliage:

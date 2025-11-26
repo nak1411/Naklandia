@@ -1,8 +1,15 @@
-[gd_scene load_steps=2 format=3 uid="uid://bsl4e7vyrxt6l"]
+[gd_scene load_steps=3 format=3 uid="uid://bsl4e7vyrxt6l"]
 
 [ext_resource type="PackedScene" uid="uid://bbjnr8g1w2m2u" path="res://assets/models/foliage/bush01.glb" id="1_a5pp6"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_collision"]
+radius = 5.0
 
 [node name="Bush01_s" type="Node3D"]
 transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0)
 
 [node name="AuxScene" parent="." instance=ExtResource("1_a5pp6")]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 9.8285, 0)
+shape = SubResource("SphereShape3D_collision")

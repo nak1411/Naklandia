@@ -78,6 +78,8 @@ extends Resource
 # Runtime cache
 var cached_meshes: Array[Mesh] = []
 var cached_mesh_transforms: Array[Transform3D] = []  # Local transforms for each mesh
+var cached_collision_shape: Shape3D = null  # Collision shape from scene (if exists)
+var cached_collision_transform: Transform3D = Transform3D.IDENTITY  # Transform of collision shape
 var noise: FastNoiseLite = null
 var scene: PackedScene = null
 
@@ -112,12 +114,37 @@ func cache_meshes() -> void:
 	cached_meshes.clear()
 	cached_mesh_transforms.clear()
 	var temp_instance = scene.instantiate()
+
+	# Cache meshes
 	var mesh_nodes = _get_all_mesh_instances(temp_instance)
 	for mesh_node in mesh_nodes:
 		if mesh_node.mesh:
 			cached_meshes.append(mesh_node.mesh)
 			cached_mesh_transforms.append(mesh_node.transform)
+
+	# Cache collision shape if it exists in the scene
+	var collision_node = _find_collision_shape(temp_instance)
+	if collision_node and collision_node.shape:
+		cached_collision_shape = collision_node.shape
+		cached_collision_transform = collision_node.transform
+		print("  Found collision shape in scene for layer '", layer_name, "': ", cached_collision_shape.get_class())
+	else:
+		cached_collision_shape = null
+		print("  No collision shape found in scene for layer '", layer_name, "' - will use fallback generation")
+
 	temp_instance.queue_free()
+
+func _find_collision_shape(node: Node) -> CollisionShape3D:
+	"""Recursively find the first CollisionShape3D node"""
+	if node is CollisionShape3D:
+		return node
+
+	for child in node.get_children():
+		var result = _find_collision_shape(child)
+		if result:
+			return result
+
+	return null
 
 func _get_all_mesh_instances(node: Node) -> Array[MeshInstance3D]:
 	"""Recursively find all MeshInstance3D nodes"""
