@@ -65,6 +65,16 @@ extends Resource
 @export var avoid_layers: Array[String] = []  # Layer names to avoid spawning near
 @export var avoidance_distance: float = 5.0
 
+# Interactable/Harvestable settings
+@export_group("Interactable Settings")
+@export var is_interactable: bool = false  # If true, spawns real nodes instead of MultiMesh
+@export var interactable_distance: float = 50.0  # Distance within which to spawn real nodes
+@export var foliage_type_name: String = "Bush"  # Name shown to player
+@export var foliage_health: float = 100.0
+@export var foliage_respawn_time: float = 300.0  # Time to respawn after harvest (0 = no respawn)
+@export var harvest_items: Array[Dictionary] = []  # {item_id: String, min_amount: int, max_amount: int, chance: float}
+@export var harvest_experience: int = 5
+
 # Runtime cache
 var cached_meshes: Array[Mesh] = []
 var cached_mesh_transforms: Array[Transform3D] = []  # Local transforms for each mesh

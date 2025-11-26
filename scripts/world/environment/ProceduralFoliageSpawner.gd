@@ -63,6 +63,7 @@ class LayerInstanceData:
 	var multimesh_instances: Array[MultiMeshInstance3D] = []
 	var item_transforms: Array[Transform3D] = []  # Cached for regeneration
 	var lod_level: int = 0  # Current LOD level
+	var interactable_nodes: Array[Node3D] = []  # Real spawned nodes for interactable foliage
 
 	func _init(name: String):
 		layer_name = name
@@ -143,6 +144,12 @@ func _return_to_pool(mmi: MultiMeshInstance3D):
 	# Clear the multimesh data but keep the node
 	if mmi.multimesh:
 		mmi.multimesh.instance_count = 0
+
+	# IMPORTANT: Remove any Area3D collision nodes from previous use
+	for child in mmi.get_children():
+		if child is Area3D and child.name == "FoliageCollision":
+			child.queue_free()
+
 	mmi_pool.append(mmi)
 
 
@@ -285,11 +292,13 @@ func _load_initial_chunks():
 
 	var player_pos = player.global_position
 	print("ProceduralFoliageSpawner: Loading initial chunks around player at ", player_pos)
+	print("  Player chunk: [", int(floor(player_pos.x / chunk_size)), ",", int(floor(player_pos.z / chunk_size)), "]")
 	last_player_chunk = Vector2i(int(floor(player_pos.x / chunk_size)), int(floor(player_pos.z / chunk_size)))
 	is_doing_initial_load = true
 	update_chunks(player_pos)
 	is_doing_initial_load = false
 	print("ProceduralFoliageSpawner: Loaded initial chunks. Total chunks loaded: ", loaded_chunks.size())
+	print("  NOTE: Chunks far from player will use MultiMesh. Walk around to trigger interactable nodes!")
 
 
 func _process(delta):
@@ -481,94 +490,9 @@ func load_chunk(chunk_x: int, chunk_z: int):
 		layer_data.item_transforms = items_in_chunk
 		layer_data.lod_level = lod_level
 
-		# Create MultiMesh instances for this layer
-		var mm_start = Time.get_ticks_usec()
-		for mesh_idx in range(layer.cached_meshes.size()):
-			var mesh = layer.cached_meshes[mesh_idx]
-			var local_transform = layer.cached_mesh_transforms[mesh_idx] if mesh_idx < layer.cached_mesh_transforms.size() else Transform3D.IDENTITY
-
-			var multimesh = MultiMesh.new()
-			multimesh.transform_format = MultiMesh.TRANSFORM_3D
-			multimesh.mesh = mesh
-			multimesh.instance_count = items_to_render.size()
-
-			if debug_detailed_profiling:
-				prof_multimesh_creation_time += float(Time.get_ticks_usec() - mm_start) / 1000000.0
-
-			# Set transforms for all items (relative to chunk center, with local mesh offset)
-			var transform_start = Time.get_ticks_usec()
-			for i in range(items_to_render.size()):
-				var item_transform: Transform3D = items_to_render[i]
-				# Make item position relative to chunk center
-				var relative_transform = item_transform
-				relative_transform.origin -= chunk_center
-
-				# Apply local mesh transform offset (like the old system)
-				var local_offset = Transform3D()
-				local_offset.origin = local_transform.origin
-				local_offset.basis = local_transform.basis.orthonormalized()
-				var final_transform = relative_transform * local_offset
-
-				multimesh.set_instance_transform(i, final_transform)
-			if debug_detailed_profiling:
-				prof_transform_set_time += float(Time.get_ticks_usec() - transform_start) / 1000000.0
-
-			var mmi = _get_pooled_mmi()
-			mmi.multimesh = multimesh
-			mmi.position = chunk_center
-
-			# Set sorting mode for proper depth testing
-			mmi.sorting_offset = 0.0
-			mmi.gi_mode = GeometryInstance3D.GI_MODE_STATIC
-
-			# Set custom AABB for proper frustum culling
-			if use_custom_aabb:
-				var aabb = AABB(
-					Vector3(-chunk_size * 0.5, -10, -chunk_size * 0.5),
-					Vector3(chunk_size, 50, chunk_size)
-				)
-				mmi.custom_aabb = aabb
-
-			# For layers with short visibility range (relative to chunk size),
-			# use shader-based per-instance fading instead of chunk-based GPU fading
-			var vis_range_end = global_visibility_range_end
-			var fade_margin = global_visibility_fade_margin
-			if layer.use_custom_visibility_range:
-				vis_range_end = layer.visibility_range_end
-				fade_margin = layer.visibility_fade_margin
-
-			var use_shader_fade = (vis_range_end < chunk_size * 0.75)  # If range is small relative to chunk
-
-			if use_shader_fade:
-				# Use custom shader for per-instance distance fading
-				var fade_mat = _create_shader_fade_material(layer, mesh, chunk_load_time)
-				mmi.material_override = fade_mat
-				# For shader fade, extend GPU culling range to account for chunk size
-				# Since GPU culling is from chunk center, we need extra range for edge items
-				mmi.visibility_range_begin = global_visibility_range_begin
-				mmi.visibility_range_end = vis_range_end + chunk_size
-				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
-			else:
-				# Use GPU-based chunk fading for larger visibility ranges
-				# Distance is calculated from camera to MMI position (chunk center)
-				# So we add chunk_size/2 to range to account for items at chunk edges
-				mmi.visibility_range_begin = global_visibility_range_begin
-				mmi.visibility_range_end = vis_range_end + chunk_size * 0.5
-				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-				mmi.visibility_range_begin_margin = fade_margin
-				mmi.visibility_range_end_margin = fade_margin
-
-			# Shadow settings
-			if layer.cast_shadows:
-				if layer.use_distance_fade_shadows and chunk_distance > layer.shadow_distance:
-					mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				else:
-					mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-			else:
-				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-
-			layer_data.multimesh_instances.append(mmi)
-			mm_start = Time.get_ticks_usec()
+		# Always use MultiMesh for performance
+		# Interactable conversion happens on-hover via MultiMeshToInteractable system
+		_spawn_multimesh_instances(layer, items_to_render, layer_data, chunk_center, chunk_distance, chunk_load_time)
 
 		chunk_data.layers[layer.layer_name] = layer_data
 
@@ -588,6 +512,230 @@ func load_chunk(chunk_x: int, chunk_z: int):
 						print("WARNING: MMI for layer '", layer_name, "' in chunk ", chunk_key, " has 0 instances!")
 
 
+func _spawn_interactable_nodes(layer: FoliageLayer, items: Array[Transform3D], layer_data: LayerInstanceData):
+	"""Spawn real interactable nodes for near foliage"""
+	print("[ProceduralFoliageSpawner] Spawning ", items.size(), " interactable ", layer.layer_name, " nodes")
+
+	if not layer.scene:
+		print("  ERROR: No scene configured for layer ", layer.layer_name)
+		return
+
+	for item_transform in items:
+		# Instance the scene
+		var foliage_instance = layer.scene.instantiate()
+
+		# Wrap in InteractableFoliage if not already
+		var interactable_node: InteractableFoliage
+		if foliage_instance is InteractableFoliage:
+			interactable_node = foliage_instance
+		else:
+			# Create wrapper node
+			interactable_node = InteractableFoliage.new()
+			interactable_node.add_child(foliage_instance)
+
+		# Set transform
+		interactable_node.transform = item_transform
+
+		# Configure foliage properties from layer
+		interactable_node.foliage_type = layer.foliage_type_name
+		interactable_node.health = layer.foliage_health
+		interactable_node.max_health = layer.foliage_health
+		interactable_node.respawn_time = layer.foliage_respawn_time
+		interactable_node.harvest_items = layer.harvest_items.duplicate()
+		interactable_node.harvest_experience = layer.harvest_experience
+
+		# Add collision shape if needed (check after adding children)
+		call_deferred("_setup_collision_for_interactable", interactable_node, layer)
+
+		# Add to scene
+		add_child(interactable_node)
+		layer_data.interactable_nodes.append(interactable_node)
+
+
+func _setup_collision_for_interactable(interactable_node: InteractableFoliage, layer: FoliageLayer):
+	"""Setup collision shape for interactable node after scene is ready"""
+	if not is_instance_valid(interactable_node):
+		print("  WARNING: Interactable node became invalid before collision setup")
+		return
+
+	# Check if collision already exists
+	if interactable_node.get_node_or_null("CollisionShape3D"):
+		print("  Collision shape already exists for ", interactable_node.foliage_type)
+		return
+
+	# Create appropriate collision shape based on foliage type
+	var collision_shape = CollisionShape3D.new()
+
+	# Calculate size from layer scale
+	var avg_scale = (layer.min_scale + layer.max_scale) / 2.0
+	var collision_radius = avg_scale * 2.0  # Make it larger for easier interaction
+
+	var shape = SphereShape3D.new()
+	shape.radius = collision_radius
+	collision_shape.shape = shape
+
+	# Add as child
+	interactable_node.add_child(collision_shape)
+	print("  Added collision sphere (radius: ", "%.2f" % collision_radius, ") to ", interactable_node.foliage_type)
+
+
+func _verify_collision_setup(mmi: MultiMeshInstance3D, layer_name: String):
+	"""Verify the collision setup is correct"""
+	var static_body = mmi.get_node_or_null("FoliageCollision")
+	if static_body:
+		print("[VERIFY] StaticBody3D exists for ", layer_name, " - layer: ", static_body.collision_layer, " children: ", static_body.get_child_count())
+		if static_body.get_child_count() > 0:
+			var first_shape = static_body.get_child(0)
+			if first_shape is CollisionShape3D:
+				print("[VERIFY] First collision shape radius: ", first_shape.shape.radius if first_shape.shape is SphereShape3D else "N/A")
+	else:
+		print("[VERIFY] ERROR: No StaticBody3D found on MMI for ", layer_name)
+
+
+func _add_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[Transform3D], layer: FoliageLayer, chunk_center: Vector3):
+	"""Add collision shapes to MultiMesh for interaction raycasting"""
+	# Use Area3D instead of StaticBody3D (Area3D works better with raycasts)
+	var area = Area3D.new()
+	area.name = "FoliageCollision"
+	# IMPORTANT: Use set_collision_layer_value for proper physics registration
+	area.set_collision_layer_value(1, false)  # Not on layer 1
+	area.set_collision_layer_value(2, true)   # Layer 2 for interactions
+	area.collision_mask = 0   # No collision mask
+
+	# Add a collision shape for each instance
+	var avg_scale = (layer.min_scale + layer.max_scale) / 2.0
+	# Use a reasonable collision radius - scale it properly based on foliage size
+	var collision_radius = avg_scale * 8.0  # 8x the scale should cover most foliage
+	if collision_radius < 1.0:
+		collision_radius = 1.0  # Minimum 1 meter radius
+
+	var collision_count = items.size()  # Add collision to ALL instances!
+
+	for i in range(collision_count):
+		var item_transform = items[i]
+
+		# Create collision shape
+		var collision_shape = CollisionShape3D.new()
+		var shape = SphereShape3D.new()
+		shape.radius = collision_radius
+		collision_shape.shape = shape
+		collision_shape.name = "Shape_" + str(i)
+
+		# Position relative to MMI (not chunk center, since Area3D is child of MMI)
+		var relative_pos = item_transform.origin - chunk_center
+		# Add small vertical offset to center collision on foliage (they vary in height)
+		relative_pos.y += collision_radius * 0.5  # Center the sphere on the foliage
+		collision_shape.position = relative_pos
+
+		# Store metadata about which instance this is
+		collision_shape.set_meta("multimesh_instance_index", i)
+		collision_shape.set_meta("foliage_layer", layer)
+
+		area.add_child(collision_shape)
+
+	# Add Area3D to MMI AFTER all shapes are added
+	mmi.add_child(area)
+
+	# Force physics server to process the collision shapes
+	area.call_deferred("force_update_transform")
+
+
+func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], layer_data: LayerInstanceData, chunk_center: Vector3, chunk_distance: float, chunk_load_time: float):
+	"""Spawn MultiMesh instances for far foliage (original behavior)"""
+	# Create MultiMesh instances for this layer
+	var mm_start = Time.get_ticks_usec()
+	for mesh_idx in range(layer.cached_meshes.size()):
+		var mesh = layer.cached_meshes[mesh_idx]
+		var local_transform = layer.cached_mesh_transforms[mesh_idx] if mesh_idx < layer.cached_mesh_transforms.size() else Transform3D.IDENTITY
+
+		var multimesh = MultiMesh.new()
+		multimesh.transform_format = MultiMesh.TRANSFORM_3D
+		multimesh.mesh = mesh
+		multimesh.instance_count = items.size()
+
+		if debug_detailed_profiling:
+			prof_multimesh_creation_time += float(Time.get_ticks_usec() - mm_start) / 1000000.0
+
+		# Set transforms for all items (relative to chunk center, with local mesh offset)
+		var transform_start = Time.get_ticks_usec()
+		for i in range(items.size()):
+			var item_transform: Transform3D = items[i]
+			# Make item position relative to chunk center
+			var relative_transform = item_transform
+			relative_transform.origin -= chunk_center
+
+			# Apply local mesh transform offset (like the old system)
+			var local_offset = Transform3D()
+			local_offset.origin = local_transform.origin
+			local_offset.basis = local_transform.basis.orthonormalized()
+			var final_transform = relative_transform * local_offset
+
+			multimesh.set_instance_transform(i, final_transform)
+		if debug_detailed_profiling:
+			prof_transform_set_time += float(Time.get_ticks_usec() - transform_start) / 1000000.0
+
+		var mmi = _get_pooled_mmi()
+		mmi.multimesh = multimesh
+		mmi.position = chunk_center
+
+		# Add collision for interactable layers
+		if layer.is_interactable:
+			_add_multimesh_collision(mmi, items, layer, chunk_center)
+
+		# Set sorting mode for proper depth testing
+		mmi.sorting_offset = 0.0
+		mmi.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+
+		# Set custom AABB for proper frustum culling
+		if use_custom_aabb:
+			var aabb = AABB(
+				Vector3(-chunk_size * 0.5, -10, -chunk_size * 0.5),
+				Vector3(chunk_size, 50, chunk_size)
+			)
+			mmi.custom_aabb = aabb
+
+		# For layers with short visibility range (relative to chunk size),
+		# use shader-based per-instance fading instead of chunk-based GPU fading
+		var vis_range_end = global_visibility_range_end
+		var fade_margin = global_visibility_fade_margin
+		if layer.use_custom_visibility_range:
+			vis_range_end = layer.visibility_range_end
+			fade_margin = layer.visibility_fade_margin
+
+		var use_shader_fade = (vis_range_end < chunk_size * 0.75)  # If range is small relative to chunk
+
+		if use_shader_fade:
+			# Use custom shader for per-instance distance fading
+			var fade_mat = _create_shader_fade_material(layer, mesh, chunk_load_time)
+			mmi.material_override = fade_mat
+			# For shader fade, extend GPU culling range to account for chunk size
+			# Since GPU culling is from chunk center, we need extra range for edge items
+			mmi.visibility_range_begin = global_visibility_range_begin
+			mmi.visibility_range_end = vis_range_end + chunk_size
+			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+		else:
+			# Use GPU-based chunk fading for larger visibility ranges
+			# Distance is calculated from camera to MMI position (chunk center)
+			# So we add chunk_size/2 to range to account for items at chunk edges
+			mmi.visibility_range_begin = global_visibility_range_begin
+			mmi.visibility_range_end = vis_range_end + chunk_size * 0.5
+			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+			mmi.visibility_range_begin_margin = fade_margin
+			mmi.visibility_range_end_margin = fade_margin
+
+		# Shadow settings
+		if layer.cast_shadows:
+			if layer.use_distance_fade_shadows and chunk_distance > layer.shadow_distance:
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			else:
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		else:
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+		layer_data.multimesh_instances.append(mmi)
+		mm_start = Time.get_ticks_usec()
+
+
 func unload_chunk(chunk_key: String):
 	"""Unload a chunk and return its resources to pool"""
 	if not loaded_chunks.has(chunk_key):
@@ -599,6 +747,12 @@ func unload_chunk(chunk_key: String):
 	for layer_data in chunk_data.layers.values():
 		for mmi in layer_data.multimesh_instances:
 			_return_to_pool(mmi)
+
+		# Clean up interactable nodes
+		for node in layer_data.interactable_nodes:
+			if is_instance_valid(node):
+				node.queue_free()
+		layer_data.interactable_nodes.clear()
 
 	# Remove from loaded chunks
 	loaded_chunks.erase(chunk_key)

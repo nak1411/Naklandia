@@ -14,6 +14,7 @@ var camera: Camera3D
 var space_state: PhysicsDirectSpaceState3D
 var current_interactable: Interactable
 var current_distance: float = 0.0
+var multimesh_converter: MultiMeshToInteractable = null
 
 
 func _ready():
@@ -50,6 +51,11 @@ func update_raycast():
 	var scene_root = get_tree().current_scene
 	_find_and_exclude_floors(scene_root, exclude_objects)
 
+	# IMPORTANT: Exclude Terrain3D so it doesn't block foliage raycasts
+	var terrain = get_tree().get_first_node_in_group("terrain")
+	if terrain:
+		exclude_objects.append(terrain)
+
 	var query = PhysicsRayQueryParameters3D.new()
 	query.from = from
 	query.to = to
@@ -78,14 +84,28 @@ func _process_raycast_result(result: Dictionary, ray_origin: Vector3):
 	if result.has("collider"):
 		var collider = result.collider
 		if collider is Node:
-			hit_interactable = _find_interactable_in_hierarchy(collider)
-			if hit_interactable and result.has("position"):
-				hit_distance = ray_origin.distance_to(result.position)
+			# Check if this is a MultiMesh foliage collision (now using Area3D)
+			if collider is Area3D and collider.name == "FoliageCollision" and collider.get_parent() is MultiMeshInstance3D:
+				# This is MultiMesh foliage - convert to interactable on-hover
+				hit_interactable = _convert_multimesh_to_interactable(result, collider)
+				if hit_interactable and result.has("position"):
+					hit_distance = ray_origin.distance_to(result.position)
+			else:
+				# Regular interactable
+				hit_interactable = _find_interactable_in_hierarchy(collider)
+				if hit_interactable and result.has("position"):
+					hit_distance = ray_origin.distance_to(result.position)
 
 	if hit_interactable != current_interactable:
 		if current_interactable:
 			current_interactable.end_hover()
 			interactable_lost.emit()
+
+			# If we're switching away from a MultiMesh-converted foliage, clean it up WITH restore
+			if current_interactable is InteractableFoliage and multimesh_converter:
+				var converter_active = multimesh_converter.get_active_interactable()
+				if converter_active == current_interactable:
+					multimesh_converter._cleanup_active_interactable(true)
 
 		current_interactable = hit_interactable
 		current_distance = hit_distance
@@ -139,3 +159,61 @@ func force_clear_interactable():
 		current_interactable = null
 		current_distance = 0.0
 		interactable_lost.emit()
+
+
+func _convert_multimesh_to_interactable(raycast_result: Dictionary, foliage_area: Area3D) -> Interactable:
+	"""Convert a MultiMesh instance to an interactable foliage node on-hover"""
+	# Lazy-load the converter
+	if not multimesh_converter:
+		var converters = get_tree().get_nodes_in_group("multimesh_converter")
+		if converters.size() > 0:
+			multimesh_converter = converters[0]
+		else:
+			# Create one if it doesn't exist
+			var spawners = get_tree().get_nodes_in_group("foliage_spawner")
+			if spawners.size() > 0:
+				multimesh_converter = MultiMeshToInteractable.new()
+				multimesh_converter.add_to_group("multimesh_converter")
+				spawners[0].add_child(multimesh_converter)
+
+	if not multimesh_converter:
+		return null
+
+	# Get the MMI and collision shape that was hit
+	var mmi = foliage_area.get_parent() as MultiMeshInstance3D
+	if not mmi:
+		return null
+
+	# Find which collision shape was hit by checking all children
+	var collision_shape: CollisionShape3D = null
+	var hit_position = raycast_result.get("position", Vector3.ZERO)
+	var closest_distance = 999999.0
+
+	# Find the closest collision shape to the hit position
+	for child in foliage_area.get_children():
+		if child is CollisionShape3D:
+			var child_global_pos = foliage_area.global_position + child.position
+			var distance = hit_position.distance_to(child_global_pos)
+			if distance < closest_distance:
+				closest_distance = distance
+				collision_shape = child
+
+	if not collision_shape:
+		return null
+
+	# Get metadata
+	var instance_index = collision_shape.get_meta("multimesh_instance_index", -1)
+	var layer: FoliageLayer = collision_shape.get_meta("foliage_layer", null)
+
+	if instance_index < 0 or not layer:
+		return null
+
+	# Use the converter to create/get the interactable
+	var hit_data = {
+		"mmi": mmi,
+		"instance_index": instance_index,
+		"layer": layer,
+		"position": raycast_result.get("position", Vector3.ZERO)
+	}
+
+	return multimesh_converter.convert_to_interactable(hit_data)
