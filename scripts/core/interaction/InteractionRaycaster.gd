@@ -56,15 +56,32 @@ func update_raycast():
 	if terrain:
 		exclude_objects.append(terrain)
 
+	# First, check for physics-based interactables (chests, NPCs, etc.)
 	var query = PhysicsRayQueryParameters3D.new()
 	query.from = from
 	query.to = to
 	query.collision_mask = 1 << (raycast_layer - 1)  # Only layer 2
-	query.collide_with_areas = true  # IMPORTANT: Allow raycasts to hit Area3D nodes
+	query.collide_with_areas = true
 	query.collide_with_bodies = true
 	query.exclude = exclude_objects
 
-	var result = space_state.intersect_ray(query)
+	var physics_result = space_state.intersect_ray(query)
+
+	# Then, check for MultiMesh foliage (no physics collision, manual detection)
+	var ray_direction = (to - from).normalized()
+	var foliage_result = _raycast_multimesh_foliage(from, ray_direction, raycast_distance)
+
+	# Use whichever hit is closer
+	var result: Dictionary
+	if physics_result.has("collider") and foliage_result.has("collider"):
+		var physics_dist = from.distance_to(physics_result.position)
+		var foliage_dist = from.distance_to(foliage_result.position)
+		result = foliage_result if foliage_dist < physics_dist else physics_result
+	elif foliage_result.has("collider"):
+		result = foliage_result
+	else:
+		result = physics_result
+
 	_process_raycast_result(result, from)
 
 
@@ -81,9 +98,32 @@ func _raycast_multimesh_foliage(ray_origin: Vector3, ray_direction: Vector3, max
 	var closest_hit: Dictionary = {}
 	var closest_distance: float = max_distance
 
+	var debug_total_checks = 0
+	var debug_mmis_checked = 0
+	var debug_chunks_skipped = 0
+	var debug_instances_culled = 0
+
 	for spawner in spawners:
 		# Check all loaded chunks
 		for chunk_data in spawner.loaded_chunks.values():
+			# OPTIMIZATION 1: Skip entire chunk if it's too far from ray origin
+			# Calculate chunk center position (chunk_data.world_pos is the corner)
+			var chunk_size = spawner.chunk_size if "chunk_size" in spawner else 256.0
+			var chunk_center = Vector3(chunk_data.world_pos.x + chunk_size * 0.5, ray_origin.y, chunk_data.world_pos.y + chunk_size * 0.5)  # Use player height for Y
+
+			# Quick distance check - skip chunk if player is too farw
+			var dist_to_chunk = ray_origin.distance_to(chunk_center)
+			if dist_to_chunk > max_distance + chunk_size:
+				debug_chunks_skipped += 1
+				continue
+
+			# OPTIMIZATION 2: Skip chunk if it's behind the camera (not in view direction)
+			var to_chunk = chunk_center - ray_origin
+			var chunk_dot = to_chunk.normalized().dot(ray_direction)
+			if chunk_dot < -0.5:  # Chunk is mostly behind camera
+				debug_chunks_skipped += 1
+				continue
+
 			for layer_data in chunk_data.layers.values():
 				for mmi in layer_data.multimesh_instances:
 					if not mmi.has_meta("is_interactable_foliage"):
@@ -101,25 +141,46 @@ func _raycast_multimesh_foliage(ray_origin: Vector3, ray_direction: Vector3, max
 					var mmi_projection = to_mmi.dot(ray_direction)
 
 					# Skip if MMI is behind camera or too far
-					if mmi_projection < 0 or mmi_projection > max_distance + 256:
+					if mmi_projection < 0 or mmi_projection > max_distance + chunk_size:
 						continue
 
 					# Check distance from ray to MMI center - skip if too far
 					var closest_on_ray = ray_origin + ray_direction * clamp(mmi_projection, 0, max_distance)
 					var dist_to_ray_from_mmi = mmi_pos.distance_to(closest_on_ray)
-					if dist_to_ray_from_mmi > 128:  # Half chunk size
+					# Use chunk size for culling, add extra margin
+					if dist_to_ray_from_mmi > chunk_size:  # Full chunk size
 						continue
 
-					# CRITICAL OPTIMIZATION: Skip instances for dense foliage to reduce CPU load
-					var check_step = 1
-					if item_transforms.size() > 1000:
-						check_step = 5  # Only check every 5th instance (20%) for very dense layers
-					elif item_transforms.size() > 500:
-						check_step = 3  # Check every 3rd instance (33%) for dense layers
+					debug_mmis_checked += 1
 
-					# Narrow-phase: Check individual instances
-					for i in range(0, item_transforms.size(), check_step):
+					# Get collision shape radius from layer
+					# The collision shape is in scene-local space, radius is typically 5.0 for bushes
+					# Scene root is scaled to 0.1, so world radius = 5.0 × 0.1 = 0.5 meters
+					# We use the radius directly as it's already properly scaled when cached
+					var interaction_radius = 1.0  # Default fallback (1 meter)
+
+					if layer.cached_collision_shape and layer.cached_collision_shape is SphereShape3D:
+						# The cached collision shape radius is in scene-local space
+						# For bushes: radius=5.0, scene_scale=0.1, so we need to divide by 10
+						# to get world space (0.5 meters)
+						var shape_radius = layer.cached_collision_shape.radius
+						interaction_radius = shape_radius * 0.1  # Assume 0.1 scene scale for foliage
+
+					# Use a generous multiplier for easier interaction (2x-3x)
+					interaction_radius *= 3.0  # Final radius: ~1.5 meters for bushes
+
+					# Narrow-phase: Check individual instances with aggressive culling
+					for i in range(item_transforms.size()):
 						var instance_pos = item_transforms[i].origin
+
+						# OPTIMIZATION 3: Quick distance check before expensive ray test
+						var dist_sq = ray_origin.distance_squared_to(instance_pos)
+						var max_dist_sq = max_distance * max_distance
+						if dist_sq > max_dist_sq:
+							debug_instances_culled += 1
+							continue
+
+						debug_total_checks += 1
 
 						# Simple sphere-ray intersection test
 						var to_instance = instance_pos - ray_origin
@@ -133,20 +194,28 @@ func _raycast_multimesh_foliage(ray_origin: Vector3, ray_direction: Vector3, max
 						var closest_point_on_ray = ray_origin + ray_direction * projection
 						var distance_to_ray = instance_pos.distance_to(closest_point_on_ray)
 
-						# Use a generous interaction radius (accounting for bush size and skip step)
-						var interaction_radius = 1.5 * item_transforms[i].basis.get_scale().x
-						if check_step > 1:
-							interaction_radius *= check_step * 0.5  # Widen radius when skipping instances
-
 						if distance_to_ray < interaction_radius and projection < closest_distance:
 							closest_distance = projection
-							closest_hit = {
-								"collider": mmi,
-								"position": instance_pos,
-								"normal": Vector3.UP,
-								"multimesh_instance_index": i,
-								"is_multimesh_foliage": true
-							}
+							closest_hit = {"collider": mmi, "position": instance_pos, "normal": Vector3.UP, "multimesh_instance_index": i, "is_multimesh_foliage": true}
+
+							# OPTIMIZATION 4: Early exit if we found a very close hit
+							if closest_distance < 1.0:  # Within 1 meter
+								return closest_hit
+
+	# Debug output every 2 seconds (with detailed culling stats)
+	if Engine.get_frames_drawn() % 120 == 0 and (debug_mmis_checked > 0 or debug_total_checks > 0 or debug_chunks_skipped > 0):
+		print(
+			"[FOLIAGE RAYCAST] Chunks skipped: ",
+			debug_chunks_skipped,
+			" | MMIs: ",
+			debug_mmis_checked,
+			" | Instances culled: ",
+			debug_instances_culled,
+			" | Ray tested: ",
+			debug_total_checks,
+			" | Hit: ",
+			closest_hit.has("collider")
+		)
 
 	return closest_hit
 
@@ -170,12 +239,7 @@ func _convert_multimesh_direct(mmi: MultiMeshInstance3D, instance_index: int, la
 		return null
 
 	# Use the converter to create/get the interactable
-	return multimesh_converter.convert_to_interactable({
-		"mmi": mmi,
-		"instance_index": instance_index,
-		"layer": layer,
-		"position": hit_position
-	})
+	return multimesh_converter.convert_to_interactable({"mmi": mmi, "instance_index": instance_index, "layer": layer, "position": hit_position})
 
 
 func _find_and_exclude_floors(node: Node, exclude_list: Array):
@@ -191,13 +255,29 @@ func _process_raycast_result(result: Dictionary, ray_origin: Vector3):
 	var hit_interactable: Interactable = null
 	var hit_distance: float = 0.0
 
+	# If no hit, clear current interactable (restore MMI if it was foliage)
+	if not result.has("collider"):
+		if current_interactable:
+			current_interactable.end_hover()
+			interactable_lost.emit()
+
+			# Restore MMI for foliage
+			if current_interactable is InteractableFoliage and multimesh_converter:
+				var converter_active = multimesh_converter.get_active_interactable()
+				if converter_active == current_interactable:
+					multimesh_converter._cleanup_active_interactable(true)
+
+			current_interactable = null
+			current_distance = 0.0
+		return
+
 	if result.has("collider"):
 		var collider = result.collider
 		# Debug: Print what we're hitting
 		# print("[RAYCAST] Hit: ", collider.get_class(), " Name: ", collider.name if collider is Node else "N/A")
 
 		if collider is Node:
-			# Check if this is manual MultiMesh foliage raycast (NEW SYSTEM - no physics!)
+			# Check if this is manual MultiMesh foliage raycast (collision-free detection!)
 			if result.has("is_multimesh_foliage") and collider is MultiMeshInstance3D:
 				var mmi: MultiMeshInstance3D = collider
 				var instance_index: int = result.get("multimesh_instance_index", -1)
@@ -208,12 +288,6 @@ func _process_raycast_result(result: Dictionary, ray_origin: Vector3):
 					hit_interactable = _convert_multimesh_direct(mmi, instance_index, layer, result.get("position", Vector3.ZERO))
 					if hit_interactable:
 						hit_distance = ray_origin.distance_to(result.position)
-			# Check if this is OLD SYSTEM MultiMesh foliage collision (using Area3D)
-			elif collider is Area3D and collider.name == "FoliageCollision" and collider.get_parent() is MultiMeshInstance3D:
-				# This is MultiMesh foliage - convert to interactable on-hover
-				hit_interactable = _convert_multimesh_to_interactable(result, collider)
-				if hit_interactable and result.has("position"):
-					hit_distance = ray_origin.distance_to(result.position)
 			else:
 				# Regular interactable
 				hit_interactable = _find_interactable_in_hierarchy(collider)
@@ -322,7 +396,7 @@ func _convert_multimesh_to_interactable(raycast_result: Dictionary, foliage_area
 		# Find the closest instance to the raycast hit position
 		var nearest_index = -1
 		var nearest_distance = 999999.0
-		var interaction_radius = 1.5  # Max distance to consider an instance "hit"
+		var interaction_radius = 3.0  # Max distance to consider an instance "hit" (increased for better detection)
 
 		for i in range(item_transforms.size()):
 			var instance_world_pos = item_transforms[i].origin
@@ -335,12 +409,7 @@ func _convert_multimesh_to_interactable(raycast_result: Dictionary, foliage_area
 			return null
 
 		# Use the converter to create/get the interactable
-		return multimesh_converter.convert_to_interactable({
-			"mmi": mmi,
-			"instance_index": nearest_index,
-			"layer": foliage_layer,
-			"position": hit_position
-		})
+		return multimesh_converter.convert_to_interactable({"mmi": mmi, "instance_index": nearest_index, "layer": foliage_layer, "position": hit_position})
 
 	# OLD SYSTEM: Per-instance collision shapes (deprecated, but keep for compatibility)
 	var collision_shape: CollisionShape3D = null
@@ -366,9 +435,4 @@ func _convert_multimesh_to_interactable(raycast_result: Dictionary, foliage_area
 		return null
 
 	# Use the converter to create/get the interactable
-	return multimesh_converter.convert_to_interactable({
-		"mmi": mmi,
-		"instance_index": instance_index,
-		"layer": layer,
-		"position": raycast_result.get("position", Vector3.ZERO)
-	})
+	return multimesh_converter.convert_to_interactable({"mmi": mmi, "instance_index": instance_index, "layer": layer, "position": raycast_result.get("position", Vector3.ZERO)})

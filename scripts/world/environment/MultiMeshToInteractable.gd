@@ -223,11 +223,32 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	active_instance_index = instance_index
 	active_layer = layer
 
-	# Store original transforms for ALL MMIs BEFORE hiding
+	# Store original transforms from metadata (NOT from MMI, which might be corrupted/hidden!)
 	active_original_transforms.clear()
 	for mmi_to_hide in active_all_mmis:
 		if mmi_to_hide.multimesh and instance_index < mmi_to_hide.multimesh.instance_count:
-			active_original_transforms[mmi_to_hide] = mmi_to_hide.multimesh.get_instance_transform(instance_index)
+			# Get the ORIGINAL transform from metadata, not from the MMI
+			var item_transforms: Array = mmi_to_hide.get_meta("item_transforms", [])
+			if instance_index < item_transforms.size():
+				# Convert world-space transform to MMI-relative transform
+				var item_world_transform = item_transforms[instance_index]
+				var mmi_relative = Transform3D()
+				mmi_relative.origin = item_world_transform.origin - mmi_to_hide.global_position
+				mmi_relative.basis = item_world_transform.basis
+
+				# Apply local mesh offset (same as in ProceduralFoliageSpawner)
+				var mesh_idx = active_all_mmis.find(mmi_to_hide)
+				if mesh_idx >= 0 and mesh_idx < layer.cached_mesh_transforms.size():
+					var local_transform = layer.cached_mesh_transforms[mesh_idx]
+					var local_offset = Transform3D()
+					local_offset.origin = local_transform.origin
+					local_offset.basis = local_transform.basis.orthonormalized()
+					mmi_relative = mmi_relative * local_offset
+
+				active_original_transforms[mmi_to_hide] = mmi_relative
+			else:
+				# Fallback: read from MMI (might be wrong if already hidden!)
+				active_original_transforms[mmi_to_hide] = mmi_to_hide.multimesh.get_instance_transform(instance_index)
 
 	# Hide this instance in ALL MultiMeshes (trunk, leaves, etc.)
 	for mmi_to_hide in active_all_mmis:

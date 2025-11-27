@@ -11,10 +11,10 @@ extends Node3D
 
 # Chunk configuration
 @export_group("Chunk Settings")
-@export var chunk_size: float = 256.0  # Size of each chunk in meters (larger = fewer chunks, more items per chunk)
-@export var chunk_load_distance: float = 300.0  # Distance to load chunks (must be > visibility range to prevent pop-in)
-@export var chunk_unload_distance: float = 350.0  # Distance to unload chunks (should be > load_distance)
-@export var chunks_per_frame: int = 2  # Max chunks to load/unload per frame (increase for smoother loading)
+@export var chunk_size: float = 64.0  # Size of each chunk in meters (smaller = better culling, like Unreal HISM)
+@export var chunk_load_distance: float = 200.0  # Distance to load chunks (must be >> visibility range to prevent pop-in)
+@export var chunk_unload_distance: float = 250.0  # Distance to unload chunks (should be > load_distance)
+@export var chunks_per_frame: int = 8  # Max chunks to load/unload per frame (increase for smoother loading)
 @export var follow_player: bool = true
 @export var use_custom_aabb: bool = true  # Set custom AABB for better frustum culling
 
@@ -109,27 +109,39 @@ func _ready():
 		push_error("ProceduralFoliageSpawner: No active foliage layers!")
 		return
 
-	# Find player
-	player = get_tree().get_first_node_in_group("player")
-	if not player:
-		push_warning("ProceduralFoliageSpawner: No player found in 'player' group")
-	else:
-		# Load initial chunks around player
-		call_deferred("_load_initial_chunks")
-
-	# CRITICAL: Clear the MMI pool to remove any old collision-based nodes
+	# CRITICAL: Clear everything BEFORE loading new chunks
+	# This prevents duplicate foliage from stacking
 	print("[STARTUP] Clearing MMI pool to remove old collision system...")
 	for old_mmi in mmi_pool:
 		if is_instance_valid(old_mmi):
 			old_mmi.queue_free()
 	mmi_pool.clear()
 
+	# Clean up any existing MMI children (from previous runs OR from scene file)
+	print("[STARTUP] Cleaning up any existing MMI nodes from scene...")
+	for child in get_children():
+		if child is MultiMeshInstance3D:
+			print("  Removing old MMI: ", child.name)
+			child.queue_free()
+
+	# IMPORTANT: Clear any chunks that might exist from previous session
+	print("[STARTUP] Clearing loaded_chunks dictionary...")
+	loaded_chunks.clear()
+
+	# Find player and load initial chunks AFTER cleanup
+	player = get_tree().get_first_node_in_group("player")
+	if not player:
+		push_warning("ProceduralFoliageSpawner: No player found in 'player' group")
+	else:
+		# Load initial chunks around player (AFTER cleanup!)
+		call_deferred("_load_initial_chunks")
+
 	print("ProceduralFoliageSpawner: Chunk-based streaming initialized")
 	print("  Active layers: ", active_layers)
 	print("  Chunk size: ", chunk_size, "m")
 	print("  Load distance: ", chunk_load_distance, "m")
 	print("  Unload distance: ", chunk_unload_distance, "m")
-	print("  Using COLLISION-FREE manual raycasting system (no physics overhead!)")
+	print("  Using COLLISION-FREE manual raycast system (like Unreal Engine HISM)!")
 
 	if debug_force_reload_chunks:
 		print("WARNING: debug_force_reload_chunks is enabled - will clear all chunks on next frame")
@@ -159,10 +171,9 @@ func _return_to_pool(mmi: MultiMeshInstance3D):
 	if mmi.multimesh:
 		mmi.multimesh.instance_count = 0
 
-	# IMPORTANT: Remove any Area3D collision nodes from previous use
+	# IMPORTANT: Remove any collision nodes from previous use (no longer needed!)
 	for child in mmi.get_children():
-		if child is Area3D and child.name == "FoliageCollision":
-			child.queue_free()
+		child.queue_free()
 
 	# Clear metadata
 	for meta_key in ["foliage_layer", "item_transforms", "chunk_center", "is_interactable_foliage"]:
@@ -491,6 +502,10 @@ func load_chunk(chunk_x: int, chunk_z: int):
 		if debug_detailed_profiling:
 			prof_chunk_gen_time += float(Time.get_ticks_usec() - gen_start) / 1000000.0
 
+		# DEBUG: Print item count per chunk to verify consistent distribution
+		if layer.layer_name == "Bushes01" and debug_performance:
+			print("[CHUNK GEN] ", chunk_key, " - ", layer.layer_name, ": ", items_in_chunk.size(), " items | Distance: ", "%.1f" % min_distance_to_chunk, "m | Initial: ", is_doing_initial_load)
+
 		if items_in_chunk.size() == 0:
 			continue
 
@@ -698,6 +713,11 @@ func _add_optimized_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[T
 	area.set_meta("chunk_center", chunk_center)
 	area.set_meta("multimesh_instance", mmi)
 
+	# Also mark the MMI itself as interactable foliage for identification
+	mmi.set_meta("is_interactable_foliage", true)
+	mmi.set_meta("foliage_layer", layer)
+	mmi.set_meta("item_transforms", items)
+
 	# Create ONE large box shape that covers the entire chunk
 	var collision_shape = CollisionShape3D.new()
 	var box_shape = BoxShape3D.new()
@@ -831,6 +851,8 @@ func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], 
 
 		var multimesh = MultiMesh.new()
 		multimesh.transform_format = MultiMesh.TRANSFORM_3D
+		multimesh.use_colors = false  # Disable if not using per-instance colors
+		multimesh.use_custom_data = false  # Disable if not using custom data
 		multimesh.mesh = mesh
 		multimesh.instance_count = items.size()
 
@@ -859,13 +881,24 @@ func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], 
 		mmi.multimesh = multimesh
 		mmi.position = chunk_center
 
-		# Add collision for interactable layers - BUT WITH A HARD CAP
-		if layer.is_interactable:
-			_add_capped_multimesh_collision(mmi, items, layer, chunk_center)
+		# CRITICAL: Enable GPU instancing for massive performance boost
+		mmi.extra_cull_margin = 0.0  # No extra culling margin (we handle it with visibility range)
 
-		# Set sorting mode for proper depth testing
+		# Store metadata for manual hover detection (NO collision shapes needed!)
+		if layer.is_interactable:
+			mmi.set_meta("is_interactable_foliage", true)
+			mmi.set_meta("foliage_layer", layer)
+			mmi.set_meta("item_transforms", items)
+
+		# Set sorting mode for proper depth testing and GPU instancing
 		mmi.sorting_offset = 0.0
 		mmi.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+		mmi.gi_lightmap_scale = GeometryInstance3D.LIGHTMAP_SCALE_1X  # Minimal lightmap for foliage
+
+		# FADE-IN: Start chunks invisible and fade them in to hide pop-in
+		mmi.transparency = 1.0  # Start fully transparent
+		var fade_tween = create_tween()
+		fade_tween.tween_property(mmi, "transparency", 0.0, 0.3).set_ease(Tween.EASE_IN)
 
 		# Set custom AABB for proper frustum culling
 		if use_custom_aabb:
@@ -883,23 +916,25 @@ func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], 
 			vis_range_end = layer.visibility_range_end
 			fade_margin = layer.visibility_fade_margin
 
-		var use_shader_fade = (vis_range_end < chunk_size * 0.75)  # If range is small relative to chunk
+		# Use shader fade for visibility ranges that are close to or larger than chunk size
+		# With 64m chunks, anything over ~90m benefits from per-instance shader fade
+		var use_shader_fade = (vis_range_end > chunk_size * 1.4)  # If range is large relative to chunk
 
 		if use_shader_fade:
 			# Use custom shader for per-instance distance fading
 			var fade_mat = _create_shader_fade_material(layer, mesh, chunk_load_time)
 			mmi.material_override = fade_mat
-			# For shader fade, extend GPU culling range to account for chunk size
-			# Since GPU culling is from chunk center, we need extra range for edge items
+			# For shader fade, only add HALF chunk diagonal for corner instances
+			# Diagonal of chunk = chunk_size * sqrt(2) ≈ chunk_size * 1.5, half = chunk_size * 0.75
 			mmi.visibility_range_begin = global_visibility_range_begin
-			mmi.visibility_range_end = vis_range_end + chunk_size
+			mmi.visibility_range_end = vis_range_end + chunk_size * 0.75
 			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 		else:
 			# Use GPU-based chunk fading for larger visibility ranges
-			# Distance is calculated from camera to MMI position (chunk center)
-			# So we add chunk_size/2 to range to account for items at chunk edges
+			# Distance is from camera to MMI position (chunk center)
+			# Add only half diagonal for corner instances (much less than full chunk size!)
 			mmi.visibility_range_begin = global_visibility_range_begin
-			mmi.visibility_range_end = vis_range_end + chunk_size * 0.5
+			mmi.visibility_range_end = vis_range_end + chunk_size * 0.75
 			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 			mmi.visibility_range_begin_margin = fade_margin
 			mmi.visibility_range_end_margin = fade_margin
