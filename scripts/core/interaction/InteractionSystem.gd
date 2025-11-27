@@ -22,10 +22,6 @@ var current_interactable: Interactable = null
 var interaction_available: bool = false
 var current_distance: float = 0.0
 
-# Performance optimization - don't raycast every frame
-var raycast_frame_skip: int = 0
-var raycast_skip_interval: int = 2  # Only raycast every 3rd frame (0, skip, skip, 0, skip, skip...)
-
 
 func _ready():
 	# Get component references
@@ -64,14 +60,8 @@ func _find_crosshair_reference():
 
 
 func _process(_delta):
-	# Performance optimization: Only raycast every 3rd frame
-	# This reduces CPU usage significantly for foliage detection
-	raycast_frame_skip += 1
-	if raycast_frame_skip > raycast_skip_interval:
-		raycast_frame_skip = 0
-
-	# Update raycaster (only on raycast frames)
-	if raycaster and raycast_frame_skip == 0:
+	# Update raycaster every frame (physics raycasts are fast)
+	if raycaster:
 		raycaster.update_raycast()
 		# Update distance for existing interactable
 		if current_interactable and raycaster.has_method("get_current_distance"):

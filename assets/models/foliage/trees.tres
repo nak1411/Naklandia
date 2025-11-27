@@ -57,6 +57,13 @@ harvest_items = Array[Dictionary]([{
 "min_amount": 1
 }])
 harvest_experience = 10
+use_manual_collision = true
+manual_collision_shape = "Capsule"
+manual_collision_radius = 0.5
+manual_collision_height = 10.0
+manual_collision_offset = Vector3(0, 0, 0)
+manual_collision_radius_multiplier = 0.1
+manual_collision_ignore_instance_scale = true
 drop_physical_items = true
 physical_item_scene_path = "res://assets/models/resources/resinwood_log.tscn"
 physical_drop_count_min = 2

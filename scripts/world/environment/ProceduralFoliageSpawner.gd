@@ -655,21 +655,15 @@ func _verify_collision_setup(mmi: MultiMeshInstance3D, layer_name: String):
 
 
 func _add_capped_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[Transform3D], layer: FoliageLayer, chunk_center: Vector3):
-	"""Add collision shapes with a HARD CAP to prevent performance issues"""
+	"""Add collision shapes for ALL foliage instances (physics-based detection)"""
 	var area = Area3D.new()
 	area.name = "FoliageCollision"
 	area.set_collision_layer_value(1, false)
 	area.set_collision_layer_value(2, true)
 	area.collision_mask = 0
 
-	# CRITICAL: Hard cap on collision shapes per chunk
-	var max_collision_shapes = 50  # Even more aggressive cap for performance
-	var collision_count = min(items.size(), max_collision_shapes)
-
-	if items.size() > max_collision_shapes and debug_performance:
-		print("[PERF WARNING] Layer '", layer.layer_name, "' has ", items.size(), " items, capping collision to ", max_collision_shapes)
-
-	for i in range(collision_count):
+	# Add collision for ALL instances (no cap - consistent detection)
+	for i in range(items.size()):
 		var item_transform = items[i]
 
 		if not layer.cached_collision_shape:
@@ -692,6 +686,12 @@ func _add_capped_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[Tran
 		collision_shape.set_meta("foliage_layer", layer)
 
 		area.add_child(collision_shape)
+
+		# Add debug visualization for collision shapes if enabled
+		if debug_show_collision_shapes:
+			var debug_mesh_instance = _create_debug_collision_mesh(collision_shape)
+			if debug_mesh_instance:
+				collision_shape.add_child(debug_mesh_instance)
 
 	mmi.add_child(area)
 	area.call_deferred("force_update_transform")
@@ -825,17 +825,17 @@ func _create_debug_collision_mesh(collision_shape: CollisionShape3D) -> MeshInst
 		return null
 
 	mesh_instance.mesh = debug_mesh
-	mesh_instance.position = collision_shape.position
-	mesh_instance.rotation = collision_shape.rotation
-	mesh_instance.scale = collision_shape.scale  # Apply the same scale as the collision shape
+	# No position/rotation/scale needed - it's a direct child of CollisionShape3D
+	# and will inherit the transform from the parent
 
-	# Create wireframe material for visibility
+	# Create cyan semi-transparent material for visibility
 	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color(0, 1, 0, 0.3)  # Green semi-transparent
+	mat.albedo_color = Color(0, 1, 1, 0.3)  # Cyan semi-transparent
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.disable_receive_shadows = true
 	mat.no_depth_test = true  # Show through objects
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED  # Show from both sides
 	mesh_instance.material_override = mat
 
 	return mesh_instance
@@ -884,11 +884,14 @@ func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], 
 		# CRITICAL: Enable GPU instancing for massive performance boost
 		mmi.extra_cull_margin = 0.0  # No extra culling margin (we handle it with visibility range)
 
-		# Store metadata for manual hover detection (NO collision shapes needed!)
+		# Add physics-based collision for interactable foliage
 		if layer.is_interactable:
 			mmi.set_meta("is_interactable_foliage", true)
 			mmi.set_meta("foliage_layer", layer)
 			mmi.set_meta("item_transforms", items)
+
+			# Add Area3D with CollisionShape3D for each instance (physics-based detection)
+			_add_capped_multimesh_collision(mmi, items, layer, chunk_center)
 
 		# Set sorting mode for proper depth testing and GPU instancing
 		mmi.sorting_offset = 0.0

@@ -57,6 +57,12 @@ harvest_items = Array[Dictionary]([{
 "min_amount": 1
 }])
 harvest_experience = 5
+use_manual_collision = false
+manual_collision_shape = "Sphere"
+manual_collision_radius = 1.0
+manual_collision_height = 5.0
+manual_collision_offset = Vector3(0, 1, 0)
+manual_collision_radius_multiplier = 2.0
 drop_physical_items = false
 physical_item_scene_path = ""
 physical_drop_count_min = 1

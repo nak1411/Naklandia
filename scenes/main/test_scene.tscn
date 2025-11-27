@@ -262,4 +262,3 @@ script = ExtResource("12_m0jab")
 foliage_layers = Array[ExtResource("13_3uiii")]([ExtResource("14_0g8h2"), ExtResource("16_c7h6s"), ExtResource("17_7g4hs"), ExtResource("15_0g8h2")])
 debug_performance = true
 debug_detailed_profiling = true
-debug_force_reload_chunks = true

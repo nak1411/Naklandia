@@ -75,6 +75,16 @@ extends Resource
 @export var harvest_items: Array[Dictionary] = []  # {item_id: String, min_amount: int, max_amount: int, chance: float}
 @export var harvest_experience: int = 5
 
+# Manual raycast collision override (for better performance and control)
+@export_group("Raycast Collision Override")
+@export var use_manual_collision: bool = false  # Override automatic collision detection with manual settings
+@export_enum("Sphere", "Capsule") var manual_collision_shape: String = "Sphere"
+@export var manual_collision_radius: float = 1.0  # Radius in meters (world space)
+@export var manual_collision_height: float = 5.0  # Height for capsule (world space)
+@export var manual_collision_offset: Vector3 = Vector3(0, 1.0, 0)  # Offset from base in meters (world space)
+@export var manual_collision_radius_multiplier: float = 2.0  # Make interaction easier (1.0 = exact, 2.0 = 2x bigger)
+@export var manual_collision_ignore_instance_scale: bool = false  # If true, collision size stays fixed regardless of instance scale
+
 # Physical item drops
 @export_group("Physical Drops")
 @export var drop_physical_items: bool = false  # Spawn PhysicalItem nodes when harvested
