@@ -1,0 +1,66 @@
+[gd_resource type="Resource" script_class="FoliageLayer" load_steps=3 format=3 uid="uid://2gh6c8xbecms"]
+
+[ext_resource type="Texture2D" uid="uid://dtk1xq4t2ueov" path="res://assets/models/foliage/materials/bush01_4.png" id="1_bichi"]
+[ext_resource type="Script" uid="uid://dh07duejch1vv" path="res://scripts/world/environment/FoliageLayer.gd" id="2_v55lp"]
+
+[resource]
+script = ExtResource("2_v55lp")
+layer_name = "Bushes01"
+enabled = true
+scene_path = "res://assets/models/foliage/bush01_s.tscn"
+density = 0.05
+min_scale = 0.01
+max_scale = 0.03
+random_rotation = true
+align_to_terrain_normal = false
+min_slope = 0.0
+max_slope = 0.5
+min_height = -100.0
+max_height = 100.0
+water_level = 0.0
+use_noise_distribution = true
+noise_threshold = -0.5
+noise_scale = 0.02
+noise_seed = 23234
+min_spacing = 1.0
+use_lod = true
+lod_distance_near = 50.0
+lod_distance_mid = 90.0
+lod_mid_scale_factor = 0.4
+lod_far_scale_factor = 0.15
+cast_shadows = true
+shadow_distance = 50.0
+use_distance_fade_shadows = true
+use_custom_visibility_range = true
+visibility_range_end = 100.0
+visibility_fade_margin = 15.0
+use_impostors = true
+impostor_texture = ExtResource("1_bichi")
+impostor_distance = 150.0
+impostor_size = Vector2(4, 8)
+avoid_layers = Array[String]([])
+avoidance_distance = 5.0
+is_interactable = true
+interactable_distance = 100.0
+foliage_type_name = "Bush"
+foliage_health = 50.0
+foliage_respawn_time = 300.0
+harvest_items = Array[Dictionary]([{
+"chance": 0.8,
+"item_id": "berries",
+"max_amount": 5,
+"min_amount": 2
+}, {
+"chance": 1.0,
+"item_id": "leaves",
+"max_amount": 3,
+"min_amount": 1
+}])
+harvest_experience = 5
+drop_physical_items = false
+physical_item_scene_path = ""
+physical_drop_count_min = 1
+physical_drop_count_max = 3
+scale_affects_drops = true
+drop_spread_radius = 1.5
+metadata/_custom_type_script = "uid://dh07duejch1vv"

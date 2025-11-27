@@ -30,6 +30,7 @@ extends Node3D
 @export var debug_performance: bool = false
 @export var debug_detailed_profiling: bool = false  # Detailed timing breakdown
 @export var debug_show_collision_shapes: bool = false  # Visualize collision shapes in game
+@export var debug_force_reload_chunks: bool = false  # Force reload all chunks (use to clear old collision system)
 
 # Internal variables
 var terrain: Terrain3D = null
@@ -116,11 +117,23 @@ func _ready():
 		# Load initial chunks around player
 		call_deferred("_load_initial_chunks")
 
+	# CRITICAL: Clear the MMI pool to remove any old collision-based nodes
+	print("[STARTUP] Clearing MMI pool to remove old collision system...")
+	for old_mmi in mmi_pool:
+		if is_instance_valid(old_mmi):
+			old_mmi.queue_free()
+	mmi_pool.clear()
+
 	print("ProceduralFoliageSpawner: Chunk-based streaming initialized")
 	print("  Active layers: ", active_layers)
 	print("  Chunk size: ", chunk_size, "m")
 	print("  Load distance: ", chunk_load_distance, "m")
 	print("  Unload distance: ", chunk_unload_distance, "m")
+	print("  Using COLLISION-FREE manual raycasting system (no physics overhead!)")
+
+	if debug_force_reload_chunks:
+		print("WARNING: debug_force_reload_chunks is enabled - will clear all chunks on next frame")
+		call_deferred("_force_clear_all_chunks")
 
 
 func _get_pooled_mmi() -> MultiMeshInstance3D:
@@ -150,6 +163,11 @@ func _return_to_pool(mmi: MultiMeshInstance3D):
 	for child in mmi.get_children():
 		if child is Area3D and child.name == "FoliageCollision":
 			child.queue_free()
+
+	# Clear metadata
+	for meta_key in ["foliage_layer", "item_transforms", "chunk_center", "is_interactable_foliage"]:
+		if mmi.has_meta(meta_key):
+			mmi.remove_meta(meta_key)
 
 	mmi_pool.append(mmi)
 
@@ -300,6 +318,9 @@ func _load_initial_chunks():
 	is_doing_initial_load = false
 	print("ProceduralFoliageSpawner: Loaded initial chunks. Total chunks loaded: ", loaded_chunks.size())
 	print("  NOTE: Chunks far from player will use MultiMesh. Walk around to trigger interactable nodes!")
+
+	# Count collision shapes for performance monitoring
+	call_deferred("debug_count_collision_shapes")
 
 
 func _process(delta):
@@ -618,8 +639,87 @@ func _verify_collision_setup(mmi: MultiMeshInstance3D, layer_name: String):
 		print("[VERIFY] ERROR: No StaticBody3D found on MMI for ", layer_name)
 
 
+func _add_capped_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[Transform3D], layer: FoliageLayer, chunk_center: Vector3):
+	"""Add collision shapes with a HARD CAP to prevent performance issues"""
+	var area = Area3D.new()
+	area.name = "FoliageCollision"
+	area.set_collision_layer_value(1, false)
+	area.set_collision_layer_value(2, true)
+	area.collision_mask = 0
+
+	# CRITICAL: Hard cap on collision shapes per chunk
+	var max_collision_shapes = 50  # Even more aggressive cap for performance
+	var collision_count = min(items.size(), max_collision_shapes)
+
+	if items.size() > max_collision_shapes and debug_performance:
+		print("[PERF WARNING] Layer '", layer.layer_name, "' has ", items.size(), " items, capping collision to ", max_collision_shapes)
+
+	for i in range(collision_count):
+		var item_transform = items[i]
+
+		if not layer.cached_collision_shape:
+			continue
+
+		var collision_shape = CollisionShape3D.new()
+		collision_shape.shape = layer.cached_collision_shape
+		collision_shape.name = "Shape_" + str(i)
+
+		var item_scale = item_transform.basis.get_scale()
+		var relative_pos = item_transform.origin - chunk_center
+		var scaled_offset = layer.cached_collision_transform.origin * item_scale
+		relative_pos += scaled_offset
+
+		collision_shape.rotation = layer.cached_collision_transform.basis.get_euler()
+		collision_shape.scale = item_scale
+		collision_shape.position = relative_pos
+
+		collision_shape.set_meta("multimesh_instance_index", i)
+		collision_shape.set_meta("foliage_layer", layer)
+
+		area.add_child(collision_shape)
+
+	mmi.add_child(area)
+	area.call_deferred("force_update_transform")
+
+
+func _add_optimized_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[Transform3D], layer: FoliageLayer, chunk_center: Vector3):
+	"""Add ONE broad collision area for the entire chunk - much more efficient than per-instance shapes"""
+	var area = Area3D.new()
+	area.name = "FoliageCollision"
+	area.set_collision_layer_value(1, false)  # Not on layer 1
+	area.set_collision_layer_value(2, true)   # Layer 2 for interactions
+	area.collision_mask = 0   # No collision mask
+	area.monitorable = true  # IMPORTANT: Make sure area can be detected
+	area.monitoring = false  # Don't need to monitor other areas
+
+	# Store metadata about the layer and items for manual raycast checking
+	area.set_meta("foliage_layer", layer)
+	area.set_meta("item_transforms", items)
+	area.set_meta("chunk_center", chunk_center)
+	area.set_meta("multimesh_instance", mmi)
+
+	# Create ONE large box shape that covers the entire chunk
+	var collision_shape = CollisionShape3D.new()
+	var box_shape = BoxShape3D.new()
+	# Make the box cover the chunk area with some height for the foliage
+	box_shape.size = Vector3(chunk_size, 20.0, chunk_size)  # 20m height should cover most foliage
+	collision_shape.shape = box_shape
+	collision_shape.position = Vector3.ZERO  # Centered on MMI position (chunk center)
+	collision_shape.position.y = 10.0  # Offset up so box sits above ground
+	collision_shape.disabled = false  # Ensure shape is enabled
+
+	area.add_child(collision_shape)
+	mmi.add_child(area)
+
+	# Force physics server to process the collision shape
+	area.call_deferred("force_update_transform")
+
+	if debug_performance:
+		print("[OPTIMIZED] Added broad collision for layer '", layer.layer_name, "' at ", chunk_center, " with ", items.size(), " items")
+
+
 func _add_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[Transform3D], layer: FoliageLayer, chunk_center: Vector3):
-	"""Add collision shapes to MultiMesh for interaction raycasting"""
+	"""DEPRECATED - Old per-instance collision (causes terrible performance with dense foliage)"""
 	# Use Area3D instead of StaticBody3D (Area3D works better with raycasts)
 	var area = Area3D.new()
 	area.name = "FoliageCollision"
@@ -759,9 +859,9 @@ func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], 
 		mmi.multimesh = multimesh
 		mmi.position = chunk_center
 
-		# Add collision for interactable layers
+		# Add collision for interactable layers - BUT WITH A HARD CAP
 		if layer.is_interactable:
-			_add_multimesh_collision(mmi, items, layer, chunk_center)
+			_add_capped_multimesh_collision(mmi, items, layer, chunk_center)
 
 		# Set sorting mode for proper depth testing
 		mmi.sorting_offset = 0.0
@@ -973,3 +1073,27 @@ func get_visible_tree_positions() -> Array[Vector3]:
 
 func is_debug_mode_enabled() -> bool:
 	return debug_show_on_minimap
+
+
+func _force_clear_all_chunks():
+	"""Debug function to clear all chunks and force reload"""
+	print("[DEBUG] Clearing all ", loaded_chunks.size(), " chunks...")
+	var chunks_to_clear = loaded_chunks.keys().duplicate()
+	for chunk_key in chunks_to_clear:
+		unload_chunk(chunk_key)
+	print("[DEBUG] All chunks cleared. They will reload on next update.")
+
+
+func debug_count_collision_shapes() -> int:
+	"""Count total collision shapes across all loaded chunks"""
+	var total_shapes = 0
+	for chunk_data in loaded_chunks.values():
+		for layer_data in chunk_data.layers.values():
+			for mmi in layer_data.multimesh_instances:
+				var area = mmi.get_node_or_null("FoliageCollision")
+				if area:
+					for child in area.get_children():
+						if child is CollisionShape3D:
+							total_shapes += 1
+	print("[DEBUG] Total collision shapes in ", loaded_chunks.size(), " chunks: ", total_shapes)
+	return total_shapes

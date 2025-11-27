@@ -110,7 +110,10 @@ func initialize() -> bool:
 	# Setup noise if needed
 	if use_noise_distribution:
 		noise = FastNoiseLite.new()
-		noise.seed = noise_seed
+		# Combine noise_seed with layer_name hash to allow same resource with different layer names
+		# to have different distributions
+		var combined_seed = noise_seed + hash(layer_name)
+		noise.seed = combined_seed
 		noise.frequency = noise_scale
 
 	return true

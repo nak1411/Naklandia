@@ -1,14 +1,14 @@
 [gd_resource type="Resource" script_class="FoliageLayer" load_steps=3 format=3 uid="uid://sj1t05nb2eea"]
 
-[ext_resource type="Texture2D" uid="uid://dtk1xq4t2ueov" path="res://assets/models/foliage/materials/bush01_4.png" id="1_kvstg"]
-[ext_resource type="Script" uid="uid://dh07duejch1vv" path="res://scripts/world/environment/FoliageLayer.gd" id="1_wmtd0"]
+[ext_resource type="Texture2D" uid="uid://dtk1xq4t2ueov" path="res://assets/models/foliage/materials/bush01_4.png" id="1_grlrq"]
+[ext_resource type="Script" uid="uid://dh07duejch1vv" path="res://scripts/world/environment/FoliageLayer.gd" id="2_30smu"]
 
 [resource]
-script = ExtResource("1_wmtd0")
-layer_name = "Bushes"
+script = ExtResource("2_30smu")
+layer_name = "Bushes03"
 enabled = true
-scene_path = "res://assets/models/foliage/bush02_s.tscn"
-density = 0.05
+scene_path = "res://assets/models/foliage/bush03_s.tscn"
+density = 0.01
 min_scale = 0.1
 max_scale = 0.3
 random_rotation = true
@@ -21,7 +21,7 @@ water_level = 0.0
 use_noise_distribution = true
 noise_threshold = -0.5
 noise_scale = 0.02
-noise_seed = 0
+noise_seed = 45
 min_spacing = 1.0
 use_lod = true
 lod_distance_near = 50.0
@@ -35,7 +35,7 @@ use_custom_visibility_range = true
 visibility_range_end = 100.0
 visibility_fade_margin = 15.0
 use_impostors = true
-impostor_texture = ExtResource("1_kvstg")
+impostor_texture = ExtResource("1_grlrq")
 impostor_distance = 150.0
 impostor_size = Vector2(4, 8)
 avoid_layers = Array[String]([])
@@ -57,4 +57,10 @@ harvest_items = Array[Dictionary]([{
 "min_amount": 1
 }])
 harvest_experience = 5
+drop_physical_items = false
+physical_item_scene_path = ""
+physical_drop_count_min = 1
+physical_drop_count_max = 3
+scale_affects_drops = true
+drop_spread_radius = 1.5
 metadata/_custom_type_script = "uid://dh07duejch1vv"

@@ -1,4 +1,4 @@
-[gd_scene load_steps=32 format=3 uid="uid://u68ixamg76uy"]
+[gd_scene load_steps=34 format=3 uid="uid://u68ixamg76uy"]
 
 [ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
 [ext_resource type="PackedScene" uid="uid://dvusnrd1ps7xx" path="res://scenes/objects/interactable_container.tscn" id="2_1swwb"]
@@ -14,7 +14,9 @@
 [ext_resource type="Script" uid="uid://4a8s0ucu515o" path="res://scripts/world/environment/ProceduralFoliageSpawner.gd" id="12_m0jab"]
 [ext_resource type="Script" uid="uid://dh07duejch1vv" path="res://scripts/world/environment/FoliageLayer.gd" id="13_3uiii"]
 [ext_resource type="Resource" uid="uid://bciakaedl3yrv" path="res://assets/models/foliage/trees.tres" id="14_0g8h2"]
-[ext_resource type="Resource" uid="uid://sj1t05nb2eea" path="res://assets/models/foliage/bushes.tres" id="15_0g8h2"]
+[ext_resource type="Resource" uid="uid://sj1t05nb2eea" path="res://assets/models/foliage/bushes03.tres" id="15_0g8h2"]
+[ext_resource type="Resource" uid="uid://2gh6c8xbecms" path="res://assets/models/foliage/bushes01.tres" id="16_c7h6s"]
+[ext_resource type="Resource" uid="uid://cl8msp0x3x36t" path="res://assets/models/foliage/bushes02.tres" id="17_7g4hs"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_6mm6u"]
 panorama = ExtResource("2_6i17e")
@@ -257,6 +259,7 @@ script = ExtResource("11_w0gou")
 
 [node name="ProceduralTreeSpawner" type="Node3D" parent="."]
 script = ExtResource("12_m0jab")
-foliage_layers = Array[ExtResource("13_3uiii")]([ExtResource("14_0g8h2"), ExtResource("15_0g8h2")])
+foliage_layers = Array[ExtResource("13_3uiii")]([ExtResource("14_0g8h2"), ExtResource("16_c7h6s"), ExtResource("17_7g4hs"), ExtResource("15_0g8h2")])
 debug_performance = true
 debug_detailed_profiling = true
+debug_show_collision_shapes = true
