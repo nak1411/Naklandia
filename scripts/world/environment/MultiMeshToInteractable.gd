@@ -103,9 +103,14 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	var interactable_node: InteractableFoliage
 
 	# Wrap the scene in an InteractableFoliage node if needed
+	var child_base_scale = Vector3.ONE
 	if foliage_instance is InteractableFoliage:
 		interactable_node = foliage_instance
 	else:
+		# Get the child scene's base scale before wrapping
+		if foliage_instance is Node3D:
+			child_base_scale = foliage_instance.scale
+
 		interactable_node = InteractableFoliage.new()
 		interactable_node.add_child(foliage_instance)
 
@@ -148,8 +153,19 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	get_tree().current_scene.add_child(interactable_node)
 
 	# THEN set the transform
-	# Since the scene is now at scale 1.0, we can apply the world_transform directly
-	interactable_node.global_transform = world_transform
+	# CRITICAL: If the child scene has a base scale (like 0.1), we need to compensate
+	# so the final visual scale matches the MultiMesh
+	if child_base_scale != Vector3.ONE:
+		# The child has a base scale, so divide it out from the world transform
+		var adjusted_scale = world_transform.basis.get_scale() / child_base_scale
+		var adjusted_transform = Transform3D(
+			world_transform.basis.orthonormalized().scaled(adjusted_scale),
+			world_transform.origin
+		)
+		interactable_node.global_transform = adjusted_transform
+	else:
+		# No child scale, use transform directly
+		interactable_node.global_transform = world_transform
 
 	# CRITICAL: Set original_scale AFTER adding to tree and setting the scale
 	# This is needed for the scale-based drop calculation in _spawn_physical_drops()
@@ -169,33 +185,18 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	active_original_transforms.clear()
 	for mmi_to_hide in active_all_mmis:
 		if mmi_to_hide.multimesh and instance_index < mmi_to_hide.multimesh.instance_count:
-			# Get the ORIGINAL world-space transform from metadata
-			var mmi_item_transforms: Array = mmi_to_hide.get_meta("item_transforms", [])
-			if instance_index < mmi_item_transforms.size():
-				# Get the world-space transform for this instance
-				var item_world_transform: Transform3D = mmi_item_transforms[instance_index]
+			# CRITICAL: Read the CURRENT transform from the MMI BEFORE we modify it
+			# This is the actual transform being used for rendering
+			var current_mmi_transform = mmi_to_hide.multimesh.get_instance_transform(instance_index)
 
-				# Convert to MMI-relative transform
-				var mmi_relative = Transform3D()
-				mmi_relative.origin = item_world_transform.origin - mmi_to_hide.global_position
-				mmi_relative.basis = item_world_transform.basis
+			print("[DEBUG] Storing original transform for instance ", instance_index)
+			print("[DEBUG]   Current MMI transform scale: ", current_mmi_transform.basis.get_scale())
+			print("[DEBUG]   Current MMI transform origin: ", current_mmi_transform.origin)
 
-				# Apply the mesh-specific local offset (same as ProceduralFoliageSpawner does)
-				# Each MMI (trunk, leaves) has its own local offset from cached_mesh_transforms
-				var mesh_idx = active_all_mmis.find(mmi_to_hide)
-				if mesh_idx >= 0 and mesh_idx < layer.cached_mesh_transforms.size():
-					var local_transform = layer.cached_mesh_transforms[mesh_idx]
-					var local_offset = Transform3D()
-					local_offset.origin = local_transform.origin
-					local_offset.basis = local_transform.basis.orthonormalized()
-					# Apply the offset: final = base * offset
-					mmi_relative = mmi_relative * local_offset
-
-				active_original_transforms[mmi_to_hide] = mmi_relative
-			else:
-				# Fallback: read current transform from MMI (might be wrong if already hidden!)
-				push_warning("[MultiMeshToInteractable] Instance index out of bounds in metadata, using MMI transform")
-				active_original_transforms[mmi_to_hide] = mmi_to_hide.multimesh.get_instance_transform(instance_index)
+			# Store the current transform (not from metadata, which might have different offsets applied!)
+			active_original_transforms[mmi_to_hide] = current_mmi_transform
+		else:
+			push_warning("[MultiMeshToInteractable] Instance index out of bounds, cannot store transform")
 
 	# Hide this instance in ALL MultiMeshes (trunk, leaves, etc.)
 	for mmi_to_hide in active_all_mmis:
@@ -247,9 +248,9 @@ func _hide_multimesh_instance(mmi: MultiMeshInstance3D, instance_index: int):
 	# IMPORTANT: Create a proper deep copy of the transform so we don't modify the original!
 	var original = active_original_transforms[mmi]
 	var hidden_transform = Transform3D()
-	hidden_transform.basis = original.basis
-	hidden_transform.origin = original.origin
-	hidden_transform.origin.y -= 10000.0  # Move underground
+	# Properly copy the basis by creating a new Basis from the original's components
+	hidden_transform.basis = Basis(original.basis.x, original.basis.y, original.basis.z)
+	hidden_transform.origin = Vector3(original.origin.x, original.origin.y - 10000.0, original.origin.z)
 
 	print("[DEBUG] Hiding instance ", instance_index, " - Original Y: ", original.origin.y, " | Hidden Y: ", hidden_transform.origin.y)
 	mmi.multimesh.set_instance_transform(instance_index, hidden_transform)
@@ -260,7 +261,16 @@ func _restore_multimesh_instance(mmi: MultiMeshInstance3D, instance_index: int, 
 	if not mmi.multimesh or instance_index >= mmi.multimesh.instance_count:
 		return
 
+	print("[DEBUG] Restoring instance ", instance_index)
+	print("[DEBUG]   Original transform scale: ", original_transform.basis.get_scale())
+	print("[DEBUG]   Original transform origin: ", original_transform.origin)
+
 	mmi.multimesh.set_instance_transform(instance_index, original_transform)
+
+	# Verify the restore worked
+	var restored = mmi.multimesh.get_instance_transform(instance_index)
+	print("[DEBUG]   After restore scale: ", restored.basis.get_scale())
+	print("[DEBUG]   After restore origin: ", restored.origin)
 
 
 func _disable_collision_for_instance(mmi: MultiMeshInstance3D, instance_index: int):
