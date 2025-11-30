@@ -502,9 +502,9 @@ func load_chunk(chunk_x: int, chunk_z: int):
 		if debug_detailed_profiling:
 			prof_chunk_gen_time += float(Time.get_ticks_usec() - gen_start) / 1000000.0
 
-		# DEBUG: Print item count per chunk to verify consistent distribution
-		if layer.layer_name == "Bushes01" and debug_performance:
-			print("[CHUNK GEN] ", chunk_key, " - ", layer.layer_name, ": ", items_in_chunk.size(), " items | Distance: ", "%.1f" % min_distance_to_chunk, "m | Initial: ", is_doing_initial_load)
+		# DEBUG: Print item count per chunk to verify consistent distribution (disabled to reduce spam)
+		# if layer.layer_name == "Bushes01" and debug_performance:
+		# 	print("[CHUNK GEN] ", chunk_key, " - ", layer.layer_name, ": ", items_in_chunk.size(), " items | Distance: ", "%.1f" % min_distance_to_chunk, "m | Initial: ", is_doing_initial_load)
 
 		if items_in_chunk.size() == 0:
 			continue
@@ -1077,8 +1077,9 @@ func generate_items_for_layer(chunk_x: float, chunk_z: float, layer: FoliageLaye
 	if debug_detailed_profiling:
 		prof_terrain_query_time += float(Time.get_ticks_usec() - query_start) / 1000000.0
 		prof_terrain_query_count += candidates.size() * 2  # height + normal per candidate
-		if candidates.size() > 0:
-			print("  Layer '", layer.layer_name, "' chunk [", int(chunk_x/chunk_size), ",", int(chunk_z/chunk_size), "]: ", candidates.size(), " candidates, ", valid_count, " valid, ", items.size(), " items created")
+		# Disabled to reduce spam
+		# if candidates.size() > 0:
+		# 	print("  Layer '", layer.layer_name, "' chunk [", int(chunk_x/chunk_size), ",", int(chunk_z/chunk_size), "]: ", candidates.size(), " candidates, ", valid_count, " valid, ", items.size(), " items created")
 
 	return items
 

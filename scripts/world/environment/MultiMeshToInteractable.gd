@@ -84,72 +84,30 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	if not mmi.multimesh or instance_index >= mmi.multimesh.instance_count:
 		return null
 
-	# Find ALL MMIs for this layer FIRST to get consistent transform
+	# Find ALL MMIs for this layer FIRST
 	var all_mmis = _find_all_mmis_for_layer(mmi, layer)
+	# Get the ORIGINAL world-space transform from metadata that was stored
+	# during chunk generation (before local offsets were applied).
+	var stored_transforms: Array = mmi.get_meta("item_transforms", [])
+	if instance_index >= stored_transforms.size():
+		push_error("[MultiMeshToInteractable] Instance index ", instance_index, " out of bounds (", stored_transforms.size(), " transforms)")
+		return null
 
-	# IMPORTANT: Use the FIRST MMI's transform as the reference point
-	# This ensures consistent positioning regardless of which mesh part was hit
-	var reference_mmi = all_mmis[0] if all_mmis.size() > 0 else mmi
-	print("[DEBUG] Hit MMI: ", mmi.name, " | Using reference MMI: ", reference_mmi.name, " | Total MMIs: ", all_mmis.size())
-
-	# Get the transform of this specific instance (relative to reference MMI)
-	var instance_transform = reference_mmi.multimesh.get_instance_transform(instance_index)
-
-	# CRITICAL: The instance_transform includes a mesh-specific local offset that was applied
-	# in ProceduralFoliageSpawner at line 744: final_transform = relative_transform * local_offset
-	# We need to REMOVE this local offset to get back to the base item transform
-	# The local offset is stored in layer.cached_mesh_transforms[0] for the reference MMI
-	var reference_local_offset = layer.cached_mesh_transforms[0] if layer.cached_mesh_transforms.size() > 0 else Transform3D.IDENTITY
-
-	# IMPORTANT: Extract the scale BEFORE removing the local offset
-	# The instance_transform contains the randomized scale we need to preserve
-	var original_scale = instance_transform.basis.get_scale()
-
-	# Create a transform from instance_transform but with scale normalized
-	var instance_no_scale = Transform3D()
-	instance_no_scale.origin = instance_transform.origin
-	instance_no_scale.basis = instance_transform.basis.orthonormalized()
-
-	# Create a local offset without scale (only position and rotation)
-	var local_offset_no_scale = Transform3D()
-	local_offset_no_scale.origin = reference_local_offset.origin
-	local_offset_no_scale.basis = reference_local_offset.basis.orthonormalized()
-
-	# Remove the local offset from the position/rotation
-	var base_transform_no_scale = instance_no_scale * local_offset_no_scale.inverse()
-
-	# Now create the final base_transform with the original scale applied
-	var base_transform = Transform3D()
-	base_transform.origin = base_transform_no_scale.origin
-	base_transform.basis = base_transform_no_scale.basis.scaled(original_scale)
-
-	print("[DEBUG] Instance transform origin: ", instance_transform.origin)
-	print("[DEBUG] Instance transform basis scale: ", instance_transform.basis.get_scale())
-	print("[DEBUG] Original scale from MMI: ", original_scale)
-	print("[DEBUG] Local offset: ", reference_local_offset.origin)
-	print("[DEBUG] Base transform origin: ", base_transform.origin)
-	print("[DEBUG] Base transform basis scale: ", base_transform.basis.get_scale())
-
-	# Convert to world space using reference MMI position and base transform
-	var world_transform = reference_mmi.global_transform * base_transform
+	# This is the original world-space transform from ProceduralFoliageSpawner.generate_items_for_layer()
+	var original_world_transform: Transform3D = stored_transforms[instance_index]
+	var world_transform = original_world_transform
 
 	# Create the interactable node
-	print("[DEBUG] Converting MMI to interactable - Layer: ", layer.layer_name, " | Scene: ", layer.scene_path)
-	print("[DEBUG] Layer has ", layer.cached_meshes.size(), " cached meshes")
 	var foliage_instance = layer.scene.instantiate()
+
 	var interactable_node: InteractableFoliage
 
-	# Get the default scale of the scene before we modify it
-	var scene_default_scale = Vector3.ONE
+	# Wrap the scene in an InteractableFoliage node if needed
 	if foliage_instance is InteractableFoliage:
 		interactable_node = foliage_instance
-		scene_default_scale = interactable_node.scale
 	else:
 		interactable_node = InteractableFoliage.new()
-		scene_default_scale = foliage_instance.scale if foliage_instance is Node3D else Vector3.ONE
 		interactable_node.add_child(foliage_instance)
-
-	print("[DEBUG] Scene default scale: ", scene_default_scale, " | MultiMesh scale: ", instance_transform.basis.get_scale())
 
 	# Configure properties from layer BEFORE adding to scene
 	interactable_node.foliage_type = layer.foliage_type_name
@@ -189,26 +147,9 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	# Add to scene FIRST
 	get_tree().current_scene.add_child(interactable_node)
 
-	# THEN set position, rotation, and scale using the transform directly
-	# Extract rotation basis without scale (orthonormalized)
-	var rotation_basis = world_transform.basis.orthonormalized()
-
-	# Set position
-	interactable_node.global_position = world_transform.origin
-
-	# Apply scale and rotation together to avoid overwriting
-	# The MMI scale is already the absolute final scale we want
-	# The scene has a base scale of 0.1, but the MMI scale already accounts for this
-	var multimesh_scale = original_scale
-	var adjusted_scale = multimesh_scale / scene_default_scale
-
-	# IMPORTANT: Apply scale to the rotation basis BEFORE setting it
-	# Otherwise setting global_transform.basis will overwrite the scale we just set!
-	var scaled_rotation_basis = rotation_basis.scaled(adjusted_scale)
-	interactable_node.global_transform.basis = scaled_rotation_basis
-
-	print("[DEBUG] MultiMesh scale: ", multimesh_scale, " | Scene default: ", scene_default_scale, " | Adjusted: ", adjusted_scale)
-	print("[DEBUG] After setting scale - Node scale: ", interactable_node.scale, " | Global scale: ", interactable_node.global_transform.basis.get_scale())
+	# THEN set the transform
+	# Since the scene is now at scale 1.0, we can apply the world_transform directly
+	interactable_node.global_transform = world_transform
 
 	# CRITICAL: Set original_scale AFTER adding to tree and setting the scale
 	# This is needed for the scale-based drop calculation in _spawn_physical_drops()
@@ -224,30 +165,36 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	active_layer = layer
 
 	# Store original transforms from metadata (NOT from MMI, which might be corrupted/hidden!)
+	# We need to store the MMI-relative transforms so we can restore them when unhovered
 	active_original_transforms.clear()
 	for mmi_to_hide in active_all_mmis:
 		if mmi_to_hide.multimesh and instance_index < mmi_to_hide.multimesh.instance_count:
-			# Get the ORIGINAL transform from metadata, not from the MMI
-			var item_transforms: Array = mmi_to_hide.get_meta("item_transforms", [])
-			if instance_index < item_transforms.size():
-				# Convert world-space transform to MMI-relative transform
-				var item_world_transform = item_transforms[instance_index]
+			# Get the ORIGINAL world-space transform from metadata
+			var mmi_item_transforms: Array = mmi_to_hide.get_meta("item_transforms", [])
+			if instance_index < mmi_item_transforms.size():
+				# Get the world-space transform for this instance
+				var item_world_transform: Transform3D = mmi_item_transforms[instance_index]
+
+				# Convert to MMI-relative transform
 				var mmi_relative = Transform3D()
 				mmi_relative.origin = item_world_transform.origin - mmi_to_hide.global_position
 				mmi_relative.basis = item_world_transform.basis
 
-				# Apply local mesh offset (same as in ProceduralFoliageSpawner)
+				# Apply the mesh-specific local offset (same as ProceduralFoliageSpawner does)
+				# Each MMI (trunk, leaves) has its own local offset from cached_mesh_transforms
 				var mesh_idx = active_all_mmis.find(mmi_to_hide)
 				if mesh_idx >= 0 and mesh_idx < layer.cached_mesh_transforms.size():
 					var local_transform = layer.cached_mesh_transforms[mesh_idx]
 					var local_offset = Transform3D()
 					local_offset.origin = local_transform.origin
 					local_offset.basis = local_transform.basis.orthonormalized()
+					# Apply the offset: final = base * offset
 					mmi_relative = mmi_relative * local_offset
 
 				active_original_transforms[mmi_to_hide] = mmi_relative
 			else:
-				# Fallback: read from MMI (might be wrong if already hidden!)
+				# Fallback: read current transform from MMI (might be wrong if already hidden!)
+				push_warning("[MultiMeshToInteractable] Instance index out of bounds in metadata, using MMI transform")
 				active_original_transforms[mmi_to_hide] = mmi_to_hide.multimesh.get_instance_transform(instance_index)
 
 	# Hide this instance in ALL MultiMeshes (trunk, leaves, etc.)
@@ -421,6 +368,57 @@ func _find_collision_shape(node: Node) -> CollisionShape3D:
 			return result
 
 	return null
+
+
+func _fix_scene_materials(scene_root: Node, layer: FoliageLayer) -> void:
+	"""Fix UV stretching by matching scene meshes with cached meshes by mesh data, not by order"""
+	# Find all MeshInstance3D nodes in the scene
+	var mesh_instances = _get_all_mesh_instances_recursive(scene_root)
+
+	# Match each scene mesh with its corresponding cached mesh by comparing the mesh resource
+	for scene_mesh_inst in mesh_instances:
+		if not scene_mesh_inst.mesh:
+			continue
+
+		# Find the matching cached mesh by comparing mesh resources
+		for i in range(layer.cached_meshes.size()):
+			var cached_mesh = layer.cached_meshes[i]
+
+			# Check if this is the same mesh (same resource)
+			if scene_mesh_inst.mesh == cached_mesh:
+				# Found a match! But we don't need to copy the material because
+				# they're using the same mesh resource, which already has the correct material
+				# The issue must be something else
+				break
+
+
+func _get_all_mesh_instances_recursive(node: Node) -> Array[MeshInstance3D]:
+	"""Recursively find all MeshInstance3D nodes"""
+	var result: Array[MeshInstance3D] = []
+
+	if node is MeshInstance3D:
+		result.append(node)
+
+	for child in node.get_children():
+		result.append_array(_get_all_mesh_instances_recursive(child))
+
+	return result
+
+
+func _debug_print_scene_hierarchy(node: Node, indent: String = "  ") -> void:
+	"""Debug helper to print scene hierarchy"""
+	print("[DEBUG] ", indent, node.get_class(), " | Name: ", node.name)
+	if node is Node3D:
+		var n3d = node as Node3D
+		print("[DEBUG] ", indent, "  Transform: pos=", n3d.position, " rot=", n3d.rotation, " scale=", n3d.scale)
+	if node is MeshInstance3D:
+		var mesh_inst = node as MeshInstance3D
+		if mesh_inst.mesh and mesh_inst.mesh.get_surface_count() > 0:
+			var mat = mesh_inst.mesh.surface_get_material(0)
+			print("[DEBUG] ", indent, "  Mesh surfaces: ", mesh_inst.mesh.get_surface_count())
+			print("[DEBUG] ", indent, "  Material: ", mat.get_class() if mat else "None")
+	for child in node.get_children():
+		_debug_print_scene_hierarchy(child, indent + "  ")
 
 
 func _create_debug_collision_mesh(collision_shape: CollisionShape3D) -> MeshInstance3D:

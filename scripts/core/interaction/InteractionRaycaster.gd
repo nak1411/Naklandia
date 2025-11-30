@@ -210,9 +210,4 @@ func _convert_multimesh_to_interactable(raycast_result: Dictionary, foliage_area
 		return null
 
 	# Use the converter to create/get the interactable
-	return multimesh_converter.convert_to_interactable({
-		"mmi": mmi,
-		"instance_index": instance_index,
-		"layer": layer,
-		"position": raycast_result.get("position", Vector3.ZERO)
-	})
+	return multimesh_converter.convert_to_interactable({"mmi": mmi, "instance_index": instance_index, "layer": layer, "position": raycast_result.get("position", Vector3.ZERO)})
