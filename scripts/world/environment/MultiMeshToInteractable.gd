@@ -100,19 +100,22 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 	# Create the interactable node
 	var foliage_instance = layer.scene.instantiate()
 
+	# DEBUG: Print the scene hierarchy and mesh info
+	print("[MMI2Interactable] Converting instance ", instance_index, " of layer '", layer.layer_name, "'")
+	print("[MMI2Interactable] Instantiated scene structure:")
+	_debug_print_scene_hierarchy(foliage_instance, "  ")
+
 	var interactable_node: InteractableFoliage
+	var scene_root_node: Node3D = null  # Track the actual scene root for transform
 
 	# Wrap the scene in an InteractableFoliage node if needed
-	var child_base_scale = Vector3.ONE
 	if foliage_instance is InteractableFoliage:
 		interactable_node = foliage_instance
+		scene_root_node = foliage_instance  # The scene root IS the interactable
 	else:
-		# Get the child scene's base scale before wrapping
-		if foliage_instance is Node3D:
-			child_base_scale = foliage_instance.scale
-
 		interactable_node = InteractableFoliage.new()
 		interactable_node.add_child(foliage_instance)
+		scene_root_node = foliage_instance as Node3D  # The scene root is the child
 
 	# Configure properties from layer BEFORE adding to scene
 	interactable_node.foliage_type = layer.foliage_type_name
@@ -149,23 +152,24 @@ func _convert_instance_to_interactable(mmi: MultiMeshInstance3D, instance_index:
 		else:
 			print("WARNING: No collision shape found in scene for layer ", layer.layer_name)
 
+	# CRITICAL FIX: Reset the scene root's transform to identity BEFORE adding to tree
+	# The cached transforms already include the scene root's scale/rotation/position
+	# If we don't reset it, we'll apply the scene's transform twice!
+	if scene_root_node and scene_root_node != interactable_node:
+		# The scene root is a child of the wrapper - reset its transform to identity
+		scene_root_node.transform = Transform3D.IDENTITY
+
+	# CRITICAL: Copy materials from ALL MMIs to match the MultiMesh appearance
+	# Each MMI (trunk, leaves, etc.) has its own material_override for fading
+	# We need to match the cached meshes with the scene's mesh instances
+	_copy_materials_from_all_mmis(all_mmis, layer, scene_root_node if scene_root_node else interactable_node)
+
 	# Add to scene FIRST
 	get_tree().current_scene.add_child(interactable_node)
 
-	# THEN set the transform
-	# CRITICAL: If the child scene has a base scale (like 0.1), we need to compensate
-	# so the final visual scale matches the MultiMesh
-	if child_base_scale != Vector3.ONE:
-		# The child has a base scale, so divide it out from the world transform
-		var adjusted_scale = world_transform.basis.get_scale() / child_base_scale
-		var adjusted_transform = Transform3D(
-			world_transform.basis.orthonormalized().scaled(adjusted_scale),
-			world_transform.origin
-		)
-		interactable_node.global_transform = adjusted_transform
-	else:
-		# No child scale, use transform directly
-		interactable_node.global_transform = world_transform
+	# THEN set the world transform on the interactable wrapper
+	# This transform already has everything baked in from the MultiMesh
+	interactable_node.global_transform = world_transform
 
 	# CRITICAL: Set original_scale AFTER adding to tree and setting the scale
 	# This is needed for the scale-based drop calculation in _spawn_physical_drops()
@@ -473,6 +477,41 @@ func _create_debug_collision_mesh(collision_shape: CollisionShape3D) -> MeshInst
 	mesh_instance.material_override = mat
 
 	return mesh_instance
+
+
+func _copy_materials_from_all_mmis(all_mmis: Array[MultiMeshInstance3D], layer: FoliageLayer, target_node: Node3D) -> void:
+	"""Copy material overrides from all MMIs to match their corresponding meshes in the scene"""
+	if not is_instance_valid(target_node):
+		return
+
+	print("[MMI2Interactable] Copying materials from ", all_mmis.size(), " MMIs to interactable")
+
+	# Get all mesh instances in the target scene
+	var scene_mesh_instances = _get_all_mesh_instances_recursive(target_node)
+	print("[MMI2Interactable]   Found ", scene_mesh_instances.size(), " mesh instances in scene")
+
+	# Match each MMI with its corresponding scene mesh by comparing with cached meshes
+	for i in range(min(all_mmis.size(), layer.cached_meshes.size())):
+		var source_mmi = all_mmis[i]
+		var cached_mesh = layer.cached_meshes[i]
+
+		if not is_instance_valid(source_mmi):
+			continue
+
+		# Find the scene mesh instance that uses this cached mesh
+		for scene_mesh_inst in scene_mesh_instances:
+			if scene_mesh_inst.mesh == cached_mesh:
+				print("[MMI2Interactable]   Matching MMI[", i, "] to scene mesh '", scene_mesh_inst.name, "'")
+
+				# Copy material override from this specific MMI
+				if source_mmi.material_override:
+					# CRITICAL: Duplicate to avoid sharing state
+					var duplicated_material = source_mmi.material_override.duplicate()
+					print("[MMI2Interactable]     Applying material override: ", duplicated_material.get_class())
+					scene_mesh_inst.material_override = duplicated_material
+				else:
+					print("[MMI2Interactable]     No material override, using mesh default")
+				break
 
 
 func convert_to_interactable(hit_data: Dictionary) -> InteractableFoliage:

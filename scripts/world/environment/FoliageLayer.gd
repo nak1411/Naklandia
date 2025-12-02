@@ -97,6 +97,7 @@ extends Resource
 # Runtime cache
 var cached_meshes: Array[Mesh] = []
 var cached_mesh_transforms: Array[Transform3D] = []  # Local transforms for each mesh
+var cached_scene_root_scale: Vector3 = Vector3.ONE  # Scene root's scale (e.g., 0.1 for bushes)
 var cached_collision_shape: Shape3D = null  # Collision shape from scene (if exists)
 var cached_collision_transform: Transform3D = Transform3D.IDENTITY  # Transform of collision shape
 var noise: FastNoiseLite = null
@@ -137,12 +138,21 @@ func cache_meshes() -> void:
 	cached_mesh_transforms.clear()
 	var temp_instance = scene.instantiate()
 
-	# Cache meshes
+	# Cache the scene root's scale (e.g., bush01_s.tscn has scale=0.1)
+	cached_scene_root_scale = temp_instance.scale if temp_instance is Node3D else Vector3.ONE
+
+	# Cache meshes and their transforms relative to the scene root
 	var mesh_nodes = _get_all_mesh_instances(temp_instance)
-	for mesh_node in mesh_nodes:
+	print("[FoliageLayer] Caching ", mesh_nodes.size(), " meshes for layer '", layer_name, "'")
+	for i in range(mesh_nodes.size()):
+		var mesh_node = mesh_nodes[i]
 		if mesh_node.mesh:
 			cached_meshes.append(mesh_node.mesh)
-			cached_mesh_transforms.append(mesh_node.transform)
+			# Get the mesh's transform by walking up the hierarchy to the scene root
+			# This avoids using affine_inverse which can cause scale inversions
+			var relative_transform = _get_transform_relative_to_ancestor(mesh_node, temp_instance)
+			print("[FoliageLayer]   Mesh ", i, " (", mesh_node.name, "): local_transform=", mesh_node.transform, " | relative_transform=", relative_transform)
+			cached_mesh_transforms.append(relative_transform)
 
 	# Cache collision shape if it exists in the scene
 	var collision_node = _find_collision_shape(temp_instance)
@@ -179,6 +189,23 @@ func _get_all_mesh_instances(node: Node) -> Array[MeshInstance3D]:
 		meshes.append_array(_get_all_mesh_instances(child))
 
 	return meshes
+
+func _get_transform_relative_to_ancestor(node: Node3D, ancestor: Node3D) -> Transform3D:
+	"""Get a node's transform relative to an ancestor by walking up the hierarchy"""
+	var result = Transform3D.IDENTITY
+	var current = node
+
+	# Walk up the hierarchy, accumulating transforms
+	while current != ancestor and current != null:
+		result = current.transform * result
+		current = current.get_parent() as Node3D
+
+		# Safety check - if we reach the root without finding ancestor, something is wrong
+		if current == null:
+			push_error("Node is not a descendant of the given ancestor")
+			return Transform3D.IDENTITY
+
+	return result
 
 func validate_spawn_position(pos: Vector3, terrain: Terrain3D) -> Dictionary:
 	"""Check if this position is valid for spawning this layer's items.
