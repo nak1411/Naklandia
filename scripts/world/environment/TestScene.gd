@@ -10,7 +10,8 @@ func _ready():
 
 	# Wait for everything to initialize properly
 	await get_tree().process_frame
-	_load_window_position()
+	# DON'T load window position - let GraphicsManager handle this
+	# _load_window_position()
 
 	# Generate procedural trees
 	generate_trees()
@@ -243,5 +244,6 @@ func _load_window_position():
 
 func _notification(what):
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		_save_window_position()
+		# DON'T save window position - GraphicsManager handles this
+		# _save_window_position()
 		get_tree().quit()

@@ -144,52 +144,17 @@ func _connect_to_workbench_window():
 
 func save_main_window_position():
 	"""Save main window position and size"""
-	var config = ConfigFile.new()
-	_load_existing_config(config)
-
-	var window_pos = DisplayServer.window_get_position()
-	var window_size = DisplayServer.window_get_size()
-	var window_mode = DisplayServer.window_get_mode()
-
-	config.set_value("main_window", "position_x", window_pos.x)
-	config.set_value("main_window", "position_y", window_pos.y)
-	config.set_value("main_window", "size_x", window_size.x)
-	config.set_value("main_window", "size_y", window_size.y)
-	config.set_value("main_window", "mode", window_mode)
-
-	var error = config.save(config_file_path)
-	if error != OK:
-		return false
-
+	# NOTE: Main window position/size/mode is now managed by GraphicsManager autoload
+	# This function is kept for backwards compatibility but does nothing
+	print("[WindowLayoutManager] Skipping main window save - GraphicsManager handles this now")
 	return true
 
 
 func load_main_window_position():
 	"""Load and apply saved main window position"""
-	var config = ConfigFile.new()
-	var error = config.load(config_file_path)
-
-	if error != OK:
-		return false
-
-	var pos_x = config.get_value("main_window", "position_x", -1)
-	var pos_y = config.get_value("main_window", "position_y", -1)
-	var size_x = config.get_value("main_window", "size_x", -1)
-	var size_y = config.get_value("main_window", "size_y", -1)
-	var mode = config.get_value("main_window", "mode", DisplayServer.WINDOW_MODE_WINDOWED)
-
-	# Apply window mode first
-	if mode != DisplayServer.window_get_mode():
-		DisplayServer.window_set_mode(mode)
-
-	# Apply position if valid
-	if pos_x >= 0 and pos_y >= 0 and _is_position_valid(Vector2i(pos_x, pos_y)):
-		DisplayServer.window_set_position(Vector2i(pos_x, pos_y))
-
-	# Apply size if valid
-	if size_x > 0 and size_y > 0:
-		DisplayServer.window_set_size(Vector2i(size_x, size_y))
-
+	# NOTE: Main window position/size/mode is now managed by GraphicsManager autoload
+	# This function is kept for backwards compatibility but does nothing
+	print("[WindowLayoutManager] Skipping main window load - GraphicsManager handles this now")
 	return true
 
 

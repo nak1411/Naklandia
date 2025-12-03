@@ -1,5 +1,5 @@
 # GraphicsManager.gd - Fixed for Godot 4.4
-class_name GraphicsManager
+# Note: This is an autoload singleton - don't use class_name
 extends Node
 
 # Signals
@@ -187,13 +187,17 @@ func apply_resolution(resolution: String, force_apply: bool = false):
 
 func apply_window_mode(mode: String):
 	"""Apply window mode setting"""
+	print("[GraphicsManager] Applying window mode: ", mode)
 	match mode:
 		"Windowed":
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			print("[GraphicsManager] Set to WINDOW_MODE_WINDOWED")
 		"Fullscreen":
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+			print("[GraphicsManager] Set to WINDOW_MODE_FULLSCREEN")
 		"Exclusive Fullscreen":
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+			print("[GraphicsManager] Set to WINDOW_MODE_EXCLUSIVE_FULLSCREEN")
 
 	current_settings["window_mode"] = mode
 	settings_changed.emit("window_mode", mode)
@@ -438,9 +442,13 @@ func _load_settings():
 	var err = config.load("user://graphics_settings.cfg")
 
 	if err == OK:
+		print("[GraphicsManager] Loading settings from graphics_settings.cfg")
 		for key in default_settings.keys():
 			current_settings[key] = config.get_value("graphics", key, default_settings[key])
+		print("[GraphicsManager] Loaded window_mode: ", current_settings.get("window_mode"))
+		print("[GraphicsManager] Loaded resolution: ", current_settings.get("resolution"))
 	else:
+		print("[GraphicsManager] No saved settings found, using defaults")
 		# Use defaults
 		current_settings = default_settings.duplicate()
 

@@ -12,7 +12,7 @@ var main_container: Panel
 var category_list: VBoxContainer
 var content_panel: Panel
 var content_container: VBoxContainer
-var graphics_manager: GraphicsManager
+var graphics_manager: Node  # GraphicsManager autoload singleton
 var audio_manager: AudioManager
 var gameplay_manager: GameplayManager
 
@@ -60,9 +60,8 @@ func _ready():
 
 
 func _setup_managers():
-	# Setup Graphics Manager
-	graphics_manager = GraphicsManager.new()
-	add_child(graphics_manager)
+	# Get the GraphicsManager singleton (autoload)
+	graphics_manager = get_node("/root/GraphicsManager")
 	graphics_manager.settings_changed.connect(_on_graphics_setting_changed)
 
 	# Setup Audio Manager
