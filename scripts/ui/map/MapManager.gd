@@ -72,6 +72,9 @@ func _setup_minimap_layer():
 	minimap.offset_top = 20.0
 	minimap.offset_bottom = 220.0  # 20 + 200 (minimap_size)
 
+	# Enable chunk overlay
+	minimap.set("show_chunk_overlay", true)
+
 	minimap_layer.add_child(minimap)
 
 

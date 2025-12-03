@@ -25,6 +25,14 @@ signal map_opened
 @export var grid_label_color: Color = Color(0.0, 0.0, 0.0, 1.0)
 @export var grid_label_size: int = 18
 
+# Chunk visualization
+@export_group("Chunk Visualization")
+@export var show_chunk_overlay: bool = false
+@export var chunk_size: float = 64.0  # Should match ProceduralFoliageSpawner chunk_size
+@export var unloaded_chunk_color: Color = Color(0.2, 0.2, 0.2, 0.3)
+@export var loaded_chunk_color: Color = Color(0.0, 0.8, 0.2, 0.5)
+@export var chunk_border_width: float = 2.0
+
 # State
 var is_map_open: bool = false
 var current_zoom: float = 0.1
@@ -60,7 +68,13 @@ var zoom_in_button: Button
 var zoom_out_button: Button
 var reset_button: Button
 var toggle_grid_button: Button
+var toggle_chunks_button: Button
 var context_menu: ContextMenu_Base
+
+# Chunk system reference
+var foliage_spawner: Node3D = null
+var hovered_chunk: Vector2i = Vector2i(-999999, -999999)  # Currently hovered chunk coords
+var _debug_chunk_draw_logged: bool = false  # Only log once
 
 
 func _ready():
@@ -115,6 +129,13 @@ func _setup_ui():
 	toggle_grid_button.position = Vector2(120, 10)
 	toggle_grid_button.size = Vector2(40, 30)
 	add_child(toggle_grid_button)
+
+	toggle_chunks_button = Button.new()
+	toggle_chunks_button.name = "ToggleChunksButton"
+	toggle_chunks_button.text = "Chunks"
+	toggle_chunks_button.position = Vector2(170, 10)
+	toggle_chunks_button.size = Vector2(80, 30)
+	add_child(toggle_chunks_button)
 
 
 func _setup_map_viewport():
@@ -192,6 +213,11 @@ func _find_player_reference():
 		if player.has_node("CameraPivot"):
 			camera_pivot = player.get_node("CameraPivot")
 
+	# Find foliage spawner for chunk data
+	foliage_spawner = get_tree().get_first_node_in_group("foliage_spawner")
+	if not foliage_spawner:
+		print("MapUI: No foliage spawner found - chunk overlay will not work")
+
 
 func _connect_signals():
 	close_button.pressed.connect(_on_close_pressed)
@@ -199,6 +225,7 @@ func _connect_signals():
 	zoom_out_button.pressed.connect(_on_zoom_out_pressed)
 	reset_button.pressed.connect(_on_reset_pressed)
 	toggle_grid_button.pressed.connect(_on_toggle_grid_pressed)
+	toggle_chunks_button.pressed.connect(_on_toggle_chunks_pressed)
 	map_container.gui_input.connect(_on_map_gui_input)
 
 	if context_menu:
@@ -226,6 +253,10 @@ func _draw():
 	if render_viewport and render_viewport.get_texture():
 		draw_texture_rect(render_viewport.get_texture(), rect, false)
 
+	# Draw chunk overlay AFTER the 3D viewport so it shows on top
+	if show_chunk_overlay:
+		_draw_chunk_overlay()
+
 	if show_grid:
 		_draw_grid()
 
@@ -234,6 +265,95 @@ func _draw():
 
 	# Draw map markers
 	_draw_map_markers()
+
+
+func _draw_chunk_overlay():
+	"""Draw chunk grid showing loaded vs unloaded chunks"""
+	if not map_camera:
+		print("DEBUG: No map_camera")
+		return
+
+	if not foliage_spawner:
+		print("DEBUG: No foliage_spawner")
+		return
+
+	var camera_pos = map_camera.global_position
+	var pixels_per_unit = size.y / map_camera.size
+
+	# Calculate visible world bounds
+	var half_width = map_camera.size * (size.x / size.y) / 2.0
+	var half_height = map_camera.size / 2.0
+
+	var world_min_x = camera_pos.x - half_width
+	var world_max_x = camera_pos.x + half_width
+	var world_min_z = camera_pos.z - half_height
+	var world_max_z = camera_pos.z + half_height
+
+	# Calculate which chunks are visible
+	var min_chunk_x = int(floor(world_min_x / chunk_size))
+	var max_chunk_x = int(ceil(world_max_x / chunk_size))
+	var min_chunk_z = int(floor(world_min_z / chunk_size))
+	var max_chunk_z = int(ceil(world_max_z / chunk_size))
+
+	# Get loaded chunks from foliage spawner
+	var loaded_chunks = foliage_spawner.get("loaded_chunks")
+	if not loaded_chunks:
+		print("DEBUG: No loaded_chunks from foliage_spawner")
+		return
+
+	var chunks_drawn = 0
+	# Draw all visible chunks
+	for chunk_x in range(min_chunk_x, max_chunk_x + 1):
+		for chunk_z in range(min_chunk_z, max_chunk_z + 1):
+			var chunk_key = str(chunk_x) + "_" + str(chunk_z)
+			var is_loaded = loaded_chunks.has(chunk_key)
+			var is_hovered = (hovered_chunk.x == chunk_x and hovered_chunk.y == chunk_z)
+
+			# Calculate chunk bounds in world space
+			var chunk_world_x = float(chunk_x) * chunk_size
+			var chunk_world_z = float(chunk_z) * chunk_size
+
+			# Convert to screen space
+			var screen_x1 = size.x / 2.0 - (chunk_world_x - camera_pos.x) * pixels_per_unit
+			var screen_y1 = size.y / 2.0 - (chunk_world_z - camera_pos.z) * pixels_per_unit
+			var screen_x2 = size.x / 2.0 - (chunk_world_x + chunk_size - camera_pos.x) * pixels_per_unit
+			var screen_y2 = size.y / 2.0 - (chunk_world_z + chunk_size - camera_pos.z) * pixels_per_unit
+
+			var rect = Rect2(Vector2(screen_x1, screen_y1), Vector2(screen_x2 - screen_x1, screen_y2 - screen_y1))
+
+			# Draw filled rectangle
+			var fill_color = loaded_chunk_color if is_loaded else unloaded_chunk_color
+			if is_hovered:
+				fill_color = fill_color.lightened(0.3)  # Brighten hovered chunk
+			draw_rect(rect, fill_color, true)
+
+			# Draw border
+			var border_color = loaded_chunk_color if is_loaded else unloaded_chunk_color
+			border_color.a = 0.8  # Make border more opaque
+			var border_width = chunk_border_width * 2.0 if is_hovered else chunk_border_width
+			draw_rect(rect, border_color, false, border_width)
+
+			chunks_drawn += 1
+
+			# Draw chunk coordinates if zoomed in enough
+			if current_zoom > 0.12:
+				var center_x = (screen_x1 + screen_x2) / 2.0
+				var center_y = (screen_y1 + screen_y2) / 2.0
+				var label = "[" + str(chunk_x) + "," + str(chunk_z) + "]"
+				var text_color = Color(1.0, 1.0, 1.0, 0.7) if is_loaded else Color(0.6, 0.6, 0.6, 0.5)
+				draw_string(ThemeDB.fallback_font, Vector2(center_x - 20, center_y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, text_color)
+
+			# Draw hover info
+			if is_hovered:
+				var center_x = (screen_x1 + screen_x2) / 2.0
+				var center_y = (screen_y1 + screen_y2) / 2.0
+				var status = "LOADED" if is_loaded else "UNLOADED"
+				var status_color = Color(0.0, 1.0, 0.0) if is_loaded else Color(1.0, 0.5, 0.0)
+				draw_string(ThemeDB.fallback_font, Vector2(center_x - 30, center_y + 15), status, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, status_color)
+
+	if chunks_drawn > 0 and not _debug_chunk_draw_logged:
+		print("DEBUG: Drew ", chunks_drawn, " chunks. Loaded chunks: ", loaded_chunks.size())
+		_debug_chunk_draw_logged = true
 
 
 func _draw_grid():
@@ -357,6 +477,9 @@ func _on_map_gui_input(event: InputEvent):
 	elif event is InputEventMouseMotion:
 		if not is_dragging:
 			hovered_marker_index = _get_marker_at_position(event.position)
+			# Update hovered chunk when chunk overlay is visible
+			if show_chunk_overlay:
+				hovered_chunk = _get_chunk_at_position(event.position)
 			queue_redraw()
 
 		if is_dragging:
@@ -375,6 +498,18 @@ func _on_map_gui_input(event: InputEvent):
 func _show_context_menu(global_pos: Vector2):
 	if context_menu:
 		context_menu.clear_items()
+
+		# Chunk-specific options if chunk overlay is visible and hovering a chunk
+		if show_chunk_overlay and hovered_chunk != Vector2i(-999999, -999999) and foliage_spawner:
+			var chunk_key = str(hovered_chunk.x) + "_" + str(hovered_chunk.y)
+			var loaded_chunks = foliage_spawner.get("loaded_chunks")
+			var is_loaded = loaded_chunks.has(chunk_key) if loaded_chunks else false
+
+			var status_text = " [LOADED]" if is_loaded else " [UNLOADED]"
+			context_menu.add_menu_item("center_chunk", "Center on Chunk [" + str(hovered_chunk.x) + "," + str(hovered_chunk.y) + "]" + status_text)
+			context_menu.add_menu_item("teleport_chunk", "Teleport to Chunk")
+			context_menu.add_separator()
+
 		context_menu.add_menu_item("center_player", "Center on Player")
 		context_menu.add_separator()
 		context_menu.add_menu_item("zoom_in", "Zoom In")
@@ -385,7 +520,7 @@ func _show_context_menu(global_pos: Vector2):
 		if not map_markers.is_empty():
 			context_menu.add_menu_item("clear_markers", "Clear All Markers")
 
-		context_menu.show_context_menu(global_pos, {"click_position": right_click_pos})
+		context_menu.show_context_menu(global_pos, {"click_position": right_click_pos, "chunk_coords": hovered_chunk})
 
 
 func _show_marker_context_menu(global_pos: Vector2, marker_index: int):
@@ -408,6 +543,10 @@ func _on_context_menu_item_selected(item_id: String, _item_data: Dictionary, _co
 	match item_id:
 		"center_player":
 			_center_on_player()
+		"center_chunk":
+			_center_on_chunk(_context_data.get("chunk_coords", Vector2i(-999999, -999999)))
+		"teleport_chunk":
+			_teleport_to_chunk(_context_data.get("chunk_coords", Vector2i(-999999, -999999)))
 		"zoom_in":
 			_zoom_in()
 		"zoom_out":
@@ -432,6 +571,47 @@ func _center_on_player():
 		map_camera.global_position = Vector3(player_pos.x, map_camera.global_position.y, player_pos.z)
 		var look_target = Vector3(player_pos.x, 0, player_pos.z)
 		map_camera.look_at(look_target, Vector3.BACK)
+
+
+func _center_on_chunk(chunk_coords: Vector2i):
+	"""Center map camera on a specific chunk"""
+	if chunk_coords == Vector2i(-999999, -999999) or not map_camera:
+		return
+
+	# Calculate chunk center in world space
+	var chunk_center_x = float(chunk_coords.x) * chunk_size + chunk_size * 0.5
+	var chunk_center_z = float(chunk_coords.y) * chunk_size + chunk_size * 0.5
+
+	map_camera.global_position = Vector3(chunk_center_x, map_camera.global_position.y, chunk_center_z)
+	var look_target = Vector3(chunk_center_x, 0, chunk_center_z)
+	map_camera.look_at(look_target, Vector3.BACK)
+	print("Map centered on chunk [", chunk_coords.x, ",", chunk_coords.y, "]")
+
+
+func _teleport_to_chunk(chunk_coords: Vector2i):
+	"""Teleport player to the center of a chunk"""
+	if chunk_coords == Vector2i(-999999, -999999) or not player:
+		return
+
+	# Calculate chunk center in world space
+	var chunk_center_x = float(chunk_coords.x) * chunk_size + chunk_size * 0.5
+	var chunk_center_z = float(chunk_coords.y) * chunk_size + chunk_size * 0.5
+
+	# Get terrain height at chunk center if available
+	var teleport_y = player.global_position.y  # Default to current height
+	if foliage_spawner and foliage_spawner.has_method("get") and foliage_spawner.get("terrain"):
+		var terrain = foliage_spawner.get("terrain")
+		if terrain and terrain.has_method("get_height"):
+			var terrain_height = terrain.get_height(Vector3(chunk_center_x, 0, chunk_center_z))
+			if terrain_height != 0.0:  # Valid height
+				teleport_y = terrain_height + 2.0  # Spawn 2m above terrain
+
+	# Teleport player
+	player.global_position = Vector3(chunk_center_x, teleport_y, chunk_center_z)
+	print("Teleported player to chunk [", chunk_coords.x, ",", chunk_coords.y, "] at position ", player.global_position)
+
+	# Center map on new position
+	_center_on_player()
 
 
 func _place_marker_at_position(click_pos: Vector2):
@@ -555,6 +735,28 @@ func _draw_map_markers():
 			if current_zoom > 0.08:
 				var label_pos = center + Vector2(draw_marker_size + 5, 5)
 				draw_string(ThemeDB.fallback_font, label_pos, marker_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, draw_color)
+
+
+func _get_chunk_at_position(screen_pos: Vector2) -> Vector2i:
+	"""Convert screen position to chunk coordinates"""
+	if not map_camera or not show_chunk_overlay:
+		return Vector2i(-999999, -999999)
+
+	var camera_pos = map_camera.global_position
+	var pixels_per_unit = size.y / map_camera.size
+
+	# Convert screen to world position
+	var offset_x = (size.x / 2.0 - screen_pos.x) / pixels_per_unit
+	var offset_z = (size.y / 2.0 - screen_pos.y) / pixels_per_unit
+
+	var world_x = camera_pos.x + offset_x
+	var world_z = camera_pos.z + offset_z
+
+	# Convert world position to chunk coordinates
+	var chunk_x = int(floor(world_x / chunk_size))
+	var chunk_z = int(floor(world_z / chunk_size))
+
+	return Vector2i(chunk_x, chunk_z)
 
 
 func _get_marker_at_position(screen_pos: Vector2) -> int:
@@ -734,6 +936,10 @@ func _on_toggle_grid_pressed():
 	_toggle_grid()
 
 
+func _on_toggle_chunks_pressed():
+	_toggle_chunks()
+
+
 func _zoom_in():
 	current_zoom = clamp(current_zoom + zoom_step, min_zoom, max_zoom)
 	if map_camera:
@@ -750,6 +956,14 @@ func open_map():
 	is_map_open = true
 	visible = true
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+	# Try to find foliage spawner again if we don't have it yet
+	if not foliage_spawner:
+		foliage_spawner = get_tree().get_first_node_in_group("foliage_spawner")
+		if foliage_spawner:
+			print("MapUI: Found foliage spawner on map open")
+		else:
+			print("MapUI: Still no foliage spawner found - chunk overlay will not work")
 
 	if player and map_camera:
 		var player_pos = player.global_position
@@ -777,4 +991,9 @@ func toggle_map():
 
 func _toggle_grid():
 	show_grid = not show_grid
+	queue_redraw()
+
+
+func _toggle_chunks():
+	show_chunk_overlay = not show_chunk_overlay
 	queue_redraw()

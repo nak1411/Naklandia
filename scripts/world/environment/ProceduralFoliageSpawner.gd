@@ -24,7 +24,7 @@ extends Node3D
 @export var global_visibility_range_end: float = 120.0
 @export var global_visibility_fade_margin: float = 20.0
 
-# Debug settings
+# Debug settingswww
 @export_group("Debug")
 @export var debug_show_on_minimap: bool = false
 @export var debug_performance: bool = false
@@ -153,12 +153,27 @@ func _get_pooled_mmi() -> MultiMeshInstance3D:
 	var result_mmi: MultiMeshInstance3D
 	if mmi_pool.size() > 0:
 		result_mmi = mmi_pool.pop_back()
-		result_mmi.visible = true
+
+		# Validate the pooled node
+		if not is_instance_valid(result_mmi):
+			print("[POOL] Invalid MMI in pool, creating new one")
+			result_mmi = MultiMeshInstance3D.new()
+			result_mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			add_child(result_mmi)
+		elif not result_mmi.is_inside_tree():
+			# Re-add it if it was removed
+			print("[POOL] MMI not in tree, re-adding")
+			add_child(result_mmi)
+			result_mmi.visible = true
+		else:
+			# Already in tree, just make visible
+			result_mmi.visible = true
 	else:
 		# Create new if pool is empty
 		result_mmi = MultiMeshInstance3D.new()
 		result_mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		add_child(result_mmi)
+
 	return result_mmi
 
 
@@ -468,11 +483,7 @@ func load_chunk(chunk_x: int, chunk_z: int):
 	var chunk_distance = chunk_center.distance_to(player_pos)
 
 	# Calculate minimum distance from player to any point in chunk (closest edge/corner)
-	var closest_point_in_chunk = Vector3(
-		clamp(player_pos.x, chunk_world_x, chunk_world_x + chunk_size),
-		0,
-		clamp(player_pos.z, chunk_world_z, chunk_world_z + chunk_size)
-	)
+	var closest_point_in_chunk = Vector3(clamp(player_pos.x, chunk_world_x, chunk_world_x + chunk_size), 0, clamp(player_pos.z, chunk_world_z, chunk_world_z + chunk_size))
 	var min_distance_to_chunk = player_pos.distance_to(closest_point_in_chunk)
 
 	var has_any_items = false
@@ -702,8 +713,8 @@ func _add_optimized_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[T
 	var area = Area3D.new()
 	area.name = "FoliageCollision"
 	area.set_collision_layer_value(1, false)  # Not on layer 1
-	area.set_collision_layer_value(2, true)   # Layer 2 for interactions
-	area.collision_mask = 0   # No collision mask
+	area.set_collision_layer_value(2, true)  # Layer 2 for interactions
+	area.collision_mask = 0  # No collision mask
 	area.monitorable = true  # IMPORTANT: Make sure area can be detected
 	area.monitoring = false  # Don't need to monitor other areas
 
@@ -745,8 +756,8 @@ func _add_multimesh_collision(mmi: MultiMeshInstance3D, items: Array[Transform3D
 	area.name = "FoliageCollision"
 	# IMPORTANT: Use set_collision_layer_value for proper physics registration
 	area.set_collision_layer_value(1, false)  # Not on layer 1
-	area.set_collision_layer_value(2, true)   # Layer 2 for interactions
-	area.collision_mask = 0   # No collision mask
+	area.set_collision_layer_value(2, true)  # Layer 2 for interactions
+	area.collision_mask = 0  # No collision mask
 
 	# Add a collision shape for each instance
 	var collision_count = items.size()  # Add collision to ALL instances!
@@ -878,6 +889,10 @@ func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], 
 			prof_transform_set_time += float(Time.get_ticks_usec() - transform_start) / 1000000.0
 
 		var mmi = _get_pooled_mmi()
+		if not is_instance_valid(mmi):
+			push_error("[ProceduralFoliageSpawner] Invalid MMI returned from pool!")
+			continue
+
 		mmi.multimesh = multimesh
 		mmi.position = chunk_center
 
@@ -905,10 +920,7 @@ func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], 
 
 		# Set custom AABB for proper frustum culling
 		if use_custom_aabb:
-			var aabb = AABB(
-				Vector3(-chunk_size * 0.5, -10, -chunk_size * 0.5),
-				Vector3(chunk_size, 50, chunk_size)
-			)
+			var aabb = AABB(Vector3(-chunk_size * 0.5, -10, -chunk_size * 0.5), Vector3(chunk_size, 50, chunk_size))
 			mmi.custom_aabb = aabb
 
 		# For layers with short visibility range (relative to chunk size),
@@ -921,7 +933,7 @@ func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], 
 
 		# Use shader fade for visibility ranges that are close to or larger than chunk size
 		# With 64m chunks, anything over ~90m benefits from per-instance shader fade
-		var use_shader_fade = (vis_range_end > chunk_size * 1.4)  # If range is large relative to chunk
+		var use_shader_fade = vis_range_end > chunk_size * 1.4  # If range is large relative to chunk
 
 		if use_shader_fade:
 			# Use custom shader for per-instance distance fading
@@ -1043,11 +1055,7 @@ func generate_items_for_layer(chunk_x: float, chunk_z: float, layer: FoliageLaye
 		var item_scale = rng.randf_range(layer.min_scale, layer.max_scale)
 		var item_rotation = rng.randf() * TAU if layer.random_rotation else 0.0
 
-		candidates.append({
-			"pos": Vector3(local_x, 0, local_z),
-			"scale": item_scale,
-			"rotation": item_rotation
-		})
+		candidates.append({"pos": Vector3(local_x, 0, local_z), "scale": item_scale, "rotation": item_rotation})
 
 	# Pass 2: Batch validate terrain constraints
 	var query_start = Time.get_ticks_usec()

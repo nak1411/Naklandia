@@ -12,6 +12,14 @@ extends Control
 @export var marker_icon_color: Color = Color(1.0, 0.0, 0.0, 1.0)
 @export var marker_size: float = 6.0
 
+# Chunk visualization
+@export_group("Chunk Visualization")
+@export var show_chunk_overlay: bool = false
+@export var chunk_size: float = 64.0  # Should match ProceduralFoliageSpawner chunk_size
+@export var unloaded_chunk_color: Color = Color(0.2, 0.2, 0.2, 0.3)
+@export var loaded_chunk_color: Color = Color(0.0, 0.8, 0.2, 0.5)
+@export var chunk_border_width: float = 1.0
+
 # Debug settings
 @export_group("Debug Visualization")
 @export var show_tree_debug: bool = false  # Enable tree debug visualization (expensive!)
@@ -20,18 +28,20 @@ extends Control
 @export var tree_culled_color: Color = Color(0.0, 0.0, 0.0, 0.8)  # Black for frustum-culled trees
 @export var tree_dot_size: float = 1.0
 
+# Minimap texture
+var minimap_image: Image
+var minimap_texture: ImageTexture
+var render_viewport: SubViewport
+var minimap_camera: Camera3D
+
 # References
 var player: Node3D
 var camera: Camera3D
 var camera_pivot: Node3D
 var map_manager: Node
 var tree_spawner: Node  # Reference to ProceduralTreeSpawner for debug vis
-
-# Minimap texture
-var minimap_image: Image
-var minimap_texture: ImageTexture
-var render_viewport: SubViewport
-var minimap_camera: Camera3D
+var foliage_spawner: Node3D = null  # Reference to ProceduralFoliageSpawner for chunk overlay
+var _debug_chunk_logged: bool = false  # Only log once
 
 
 func _ready():
@@ -40,6 +50,8 @@ func _ready():
 	_find_player_reference()
 	_find_map_manager()
 	_find_tree_spawner()
+	# Defer finding foliage spawner to avoid timing issues
+	call_deferred("_find_foliage_spawner")
 
 
 func _setup_minimap_viewport():
@@ -109,6 +121,14 @@ func _find_tree_spawner():
 		print("Minimap: No tree spawner found in group 'tree_spawner'")
 
 
+func _find_foliage_spawner():
+	foliage_spawner = get_tree().get_first_node_in_group("foliage_spawner")
+	if not foliage_spawner:
+		print("Minimap: No foliage spawner found - chunk overlay will not work")
+	else:
+		print("Minimap: Found foliage spawner")
+
+
 func _process(_delta):
 	if player and minimap_camera:
 		var player_pos = player.global_position
@@ -128,6 +148,14 @@ func _draw():
 		draw_texture_rect(render_viewport.get_texture(), rect, false)
 
 	var center = minimap_size / 2.0
+
+	# Draw chunk overlay after 3D viewport but before other UI elements
+	if show_chunk_overlay:
+		_draw_chunk_overlay(center)
+	elif not _debug_chunk_logged:
+		print("Minimap: Chunk overlay disabled (show_chunk_overlay = false)")
+		_debug_chunk_logged = true
+
 	_draw_debug_trees(center)
 	_draw_map_markers(center)
 	_draw_player_marker(center)
@@ -154,6 +182,83 @@ func _draw_north_indicator(center: Vector2):
 	var north_pos = center + Vector2(0, -minimap_size.y / 2.0 + 15)
 	draw_circle(north_pos, 3, north_indicator_color)
 	draw_string(ThemeDB.fallback_font, north_pos + Vector2(-3, -5), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, north_indicator_color)
+
+
+func _draw_chunk_overlay(center: Vector2):
+	"""Draw chunk grid showing loaded vs unloaded chunks on the minimap"""
+	if not player or not minimap_camera or not foliage_spawner:
+		if not _debug_chunk_logged:
+			if not player:
+				print("Minimap chunk overlay: No player")
+			if not minimap_camera:
+				print("Minimap chunk overlay: No minimap_camera")
+			if not foliage_spawner:
+				print("Minimap chunk overlay: No foliage_spawner")
+			_debug_chunk_logged = true
+		return
+
+	var player_pos = player.global_position
+	var pixels_per_unit = minimap_size.y / minimap_camera.size
+
+	# Calculate visible world bounds based on minimap view
+	var half_width = minimap_camera.size * (minimap_size.x / minimap_size.y) / 2.0
+	var half_height = minimap_camera.size / 2.0
+
+	var world_min_x = player_pos.x - half_width
+	var world_max_x = player_pos.x + half_width
+	var world_min_z = player_pos.z - half_height
+	var world_max_z = player_pos.z + half_height
+
+	# Calculate which chunks are visible
+	var min_chunk_x = int(floor(world_min_x / chunk_size))
+	var max_chunk_x = int(ceil(world_max_x / chunk_size))
+	var min_chunk_z = int(floor(world_min_z / chunk_size))
+	var max_chunk_z = int(ceil(world_max_z / chunk_size))
+
+	# Get loaded chunks from foliage spawner
+	var loaded_chunks = foliage_spawner.get("loaded_chunks")
+	if not loaded_chunks:
+		if not _debug_chunk_logged:
+			print("Minimap chunk overlay: No loaded_chunks from foliage_spawner")
+			_debug_chunk_logged = true
+		return
+
+	if not _debug_chunk_logged:
+		print("Minimap chunk overlay: Drawing ", (max_chunk_x - min_chunk_x + 1) * (max_chunk_z - min_chunk_z + 1), " chunks, ", loaded_chunks.size(), " loaded")
+		_debug_chunk_logged = true
+
+	# Draw all visible chunks
+	for chunk_x in range(min_chunk_x, max_chunk_x + 1):
+		for chunk_z in range(min_chunk_z, max_chunk_z + 1):
+			var chunk_key = str(chunk_x) + "_" + str(chunk_z)
+			var is_loaded = loaded_chunks.has(chunk_key)
+
+			# Calculate chunk bounds in world space
+			var chunk_world_x = float(chunk_x) * chunk_size
+			var chunk_world_z = float(chunk_z) * chunk_size
+
+			# Calculate offset from player (who is at center)
+			var offset_x1 = chunk_world_x - player_pos.x
+			var offset_z1 = chunk_world_z - player_pos.z
+			var offset_x2 = (chunk_world_x + chunk_size) - player_pos.x
+			var offset_z2 = (chunk_world_z + chunk_size) - player_pos.z
+
+			# Convert to screen coordinates (relative to center) - negate to flip
+			var screen_x1 = center.x - offset_x1 * pixels_per_unit
+			var screen_y1 = center.y - offset_z1 * pixels_per_unit
+			var screen_x2 = center.x - offset_x2 * pixels_per_unit
+			var screen_y2 = center.y - offset_z2 * pixels_per_unit
+
+			var rect = Rect2(Vector2(screen_x1, screen_y1), Vector2(screen_x2 - screen_x1, screen_y2 - screen_y1))
+
+			# Draw filled rectangle
+			var fill_color = loaded_chunk_color if is_loaded else unloaded_chunk_color
+			draw_rect(rect, fill_color, true)
+
+			# Draw border
+			var chunk_border_color = loaded_chunk_color if is_loaded else unloaded_chunk_color
+			chunk_border_color.a = 0.8  # Make border more opaque
+			draw_rect(rect, chunk_border_color, false, chunk_border_width)
 
 
 func _is_point_in_frustum(point: Vector3, cam: Camera3D) -> bool:
