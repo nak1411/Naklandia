@@ -12,8 +12,8 @@ extends Node3D
 # Chunk configuration
 @export_group("Chunk Settings")
 @export var chunk_size: float = 64.0  # Size of each chunk in meters (smaller = better culling, like Unreal HISM)
-@export var chunk_load_distance: float = 200.0  # Distance to load chunks (must be >> visibility range to prevent pop-in)
-@export var chunk_unload_distance: float = 250.0  # Distance to unload chunks (should be > load_distance)
+@export var chunk_load_distance: float = 250.0  # Distance to load chunks (MUST be larger than max visibility_range_end + chunk_size to prevent pop-in)
+@export var chunk_unload_distance: float = 300.0  # Distance to unload chunks (MUST be > load_distance to prevent thrashing)
 @export var chunks_per_frame: int = 8  # Max chunks to load/unload per frame (increase for smoother loading)
 @export var follow_player: bool = true
 @export var use_custom_aabb: bool = true  # Set custom AABB for better frustum culling
@@ -213,42 +213,23 @@ func _return_to_pool(mmi: MultiMeshInstance3D):
 
 
 func _get_lod_level(distance: float, layer: FoliageLayer) -> int:
-	"""Get LOD level based on distance: 0=full, 1=medium, 2=far"""
-	if not layer.use_lod:
+	"""Get LOD level based on distance: 0=LOD0 (highest), 1=LOD1 (medium), 2=LOD2 (low), 3=impostor"""
+	if not layer.use_geometry_lod:
 		return 0
 
-	if distance <= layer.lod_distance_near:
-		return 0  # Full detail
-	if distance <= layer.lod_distance_mid:
-		return 1  # Medium detail
-	return 2  # Far/low detail
+	# Use Unreal Engine-style distance thresholds
+	if distance <= layer.lod0_distance:
+		return 0  # LOD0 - Highest detail
+	if distance <= layer.lod1_distance:
+		return 1  # LOD1 - Medium detail
+	if distance <= layer.lod2_distance:
+		return 2  # LOD2 - Low detail
+	if layer.use_impostors and distance <= layer.impostor_distance:
+		return 3  # Impostor - Billboard
+	return 3 if layer.use_impostors else 2  # Beyond impostor distance, use impostor or LOD2
 
 
-func _apply_lod_to_items(items: Array[Transform3D], lod_level: int, layer: FoliageLayer) -> Array[Transform3D]:
-	"""Reduce item count for distant chunks based on LOD level."""
-	if lod_level == 0 or items.size() == 0 or not layer.use_lod:
-		return items
-
-	var keep_ratio: float
-	if lod_level == 1:
-		keep_ratio = layer.lod_mid_scale_factor
-	else:
-		keep_ratio = layer.lod_far_scale_factor
-
-	var items_to_keep = max(1, int(items.size() * keep_ratio))
-	var result: Array[Transform3D] = []
-
-	# Use deterministic selection (every Nth item) for consistent appearance
-	var step = float(items.size()) / float(items_to_keep)
-	var index: float = 0.0
-	while result.size() < items_to_keep and int(index) < items.size():
-		result.append(items[int(index)])
-		index += step
-
-	return result
-
-
-func _create_shader_fade_material(layer: FoliageLayer, mesh: Mesh, _chunk_load_time: float) -> ShaderMaterial:
+func _create_shader_fade_material(layer: FoliageLayer, mesh: Mesh) -> ShaderMaterial:
 	"""Create a shader material with distance-based fading for a layer"""
 	var fade_shader = Shader.new()
 	fade_shader.code = """
@@ -281,11 +262,17 @@ void fragment() {
 		color = albedo_color;
 	}
 
-	// Calculate distance-based fade
+	// Calculate distance-based fade (per-instance only - NO chunk-based fading)
 	float fade_range = fade_end - fade_start;
 	float distance_fade = 1.0 - clamp((vertex_distance - fade_start) / fade_range, 0.0, 1.0);
 
-	// Use dithering for fade to maintain proper depth sorting
+	// Hide foliage that's beyond the fade range (don't render distant chunks at all)
+	// This prevents pop-in when chunks load - they're invisible until within fade distance
+	if (vertex_distance > fade_end) {
+		discard;
+	}
+
+	// Use dithering for smooth per-instance fade based on distance only
 	float dither = hash(FRAGCOORD.xy);
 	if (dither > distance_fade) {
 		discard;
@@ -415,9 +402,8 @@ func _process(delta):
 	last_player_chunk = current_chunk
 	update_chunks(player_pos)
 
-	# NOTE: LOD system disabled - it was changing instance count instead of mesh quality
-	# Godot's built-in visibility range and shader fade handle distance culling
-	# update_lod_for_chunks(player_pos)
+	# Update geometry LOD for all chunks (Unreal Engine-style mesh swapping)
+	update_lod_for_chunks(player_pos)
 
 	if debug_detailed_profiling:
 		prof_total_frame_time += float(Time.get_ticks_usec() - frame_start) / 1000000.0
@@ -440,55 +426,61 @@ func update_lod_for_chunks(player_pos: Vector3):
 					layer = foliage_layer
 					break
 
-			if not layer or not layer.use_lod:
+			if not layer or not layer.use_geometry_lod:
 				continue
 
-			# Calculate new LOD level
+			# Calculate new LOD level (geometry-based)
 			var new_lod_level = _get_lod_level(chunk_distance, layer)
 
 			# Add hysteresis to prevent rapid LOD switching at boundaries
-			# Only switch LOD if we're clearly in the new zone (5m buffer)
+			var hysteresis = layer.lod_transition_hysteresis
 			var should_update_lod = false
+
 			if new_lod_level < layer_data.lod_level:
 				# Moving closer (lower LOD = more detail) - need to be clearly past the threshold
-				if new_lod_level == 0 and chunk_distance < layer.lod_distance_near - 5.0:
+				if new_lod_level == 0 and chunk_distance < layer.lod0_distance - hysteresis:
 					should_update_lod = true
-				elif new_lod_level == 1 and chunk_distance < layer.lod_distance_mid - 5.0:
+				elif new_lod_level == 1 and chunk_distance < layer.lod1_distance - hysteresis:
+					should_update_lod = true
+				elif new_lod_level == 2 and chunk_distance < layer.lod2_distance - hysteresis:
 					should_update_lod = true
 			elif new_lod_level > layer_data.lod_level:
 				# Moving away (higher LOD = less detail) - need to be clearly past the threshold
-				if new_lod_level == 1 and chunk_distance > layer.lod_distance_near + 5.0:
+				if new_lod_level == 1 and chunk_distance > layer.lod0_distance + hysteresis:
 					should_update_lod = true
-				elif new_lod_level == 2 and chunk_distance > layer.lod_distance_mid + 5.0:
+				elif new_lod_level == 2 and chunk_distance > layer.lod1_distance + hysteresis:
+					should_update_lod = true
+				elif new_lod_level == 3 and chunk_distance > layer.lod2_distance + hysteresis:
 					should_update_lod = true
 
-			# If LOD changed, regenerate the multimesh
+			# If LOD changed, regenerate the multimesh with new geometry
 			if should_update_lod:
 				layer_data.lod_level = new_lod_level
-
-				# Apply new LOD to items
-				var items_to_render = layer_data.item_transforms
-				if new_lod_level > 0:
-					items_to_render = _apply_lod_to_items(layer_data.item_transforms, new_lod_level, layer)
-
-				# Regenerate multimesh with new item count
-				_regenerate_multimesh_for_layer(layer, items_to_render, layer_data, chunk_center)
+				# Regenerate multimesh with new LOD meshes (all instances kept)
+				_regenerate_multimesh_for_layer(layer, layer_data.item_transforms, layer_data, chunk_center, new_lod_level)
 
 
-func _regenerate_multimesh_for_layer(layer: FoliageLayer, items: Array[Transform3D], layer_data: LayerInstanceData, chunk_center: Vector3):
-	"""Regenerate multimesh instances for a layer with new LOD"""
-	# Return old MMI nodes to pool immediately - shader handles fading
-	for old_mmi in layer_data.multimesh_instances:
-		_return_to_pool(old_mmi)
+func _regenerate_multimesh_for_layer(layer: FoliageLayer, items: Array[Transform3D], layer_data: LayerInstanceData, chunk_center: Vector3, lod_level: int = 0):
+	"""Regenerate multimesh instances for a layer with new LOD geometry"""
+	# Smooth LOD transition: fade out old meshes while fading in new ones
+	var old_mmis = layer_data.multimesh_instances.duplicate()
 	layer_data.multimesh_instances.clear()
 
 	if items.size() == 0:
 		return
 
-	# Create new MMI nodes with updated item count
-	for mesh_idx in range(layer.cached_meshes.size()):
-		var mesh = layer.cached_meshes[mesh_idx]
-		var local_transform = layer.cached_mesh_transforms[mesh_idx] if mesh_idx < layer.cached_mesh_transforms.size() else Transform3D.IDENTITY
+	# Get meshes and transforms for the specified LOD level
+	var lod_meshes = layer.get_meshes_for_lod(lod_level)
+	var lod_transforms = layer.get_mesh_transforms_for_lod(lod_level)
+
+	if lod_meshes.size() == 0:
+		push_warning("[ProceduralFoliageSpawner] No meshes available for LOD", lod_level, " on layer ", layer.layer_name)
+		return
+
+	# Create new MMI nodes with LOD-appropriate meshes
+	for mesh_idx in range(lod_meshes.size()):
+		var mesh = lod_meshes[mesh_idx]
+		var local_transform = lod_transforms[mesh_idx] if mesh_idx < lod_transforms.size() else Transform3D.IDENTITY
 
 		var multimesh = MultiMesh.new()
 		multimesh.transform_format = MultiMesh.TRANSFORM_3D
@@ -534,38 +526,35 @@ func _regenerate_multimesh_for_layer(layer: FoliageLayer, items: Array[Transform
 			var aabb = AABB(Vector3(-chunk_size * 0.5, -10, -chunk_size * 0.5), Vector3(chunk_size, 50, chunk_size))
 			mmi.custom_aabb = aabb
 
-		# Apply visibility and shadow settings
-		var vis_range_end = global_visibility_range_end
-		var fade_margin = global_visibility_fade_margin
-		if layer.use_custom_visibility_range:
-			vis_range_end = layer.visibility_range_end
-			fade_margin = layer.visibility_fade_margin
-
-		var use_shader_fade = vis_range_end > chunk_size * 1.4
-		if use_shader_fade:
-			var fade_mat = _create_shader_fade_material(layer, mesh, 0.0)
-			mmi.material_override = fade_mat
-			mmi.visibility_range_begin = global_visibility_range_begin
-			mmi.visibility_range_end = vis_range_end + chunk_size * 0.75
-			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
-		else:
-			mmi.visibility_range_begin = global_visibility_range_begin
-			mmi.visibility_range_end = vis_range_end + chunk_size * 0.75
-			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-			mmi.visibility_range_begin_margin = fade_margin
-			mmi.visibility_range_end_margin = fade_margin
+		# ALWAYS use shader fade for per-instance distance-based fading
+		# This ensures individual foliage items fade based on their distance, not chunk distance
+		var fade_mat = _create_shader_fade_material(layer, mesh)
+		mmi.material_override = fade_mat
+		mmi.visibility_range_begin = global_visibility_range_begin
+		# Set visibility_range_end to 0 to DISABLE Godot's chunk-level GPU culling
+		# This allows the shader to handle per-instance fading without chunk-based interference
+		mmi.visibility_range_end = 0.0
+		mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 
 		if layer.cast_shadows:
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		else:
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
-		# FADE-IN: Same as initial chunk loading
-		mmi.transparency = 1.0  # Start fully transparent
-		var fade_tween = create_tween()
-		fade_tween.tween_property(mmi, "transparency", 0.0, 0.3).set_ease(Tween.EASE_IN)
+		# Smooth LOD cross-fade: start new LOD slightly transparent, fade in quickly
+		mmi.transparency = 0.3  # Start slightly transparent
+		var fade_in = create_tween()
+		fade_in.tween_property(mmi, "transparency", 0.0, 0.2).set_ease(Tween.EASE_IN)
 
 		layer_data.multimesh_instances.append(mmi)
+
+	# Cross-fade: fade out old LOD meshes while new ones fade in
+	if old_mmis.size() > 0:
+		for old_mmi in old_mmis:
+			var fade_out = create_tween()
+			fade_out.tween_property(old_mmi, "transparency", 1.0, 0.2).set_ease(Tween.EASE_OUT)
+			# Return to pool after fade completes
+			fade_out.tween_callback(func(): _return_to_pool(old_mmi))
 
 
 func update_chunks(player_pos: Vector3):
@@ -691,8 +680,8 @@ func load_chunk(chunk_x: int, chunk_z: int):
 		layer_data.lod_level = 0  # LOD disabled - always render all instances
 
 		# Always use MultiMesh for performance
-		# All instances are rendered - Godot's visibility range handles culling
-		_spawn_multimesh_instances(layer, items_in_chunk, layer_data, chunk_center, chunk_distance, chunk_load_time)
+		# All instances are rendered - shader handles per-instance distance fading
+		_spawn_multimesh_instances(layer, items_in_chunk, layer_data, chunk_center, chunk_distance)
 
 		chunk_data.layers[layer.layer_name] = layer_data
 
@@ -719,7 +708,23 @@ func load_chunk(chunk_x: int, chunk_z: int):
 				var rendered_count = 0
 				if layer_data.multimesh_instances.size() > 0 and layer_data.multimesh_instances[0].multimesh:
 					rendered_count = layer_data.multimesh_instances[0].multimesh.instance_count
-				print("[CHUNK LOAD] Chunk [", chunk_x, ",", chunk_z, "] layer '", layer_name, "': ", layer_data.item_transforms.size(), " items GENERATED, ", rendered_count, " items RENDERED (LOD=", layer_data.lod_level, "), ", layer_data.multimesh_instances.size(), " MMI nodes")
+				print(
+					"[CHUNK LOAD] Chunk [",
+					chunk_x,
+					",",
+					chunk_z,
+					"] layer '",
+					layer_name,
+					"': ",
+					layer_data.item_transforms.size(),
+					" items GENERATED, ",
+					rendered_count,
+					" items RENDERED (LOD=",
+					layer_data.lod_level,
+					"), ",
+					layer_data.multimesh_instances.size(),
+					" MMI nodes"
+				)
 				# Print distance to understand LOD
 				var dist_to_chunk = chunk_center.distance_to(player_pos)
 				print("  Distance to chunk center: ", "%.1f" % dist_to_chunk, "m")
@@ -1017,13 +1022,25 @@ func _create_debug_collision_mesh(collision_shape: CollisionShape3D) -> MeshInst
 	return mesh_instance
 
 
-func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], layer_data: LayerInstanceData, chunk_center: Vector3, _chunk_distance: float, chunk_load_time: float):
-	"""Spawn MultiMesh instances for far foliage (original behavior)"""
+func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], layer_data: LayerInstanceData, chunk_center: Vector3, chunk_distance: float):
+	"""Spawn MultiMesh instances with appropriate LOD level based on distance"""
+	# Determine initial LOD level based on chunk distance
+	var lod_level = _get_lod_level(chunk_distance, layer)
+	layer_data.lod_level = lod_level
+
+	# Get meshes and transforms for the appropriate LOD level
+	var lod_meshes = layer.get_meshes_for_lod(lod_level)
+	var lod_transforms = layer.get_mesh_transforms_for_lod(lod_level)
+
+	if lod_meshes.size() == 0:
+		push_warning("[ProceduralFoliageSpawner] No meshes available for LOD", lod_level, " on layer ", layer.layer_name)
+		return
+
 	# Create MultiMesh instances for this layer
 	var mm_start = Time.get_ticks_usec()
-	for mesh_idx in range(layer.cached_meshes.size()):
-		var mesh = layer.cached_meshes[mesh_idx]
-		var local_transform = layer.cached_mesh_transforms[mesh_idx] if mesh_idx < layer.cached_mesh_transforms.size() else Transform3D.IDENTITY
+	for mesh_idx in range(lod_meshes.size()):
+		var mesh = lod_meshes[mesh_idx]
+		var local_transform = lod_transforms[mesh_idx] if mesh_idx < lod_transforms.size() else Transform3D.IDENTITY
 
 		var multimesh = MultiMesh.new()
 		multimesh.transform_format = MultiMesh.TRANSFORM_3D
@@ -1078,46 +1095,23 @@ func _spawn_multimesh_instances(layer: FoliageLayer, items: Array[Transform3D], 
 		mmi.gi_mode = GeometryInstance3D.GI_MODE_STATIC
 		mmi.gi_lightmap_scale = GeometryInstance3D.LIGHTMAP_SCALE_1X  # Minimal lightmap for foliage
 
-		# FADE-IN: Start chunks invisible and fade them in to hide pop-in
-		mmi.transparency = 1.0  # Start fully transparent
-		var fade_tween = create_tween()
-		fade_tween.tween_property(mmi, "transparency", 0.0, 0.3).set_ease(Tween.EASE_IN)
+		# NO chunk fade-in - shader handles per-instance distance fading
+		mmi.transparency = 0.0  # Fully visible - let shader fade handle it
 
 		# Set custom AABB for proper frustum culling
 		if use_custom_aabb:
 			var aabb = AABB(Vector3(-chunk_size * 0.5, -10, -chunk_size * 0.5), Vector3(chunk_size, 50, chunk_size))
 			mmi.custom_aabb = aabb
 
-		# For layers with short visibility range (relative to chunk size),
-		# use shader-based per-instance fading instead of chunk-based GPU fading
-		var vis_range_end = global_visibility_range_end
-		var fade_margin = global_visibility_fade_margin
-		if layer.use_custom_visibility_range:
-			vis_range_end = layer.visibility_range_end
-			fade_margin = layer.visibility_fade_margin
-
-		# Use shader fade for visibility ranges that are close to or larger than chunk size
-		# With 64m chunks, anything over ~90m benefits from per-instance shader fade
-		var use_shader_fade = vis_range_end > chunk_size * 1.4  # If range is large relative to chunk
-
-		if use_shader_fade:
-			# Use custom shader for per-instance distance fading
-			var fade_mat = _create_shader_fade_material(layer, mesh, chunk_load_time)
-			mmi.material_override = fade_mat
-			# For shader fade, only add HALF chunk diagonal for corner instances
-			# Diagonal of chunk = chunk_size * sqrt(2) ≈ chunk_size * 1.5, half = chunk_size * 0.75
-			mmi.visibility_range_begin = global_visibility_range_begin
-			mmi.visibility_range_end = vis_range_end + chunk_size * 0.75
-			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
-		else:
-			# Use GPU-based chunk fading for larger visibility ranges
-			# Distance is from camera to MMI position (chunk center)
-			# Add only half diagonal for corner instances (much less than full chunk size!)
-			mmi.visibility_range_begin = global_visibility_range_begin
-			mmi.visibility_range_end = vis_range_end + chunk_size * 0.75
-			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-			mmi.visibility_range_begin_margin = fade_margin
-			mmi.visibility_range_end_margin = fade_margin
+		# ALWAYS use shader fade for per-instance distance-based fading
+		# This ensures individual foliage items fade based on their distance, not chunk distance
+		var fade_mat = _create_shader_fade_material(layer, mesh)
+		mmi.material_override = fade_mat
+		mmi.visibility_range_begin = global_visibility_range_begin
+		# Set visibility_range_end to 0 to DISABLE Godot's chunk-level GPU culling
+		# This allows the shader to handle per-instance fading without chunk-based interference
+		mmi.visibility_range_end = 0.0
+		mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 
 		# Shadow settings
 		# IMPORTANT: Always enable shadows for the multimesh if layer has cast_shadows=true
