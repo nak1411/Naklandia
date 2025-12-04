@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ck34a3v31bei7"
-path="res://.godot/imported/branch01_normal.png-802afa3ecd81e91d530f21245d188dc9.ctex"
+uid="uid://y7y2ql37c0r6"
+path="res://.godot/imported/branch04_transmission.png-8e7ed2a71fe2442d289aa7dc88186482.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/models/foliage/branch01_normal.png"
-dest_files=["res://.godot/imported/branch01_normal.png-802afa3ecd81e91d530f21245d188dc9.ctex"]
+source_file="res://assets/models/foliage/branch04_transmission.png"
+dest_files=["res://.godot/imported/branch04_transmission.png-8e7ed2a71fe2442d289aa7dc88186482.ctex"]
 
 [params]
 

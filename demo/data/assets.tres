@@ -12,6 +12,7 @@ scene_file = ExtResource("1_y3ibi")
 density = 0.01
 last_lod = 1
 last_shadow_lod = 1
+lod0_range = 128.0
 lod1_range = 128.0
 
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_lha57"]
