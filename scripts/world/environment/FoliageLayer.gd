@@ -229,6 +229,7 @@ func validate_spawn_position(pos: Vector3, terrain: Terrain3D) -> Dictionary:
 	# Check slope
 	var normal = terrain.data.get_normal(pos)
 	var slope = 1.0 - normal.y
+
 	if slope < min_slope or slope > max_slope:
 		return {"valid": false, "height": 0.0}
 

@@ -24,9 +24,9 @@ extends Node3D
 @export var global_visibility_range_end: float = 120.0
 @export var global_visibility_fade_margin: float = 20.0
 
-# Debug settingswww
+# Debug settings
 @export_group("Debug")
-@export var debug_show_on_minimap: bool = false
+@export var debug_show_on_minimap: bool = true
 @export var debug_performance: bool = false
 @export var debug_detailed_profiling: bool = false  # Detailed timing breakdown
 @export var debug_show_collision_shapes: bool = false  # Visualize collision shapes in game
@@ -36,7 +36,7 @@ extends Node3D
 var terrain: Terrain3D = null
 var player: Node3D = null
 
-# Chunk management
+# Chunk managementw
 var loaded_chunks: Dictionary = {}  # chunk_key -> ChunkData
 var last_player_chunk: Vector2i = Vector2i.MAX
 var is_doing_initial_load: bool = false  # Track if we're doing initial chunk load
@@ -118,11 +118,9 @@ func _ready():
 	mmi_pool.clear()
 
 	# Clean up any existing MMI children (from previous runs OR from scene file)
+	# Use recursive cleanup to catch any deeply nested MMI nodes
 	print("[STARTUP] Cleaning up any existing MMI nodes from scene...")
-	for child in get_children():
-		if child is MultiMeshInstance3D:
-			print("  Removing old MMI: ", child.name)
-			child.queue_free()
+	_recursive_cleanup_mmi(self)
 
 	# IMPORTANT: Clear any chunks that might exist from previous session
 	print("[STARTUP] Clearing loaded_chunks dictionary...")
@@ -146,6 +144,22 @@ func _ready():
 	if debug_force_reload_chunks:
 		print("WARNING: debug_force_reload_chunks is enabled - will clear all chunks on next frame")
 		call_deferred("_force_clear_all_chunks")
+
+
+func _recursive_cleanup_mmi(node: Node):
+	"""Recursively clean up all MultiMeshInstance3D nodes from the tree"""
+	var children_to_remove: Array[Node] = []
+	for child in node.get_children():
+		if child is MultiMeshInstance3D:
+			print("  Removing old MMI: ", child.name, " at path: ", child.get_path())
+			children_to_remove.append(child)
+		else:
+			# Recursively check children
+			_recursive_cleanup_mmi(child)
+
+	# Remove after iteration to avoid modifying array during iteration
+	for child in children_to_remove:
+		child.queue_free()
 
 
 func _get_pooled_mmi() -> MultiMeshInstance3D:
@@ -401,8 +415,157 @@ func _process(delta):
 	last_player_chunk = current_chunk
 	update_chunks(player_pos)
 
+	# NOTE: LOD system disabled - it was changing instance count instead of mesh quality
+	# Godot's built-in visibility range and shader fade handle distance culling
+	# update_lod_for_chunks(player_pos)
+
 	if debug_detailed_profiling:
 		prof_total_frame_time += float(Time.get_ticks_usec() - frame_start) / 1000000.0
+
+
+func update_lod_for_chunks(player_pos: Vector3):
+	"""Update LOD for all loaded chunks based on player distance"""
+	for chunk_data in loaded_chunks.values():
+		var chunk_center = Vector3(chunk_data.world_pos.x + chunk_size * 0.5, 0, chunk_data.world_pos.y + chunk_size * 0.5)
+		var chunk_distance = chunk_center.distance_to(player_pos)
+
+		# Update LOD for each layer in the chunk
+		for layer_name in chunk_data.layers.keys():
+			var layer_data: LayerInstanceData = chunk_data.layers[layer_name]
+
+			# Find the corresponding FoliageLayer resource
+			var layer: FoliageLayer = null
+			for foliage_layer in foliage_layers:
+				if foliage_layer.layer_name == layer_name:
+					layer = foliage_layer
+					break
+
+			if not layer or not layer.use_lod:
+				continue
+
+			# Calculate new LOD level
+			var new_lod_level = _get_lod_level(chunk_distance, layer)
+
+			# Add hysteresis to prevent rapid LOD switching at boundaries
+			# Only switch LOD if we're clearly in the new zone (5m buffer)
+			var should_update_lod = false
+			if new_lod_level < layer_data.lod_level:
+				# Moving closer (lower LOD = more detail) - need to be clearly past the threshold
+				if new_lod_level == 0 and chunk_distance < layer.lod_distance_near - 5.0:
+					should_update_lod = true
+				elif new_lod_level == 1 and chunk_distance < layer.lod_distance_mid - 5.0:
+					should_update_lod = true
+			elif new_lod_level > layer_data.lod_level:
+				# Moving away (higher LOD = less detail) - need to be clearly past the threshold
+				if new_lod_level == 1 and chunk_distance > layer.lod_distance_near + 5.0:
+					should_update_lod = true
+				elif new_lod_level == 2 and chunk_distance > layer.lod_distance_mid + 5.0:
+					should_update_lod = true
+
+			# If LOD changed, regenerate the multimesh
+			if should_update_lod:
+				layer_data.lod_level = new_lod_level
+
+				# Apply new LOD to items
+				var items_to_render = layer_data.item_transforms
+				if new_lod_level > 0:
+					items_to_render = _apply_lod_to_items(layer_data.item_transforms, new_lod_level, layer)
+
+				# Regenerate multimesh with new item count
+				_regenerate_multimesh_for_layer(layer, items_to_render, layer_data, chunk_center)
+
+
+func _regenerate_multimesh_for_layer(layer: FoliageLayer, items: Array[Transform3D], layer_data: LayerInstanceData, chunk_center: Vector3):
+	"""Regenerate multimesh instances for a layer with new LOD"""
+	# Return old MMI nodes to pool immediately - shader handles fading
+	for old_mmi in layer_data.multimesh_instances:
+		_return_to_pool(old_mmi)
+	layer_data.multimesh_instances.clear()
+
+	if items.size() == 0:
+		return
+
+	# Create new MMI nodes with updated item count
+	for mesh_idx in range(layer.cached_meshes.size()):
+		var mesh = layer.cached_meshes[mesh_idx]
+		var local_transform = layer.cached_mesh_transforms[mesh_idx] if mesh_idx < layer.cached_mesh_transforms.size() else Transform3D.IDENTITY
+
+		var multimesh = MultiMesh.new()
+		multimesh.transform_format = MultiMesh.TRANSFORM_3D
+		multimesh.use_colors = false
+		multimesh.use_custom_data = false
+		multimesh.mesh = mesh
+		multimesh.instance_count = items.size()
+
+		# Set transforms for all items
+		for i in range(items.size()):
+			var item_transform: Transform3D = items[i]
+			var relative_transform = item_transform
+			relative_transform.origin -= chunk_center
+
+			var local_offset = Transform3D()
+			local_offset.origin = local_transform.origin
+			local_offset.basis = local_transform.basis.orthonormalized()
+			var final_transform = relative_transform * local_offset
+
+			multimesh.set_instance_transform(i, final_transform)
+
+		var mmi = _get_pooled_mmi()
+		if not is_instance_valid(mmi):
+			push_error("[ProceduralFoliageSpawner] Invalid MMI returned from pool during LOD update!")
+			continue
+
+		mmi.multimesh = multimesh
+		mmi.position = chunk_center
+		mmi.extra_cull_margin = 0.0
+
+		# Re-add collision for interactable foliage
+		if layer.is_interactable:
+			mmi.set_meta("is_interactable_foliage", true)
+			mmi.set_meta("foliage_layer", layer)
+			mmi.set_meta("item_transforms", items)
+			_add_capped_multimesh_collision(mmi, items, layer, chunk_center)
+
+		mmi.sorting_offset = 0.0
+		mmi.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+		mmi.gi_lightmap_scale = GeometryInstance3D.LIGHTMAP_SCALE_1X
+
+		if use_custom_aabb:
+			var aabb = AABB(Vector3(-chunk_size * 0.5, -10, -chunk_size * 0.5), Vector3(chunk_size, 50, chunk_size))
+			mmi.custom_aabb = aabb
+
+		# Apply visibility and shadow settings
+		var vis_range_end = global_visibility_range_end
+		var fade_margin = global_visibility_fade_margin
+		if layer.use_custom_visibility_range:
+			vis_range_end = layer.visibility_range_end
+			fade_margin = layer.visibility_fade_margin
+
+		var use_shader_fade = vis_range_end > chunk_size * 1.4
+		if use_shader_fade:
+			var fade_mat = _create_shader_fade_material(layer, mesh, 0.0)
+			mmi.material_override = fade_mat
+			mmi.visibility_range_begin = global_visibility_range_begin
+			mmi.visibility_range_end = vis_range_end + chunk_size * 0.75
+			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+		else:
+			mmi.visibility_range_begin = global_visibility_range_begin
+			mmi.visibility_range_end = vis_range_end + chunk_size * 0.75
+			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+			mmi.visibility_range_begin_margin = fade_margin
+			mmi.visibility_range_end_margin = fade_margin
+
+		if layer.cast_shadows:
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		else:
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+		# FADE-IN: Same as initial chunk loading
+		mmi.transparency = 1.0  # Start fully transparent
+		var fade_tween = create_tween()
+		fade_tween.tween_property(mmi, "transparency", 0.0, 0.3).set_ease(Tween.EASE_IN)
+
+		layer_data.multimesh_instances.append(mmi)
 
 
 func update_chunks(player_pos: Vector3):
@@ -522,25 +685,14 @@ func load_chunk(chunk_x: int, chunk_z: int):
 
 		has_any_items = true
 
-		# Calculate LOD level for this layer
-		var lod_level = _get_lod_level(chunk_distance, layer)
-
-		# Apply LOD
-		var items_to_render = items_in_chunk
-		if layer.use_lod and lod_level > 0:
-			items_to_render = _apply_lod_to_items(items_in_chunk, lod_level, layer)
-
-		if items_to_render.size() == 0:
-			continue
-
 		# Create layer instance data
 		var layer_data = LayerInstanceData.new(layer.layer_name)
 		layer_data.item_transforms = items_in_chunk
-		layer_data.lod_level = lod_level
+		layer_data.lod_level = 0  # LOD disabled - always render all instances
 
 		# Always use MultiMesh for performance
-		# Interactable conversion happens on-hover via MultiMeshToInteractable system
-		_spawn_multimesh_instances(layer, items_to_render, layer_data, chunk_center, chunk_distance, chunk_load_time)
+		# All instances are rendered - Godot's visibility range handles culling
+		_spawn_multimesh_instances(layer, items_in_chunk, layer_data, chunk_center, chunk_distance, chunk_load_time)
 
 		chunk_data.layers[layer.layer_name] = layer_data
 
@@ -558,6 +710,19 @@ func load_chunk(chunk_x: int, chunk_z: int):
 						print("WARNING: MMI for layer '", layer_name, "' in chunk ", chunk_key, " has no multimesh!")
 					elif mmi.multimesh.instance_count == 0:
 						print("WARNING: MMI for layer '", layer_name, "' in chunk ", chunk_key, " has 0 instances!")
+
+		# DEBUG: Print item count for specific chunks
+		if abs(chunk_x) <= 1 and abs(chunk_z) <= 1:
+			for layer_name in chunk_data.layers.keys():
+				var layer_data: LayerInstanceData = chunk_data.layers[layer_name]
+				# Count actual rendered instances from MMI
+				var rendered_count = 0
+				if layer_data.multimesh_instances.size() > 0 and layer_data.multimesh_instances[0].multimesh:
+					rendered_count = layer_data.multimesh_instances[0].multimesh.instance_count
+				print("[CHUNK LOAD] Chunk [", chunk_x, ",", chunk_z, "] layer '", layer_name, "': ", layer_data.item_transforms.size(), " items GENERATED, ", rendered_count, " items RENDERED (LOD=", layer_data.lod_level, "), ", layer_data.multimesh_instances.size(), " MMI nodes")
+				# Print distance to understand LOD
+				var dist_to_chunk = chunk_center.distance_to(player_pos)
+				print("  Distance to chunk center: ", "%.1f" % dist_to_chunk, "m")
 
 
 func _spawn_interactable_nodes(layer: FoliageLayer, items: Array[Transform3D], layer_data: LayerInstanceData):
@@ -996,8 +1161,13 @@ func generate_items_for_layer(chunk_x: float, chunk_z: float, layer: FoliageLaye
 	var items: Array[Transform3D] = []
 
 	# Create a seeded RNG for this chunk and layer - deterministic but truly random distribution
+	# Convert world coordinates back to chunk coordinates for consistent seeding
+	var chunk_coord_x = int(floor(chunk_x / chunk_size))
+	var chunk_coord_z = int(floor(chunk_z / chunk_size))
 	var rng = RandomNumberGenerator.new()
-	rng.seed = hash(str(int(chunk_x)) + "_" + str(int(chunk_z)) + "_" + layer.layer_name)
+	var seed_string = str(chunk_coord_x) + "_" + str(chunk_coord_z) + "_" + layer.layer_name
+	var seed_value = hash(seed_string)
+	rng.seed = seed_value
 
 	var chunk_area = chunk_size * chunk_size
 	var target_item_count = int(chunk_area * layer.density)
@@ -1059,12 +1229,11 @@ func generate_items_for_layer(chunk_x: float, chunk_z: float, layer: FoliageLaye
 
 	# Pass 2: Batch validate terrain constraints
 	var query_start = Time.get_ticks_usec()
-	var valid_count = 0
 	for candidate in candidates:
 		var pos: Vector3 = candidate["pos"]
 		var spawn_result = layer.validate_spawn_position(pos, terrain)
+
 		if spawn_result["valid"]:
-			valid_count += 1
 			var item_transform = Transform3D()
 
 			# Align to terrain normal if requested
