@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 GraphicsManager="*res://scripts/ui/core/settings/GraphicsManager.gd"
+DebugManager="*res://scripts/ui/core/settings/DebugManager.gd"
 UiDebuggerAutoload="*res://scripts/debug/UIDebuggerAutoload.gd"
 WindowSnappingManager="*res://scripts/ui/core/WindowSnappingManager.gd"
 WindowLayoutManager="*res://scripts/ui/core/WindowLayoutManager.gd"

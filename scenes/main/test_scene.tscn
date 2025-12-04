@@ -1,4 +1,4 @@
-[gd_scene load_steps=34 format=3 uid="uid://u68ixamg76uy"]
+[gd_scene load_steps=35 format=3 uid="uid://u68ixamg76uy"]
 
 [ext_resource type="Script" uid="uid://c8q4ad85l2ppl" path="res://scripts/world/environment/TestScene.gd" id="1_wvjab"]
 [ext_resource type="PackedScene" uid="uid://dvusnrd1ps7xx" path="res://scenes/objects/interactable_container.tscn" id="2_1swwb"]
@@ -14,9 +14,6 @@
 [ext_resource type="Script" uid="uid://4a8s0ucu515o" path="res://scripts/world/environment/ProceduralFoliageSpawner.gd" id="12_m0jab"]
 [ext_resource type="Script" uid="uid://dh07duejch1vv" path="res://scripts/world/environment/FoliageLayer.gd" id="13_3uiii"]
 [ext_resource type="Resource" uid="uid://bciakaedl3yrv" path="res://assets/models/foliage/trees.tres" id="14_0g8h2"]
-[ext_resource type="Resource" uid="uid://sj1t05nb2eea" path="res://assets/models/foliage/bushes03.tres" id="15_0g8h2"]
-[ext_resource type="Resource" uid="uid://2gh6c8xbecms" path="res://assets/models/foliage/bushes01.tres" id="16_c7h6s"]
-[ext_resource type="Resource" uid="uid://cl8msp0x3x36t" path="res://assets/models/foliage/bushes02.tres" id="17_7g4hs"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_6mm6u"]
 panorama = ExtResource("2_6i17e")
@@ -40,7 +37,8 @@ glow_enabled = true
 glow_normalized = true
 glow_intensity = 0.17
 glow_hdr_scale = 0.44
-volumetric_fog_density = 0.0
+volumetric_fog_density = 0.0148
+volumetric_fog_ambient_inject = 2.9
 adjustment_enabled = true
 adjustment_contrast = 1.14
 adjustment_saturation = 1.58
@@ -138,6 +136,225 @@ size = Vector3(3, 0.2, 3)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_vr1i5"]
 size = Vector3(3, 0.2, 3)
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_3uiii"]
+load_path = "res://.godot/imported/bush01_4.png-a143452b11192648cec2f4154f8bb2fe.s3tc.ctex"
+
+[sub_resource type="Resource" id="Resource_0g8h2"]
+script = ExtResource("13_3uiii")
+layer_name = "Bushes01"
+enabled = true
+scene_path = "res://assets/models/foliage/bush01_s.tscn"
+scene_path_lod1 = ""
+scene_path_lod2 = ""
+density = 0.02
+min_scale = 0.01
+max_scale = 0.03
+random_rotation = true
+align_to_terrain_normal = false
+min_slope = 0.0
+max_slope = 0.5
+min_height = -100.0
+max_height = 100.0
+water_level = -10.0
+use_noise_distribution = false
+noise_threshold = -0.8
+noise_scale = 0.015
+noise_seed = 23234
+min_spacing = 1.5
+use_geometry_lod = true
+lod0_distance = 50.0
+lod1_distance = 100.0
+lod2_distance = 150.0
+impostor_distance = 200.0
+lod_transition_hysteresis = 5.0
+cast_shadows = true
+shadow_distance = 40.0
+use_distance_fade_shadows = true
+use_custom_visibility_range = true
+visibility_range_end = 80.0
+visibility_fade_margin = 10.0
+use_impostors = true
+impostor_texture = SubResource("CompressedTexture2D_3uiii")
+impostor_size = Vector2(4, 8)
+impostor_fade_margin = 10.0
+avoid_layers = Array[String]([])
+avoidance_distance = 5.0
+is_interactable = true
+interactable_distance = 100.0
+foliage_type_name = "Bush"
+foliage_health = 50.0
+foliage_respawn_time = 300.0
+harvest_items = Array[Dictionary]([{
+"chance": 0.8,
+"item_id": "berries",
+"max_amount": 5,
+"min_amount": 2
+}, {
+"chance": 1.0,
+"item_id": "leaves",
+"max_amount": 3,
+"min_amount": 1
+}])
+harvest_experience = 5
+use_manual_collision = false
+manual_collision_shape = "Sphere"
+manual_collision_radius = 1.0
+manual_collision_height = 5.0
+manual_collision_offset = Vector3(0, 1, 0)
+manual_collision_radius_multiplier = 2.0
+manual_collision_ignore_instance_scale = false
+drop_physical_items = false
+physical_item_scene_path = ""
+physical_drop_count_min = 1
+physical_drop_count_max = 3
+scale_affects_drops = true
+drop_spread_radius = 1.5
+metadata/_custom_type_script = "uid://dh07duejch1vv"
+
+[sub_resource type="Resource" id="Resource_c7h6s"]
+script = ExtResource("13_3uiii")
+layer_name = "Bushes02"
+enabled = true
+scene_path = "res://assets/models/foliage/bush02_s.tscn"
+scene_path_lod1 = ""
+scene_path_lod2 = ""
+density = 0.002
+min_scale = 0.05
+max_scale = 0.1
+random_rotation = true
+align_to_terrain_normal = false
+min_slope = 0.0
+max_slope = 0.5
+min_height = -100.0
+max_height = 100.0
+water_level = -10.0
+use_noise_distribution = true
+noise_threshold = -0.5
+noise_scale = 0.02
+noise_seed = 123423
+min_spacing = 2.0
+use_geometry_lod = true
+lod0_distance = 50.0
+lod1_distance = 100.0
+lod2_distance = 150.0
+impostor_distance = 200.0
+lod_transition_hysteresis = 5.0
+cast_shadows = true
+shadow_distance = 50.0
+use_distance_fade_shadows = true
+use_custom_visibility_range = true
+visibility_range_end = 100.0
+visibility_fade_margin = 15.0
+use_impostors = true
+impostor_texture = SubResource("CompressedTexture2D_3uiii")
+impostor_size = Vector2(4, 8)
+impostor_fade_margin = 10.0
+avoid_layers = Array[String]([])
+avoidance_distance = 5.0
+is_interactable = true
+interactable_distance = 100.0
+foliage_type_name = "Bush"
+foliage_health = 50.0
+foliage_respawn_time = 300.0
+harvest_items = Array[Dictionary]([{
+"chance": 0.8,
+"item_id": "berries",
+"max_amount": 5,
+"min_amount": 2
+}, {
+"chance": 1.0,
+"item_id": "leaves",
+"max_amount": 3,
+"min_amount": 1
+}])
+harvest_experience = 5
+use_manual_collision = false
+manual_collision_shape = "Sphere"
+manual_collision_radius = 1.0
+manual_collision_height = 5.0
+manual_collision_offset = Vector3(0, 1, 0)
+manual_collision_radius_multiplier = 2.0
+manual_collision_ignore_instance_scale = false
+drop_physical_items = false
+physical_item_scene_path = ""
+physical_drop_count_min = 1
+physical_drop_count_max = 3
+scale_affects_drops = true
+drop_spread_radius = 1.5
+metadata/_custom_type_script = "uid://dh07duejch1vv"
+
+[sub_resource type="Resource" id="Resource_7g4hs"]
+script = ExtResource("13_3uiii")
+layer_name = "Bushes03"
+enabled = true
+scene_path = "res://assets/models/foliage/bush03_s.tscn"
+scene_path_lod1 = ""
+scene_path_lod2 = ""
+density = 0.01
+min_scale = 0.1
+max_scale = 0.3
+random_rotation = true
+align_to_terrain_normal = false
+min_slope = 0.0
+max_slope = 0.5
+min_height = -100.0
+max_height = 100.0
+water_level = -10.0
+use_noise_distribution = true
+noise_threshold = -0.5
+noise_scale = 0.02
+noise_seed = 45
+min_spacing = 1.0
+use_geometry_lod = true
+lod0_distance = 50.0
+lod1_distance = 100.0
+lod2_distance = 150.0
+impostor_distance = 200.0
+lod_transition_hysteresis = 5.0
+cast_shadows = true
+shadow_distance = 50.0
+use_distance_fade_shadows = true
+use_custom_visibility_range = true
+visibility_range_end = 100.0
+visibility_fade_margin = 15.0
+use_impostors = true
+impostor_texture = SubResource("CompressedTexture2D_3uiii")
+impostor_size = Vector2(4, 8)
+impostor_fade_margin = 10.0
+avoid_layers = Array[String]([])
+avoidance_distance = 5.0
+is_interactable = true
+interactable_distance = 100.0
+foliage_type_name = "Bush"
+foliage_health = 50.0
+foliage_respawn_time = 300.0
+harvest_items = Array[Dictionary]([{
+"chance": 0.8,
+"item_id": "berries",
+"max_amount": 5,
+"min_amount": 2
+}, {
+"chance": 1.0,
+"item_id": "leaves",
+"max_amount": 3,
+"min_amount": 1
+}])
+harvest_experience = 5
+use_manual_collision = false
+manual_collision_shape = "Sphere"
+manual_collision_radius = 1.0
+manual_collision_height = 5.0
+manual_collision_offset = Vector3(0, 1, 0)
+manual_collision_radius_multiplier = 2.0
+manual_collision_ignore_instance_scale = false
+drop_physical_items = false
+physical_item_scene_path = ""
+physical_drop_count_min = 1
+physical_drop_count_max = 3
+scale_affects_drops = true
+drop_spread_radius = 1.5
+metadata/_custom_type_script = "uid://dh07duejch1vv"
 
 [node name="TestScene" type="Node3D"]
 script = ExtResource("1_wvjab")
@@ -259,6 +476,6 @@ script = ExtResource("11_w0gou")
 
 [node name="ProceduralTreeSpawner" type="Node3D" parent="."]
 script = ExtResource("12_m0jab")
-foliage_layers = Array[ExtResource("13_3uiii")]([ExtResource("14_0g8h2"), ExtResource("16_c7h6s"), ExtResource("17_7g4hs"), ExtResource("15_0g8h2")])
+foliage_layers = Array[ExtResource("13_3uiii")]([ExtResource("14_0g8h2"), SubResource("Resource_0g8h2"), SubResource("Resource_c7h6s"), SubResource("Resource_7g4hs")])
 debug_performance = true
 debug_detailed_profiling = true

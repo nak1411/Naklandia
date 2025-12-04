@@ -751,8 +751,27 @@ func _spawn_interactable_nodes(layer: FoliageLayer, items: Array[Transform3D], l
 			interactable_node = InteractableFoliage.new()
 			interactable_node.add_child(foliage_instance)
 
-		# Set transform
-		interactable_node.transform = item_transform
+		# Set transform, compensating for scene's internal scale hierarchy
+		# The scene has scale baked into child nodes (e.g., Resinwood_Tree has 0.1 scale)
+		# MultiMesh transforms already include this scale, but scene instances have it in hierarchy
+		# We need to divide by the baked scale to avoid double-scaling
+		var adjusted_transform = item_transform
+
+		# Extract the baked-in scale from the first cached mesh transform (if available)
+		if layer.cached_mesh_transforms.size() > 0:
+			var baked_scale = layer.cached_mesh_transforms[0].basis.get_scale()
+			# Only compensate if there's actual scale baked in
+			if baked_scale != Vector3.ONE:
+				var item_scale = item_transform.basis.get_scale()
+				# Divide item scale by baked scale to compensate for scene hierarchy scale
+				var compensated_scale = item_scale / baked_scale
+				# Reconstruct basis with compensated scale
+				adjusted_transform.basis = Basis().scaled(compensated_scale)
+				# Keep rotation from original transform
+				var rotation_only = item_transform.basis.orthonormalized()
+				adjusted_transform.basis = rotation_only.scaled(compensated_scale)
+
+		interactable_node.transform = adjusted_transform
 
 		# Configure foliage properties from layer
 		interactable_node.foliage_type = layer.foliage_type_name

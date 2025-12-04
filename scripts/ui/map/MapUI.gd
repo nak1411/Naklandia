@@ -75,6 +75,7 @@ var context_menu: ContextMenu_Base
 var foliage_spawner: Node3D = null
 var hovered_chunk: Vector2i = Vector2i(-999999, -999999)  # Currently hovered chunk coords
 var _debug_chunk_draw_logged: bool = false  # Only log once
+var debug_manager: Node = null
 
 
 func _ready():
@@ -85,6 +86,7 @@ func _ready():
 	call_deferred("_setup_waypoint_container")
 	_find_player_reference()
 	_connect_signals()
+	_connect_debug_manager()
 
 
 func _setup_ui():
@@ -230,6 +232,18 @@ func _connect_signals():
 
 	if context_menu:
 		context_menu.item_selected.connect(_on_context_menu_item_selected)
+
+
+func _connect_debug_manager():
+	"""Connect to DebugManager signals for chunk visualization"""
+	debug_manager = get_node_or_null("/root/DebugManager")
+	if debug_manager:
+		debug_manager.chunk_visualization_toggled.connect(_on_chunk_visualization_toggled)
+		# Sync initial state
+		show_chunk_overlay = debug_manager.get_chunk_overlay_enabled()
+		print("MapUI: Connected to DebugManager, chunk overlay: ", show_chunk_overlay)
+	else:
+		print("MapUI: DebugManager not found, chunk overlay toggle won't sync with settings")
 
 
 func _input(event):
@@ -996,4 +1010,14 @@ func _toggle_grid():
 
 func _toggle_chunks():
 	show_chunk_overlay = not show_chunk_overlay
+	# Update DebugManager if connected
+	if debug_manager:
+		debug_manager.set_setting("show_chunk_overlay", show_chunk_overlay)
 	queue_redraw()
+
+
+func _on_chunk_visualization_toggled(enabled: bool):
+	"""Called when chunk visualization is toggled from settings"""
+	show_chunk_overlay = enabled
+	queue_redraw()
+	print("MapUI: Chunk overlay toggled from settings: ", enabled)

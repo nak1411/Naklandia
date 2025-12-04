@@ -52,7 +52,10 @@
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/core/interaction/InteractionRaycaster.gd)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff scripts/world/environment/MultiMeshToInteractable.gd)",
       "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" log --oneline -20 -- \"scripts/world/environment/ProceduralFoliageSpawner.gd\")",
-      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show 37256c5:scripts/world/environment/ProceduralFoliageSpawner.gd)"
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show 37256c5:scripts/world/environment/ProceduralFoliageSpawner.gd)",
+      "Bash(wc:*)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" diff assets/models/foliage/resinwood_tree_s.tscn)",
+      "Bash(git -C \"c:/Users/Justin/Documents/GitHub/Naklandia\" show 37256c5:assets/models/foliage/resinwood_tree_s.tscn)"
     ],
     "deny": [],
     "ask": []

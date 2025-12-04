@@ -41,17 +41,20 @@ var camera_pivot: Node3D
 var map_manager: Node
 var tree_spawner: Node  # Reference to ProceduralTreeSpawner for debug vis
 var foliage_spawner: Node3D = null  # Reference to ProceduralFoliageSpawner for chunk overlay
+var debug_manager: Node = null
 var _debug_chunk_logged: bool = false  # Only log once
 
 
 func _ready():
 	custom_minimum_size = minimap_size
+	clip_contents = true  # Enable clipping to prevent content from drawing outside bounds
 	_setup_minimap_viewport()
 	_find_player_reference()
 	_find_map_manager()
 	_find_tree_spawner()
 	# Defer finding foliage spawner to avoid timing issues
 	call_deferred("_find_foliage_spawner")
+	_connect_debug_manager()
 
 
 func _setup_minimap_viewport():
@@ -127,6 +130,34 @@ func _find_foliage_spawner():
 		print("Minimap: No foliage spawner found - chunk overlay will not work")
 	else:
 		print("Minimap: Found foliage spawner")
+
+
+func _connect_debug_manager():
+	"""Connect to DebugManager signals for debug visualization"""
+	debug_manager = get_node_or_null("/root/DebugManager")
+	if debug_manager:
+		debug_manager.chunk_visualization_toggled.connect(_on_chunk_visualization_toggled)
+		debug_manager.tree_debug_toggled.connect(_on_tree_debug_toggled)
+		# Sync initial state
+		show_chunk_overlay = debug_manager.get_chunk_overlay_enabled()
+		show_tree_debug = debug_manager.get_tree_debug_enabled()
+		print("Minimap: Connected to DebugManager, chunk overlay: ", show_chunk_overlay, ", tree debug: ", show_tree_debug)
+	else:
+		print("Minimap: DebugManager not found, debug toggles won't sync with settings")
+
+
+func _on_chunk_visualization_toggled(enabled: bool):
+	"""Called when chunk visualization is toggled from settings"""
+	show_chunk_overlay = enabled
+	queue_redraw()
+	print("Minimap: Chunk overlay toggled from settings: ", enabled)
+
+
+func _on_tree_debug_toggled(enabled: bool):
+	"""Called when tree debug is toggled from settings"""
+	show_tree_debug = enabled
+	queue_redraw()
+	print("Minimap: Tree debug toggled from settings: ", enabled)
 
 
 func _process(_delta):

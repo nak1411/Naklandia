@@ -11,10 +11,12 @@ var pause_menu_control: Control
 var background_panel: Panel
 var menu_panel: Panel
 var resume_button: Button
+var debug_button: Button
 var settings_button: Button
 var exit_button: Button
 
 var settings_menu: SettingsMenu
+var debug_menu: DebugMenu
 
 
 func _ready():
@@ -29,9 +31,11 @@ func _ready():
 	# Create the UI hierarchy programmatically
 	_setup_menu_ui()
 	_setup_settings_menu()
+	_setup_debug_menu()
 
 	# Connect button signals
 	resume_button.pressed.connect(_on_resume_pressed)
+	debug_button.pressed.connect(_on_debug_pressed)
 	settings_button.pressed.connect(_on_settings_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
 
@@ -116,10 +120,10 @@ func _setup_menu_ui():
 	menu_panel = Panel.new()
 	menu_panel.name = "MenuPanel"
 	menu_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	menu_panel.custom_minimum_size = Vector2(400, 300)
-	menu_panel.size = Vector2(400, 300)
+	menu_panel.custom_minimum_size = Vector2(400, 380)
+	menu_panel.size = Vector2(400, 380)
 	# Center the panel by offsetting by half its size
-	menu_panel.position = Vector2(-200, -150)  # -width/2, -height/2
+	menu_panel.position = Vector2(-200, -190)  # -width/2, -height/2
 	background_panel.add_child(menu_panel)
 
 	# Style the menu panel
@@ -162,6 +166,12 @@ func _setup_menu_ui():
 	resume_button.custom_minimum_size.y = 50
 	button_container.add_child(resume_button)
 
+	debug_button = Button.new()
+	debug_button.name = "DebugButton"
+	debug_button.text = "Debug"
+	debug_button.custom_minimum_size.y = 50
+	button_container.add_child(debug_button)
+
 	settings_button = Button.new()
 	settings_button.name = "SettingsButton"
 	settings_button.text = "Settings"
@@ -186,6 +196,19 @@ func _setup_settings_menu():
 
 	# Add to the pause canvas
 	add_child(settings_menu)
+
+
+func _setup_debug_menu():
+	debug_menu = DebugMenu.new()
+	debug_menu.name = "DebugMenu"
+	debug_menu.visible = false
+	debug_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	# Connect debug menu signals
+	debug_menu.debug_menu_closed.connect(_on_debug_menu_closed)
+
+	# Add to the pause canvas
+	add_child(debug_menu)
 
 
 func _input(event):
@@ -253,6 +276,16 @@ func toggle_pause():
 
 func _on_resume_pressed():
 	toggle_pause()
+
+
+func _on_debug_pressed():
+	pause_menu_control.visible = false
+	debug_menu.show_debug_menu()
+
+
+func _on_debug_menu_closed():
+	debug_menu.hide_debug_menu()
+	pause_menu_control.visible = true
 
 
 func _on_settings_pressed():

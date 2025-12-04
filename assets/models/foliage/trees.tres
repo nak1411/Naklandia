@@ -1,7 +1,8 @@
 [gd_resource type="Resource" script_class="FoliageLayer" load_steps=3 format=3 uid="uid://bciakaedl3yrv"]
 
-[ext_resource type="Texture2D" uid="uid://xvysnbaqgu8h" path="res://assets/models/foliage/materials/tree_4.png" id="1_4q80p"]
 [ext_resource type="Script" uid="uid://dh07duejch1vv" path="res://scripts/world/environment/FoliageLayer.gd" id="1_oklo7"]
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_oklo7"]
 
 [resource]
 script = ExtResource("1_oklo7")
@@ -12,7 +13,7 @@ scene_path_lod1 = ""
 scene_path_lod2 = ""
 density = 0.005
 min_scale = 0.1
-max_scale = 0.3
+max_scale = 0.2
 random_rotation = true
 align_to_terrain_normal = false
 min_slope = 0.0
@@ -38,7 +39,7 @@ use_custom_visibility_range = true
 visibility_range_end = 100.0
 visibility_fade_margin = 10.0
 use_impostors = true
-impostor_texture = ExtResource("1_4q80p")
+impostor_texture = SubResource("CompressedTexture2D_oklo7")
 impostor_size = Vector2(4, 8)
 impostor_fade_margin = 10.0
 avoid_layers = Array[String]([])
@@ -66,7 +67,7 @@ manual_collision_radius = 0.5
 manual_collision_height = 10.0
 manual_collision_offset = Vector3(0, 0, 0)
 manual_collision_radius_multiplier = 0.1
-manual_collision_ignore_instance_scale = true
+manual_collision_ignore_instance_scale = false
 drop_physical_items = true
 physical_item_scene_path = "res://assets/models/resources/resinwood_log.tscn"
 physical_drop_count_min = 2
